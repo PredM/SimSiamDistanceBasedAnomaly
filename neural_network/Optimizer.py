@@ -26,11 +26,12 @@ class Optimizer:
         current_epoch = 0
         train_loss_results = []
 
-        # TODO Test
+        # TODO Continuation not tested yet
         if self.config.continue_training:
             self.snn.load_models(self.config)
 
             try:
+                # Get the epoch by the directory name
                 current_epoch = int(self.config.directory_model_to_use.split('-')[-1])
                 print('Continuing the training at epoch', current_epoch)
 
@@ -85,6 +86,7 @@ class Optimizer:
         with tf.GradientTape() as tape:
             pred_similarities = self.snn.get_sims_batch(model_input)
 
+            # TODO  needs to be changed for FastSNN
             # Get parameters of subnet and ffnn
             if self.config.simple_similarity_measure:
                 trainable_params = self.snn.subnet.model.trainable_variables
@@ -124,7 +126,9 @@ class Optimizer:
         dir_name = self.config.models_folder + '_'.join(['models', dt_string, epoch_string]) + '/'
         os.mkdir(dir_name)
 
-        # Generate the file names and save the single model files in the directory created before
+        # TODO Needs to be changed for FastSNN
+
+        # Generate the file names and save the model files in the directory created before
         subnet_file_name = '_'.join(['subnet', self.config.subnet_variant, epoch_string]) + '.h5'
         self.snn.subnet.model.save(dir_name + subnet_file_name)
 

@@ -4,39 +4,7 @@ from os import listdir
 import tensorflow as tf
 
 from configuration.Configuration import Configuration
-from neural_network.Subnets import CNN, RNN, NN
-
-
-class FFNN(NN):
-
-    def __init__(self, hyperparameters, dataset, input_shape):
-        super().__init__(hyperparameters, dataset)
-        self.input_shape = input_shape
-
-    def create_model(self):
-
-        print('Creating FFNN')
-        model = tf.keras.Sequential(name='FFNN')
-
-        layers = self.hyper.ffnn_layers
-
-        if len(layers) < 1:
-            print('FFNN with less than one layer is not possible')
-            sys.exit(1)
-
-        num_units_first = layers.pop(0)
-        # print('\tFully connected layer with', num_units_first, 'units and relu activation')
-        model.add(tf.keras.layers.Dense(units=num_units_first, activation=tf.keras.activations.relu,
-                                        batch_input_shape=self.input_shape))
-
-        for num_units in layers:
-            # print('\tFully connected layer with', num_units, 'units and relu activation')
-            model.add(tf.keras.layers.Dense(units=num_units, activation=tf.keras.activations.relu))
-
-        # print('\tFully connected layer with 1 unit and sigmoid activation')
-        model.add(tf.keras.layers.Dense(units=1, activation=tf.keras.activations.sigmoid))
-
-        self.model = model
+from neural_network.Subnets import CNN, RNN, NN, FFNN
 
 
 class SimpleSNN(NN):
@@ -48,7 +16,8 @@ class SimpleSNN(NN):
         self.context_vectors = None
 
         self.subnet = None
-        # TODO Try None at first dimension for variable batch size
+
+        # TODO Try None at first dimension for variable batch size, other changes need
         input_shape_subnet = (None, self.hyper.time_series_length,
                               self.hyper.time_series_depth)
 
@@ -64,19 +33,22 @@ class SimpleSNN(NN):
             print(variant)
             sys.exit(1)
 
+    # TODO Maybe handel matching filename with wrong content
     def load_models(self, config: Configuration):
         self.subnet.model = None
 
         for file_name in listdir(config.directory_model_to_use):
 
+            # If model is already loaded no further files need to be checked
             if self.subnet.model is not None:
                 break
 
-            # Compile must be set to false because the standard optimizer was not used and this would otherwise
+            # Compile must be set to false because the standard optimizer wasn't used what would otherwise
             # generate an error
             if file_name.startswith('subnet'):
                 self.subnet.model = tf.keras.models.load_model(config.directory_model_to_use + file_name, compile=False)
 
+        # If still None no matching file was
         if self.subnet.model is None:
             print('Subnet model file not found in', config.directory_model_to_use)
         else:
@@ -85,10 +57,12 @@ class SimpleSNN(NN):
     @tf.function
     def get_sims_batch(self, batch):
 
-        # count gpus, split batch and call on multiple gpus, then combine --> Only possible if variable batch size
+        # TODO count gpus, split batch and call on multiple gpus, then combine
+        #  --> Not possible until variable batch size was implemented
         self.context_vectors = self.subnet.model(batch, training=self.training)
 
-        distances_batch = tf.map_fn(lambda pair_index: self.get_sim_pair(pair_index),
+        # Get the distances for the hole batch by calculating it for each pair
+        distances_batch = tf.map_fn(lambda pair_index: self.get_distance_pair(pair_index),
                                     tf.range(self.hyper.batch_size, dtype=tf.int32),
                                     back_prop=True,
                                     name='PairWiseDistMap',
@@ -98,16 +72,16 @@ class SimpleSNN(NN):
         return sims_batch
 
     @tf.function
-    def get_sim_pair(self, pair_index):
+    def get_distance_pair(self, pair_index):
         a = self.context_vectors[2 * pair_index, :, :]
         b = self.context_vectors[2 * pair_index + 1, :, :]
 
+        # This snn version (SimpleSNN) uses the a simple distance measure
+        # by calculating the mean of the absolute difference at matching timestamps
         diff = tf.abs(a - b)
-        mean = tf.reduce_mean(diff)
+        distance_example = tf.reduce_mean(diff)
 
-        sims_batch = tf.exp(-mean)
-
-        return sims_batch
+        return distance_example
 
     def print_detailed_model_info(self):
         print('')
@@ -120,6 +94,7 @@ class SNN(SimpleSNN):
     def __init__(self, variant, hyperparameters, dataset, training):
         super().__init__(variant, hyperparameters, dataset, training)
 
+        # In addition the simple snn version the ffnn needs to be initialised
         subnet_output_shape = self.subnet.model.output_shape
         input_shape_ffnn = (subnet_output_shape[1] ** 2, subnet_output_shape[2] * 2)
 
@@ -128,9 +103,9 @@ class SNN(SimpleSNN):
 
         print('The full model has', self.ffnn.get_parameter_count() + self.subnet.get_parameter_count(), 'parameters\n')
 
-    # TODO Add multi gpu support again, maybe split not here but above in map_fn function
+    # TODO Add multi gpu support again, maybe rather split map_fn method
     @tf.function
-    def get_sim_pair(self, pair_index):
+    def get_distance_pair(self, pair_index):
 
         a = self.context_vectors[2 * pair_index, :, :]
         indices_a = tf.range(a.shape[0])

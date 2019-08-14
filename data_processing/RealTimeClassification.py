@@ -415,7 +415,6 @@ def main():
     config = Configuration()
 
     # suppress debugging messages of tensorflow
-    tf.logging.set_verbosity(tf.logging.ERROR)
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
     # load the scalers of the training data for the normalisation

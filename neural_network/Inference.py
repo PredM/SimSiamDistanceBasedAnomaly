@@ -1,3 +1,4 @@
+import os
 import time
 
 import numpy as np
@@ -17,19 +18,24 @@ class Inference:
 
         self.ds: Dataset = Dataset(dataset_folder)
         self.ds.load()
+
+        # Set hyperparameters to match the properties of the loaded data
         self.hyper.time_series_length = self.ds.time_series_length
         self.hyper.time_series_depth = self.ds.time_series_depth
 
+        # Creation of dataframe in which the classification results are stored
+        # Rows contain the classes including a row for combined accuracy
         classes = list(self.ds.classes)
         index = classes + ['combined']
         cols = ['true_positive', 'total', 'accuracy']
-
         self.results = pd.DataFrame(0, index=np.arange(1, len(index) + 1), columns=np.arange(len(cols)))
         self.results.set_axis(cols, 1, inplace=True)
         self.results['classes'] = index
         self.results.set_index('classes', inplace=True)
         self.results.loc['combined', 'total'] = self.ds.num_test_instances
 
+        # Todo needs to be changed for variable batch size, maybe to tf.tensor
+        # Define input tensor
         self.input_pairs = np.zeros((2 * self.hyper.batch_size, self.hyper.time_series_length,
                                      self.hyper.time_series_depth)).astype('float32')
 
@@ -40,6 +46,7 @@ class Inference:
             print('Creating SNN with FFNN similarity measure')
             self.snn = SNN(self.config.subnet_variant, self.hyper, self.ds, training=False)
 
+        # Load the models from the file configured
         self.snn.load_models(config)
 
     def infer_test_dataset(self):
@@ -50,7 +57,7 @@ class Inference:
         start_time = time.clock()
 
         # Infer all examples in the given range
-        for idx_test in range(0, self.ds.num_test_instances):
+        for idx_test in range(self.ds.num_test_instances):
 
             max_similarity = 0
             max_similarity_idx = 0
@@ -77,23 +84,21 @@ class Inference:
                         max_similarity = sims[i]
                         max_similarity_idx = start_idx + i
 
-            # TODO Remove if class split result is working and yields the same result
-            # Check if correctly classified
-            if np.array_equal(self.ds.y_test[idx_test], self.ds.y_train[max_similarity_idx]):
-                correct += 1
-            num_infers += 1
-
-            # Revert selected classes back to human readable labels
+            # Revert selected classes back to simple string labels
             real = self.ds.one_hot_encoder.inverse_transform([self.ds.y_test[idx_test]])[0][0]
             max_sim_class = self.ds.one_hot_encoder.inverse_transform([self.ds.y_train[max_similarity_idx]])[0][0]
 
+            # If correctly classified increase the true positive field of the correct class and the of all classes
             if real == max_sim_class:
+                correct += 1
                 self.results.loc[real, 'true_positive'] += 1
                 self.results.loc['combined', 'true_positive'] += 1
 
+            # Regardless of the result increase the number of examples with this class
             self.results.loc[real, 'total'] += 1
+            num_infers += 1
 
-            # Print results for this batch
+            # Print result for this example
             example_results = [
                 ['Example', str(idx_test + 1) + '/' + str(self.ds.num_test_instances)],
                 ['Classified as:', max_sim_class],
@@ -109,22 +114,19 @@ class Inference:
 
         elapsed_time = time.clock() - start_time
 
+        # Calculate the classification accuracy for all classes and save in the intended column
         self.results['accuracy'] = self.results['true_positive'] / self.results['total']
         self.results['accuracy'] = self.results['accuracy'].fillna(0) * 100
 
-        # Print results of complete inference process
-        print('----------------------------------------------------')
+        # Print the result of completed inference process
+        print('-------------------------------------------------------------')
         print('Final Result:')
-        print('----------------------------------------------------')
-        print('Examples classified:', num_infers)
-        print('Correctly classified:', correct)
-        print('Classification accuracy:', correct / num_infers)
-        print('Elapsed time:', elapsed_time)
-        print('----------------------------------------------------')
-        print('Result split by classes:')
-        print('----------------------------------------------------')
+        print('-------------------------------------------------------------')
+        print('Elapsed time:', elapsed_time, 'Seconds')
+        print('Average time per example:', elapsed_time / self.ds.num_test_instances, 'Seconds')
+        print('Classification accuracy split by classes:')
         print(self.results)
-        print('----------------------------------------------------')
+        print('-------------------------------------------------------------')
 
     def infer_single_example(self, example: np.ndarray):
 
@@ -136,6 +138,8 @@ class Inference:
         # Inference is split into batch size big parts
         for index in range(0, num_train, batch_size):
 
+            # TODO Change to variable input size so no similarities are calculated multiple times
+
             # Fix the starting index, if the batch exceeds the number of train instances
             start_index = index
             if index + batch_size >= num_train:
@@ -146,7 +150,6 @@ class Inference:
                 self.input_pairs[2 * i] = example
                 self.input_pairs[2 * i + 1] = self.ds.x_train[start_index + i]
 
-            # TODO Unsure if working
             # Measure the similarity between the example and the training batch
             sims = self.snn.get_sims_batch(self.input_pairs)
 
@@ -161,6 +164,9 @@ class Inference:
 
 
 def main():
+    # suppress debugging messages of TensorFlow
+    os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+
     config = Configuration()
     hyperparameters = Hyperparameters()
     inference = Inference(config, hyperparameters, config.training_data_folder)

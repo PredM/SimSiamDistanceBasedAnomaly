@@ -1,3 +1,5 @@
+import os
+
 from configuration.Configuration import Configuration
 from configuration.Hyperparameter import Hyperparameters
 from neural_network.Dataset import Dataset
@@ -7,8 +9,8 @@ from neural_network.SNN import SNN, SimpleSNN
 
 
 def main():
-    import warnings
-    warnings.simplefilter(action='ignore', category=FutureWarning)
+    # suppress debugging messages of TensorFlow
+    os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
     config = Configuration()
     hyper = Hyperparameters()
@@ -30,7 +32,7 @@ def main():
 
     print('Training:')
     optimizer = Optimizer(snn, dataset, hyper, config)
-    # optimizer.optimize()
+    optimizer.optimize()
 
 
 if __name__ == '__main__':

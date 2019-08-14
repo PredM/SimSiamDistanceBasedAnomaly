@@ -13,13 +13,12 @@ class NN:
         self.hyper: Hyperparameters = hyperparameters
 
     def create_model(self):
-        pass
+        raise AssertionError('No model creation for abstract NN class possible')
 
     def get_parameter_count(self):
         total_parameters = 0
 
         for variable in self.model.trainable_variables:
-            # shape is an array of tf.Dimension
             shape = variable.get_shape()
             variable_parameters = 1
 
@@ -31,13 +30,46 @@ class NN:
         return total_parameters
 
 
+class FFNN(NN):
+
+    def __init__(self, hyperparameters, dataset, input_shape):
+        super().__init__(hyperparameters, dataset)
+        self.input_shape = input_shape
+
+    def create_model(self):
+
+        print('Creating FFNN')
+        model = tf.keras.Sequential(name='FFNN')
+
+        layers = self.hyper.ffnn_layers
+
+        if len(layers) < 1:
+            print('FFNN with less than one layer is not possible')
+            sys.exit(1)
+
+        # First layer must be handled separately because the input shape parameter must be set
+        num_units_first = layers.pop(0)
+        model.add(tf.keras.layers.Dense(units=num_units_first, activation=tf.keras.activations.relu,
+                                        batch_input_shape=self.input_shape))
+
+        for num_units in layers:
+            model.add(tf.keras.layers.Dense(units=num_units, activation=tf.keras.activations.relu))
+
+        # Regardless of the configured number of layers, add a layer with
+        # a single neuron that provides the indicator function output.
+        model.add(tf.keras.layers.Dense(units=1, activation=tf.keras.activations.sigmoid))
+
+        self.model = model
+
+
 class RNN(NN):
 
     def __init__(self, hyperparameters, dataset, input_shape):
         super().__init__(hyperparameters, dataset)
         self.input_shape = input_shape
 
-    # rnn structure matching the description in the neural warp paper
+    # RNN structure matching the description in the neural warp paper,
+    # currently not used
     def create_model_nw(self):
         print('Creating LSTM subnet')
 
@@ -53,7 +85,6 @@ class RNN(NN):
         # Create one timeline and stack into StackedRNNCell
         cells = []
         for num_units in layers:
-            # print("\tLSTM layer with a", num_units, "unit output vector")
             cells.append(tf.keras.layers.LSTMCell(units=num_units, activation=tf.keras.activations.tanh))
 
         stacked_cells = tf.keras.layers.StackedRNNCells(cells)
@@ -82,12 +113,13 @@ class RNN(NN):
         for i in range(len(layers)):
             num_units = layers[i]
 
+            # First layer must be handled separately because the input shape parameter must be set
+            # Choice of parameters ensure usage of cuDNN TODO must be tested if working
             if i == 0:
                 layer = tf.keras.layers.LSTM(units=num_units, activation='tanh', recurrent_activation='sigmoid',
                                              recurrent_dropout=0, unroll=False, use_bias=True,
                                              batch_input_shape=self.input_shape, return_sequences=True)
             else:
-                # choice of parameters ensure usage of cuDNN
                 layer = tf.keras.layers.LSTM(units=num_units, activation='tanh', recurrent_activation='sigmoid',
                                              recurrent_dropout=0, unroll=False, use_bias=True, return_sequences=True)
             model.add(layer)
@@ -120,9 +152,7 @@ class CNN(NN):
         for i in range(len(layer_properties)):
             num_filter, filter_size, stride = layer_properties[i][0], layer_properties[i][1], layer_properties[i][2]
 
-            # print('\tConvolution layer with', num_filter, 'filters, ', filter_size,
-            #      'kernel length and a stride value of', stride)
-
+            # First layer must be handled separately because the input shape parameter must be set
             if i == 0:
                 conv_layer = tf.keras.layers.Conv1D(filters=num_filter, padding='VALID', kernel_size=filter_size,
                                                     strides=stride, batch_input_shape=self.input_shape)

@@ -40,7 +40,7 @@ class Dataset:
         self.one_hot_encoder = self.one_hot_encoder.fit(np.concatenate((y_train, y_test), axis=0))
 
         # Transforms the vector of labels into a one hot matrix
-        self.y_train = self.one_hot_encoder.transform(y_train).astype('float32')
+        self.y_train = self.one_hot_encoder.transform(y_train)
         self.y_test = self.one_hot_encoder.transform(y_test)
 
         ##
@@ -60,7 +60,7 @@ class Dataset:
         # Length of the third array dimension is the number of channels = (independent) readings at this point of time
         self.time_series_depth = self.x_train.shape[2]
 
-        # Get the number of classes by unique labels
+        # Get the unique classes and the corresponding number
         self.classes = np.unique(np.concatenate((y_train, y_test), axis=0))
         self.num_classes = self.classes.size
 
