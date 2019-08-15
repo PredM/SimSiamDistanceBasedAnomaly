@@ -6,7 +6,7 @@ class Hyperparameters:
         self.time_series_length = 250
         self.time_series_depth = 58
 
-        self.batch_size = 32
+        self.batch_size = 23
         self.epochs = 100000
         self.learning_rate = 0.0001
         self.gradient_cap = 10
