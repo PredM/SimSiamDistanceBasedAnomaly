@@ -106,10 +106,10 @@ class Configuration:
         ###
 
         self.subnet_variants = ['cnn', 'rnn']
-        self.subnet_variant = self.subnet_variants[1]
+        self.subnet_variant = self.subnet_variants[0]
 
         # Use the mean absolute difference as distance measure instead of the ffnn
-        self.simple_similarity_measure = False
+        self.simple_similarity_measure = True
 
         # Select whether training should be continued from the checkpoint defined below
         self.continue_training = False
@@ -267,7 +267,7 @@ class Configuration:
 
         # path and file name to the specific model that should be used for testing and live classification
         # 4774, 4597, 4875
-        self.directory_model_to_use = self.models_folder + '' + '/'
+        self.directory_model_to_use = self.models_folder + 'models_08-14_20-46-00_epoch-100' + '/'
 
         # define file names for all topics
         self.topic15File = self.pathPrefix + 'raw_data/txt15.txt'

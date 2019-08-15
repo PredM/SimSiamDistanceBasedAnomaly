@@ -34,7 +34,6 @@ class Inference:
         self.results.set_index('classes', inplace=True)
         self.results.loc['combined', 'total'] = self.ds.num_test_instances
 
-        # Todo needs to be changed for variable batch size, maybe to tf.tensor
         # Define input tensor
         self.input_pairs = np.zeros((2 * self.hyper.batch_size, self.hyper.time_series_length,
                                      self.hyper.time_series_depth)).astype('float32')

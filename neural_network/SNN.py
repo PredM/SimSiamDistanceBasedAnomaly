@@ -4,22 +4,23 @@ from os import listdir
 import tensorflow as tf
 
 from configuration.Configuration import Configuration
-from neural_network.Subnets import CNN, RNN, NN, FFNN
+from configuration.Hyperparameter import Hyperparameters
+from neural_network.Dataset import Dataset
+from neural_network.Subnets import CNN, RNN, FFNN
 
 
-class SimpleSNN(NN):
+class SimpleSNN:
 
     def __init__(self, variant, hyperparameters, dataset, training):
-        super().__init__(hyperparameters, dataset)
+        self.hyper: Hyperparameters = hyperparameters
+        self.dataset: Dataset = dataset
         self.training = training
         self.sims_batch = None
         self.context_vectors = None
 
         self.subnet = None
 
-        # TODO Try None at first dimension for variable batch size, other changes need
-        input_shape_subnet = (None, self.hyper.time_series_length,
-                              self.hyper.time_series_depth)
+        input_shape_subnet = (self.hyper.time_series_length, self.hyper.time_series_depth)
 
         if variant == 'cnn':
             self.subnet = CNN(hyperparameters, dataset, input_shape_subnet)
@@ -63,7 +64,7 @@ class SimpleSNN(NN):
 
         # Get the distances for the hole batch by calculating it for each pair
         distances_batch = tf.map_fn(lambda pair_index: self.get_distance_pair(pair_index),
-                                    tf.range(self.hyper.batch_size, dtype=tf.int32),
+                                    tf.range(int(batch.shape[0] / 2), dtype=tf.int32),
                                     back_prop=True,
                                     name='PairWiseDistMap',
                                     dtype=tf.float32)
