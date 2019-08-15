@@ -86,12 +86,11 @@ class Optimizer:
         with tf.GradientTape() as tape:
             pred_similarities = self.snn.get_sims(model_input)
 
-            # TODO  needs to be changed for FastSNN
             # Get parameters of subnet and ffnn
-            if self.config.simple_similarity_measure:
-                trainable_params = self.snn.subnet.model.trainable_variables
-            else:
+            if self.config.snn_variant in ['standard_ffnn', 'fast_ffnn']:
                 trainable_params = self.snn.ffnn.model.trainable_variables + self.snn.subnet.model.trainable_variables
+            else:
+                trainable_params = self.snn.subnet.model.trainable_variables
 
             # Calculate the loss and the gradients
             loss = tf.keras.losses.binary_crossentropy(y_true=true_similarities, y_pred=pred_similarities)
@@ -126,12 +125,10 @@ class Optimizer:
         dir_name = self.config.models_folder + '_'.join(['models', dt_string, epoch_string]) + '/'
         os.mkdir(dir_name)
 
-        # TODO Needs to be changed for FastSNN
-
         # Generate the file names and save the model files in the directory created before
         subnet_file_name = '_'.join(['subnet', self.config.subnet_variant, epoch_string]) + '.h5'
         self.snn.subnet.model.save(dir_name + subnet_file_name)
 
-        if not self.config.simple_similarity_measure:
+        if self.config.snn_variant in ['standard_ffnn', 'fast_ffnn']:
             ffnn_file_name = '_'.join(['ffnn', epoch_string]) + '.h5'
             self.snn.ffnn.model.save(dir_name + ffnn_file_name)

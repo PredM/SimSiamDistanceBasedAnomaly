@@ -108,8 +108,12 @@ class Configuration:
         self.subnet_variants = ['cnn', 'rnn']
         self.subnet_variant = self.subnet_variants[0]
 
-        # Use the mean absolute difference as distance measure instead of the ffnn
-        self.simple_similarity_measure = True
+        # standard = classic snn behaviour, context vectors calculated each time, also multiple times for the example
+        # fast = encoding of case base only once, example also only once
+        # ffnn = uses ffnn as distance measure
+        # simple = mean absolute difference as distance measure instead of the ffnn
+        self.snn_variants = ['standard_simple', 'standard_ffnn', 'fast_simple', 'fast_ffnn']
+        self.snn_variant = self.snn_variants[0]
 
         # Select whether training should be continued from the checkpoint defined below
         self.continue_training = False

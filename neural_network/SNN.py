@@ -10,6 +10,25 @@ from neural_network.Dataset import Dataset
 from neural_network.Subnets import CNN, RNN, FFNN
 
 
+def initialise_snn(config: Configuration, hyper, dataset, training):
+    variants = ['standard_simple', 'standard_ffnn', 'fast_simple', 'fast_ffnn']
+
+    if config.snn_variant == variants[0]:
+        print('Creating standard SNN with simple similarity measure')
+        return SimpleSNN(config.subnet_variant, hyper, dataset, training)
+    elif config.snn_variant == variants[1]:
+        print('Creating standard SNN with FFNN similarity measure')
+        return SNN(config.subnet_variant, hyper, dataset, training)
+    elif config.snn_variant == variants[2]:
+        print('Creating fast SNN with simple similarity measure')
+        return FastSimpleSNN(config.subnet_variant, hyper, dataset, training)
+    elif config.snn_variant == variants[3]:
+        print('Creating fast SNN with FFNN similarity measure')
+        return SNN(config.subnet_variant, hyper, dataset, training)
+    else:
+        raise AttributeError('Unknown SNN variant specified:' + config.snn_variant)
+
+
 class SimpleSNN:
 
     def __init__(self, variant, hyperparameters, dataset, training):
@@ -18,7 +37,7 @@ class SimpleSNN:
         self.training = training
         self.sims_batch = None
         self.context_vectors = None
-        self.strategy = tf.distribute.MirroredStrategy() # Todo remove if not working
+        self.strategy = tf.distribute.MirroredStrategy()  # Todo remove if not working
         self.subnet = None
 
         input_shape_subnet = (self.hyper.time_series_length, self.hyper.time_series_depth)
@@ -57,7 +76,7 @@ class SimpleSNN:
             print('Subnet model has been loaded successfully:\n')
 
     # TODO Untested because no gpu pc available
-    # Manual distribution to all available gpus
+    # Manual distribution to all available gpus, currently to automatic version is used, see below
     def get_sims_2(self, example):
 
         gpu_list = tf.config.experimental.list_logical_devices('GPU')
@@ -179,7 +198,6 @@ class SNN(SimpleSNN):
 
         print('The full model has', self.ffnn.get_parameter_count() + self.subnet.get_parameter_count(), 'parameters\n')
 
-    # TODO Add multi gpu support again, maybe rather split map_fn method
     @tf.function
     def get_distance_pair(self, pair_index):
 
@@ -234,3 +252,15 @@ class SNN(SimpleSNN):
         print('')
         self.ffnn.model.summary()
         print('')
+
+
+class FastSimpleSNN(SimpleSNN):
+
+    def __init__(self, variant, hyperparameters, dataset, training):
+        super().__init__(variant, hyperparameters, dataset, training)
+
+
+class FastSNN(SNN):
+
+    def __init__(self, variant, hyperparameters, dataset, training):
+        super().__init__(variant, hyperparameters, dataset, training)

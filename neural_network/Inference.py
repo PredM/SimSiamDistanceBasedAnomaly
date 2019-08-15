@@ -7,7 +7,7 @@ import pandas as pd
 from configuration.Configuration import Configuration
 from configuration.Hyperparameter import Hyperparameters
 from neural_network.Dataset import Dataset
-from neural_network.SNN import SNN, SimpleSNN
+from neural_network.SNN import initialise_snn
 
 
 class Inference:
@@ -34,12 +34,7 @@ class Inference:
         self.results.set_index('classes', inplace=True)
         self.results.loc['combined', 'total'] = self.dataset.num_test_instances
 
-        if self.config.simple_similarity_measure:
-            print('Creating SNN with simple similarity measure')
-            self.snn = SimpleSNN(self.config.subnet_variant, self.hyper, self.dataset, training=False)
-        else:
-            print('Creating SNN with FFNN similarity measure')
-            self.snn = SNN(self.config.subnet_variant, self.hyper, self.dataset, training=False)
+        self.snn = initialise_snn(config, hyperparameters, dataset_folder, False)
 
         # Load the models from the file configured
         self.snn.load_models(config)
@@ -66,7 +61,8 @@ class Inference:
 
             # Revert selected classes back to simple string labels
             real = self.dataset.one_hot_encoder.inverse_transform([self.dataset.y_test[idx_test]])[0][0]
-            max_sim_class = self.dataset.one_hot_encoder.inverse_transform([self.dataset.y_train[max_similarity_idx]])[0][0]
+            max_sim_class = \
+                self.dataset.one_hot_encoder.inverse_transform([self.dataset.y_train[max_similarity_idx]])[0][0]
 
             # If correctly classified increase the true positive field of the correct class and the of all classes
             if real == max_sim_class:
@@ -107,41 +103,6 @@ class Inference:
         print('Classification accuracy split by classes:')
         print(self.results)
         print('-------------------------------------------------------------')
-
-    # TODO Maybe this method is not needed at all because snn.get_sims now returns an array with all sims
-    def infer_single_example(self, example: np.ndarray):
-
-        sims_all_examples = np.zeros(self.dataset.num_train_instances)
-
-        batch_size = self.hyper.batch_size
-        num_train = self.dataset.num_train_instances
-
-        # Inference is split into batch size big parts
-        for index in range(0, num_train, batch_size):
-
-            # TODO Change to variable input size so no similarities are calculated multiple times
-
-            # Fix the starting index, if the batch exceeds the number of train instances
-            start_index = index
-            if index + batch_size >= num_train:
-                start_index = num_train - batch_size
-
-            # Create a batch of pair between the test series and the batch train series
-            for i in range(batch_size):
-                self.input_pairs[2 * i] = example
-                self.input_pairs[2 * i + 1] = self.dataset.x_train[start_index + i]
-
-            # Measure the similarity between the example and the training batch
-            sims = self.snn.get_sims(self.input_pairs)
-
-            # TODO check if somewhere .numpy() is needed so a normal array instead of a tensor is used
-            # Collect similarities of all badges, can't be collected in simple list because
-            # Some sims are calculated multiple times because only full batches can be processed
-            end_of_batch = start_index + batch_size
-            sims_all_examples[start_index:end_of_batch] = sims
-
-        # Return the result of the knn classifier using the calculated similarities
-        return sims_all_examples
 
 
 def main():
