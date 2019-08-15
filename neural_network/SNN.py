@@ -57,7 +57,8 @@ class SimpleSNN:
             print('Subnet model has been loaded successfully:\n')
 
     # TODO Untested because no gpu pc available
-    def get_sims(self, example):
+    # Manual distribution to all available gpus
+    def get_sims_2(self, example):
 
         gpu_list = tf.config.experimental.list_logical_devices('GPU')
 
@@ -68,6 +69,9 @@ class SimpleSNN:
         for pos, gpu, part in zip(order_list, gpu_list, parts_list):
             with tf.device(gpu):
                 self.get_sims_per_gpu(part, example, output, pos)
+
+        # Fixme maybe, unsure if this works without some kind of join, but should
+        # see: https://www.tensorflow.org/beta/guide/using_gpu#manual_placement
         return np.concatenate(output)
 
     def get_sims_per_gpu(self, part, example, output, pos):
@@ -101,7 +105,7 @@ class SimpleSNN:
 
     # Todo: Untested
     # Using new automatic distribution to multiple gpus, this would be preferable if it works
-    def get_sims_2(self, example):
+    def get_sims(self, example):
         # For the classic version the sims are calculated in batches
         num_train = len(self.dataset.x_train)
         sims_all_examples = np.zeros(num_train)
