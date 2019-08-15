@@ -2,6 +2,7 @@ import sys
 from os import listdir
 
 import tensorflow as tf
+import numpy as np
 
 from configuration.Configuration import Configuration
 from configuration.Hyperparameter import Hyperparameters
@@ -17,7 +18,7 @@ class SimpleSNN:
         self.training = training
         self.sims_batch = None
         self.context_vectors = None
-
+        self.strategy = tf.distribute.MirroredStrategy() # Todo remove if not working
         self.subnet = None
 
         input_shape_subnet = (self.hyper.time_series_length, self.hyper.time_series_depth)
@@ -55,19 +56,89 @@ class SimpleSNN:
         else:
             print('Subnet model has been loaded successfully:\n')
 
+    # TODO Untested because no gpu pc available
+    def get_sims(self, example):
+
+        gpu_list = tf.config.experimental.list_logical_devices('GPU')
+
+        order_list = np.arange(len(gpu_list))
+        parts_list = np.array_split(self.dataset.x_train, len(gpu_list))
+        output = np.ndarray(order_list.shape, dtype=np.ndarray)
+
+        for pos, gpu, part in zip(order_list, gpu_list, parts_list):
+            with tf.device(gpu):
+                self.get_sims_per_gpu(part, example, output, pos)
+        return np.concatenate(output)
+
+    def get_sims_per_gpu(self, part, example, output, pos):
+
+        # For the classic version the sims are calculated in batches
+        num_train = len(part)
+        sims_all_examples = np.zeros(num_train)
+        batch_size = self.hyper.batch_size
+
+        for index in range(0, num_train, batch_size):
+
+            # Fix batch size if it would exceed the number of train instances
+            if index + batch_size >= num_train:
+                batch_size = num_train - index
+
+            input_pairs = np.zeros((2 * batch_size, self.hyper.time_series_length,
+                                    self.hyper.time_series_depth)).astype('float32')
+
+            # Create a batch of pairs between the test series and the train series
+            for i in range(batch_size):
+                input_pairs[2 * i] = example
+                input_pairs[2 * i + 1] = self.dataset.x_train[index + i]
+
+            sims_batch = self.get_sims_batch(input_pairs)
+
+            # Collect similarities of all badges
+            sims_all_examples[index:index + batch_size] = sims_batch
+
+        # Return the result of the knn classifier using the calculated similarities
+        output[pos] = sims_all_examples
+
+    # Todo: Untested
+    # Using new automatic distribution to multiple gpus, this would be preferable if it works
+    def get_sims_2(self, example):
+        # For the classic version the sims are calculated in batches
+        num_train = len(self.dataset.x_train)
+        sims_all_examples = np.zeros(num_train)
+        batch_size = self.hyper.batch_size
+
+        for index in range(0, num_train, batch_size):
+
+            # Fix batch size if it would exceed the number of train instances
+            if index + batch_size >= num_train:
+                batch_size = num_train - index
+
+            input_pairs = np.zeros((2 * batch_size, self.hyper.time_series_length,
+                                    self.hyper.time_series_depth)).astype('float32')
+
+            # Create a batch of pairs between the test series and the train series
+            for i in range(batch_size):
+                input_pairs[2 * i] = example
+                input_pairs[2 * i + 1] = self.dataset.x_train[index + i]
+
+            with self.strategy.scope():
+                sims_batch = self.get_sims_batch(input_pairs)
+
+            # Collect similarities of all badges
+            sims_all_examples[index:index + batch_size] = sims_batch
+
+        # Return the result of the knn classifier using the calculated similarities
+        return sims_all_examples
+
     @tf.function
     def get_sims_batch(self, batch):
-
-        # TODO count gpus, split batch and call on multiple gpus, then combine
-        #  --> Not possible until variable batch size was implemented
+        # Measure the similarity between the example and the training batch
         self.context_vectors = self.subnet.model(batch, training=self.training)
 
         # Get the distances for the hole batch by calculating it for each pair
         distances_batch = tf.map_fn(lambda pair_index: self.get_distance_pair(pair_index),
                                     tf.range(int(batch.shape[0] / 2), dtype=tf.int32),
-                                    back_prop=True,
-                                    name='PairWiseDistMap',
-                                    dtype=tf.float32)
+                                    back_prop=True)
         sims_batch = tf.exp(-distances_batch)
 
         return sims_batch

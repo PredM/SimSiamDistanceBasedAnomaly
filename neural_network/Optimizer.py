@@ -84,7 +84,7 @@ class Optimizer:
     def update_model(self, model_input, true_similarities):
 
         with tf.GradientTape() as tape:
-            pred_similarities = self.snn.get_sims_batch(model_input)
+            pred_similarities = self.snn.get_sims(model_input)
 
             # TODO  needs to be changed for FastSNN
             # Get parameters of subnet and ffnn
