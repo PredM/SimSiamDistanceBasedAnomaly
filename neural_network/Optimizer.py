@@ -133,5 +133,5 @@ class Optimizer:
         self.snn.subnet.model.save(dir_name + subnet_file_name)
 
         if not self.config.simple_similarity_measure:
-            ffnn_file_name = '_'.join(['ffnn', epoch_string]) + '.txt'
+            ffnn_file_name = '_'.join(['ffnn', epoch_string]) + '.h5'
             self.snn.ffnn.model.save(dir_name + ffnn_file_name)
