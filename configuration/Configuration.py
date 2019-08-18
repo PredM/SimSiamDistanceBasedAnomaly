@@ -25,7 +25,7 @@ class Configuration:
         self.output_interval = 100
 
         # How many model checkpoints are kept
-        self.model_files_stored = 50
+        self.model_files_stored = 5
 
         ###
         # kafka
@@ -64,6 +64,12 @@ class Configuration:
         # folders and file names
         ###
 
+        # folder where the trained models are saved to during learning process
+        self.models_folder = '../data/trained_models/'
+
+        # path and file name to the specific model that should be used for testing and live classification
+        self.directory_model_to_use = self.models_folder + 'models_08-18_16-07-04_epoch-1400' + '/'
+
         # folder where the preprocessed training and test data for the neural network should be stored
         self.training_data_folder = '../data/training_data/'
         self.training_data_encoded_folder = '../data/training_encoded_data/'
@@ -75,9 +81,6 @@ class Configuration:
         self.filename_pkl = 'export_data.pkl'
         self.filename_pkl_cleaned = 'cleaned_data.pkl'
 
-        # folder where the trained models are saved to during learning process
-        self.models_folder = '../data/trained_models/'
-
         # folder where the reduced training data set aka. case base is safed to
         self.case_base_folder = '../data/case_base/'
         self.case_base_encoded_folder = '../data/case_base_encoded/'
@@ -85,8 +88,7 @@ class Configuration:
         # folder where text files with extracted cases are safed to
         self.cases_folder = '../data/cases/'
 
-        # path and file name to the specific model that should be used for testing and live classification
-        self.directory_model_to_use = self.models_folder + 'models_08-14_20-46-00_epoch-100' + '/'
+
 
         ##
         # lists of topics separated by types that need different import variants

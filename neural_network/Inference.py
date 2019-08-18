@@ -16,7 +16,7 @@ class Inference:
         self.hyper: Hyperparameters = hyperparameters
         self.config: Configuration = config
 
-        self.dataset: Dataset = Dataset(dataset_folder)
+        self.dataset: Dataset = Dataset(dataset_folder, config)
         self.dataset.load()
 
         # Set hyperparameters to match the properties of the loaded data
@@ -34,7 +34,7 @@ class Inference:
         self.results.set_index('classes', inplace=True)
         self.results.loc['combined', 'total'] = self.dataset.num_test_instances
 
-        self.snn = initialise_snn(config, hyperparameters, dataset_folder, False)
+        self.snn = initialise_snn(config, hyperparameters, self.dataset, False)
 
         # Load the models from the file configured
         self.snn.load_model(config)
@@ -51,7 +51,7 @@ class Inference:
             max_similarity_idx = 0
 
             # Measure the similarity between the test series and the training batch series
-            sims = self.snn.get_sims(self.dataset.x_test[idx_test])
+            sims = self.snn.get_sims(self.snn.dataset.x_test[idx_test])
 
             # Check similarities of all pairs and record the index of the closest training series
             for i in range(len(sims)):

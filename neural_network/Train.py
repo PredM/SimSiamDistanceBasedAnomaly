@@ -14,7 +14,7 @@ def main():
     config = Configuration()
     hyper = Hyperparameters()
 
-    dataset = Dataset(config.training_data_folder)
+    dataset = Dataset(config.training_data_folder, config)
     dataset.load()
 
     hyper.time_series_length = dataset.time_series_length

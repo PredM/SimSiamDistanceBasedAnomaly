@@ -10,20 +10,30 @@ from neural_network.Subnets import CNN, RNN, FFNN
 
 
 def initialise_snn(config: Configuration, hyper, dataset, training):
-    variants = ['standard_simple', 'standard_ffnn', 'fast_simple', 'fast_ffnn']
+    if training and config.snn_variant in ['fast_simple', 'fast_ffnn']:
+        print('WARNING:')
+        print('The fast version can only be used for inference.')
+        print('Training will still use the standard version, ')
+        print('because the encoding must be recalculated after each epoch any way')
 
-    if config.snn_variant == variants[0]:
+    var = config.snn_variant
+
+    if training and var.endswith('simple') or not training and var == 'standard_simple':
         print('Creating standard SNN with simple similarity measure')
         return SimpleSNN(config.subnet_variant, hyper, dataset, training)
-    elif config.snn_variant == variants[1]:
+
+    elif training and var.endswith('ffnn') or not training and var == 'standard_ffnn':
         print('Creating standard SNN with FFNN similarity measure')
         return SNN(config.subnet_variant, hyper, dataset, training)
-    elif config.snn_variant == variants[2]:
+
+    elif not training and var == 'fast_simple':
         print('Creating fast SNN with simple similarity measure')
         return FastSimpleSNN(config.subnet_variant, hyper, dataset, training)
-    elif config.snn_variant == variants[3]:
+
+    elif not training and var == 'fast_ffnn':
         print('Creating fast SNN with FFNN similarity measure')
         return SNN(config.subnet_variant, hyper, dataset, training)
+
     else:
         raise AttributeError('Unknown SNN variant specified:' + config.snn_variant)
 
@@ -64,7 +74,7 @@ class SimpleSNN:
 
     # TODO Untested because no gpu pc available
     # Manual distribution to all available gpus, currently to automatic version is used, see below
-    def get_sims_2(self, example):
+    def get_sims_2(self, example: np.ndarray):
 
         gpu_list = tf.config.experimental.list_logical_devices('GPU')
 
@@ -111,8 +121,11 @@ class SimpleSNN:
 
     # Todo: Untested
     # Using new automatic distribution to multiple gpus, this would be preferable if it works
+    # Reminder: No method before a batch is combined can use tf.function. Otherwise a value error will occur when
+    # when trying to include an example into the batch that has been passed as a parameter (because of tf.function the
+    # example would be a tensor and a conversion back to an np.array didn't seem to be possible)
     def get_sims(self, example):
-        # For the classic version the sims are calculated in batches
+
         num_train = len(self.dataset.x_train)
         sims_all_examples = np.zeros(num_train)
         batch_size = self.hyper.batch_size
@@ -140,15 +153,18 @@ class SimpleSNN:
         # Return the result of the knn classifier using the calculated similarities
         return sims_all_examples
 
-    @tf.function
+    # Reminder: No tf.function here otherwise TypeError: An op outside of the function building code is being passed
+    # a "Graph" tensor. will occur.
     def get_sims_batch(self, batch):
+
         # Measure the similarity between the example and the training batch
         self.context_vectors = self.subnet.model(batch, training=self.training)
 
         # Get the distances for the hole batch by calculating it for each pair
         distances_batch = tf.map_fn(lambda pair_index: self.get_distance_pair(pair_index),
-                                    tf.range(int(batch.shape[0] / 2), dtype=tf.int32),
-                                    back_prop=True)
+                                    tf.range(batch.shape[0] // 2, dtype=tf.int32),
+                                    back_prop=True, dtype='float32')  # DTYPE IS NECESSARY
+
         sims_batch = tf.exp(-distances_batch)
 
         return sims_batch
@@ -268,13 +284,12 @@ class FastSimpleSNN(SimpleSNN):
         # Return the result of the knn classifier using the calculated similarities
         return sims_all_examples
 
-    @tf.function
     def get_sims_batch(self, section_train, encoded_example):
 
         # Get the distances for the hole batch by calculating it for each pair
         distances_batch = tf.map_fn(lambda index: self.get_distance_pair(section_train[index], encoded_example),
                                     tf.range(section_train.shape[0], dtype=tf.int32),
-                                    back_prop=True)
+                                    back_prop=True, dtype='float32')  # DTYPE IS NECESSARY
         sims_batch = tf.exp(-distances_batch)
 
         return sims_batch

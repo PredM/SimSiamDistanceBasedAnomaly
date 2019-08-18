@@ -5,7 +5,6 @@ import tensorflow as tf
 
 from configuration import Configuration
 from configuration.Hyperparameter import Hyperparameters
-from neural_network.Dataset import Dataset
 
 
 class NN:
