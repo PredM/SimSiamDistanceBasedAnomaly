@@ -16,7 +16,7 @@ class Configuration:
         # ffnn = uses ffnn as distance measure
         # simple = mean absolute difference as distance measure instead of the ffnn
         self.snn_variants = ['standard_simple', 'standard_ffnn', 'fast_simple', 'fast_ffnn']
-        self.snn_variant = self.snn_variants[0]
+        self.snn_variant = self.snn_variants[3]
 
         # Select whether training should be continued from the checkpoint defined below
         self.continue_training = False
@@ -72,7 +72,7 @@ class Configuration:
 
         # folder where the preprocessed training and test data for the neural network should be stored
         self.training_data_folder = '../data/training_data/'
-        self.training_data_encoded_folder = '../data/training_encoded_data/'
+        self.training_data_encoded_folder = '../data/training_data_encoded/'
 
         # folder where the normalisation models should be stored
         self.scaler_folder = '../data/scaler/'

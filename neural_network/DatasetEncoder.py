@@ -13,6 +13,7 @@ class DatasetEncoder:
         self.config: Configuration = config
         self.target_folder = ''
         self.subnet = None  # Cant be initialized here because input shape is unknown
+
         if source_folder == self.config.training_data_folder:
             self.target_folder = self.config.training_data_encoded_folder
         elif source_folder == self.config.case_base_folder:
@@ -39,21 +40,33 @@ class DatasetEncoder:
 
         self.subnet.load_model(self.config)
 
-        x_train_encoded = np.zeros(x_train.shape, dtype='float32')
-        x_test_encoded = np.zeros(x_test.shape, dtype='float32')
+        output_shape = self.subnet.model.output_shape
+        new_train_shape = (x_train.shape[0], output_shape[1], output_shape[2])
+        new_test_shape = (x_test.shape[0], output_shape[1], output_shape[2])
+
+        x_train_encoded = np.zeros(new_train_shape, dtype='float32')
+        x_test_encoded = np.zeros(new_test_shape, dtype='float32')
 
         # TODO Add multigpu support when test in snn implementation
         # Todo maybe needs to be enclosed with an additional array dimension
         for i in range(len(x_train)):
-            context_vector = self.subnet.model(x_train[i], training=False)
-            x_train_encoded[i] = context_vector
+            ex = np.expand_dims(x_train[i], axis=0)
+            context_vector = self.subnet.model(ex, training=False)
+            x_train_encoded[i] = np.squeeze(context_vector, axis=0)
 
         for i in range(len(x_test)):
-            context_vector = self.subnet.model(x_test[i], training=False)
-            x_test_encoded[i] = context_vector
+            ex = np.expand_dims(x_test[i], axis=0)
+            context_vector = self.subnet.model(ex, training=False)
+            x_test_encoded[i] = np.squeeze(context_vector, axis=0)
 
         np.save(self.target_folder + 'train_features.npy', x_train_encoded)
         np.save(self.target_folder + 'test_features.npy', x_test_encoded)
+
+        # Just copy label files into the other directory
+        y_train = np.load(self.source_folder + 'train_labels.npy')
+        y_test = np.load(self.source_folder + 'test_labels.npy')
+        np.save(self.target_folder + 'train_labels.npy', y_train)
+        np.save(self.target_folder + 'test_labels.npy', y_test)
 
 
 def main():

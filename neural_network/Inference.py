@@ -16,7 +16,7 @@ class Inference:
         self.hyper: Hyperparameters = hyperparameters
         self.config: Configuration = config
 
-        self.dataset: Dataset = Dataset(dataset_folder, config)
+        self.dataset: Dataset = Dataset(dataset_folder, config, training=False)
         self.dataset.load()
 
         # Set hyperparameters to match the properties of the loaded data

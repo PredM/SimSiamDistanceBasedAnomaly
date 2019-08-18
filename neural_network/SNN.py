@@ -162,7 +162,7 @@ class SimpleSNN:
 
         # Get the distances for the hole batch by calculating it for each pair
         distances_batch = tf.map_fn(lambda pair_index: self.get_distance_pair(pair_index),
-                                    tf.range(batch.shape[0] // 2, dtype=tf.int32),
+                                    tf.range(int(batch.shape[0] / 2), dtype=tf.int32),
                                     back_prop=True, dtype='float32')  # DTYPE IS NECESSARY
 
         sims_batch = tf.exp(-distances_batch)
@@ -251,7 +251,8 @@ class FastSimpleSNN(SimpleSNN):
 
     # Todo: Untested
     # Using new automatic distribution to multiple gpus, this would be preferable if it works
-    def get_sims(self, example):
+    # Example must already be encoded
+    def get_sims(self, encoded_example):
 
         # For the classic version the sims are calculated in batches
         num_train = len(self.dataset.x_train)
@@ -259,9 +260,6 @@ class FastSimpleSNN(SimpleSNN):
         batch_size = self.hyper.batch_size
 
         # Get the encoding for the example once
-        # Todo maybe needs to be enclosed with an additional array dimension
-        encoded_example = self.subnet.model(example, training=self.training)
-
         for index in range(0, num_train, batch_size):
 
             # Fix batch size if it would exceed the number of train instances
@@ -276,7 +274,7 @@ class FastSimpleSNN(SimpleSNN):
                 section_train[i] = self.dataset.x_train[index + i]
 
             with self.strategy.scope():
-                sims_batch = self.get_sims_batch(section_train, encoded_example)
+                sims_batch = self.get_sims_section(section_train, encoded_example)
 
             # Collect similarities of all badges
             sims_all_examples[index:index + batch_size] = sims_batch
@@ -284,7 +282,10 @@ class FastSimpleSNN(SimpleSNN):
         # Return the result of the knn classifier using the calculated similarities
         return sims_all_examples
 
-    def get_sims_batch(self, section_train, encoded_example):
+    def get_sims_batch(self, batch):
+        raise NotImplemented('This method is not supported by this SNN variant by design.')
+
+    def get_sims_section(self, section_train, encoded_example):
 
         # Get the distances for the hole batch by calculating it for each pair
         distances_batch = tf.map_fn(lambda index: self.get_distance_pair(section_train[index], encoded_example),

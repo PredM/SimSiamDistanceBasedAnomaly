@@ -65,7 +65,7 @@ class Optimizer:
             # Get the example pairs by the selected indices
             model_input = np.take(a=self.dataset.x_train, indices=batch_pairs_indices, axis=0)
 
-            batch_loss, pred_similarities = self.update_model(model_input, true_similarities)
+            batch_loss = self.update_model(model_input, true_similarities)
 
             # Track progress
             epoch_loss_avg.update_state(batch_loss)  # Add current batch loss
@@ -99,7 +99,7 @@ class Optimizer:
             # Apply the gradients to the trainable parameters
             self.adam_optimizer.apply_gradients(zip(grads, trainable_params))
 
-            return loss, pred_similarities
+            return loss
 
     def delete_old_checkpoints(self, current_epoch):
 

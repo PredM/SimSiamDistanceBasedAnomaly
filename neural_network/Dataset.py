@@ -7,7 +7,7 @@ from neural_network.DatasetEncoder import DatasetEncoder
 
 class Dataset:
 
-    def __init__(self, dataset_folder, config: Configuration):
+    def __init__(self, dataset_folder, config: Configuration, training):
         self.dataset_folder = dataset_folder
         self.config: Configuration = config
 
@@ -26,11 +26,12 @@ class Dataset:
         self.num_classes = None
         self.classes = None
 
-        if self.config.snn_variant in ['standard_simple', 'standard_ffnn']:
+        if self.config.snn_variant in ['standard_simple', 'standard_ffnn'] or training:
             pass  # nothing to do if standard variant
         elif self.config.snn_variant in ['fast_simple', 'fast_ffnn']:
             print('Fast SNN variant configured, encoding the dataset with subnet')
-            encoder = DatasetEncoder(dataset_folder, Configuration)
+            print('Encoding feature files ...')
+            encoder = DatasetEncoder(self.dataset_folder, config)
             encoder.encode()
             self.dataset_folder = encoder.target_folder
             print('Encoding finished')

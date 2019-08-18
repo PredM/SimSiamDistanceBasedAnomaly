@@ -300,7 +300,7 @@ class Classifier(threading.Thread):
         super().__init__()
         self.examples_to_classify = multiprocessing.Manager().Queue(10)
         self.config = config
-        self.dataset = Dataset(config.case_base_folder)
+        self.dataset = Dataset(config.training_data_folder, config, training=False)
         self.snn = SNN.initialise_snn(config, Hyperparameters(), self.dataset, training=False)
         self.snn.load_model(config)
         self.stop = False
@@ -379,6 +379,14 @@ class Classifier(threading.Thread):
 
     # k nearest neighbor implementation to select the class based on the k most similar training examples
     def knn(self, example: np.ndarray):
+
+        # TODO Encode example if fast version check if working
+        if self.config.snn_variant in []:
+            example_as_batch = np.expand_dims(example, axis=0)
+            result = self.snn.subnet.model(example_as_batch, training=False)
+            encoded_example = np.squeeze(result, axis=0)
+            print(encoded_example.shape)
+
         # calculate the similarities to all examples of the case base using the nn
         sims = self.snn.get_sims(example)
 
