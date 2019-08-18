@@ -37,7 +37,7 @@ class Inference:
         self.snn = initialise_snn(config, hyperparameters, dataset_folder, False)
 
         # Load the models from the file configured
-        self.snn.load_models(config)
+        self.snn.load_model(config)
 
     def infer_test_dataset(self):
         correct, num_infers = 0, 0

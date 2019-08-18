@@ -1,10 +1,59 @@
+from configuration.Configuration import Configuration
+
+import numpy as np
+
+from configuration.Hyperparameter import Hyperparameters
+from neural_network.Subnets import CNN, RNN
+
+
 class DatasetEncoder:
 
-    def __init__(self):
-        pass
+    def __init__(self, source_folder, config):
+        self.source_folder = source_folder
+        self.config: Configuration = config
+        self.target_folder = ''
+        self.subnet = None  # Cant be initialized here because input shape is unknown
+        if source_folder == self.config.training_data_folder:
+            self.target_folder = self.config.training_data_encoded_folder
+        elif source_folder == self.config.case_base_folder:
+            self.target_folder = self.config.case_base_encoded_folder
+        else:
+            raise AttributeError('Unknown source folder for dataset encoder')
 
     def encode(self):
-        pass
+        x_train = np.load(self.source_folder + "train_features.npy").astype('float32')
+        x_test = np.load(self.source_folder + "test_features.npy").astype('float32')
+
+        time_series_length = x_train.shape[1]
+        time_series_depth = x_train.shape[2]
+
+        input_shape = (time_series_length, time_series_depth)
+
+        # TODO Replace with load subnet model
+        if self.config.subnet_variant == 'cnn':
+            self.subnet = CNN(Hyperparameters(), input_shape)
+        elif self.config.subnet_variant == 'rnn':
+            self.subnet = RNN(Hyperparameters(), input_shape)
+        else:
+            print('Unknown subnet variant, use "cnn" or "rnn"')
+
+        self.subnet.load_model(self.config)
+
+        x_train_encoded = np.zeros(x_train.shape, dtype='float32')
+        x_test_encoded = np.zeros(x_test.shape, dtype='float32')
+
+        # TODO Add multigpu support when test in snn implementation
+        # Todo maybe needs to be enclosed with an additional array dimension
+        for i in range(len(x_train)):
+            context_vector = self.subnet.model(x_train[i], training=False)
+            x_train_encoded[i] = context_vector
+
+        for i in range(len(x_test)):
+            context_vector = self.subnet.model(x_test[i], training=False)
+            x_test_encoded[i] = context_vector
+
+        np.save(self.target_folder + 'train_features.npy', x_train_encoded)
+        np.save(self.target_folder + 'test_features.npy', x_test_encoded)
 
 
 def main():

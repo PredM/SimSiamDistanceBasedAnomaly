@@ -1,5 +1,4 @@
 import sys
-from os import listdir
 
 import tensorflow as tf
 import numpy as np
@@ -31,7 +30,7 @@ def initialise_snn(config: Configuration, hyper, dataset, training):
 
 class SimpleSNN:
 
-    def __init__(self, variant, hyperparameters, dataset, training):
+    def __init__(self, subnet_variant, hyperparameters, dataset, training):
         self.hyper: Hyperparameters = hyperparameters
         self.dataset: Dataset = dataset
         self.training = training
@@ -40,40 +39,28 @@ class SimpleSNN:
         self.strategy = tf.distribute.MirroredStrategy()  # Todo remove if not working
         self.subnet = None
 
+        # shape of a single example, is left flexible
         input_shape_subnet = (self.hyper.time_series_length, self.hyper.time_series_depth)
 
-        if variant == 'cnn':
-            self.subnet = CNN(hyperparameters, dataset, input_shape_subnet)
+        if subnet_variant == 'cnn':
+            self.subnet = CNN(hyperparameters, input_shape_subnet)
             self.subnet.create_model()
 
-        elif variant == 'rnn':
-            self.subnet = RNN(hyperparameters, dataset, input_shape_subnet)
+        elif subnet_variant == 'rnn':
+            self.subnet = RNN(hyperparameters, input_shape_subnet)
             self.subnet.create_model()
         else:
             print('Unknown subnet variant, use "cnn" or "rnn"')
-            print(variant)
+            print(subnet_variant)
             sys.exit(1)
 
-    # TODO Maybe handel matching filename with wrong content
-    def load_models(self, config: Configuration):
-        self.subnet.model = None
+    def load_model(self, config: Configuration):
+        self.subnet.load_model(config)
 
-        for file_name in listdir(config.directory_model_to_use):
-
-            # If model is already loaded no further files need to be checked
-            if self.subnet.model is not None:
-                break
-
-            # Compile must be set to false because the standard optimizer wasn't used what would otherwise
-            # generate an error
-            if file_name.startswith('subnet'):
-                self.subnet.model = tf.keras.models.load_model(config.directory_model_to_use + file_name, compile=False)
-
-        # If still None no matching file was
         if self.subnet.model is None:
-            print('Subnet model file not found in', config.directory_model_to_use)
+            sys.exit(1)
         else:
-            print('Subnet model has been loaded successfully:\n')
+            self.print_detailed_model_info()
 
     # TODO Untested because no gpu pc available
     # Manual distribution to all available gpus, currently to automatic version is used, see below
@@ -186,14 +173,14 @@ class SimpleSNN:
 
 class SNN(SimpleSNN):
 
-    def __init__(self, variant, hyperparameters, dataset, training):
-        super().__init__(variant, hyperparameters, dataset, training)
+    def __init__(self, subnet_variant, hyperparameters, dataset, training):
+        super().__init__(subnet_variant, hyperparameters, dataset, training)
 
         # In addition the simple snn version the ffnn needs to be initialised
         subnet_output_shape = self.subnet.model.output_shape
         input_shape_ffnn = (subnet_output_shape[1] ** 2, subnet_output_shape[2] * 2)
 
-        self.ffnn = FFNN(self.hyper, self.dataset, input_shape_ffnn)
+        self.ffnn = FFNN(self.hyper, input_shape_ffnn)
         self.ffnn.create_model()
 
         print('The full model has', self.ffnn.get_parameter_count() + self.subnet.get_parameter_count(), 'parameters\n')
@@ -224,26 +211,13 @@ class SNN(SimpleSNN):
 
         return tf.reduce_mean(warped_dists)
 
-    def load_models(self, config: Configuration):
-        self.subnet.model = None
-        self.ffnn.model = None
-
-        for file_name in listdir(config.directory_model_to_use):
-
-            if self.subnet.model is not None and self.ffnn.model is not None:
-                break
-
-            # Compile must be set to false because the standard optimizer was not used and this would otherwise
-            # generate an error
-            if file_name.startswith('ffnn'):
-                self.ffnn.model = tf.keras.models.load_model(config.directory_model_to_use + file_name, compile=False)
-            elif file_name.startswith('subnet'):
-                self.subnet.model = tf.keras.models.load_model(config.directory_model_to_use + file_name, compile=False)
+    def load_model(self, config: Configuration):
+        self.subnet.load_model(config)
+        self.ffnn.load_model(config)
 
         if self.subnet.model is None or self.ffnn.model is None:
-            print('At least one model file not found in', config.directory_model_to_use)
+            sys.exit(1)
         else:
-            print('Models have been loaded successfully:\n')
             self.print_detailed_model_info()
 
     def print_detailed_model_info(self):
@@ -256,11 +230,116 @@ class SNN(SimpleSNN):
 
 class FastSimpleSNN(SimpleSNN):
 
-    def __init__(self, variant, hyperparameters, dataset, training):
-        super().__init__(variant, hyperparameters, dataset, training)
+    def __init__(self, subnet_variant, hyperparameters, dataset, training):
+        super().__init__(subnet_variant, hyperparameters, dataset, training)
+
+    # Todo: Untested
+    # Using new automatic distribution to multiple gpus, this would be preferable if it works
+    def get_sims(self, example):
+
+        # For the classic version the sims are calculated in batches
+        num_train = len(self.dataset.x_train)
+        sims_all_examples = np.zeros(num_train)
+        batch_size = self.hyper.batch_size
+
+        # Get the encoding for the example once
+        # Todo maybe needs to be enclosed with an additional array dimension
+        encoded_example = self.subnet.model(example, training=self.training)
+
+        for index in range(0, num_train, batch_size):
+
+            # Fix batch size if it would exceed the number of train instances
+            if index + batch_size >= num_train:
+                batch_size = num_train - index
+
+            section_train = np.zeros((batch_size, self.hyper.time_series_length,
+                                      self.hyper.time_series_depth)).astype('float32')
+
+            # Create a batch of pairs between the test series and the train series
+            for i in range(batch_size):
+                section_train[i] = self.dataset.x_train[index + i]
+
+            with self.strategy.scope():
+                sims_batch = self.get_sims_batch(section_train, encoded_example)
+
+            # Collect similarities of all badges
+            sims_all_examples[index:index + batch_size] = sims_batch
+
+        # Return the result of the knn classifier using the calculated similarities
+        return sims_all_examples
+
+    @tf.function
+    def get_sims_batch(self, section_train, encoded_example):
+
+        # Get the distances for the hole batch by calculating it for each pair
+        distances_batch = tf.map_fn(lambda index: self.get_distance_pair(section_train[index], encoded_example),
+                                    tf.range(section_train.shape[0], dtype=tf.int32),
+                                    back_prop=True)
+        sims_batch = tf.exp(-distances_batch)
+
+        return sims_batch
+
+    @tf.function
+    def get_distance_pair(self, a, b):
+
+        # This snn version uses the a simple distance measure
+        # by calculating the mean of the absolute difference at matching timestamps
+        diff = tf.abs(a - b)
+        distance_example = tf.reduce_mean(diff)
+
+        return distance_example
 
 
-class FastSNN(SNN):
+class FastSNN(FastSimpleSNN):
 
-    def __init__(self, variant, hyperparameters, dataset, training):
-        super().__init__(variant, hyperparameters, dataset, training)
+    def __init__(self, subnet_variant, hyperparameters, dataset, training):
+        super().__init__(subnet_variant, hyperparameters, dataset, training)
+
+        # In addition the simple snn version the ffnn needs to be initialised
+        subnet_output_shape = self.subnet.model.output_shape
+        input_shape_ffnn = (subnet_output_shape[1] ** 2, subnet_output_shape[2] * 2)
+
+        self.ffnn = FFNN(self.hyper, input_shape_ffnn)
+        self.ffnn.create_model()
+
+        print('The full model has', self.ffnn.get_parameter_count() + self.subnet.get_parameter_count(), 'parameters\n')
+
+    @tf.function
+    def get_distance_pair(self, a, b):
+
+        indices_a = tf.range(a.shape[0])
+        indices_a = tf.tile(indices_a, [a.shape[0]])
+        a = tf.gather(a, indices_a)
+
+        indices_b = tf.range(b.shape[0])
+        indices_b = tf.reshape(indices_b, [-1, 1])
+        indices_b = tf.tile(indices_b, [1, b.shape[0]])
+        indices_b = tf.reshape(indices_b, [-1])
+        b = tf.gather(b, indices_b)
+
+        ffnn_input = tf.concat([a, b], axis=1)
+
+        ffnn = self.ffnn.model(ffnn_input, training=self.training)
+
+        abs_distance = tf.abs(tf.subtract(a, b))
+        smallest_abs_difference = tf.expand_dims(tf.reduce_mean(abs_distance, axis=1), axis=-1)
+
+        warped_dists = tf.multiply(smallest_abs_difference, ffnn)
+
+        return tf.reduce_mean(warped_dists)
+
+    def load_model(self, config: Configuration):
+        self.subnet.load_model(config)
+        self.ffnn.load_model(config)
+
+        if self.subnet.model is None or self.ffnn.model is None:
+            sys.exit(1)
+        else:
+            self.print_detailed_model_info()
+
+    def print_detailed_model_info(self):
+        print('')
+        self.subnet.model.summary()
+        print('')
+        self.ffnn.model.summary()
+        print('')

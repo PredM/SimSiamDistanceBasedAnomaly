@@ -302,7 +302,7 @@ class Classifier(threading.Thread):
         self.config = config
         self.dataset = Dataset(config.case_base_folder)
         self.snn = SNN.initialise_snn(config, Hyperparameters(), self.dataset, training=False)
-        self.snn.load_models(config)
+        self.snn.load_model(config)
         self.stop = False
 
         if config.export_results_to_kafka:

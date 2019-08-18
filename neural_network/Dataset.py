@@ -1,11 +1,15 @@
 import numpy as np
 from sklearn import preprocessing
 
+from configuration.Configuration import Configuration
+from neural_network.DatasetEncoder import DatasetEncoder
+
 
 class Dataset:
 
-    def __init__(self, dataset_folder):
+    def __init__(self, dataset_folder, config: Configuration):
         self.dataset_folder = dataset_folder
+        self.config: Configuration = config
 
         self.x_train = None
         self.y_train = None
@@ -21,6 +25,17 @@ class Dataset:
         self.time_series_depth = None
         self.num_classes = None
         self.classes = None
+
+        if self.config.snn_variant in ['standard_simple', 'standard_ffnn']:
+            pass  # nothing to do if standard variant
+        elif self.config.snn_variant in ['fast_simple', 'fast_ffnn']:
+            print('Fast SNN variant configured, encoding the dataset with subnet')
+            encoder = DatasetEncoder(dataset_folder, Configuration)
+            encoder.encode()
+            self.dataset_folder = encoder.target_folder
+            print('Encoding finished')
+        else:
+            raise AttributeError('Unknown SNN variant.')
 
     def load(self):
         # Dtype conversion necessary because layers use float32 by default
@@ -68,7 +83,7 @@ class Dataset:
         # 1. dimension: example
         # 2. dimension: time index
         # 3. dimension: array of all channels
-        print('Dataset created')
+        print('Dataset loaded')
         print('\tShape of training set:', self.x_train.shape)
         print('\tShape of test set:', self.x_test.shape, '\n')
 

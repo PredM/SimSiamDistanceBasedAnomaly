@@ -28,7 +28,7 @@ class Optimizer:
 
         # TODO Continuation not tested yet
         if self.config.continue_training:
-            self.snn.load_models(self.config)
+            self.snn.load_model(self.config)
 
             try:
                 # Get the epoch by the directory name

@@ -1,16 +1,17 @@
 import sys
+from os import listdir
 
 import tensorflow as tf
 
+from configuration import Configuration
 from configuration.Hyperparameter import Hyperparameters
 from neural_network.Dataset import Dataset
 
 
 class NN:
 
-    def __init__(self, hyperparameters, dataset, input_shape):
+    def __init__(self, hyperparameters, input_shape):
         self.hyper: Hyperparameters = hyperparameters
-        self.dataset: Dataset = dataset
         self.input_shape = input_shape
         self.model: tf.keras.Sequential = tf.keras.Sequential()
 
@@ -31,11 +32,37 @@ class NN:
 
         return total_parameters
 
+    # TODO Maybe handel matching filename with wrong content
+    def load_model(self, config: Configuration):
+        self.model = None
+
+        if type(self) == CNN or type(self) == RNN:
+            prefix = 'subnet'
+        elif type(self) == FFNN:
+            prefix = 'ffnn'
+        else:
+            raise AttributeError('Can not import models of type', type(self))
+
+        for file_name in listdir(config.directory_model_to_use):
+
+            # Compile must be set to false because the standard optimizer was not used and this would otherwise
+            # generate an error
+            if file_name.startswith(prefix):
+                self.model = tf.keras.models.load_model(config.directory_model_to_use + file_name, compile=False)
+
+            if self.model is not None:
+                break
+
+        if self.model is None:
+            print('Model file for this type could not be found in ', config.directory_model_to_use)
+        else:
+            print('Model has been loaded successfully:\n')
+
 
 class FFNN(NN):
 
-    def __init__(self, hyperparameters, dataset, input_shape):
-        super().__init__(hyperparameters, dataset, input_shape)
+    def __init__(self, hyperparameters, input_shape):
+        super().__init__(hyperparameters, input_shape)
 
     def create_model(self):
 
@@ -65,8 +92,8 @@ class FFNN(NN):
 
 class RNN(NN):
 
-    def __init__(self, hyperparameters, dataset, input_shape):
-        super().__init__(hyperparameters, dataset, input_shape)
+    def __init__(self, hyperparameters, input_shape):
+        super().__init__(hyperparameters, input_shape)
 
     # RNN structure matching the description in the neural warp paper,
     # currently not used
@@ -133,8 +160,8 @@ class RNN(NN):
 
 class CNN(NN):
 
-    def __init__(self, hyperparameters, dataset, input_shape):
-        super().__init__(hyperparameters, dataset, input_shape)
+    def __init__(self, hyperparameters, input_shape):
+        super().__init__(hyperparameters, input_shape)
 
     def create_model(self):
         print('Creating CNN subnet')
