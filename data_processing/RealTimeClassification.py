@@ -13,7 +13,10 @@ from kafka import KafkaConsumer, TopicPartition, KafkaProducer
 from sklearn.preprocessing import MinMaxScaler
 
 from configuration.Configuration import Configuration
+from configuration.Hyperparameter import Hyperparameters
 from data_processing.DataframeCleaning import clean_up_dataframe
+from neural_network import SNN
+from neural_network.Dataset import Dataset
 from neural_network.Inference import Inference
 
 
@@ -293,16 +296,14 @@ def load_scalers(config):
 
 class Classifier(threading.Thread):
 
-    def __init__(self, config):
+    def __init__(self, config: Configuration):
         super().__init__()
         self.examples_to_classify = multiprocessing.Manager().Queue(10)
         self.config = config
-        self.inferencer = None
+        self.dataset = Dataset(config.case_base_folder)
+        self.snn = SNN.initialise_snn(config, Hyperparameters(), self.dataset, training=False)
+        self.snn.load_models(config)
         self.stop = False
-
-        # tensorflow session created here so is not closed
-        with contextlib.redirect_stdout(None):
-            self.tf_session = tf.Session()
 
         if config.export_results_to_kafka:
             self.result_producer = KafkaProducer(bootstrap_servers=config.get_connection(),
@@ -314,80 +315,75 @@ class Classifier(threading.Thread):
         self.total_diff = pd.Timedelta(0)
 
     def run(self):
-        # prepare inferencer with given parameters
-        # instead of training data folder the folder with the reduced set of training examples aka case base is used
-        # for faster classification, generated with with CaseBaseExtraction.py
-        config = self.config
 
-        with self.tf_session:
-            try:
-                # classify element of the queue as long as the stop flag is not set by a interrupt
-                while not self.stop:
-                    classification_start = time.clock()
+        try:
+            # classify element of the queue as long as the stop flag is not set by a interrupt
+            while not self.stop:
+                classification_start = time.clock()
 
-                    # get the next element in queue, wait if empty
-                    element = self.examples_to_classify.get(block=True)
+                # get the next element in queue, wait if empty
+                element = self.examples_to_classify.get(block=True)
 
-                    # extract information from the queue element
-                    example = element[0]
-                    time_start = element[1].strftime('%H:%M:%S')
-                    time_end = element[2].strftime('%H:%M:%S')
-                    start_time = element[3]
+                # extract information from the queue element
+                example = element[0]
+                time_start = element[1].strftime('%H:%M:%S')
+                time_end = element[2].strftime('%H:%M:%S')
+                start_time = element[3]
 
-                    # classify the example using knn and the neural network
-                    label, mean_sim = self.knn(example)
+                # classify the example using knn and the neural network
+                label, mean_sim = self.knn(example)
 
-                    error_description = config.get_error_description(label)
+                error_description = self.config.get_error_description(label)
 
-                    if config.export_results_to_kafka and not self.stop:
-                        results = {'class_label': label,
-                                   'description': error_description,
-                                   'mean_similarity_of_k_best': mean_sim,
-                                   'time_interval_start': time_start,
-                                   'time_interval_end': time_end}
-                        self.result_producer.send(config.export_topic, results)
+                if self.config.export_results_to_kafka and not self.stop:
+                    results = {'class_label': label,
+                               'description': error_description,
+                               'mean_similarity_of_k_best': mean_sim,
+                               'time_interval_start': time_start,
+                               'time_interval_end': time_end}
+                    self.result_producer.send(self.config.export_topic, results)
 
-                    classification_time = time.clock() - classification_start
-                    total_time_for_example = time.clock() - start_time
-                    time_span = (pd.Timestamp.now() - element[2])
+                classification_time = time.clock() - classification_start
+                total_time_for_example = time.clock() - start_time
+                time_span = (pd.Timestamp.now() - element[2])
 
-                    self.nbr_classified += 1
-                    self.total_time_classification += classification_time
-                    self.total_time_all += total_time_for_example
-                    self.total_diff += time_span
+                self.nbr_classified += 1
+                self.total_time_classification += classification_time
+                self.total_time_all += total_time_for_example
+                self.total_diff += time_span
 
-                    if not self.stop:
-                        print('Classification result for the time interval from', time_start, 'to', time_end + ':')
+                if not self.stop:
+                    print('Classification result for the time interval from', time_start, 'to', time_end + ':')
 
-                        table_data = [
-                            ['\tLabel:', label],
-                            ['\tDescription:', error_description],
-                            ['\tMean similarity:', '{0:.4f}'.format(mean_sim)],
-                            ['\tClassification time:', '{0:.4f}'.format(classification_time)],
-                            ['\tTotal time:', '{0:.4f}'.format(total_time_for_example)],
-                            ['\tTime span:', '{0:.4f}'.format(time_span.total_seconds())],
-                            ['\tMean classification time:',
-                             '{0:.4f}'.format(self.total_time_classification / self.nbr_classified)],
-                            ['\tMean total time:', '{0:.4f}'.format(self.total_time_all / self.nbr_classified)],
-                            ['\tMean time span:',
-                             '{0:.4f}'.format(self.total_diff.total_seconds() / self.nbr_classified)],
-                            ['\tExamples left in queue:', self.examples_to_classify.qsize()]
-                        ]
+                    table_data = [
+                        ['\tLabel:', label],
+                        ['\tDescription:', error_description],
+                        ['\tMean similarity:', '{0:.4f}'.format(mean_sim)],
+                        ['\tClassification time:', '{0:.4f}'.format(classification_time)],
+                        ['\tTotal time:', '{0:.4f}'.format(total_time_for_example)],
+                        ['\tTime span:', '{0:.4f}'.format(time_span.total_seconds())],
+                        ['\tMean classification time:',
+                         '{0:.4f}'.format(self.total_time_classification / self.nbr_classified)],
+                        ['\tMean total time:', '{0:.4f}'.format(self.total_time_all / self.nbr_classified)],
+                        ['\tMean time span:',
+                         '{0:.4f}'.format(self.total_diff.total_seconds() / self.nbr_classified)],
+                        ['\tExamples left in queue:', self.examples_to_classify.qsize()]
+                    ]
 
-                        for row in table_data:
-                            print("{: <28} {: <28}".format(*row))
-                        print('')
+                    for row in table_data:
+                        print("{: <28} {: <28}".format(*row))
+                    print('')
 
-            except BrokenPipeError or EOFError:
-                self.stop = True
+        except BrokenPipeError or EOFError:
+            self.stop = True
 
     # k nearest neighbor implementation to select the class based on the k most similar training examples
     def knn(self, example: np.ndarray):
         # calculate the similarities to all examples of the case base using the nn
-        sims = self.inferencer.infer_single_example(example, self.tf_session)
+        sims = self.snn.get_sims(example)
 
         # get labels without onehot encoding
-        y_train = self.inferencer.ds.onehot_encoder.inverse_transform(self.inferencer.ds.y_train)
+        y_train = self.snn.dataset.one_hot_encoder.inverse_transform(self.snn.dataset.y_train)
 
         # argsort is ascending only, but descending is needed, so 'invert' the array content
         arg_sort = np.argsort(-sims)
@@ -447,12 +443,6 @@ def main():
 
     # create and start a classifier thread that handles the classification of processed examples
     classifier = Classifier(config)
-
-    classifier.inferencer = Inference(model_type=config.architecture_type,
-                                      model_file=config.directory_model_to_use,
-                                      dataset_path=config.case_base_folder)
-
-    classifier.inferencer.saver.restore(classifier.tf_session, classifier.inferencer.model_file)
 
     print('\nCreating classifier ...')
     print('The classifier will use k=' + str(config.k_of_knn) + ' for the k-NN algorithm')

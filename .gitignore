@@ -135,3 +135,7 @@ data/training_data/*
 
 data/trained_models/*
 !data/trained_models/.gitkeep
+
+data/training_data_encoded/*
+!data/training_data_encoded/.gitkeep
+
