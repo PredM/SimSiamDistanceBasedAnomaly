@@ -14,6 +14,8 @@ class DatasetEncoder:
         self.target_folder = ''
         self.subnet = None  # Cant be initialized here because input shape is unknown
 
+        # Depending on whether it is training data or case base,
+        # a corresponding target folder is set for the encoded files
         if source_folder == self.config.training_data_folder:
             self.target_folder = self.config.training_data_encoded_folder
         elif source_folder == self.config.case_base_folder:
@@ -30,7 +32,7 @@ class DatasetEncoder:
 
         input_shape = (time_series_length, time_series_depth)
 
-        # TODO Replace with load subnet model
+        # Create the subnet encoder and load the configured model
         if self.config.subnet_variant == 'cnn':
             self.subnet = CNN(Hyperparameters(), input_shape)
         elif self.config.subnet_variant == 'rnn':
@@ -40,6 +42,7 @@ class DatasetEncoder:
 
         self.subnet.load_model(self.config)
 
+        # Calculate the shape of the arrays that store the encoded examples and create empty ones
         output_shape = self.subnet.model.output_shape
         new_train_shape = (x_train.shape[0], output_shape[1], output_shape[2])
         new_test_shape = (x_test.shape[0], output_shape[1], output_shape[2])
@@ -47,12 +50,11 @@ class DatasetEncoder:
         x_train_encoded = np.zeros(new_train_shape, dtype='float32')
         x_test_encoded = np.zeros(new_test_shape, dtype='float32')
 
-        # TODO Add multigpu support when test in snn implementation
-        # Todo maybe needs to be enclosed with an additional array dimension
+        # TODO Add multi gpu support when tested in snn implementation
         for i in range(len(x_train)):
-            ex = np.expand_dims(x_train[i], axis=0)
+            ex = np.expand_dims(x_train[i], axis=0)  # Model expects array of examples -> add outer dimension
             context_vector = self.subnet.model(ex, training=False)
-            x_train_encoded[i] = np.squeeze(context_vector, axis=0)
+            x_train_encoded[i] = np.squeeze(context_vector, axis=0)  # Back to a single example
 
         for i in range(len(x_test)):
             ex = np.expand_dims(x_test[i], axis=0)

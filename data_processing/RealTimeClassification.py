@@ -319,7 +319,7 @@ class Classifier(threading.Thread):
         try:
             # classify element of the queue as long as the stop flag is not set by a interrupt
             while not self.stop:
-                classification_start = time.clock()
+                classification_start = time.perf_counter()
 
                 # get the next element in queue, wait if empty
                 element = self.examples_to_classify.get(block=True)
@@ -343,8 +343,8 @@ class Classifier(threading.Thread):
                                'time_interval_end': time_end}
                     self.result_producer.send(self.config.export_topic, results)
 
-                classification_time = time.clock() - classification_start
-                total_time_for_example = time.clock() - start_time
+                classification_time = time.perf_counter() - classification_start
+                total_time_for_example = time.perf_counter() - start_time
                 time_span = (pd.Timestamp.now() - element[2])
 
                 self.nbr_classified += 1
@@ -380,17 +380,14 @@ class Classifier(threading.Thread):
     # k nearest neighbor implementation to select the class based on the k most similar training examples
     def knn(self, example: np.ndarray):
 
-        # TODO Encode example if fast version check if working
-        if self.config.snn_variant in []:
-            example_as_batch = np.expand_dims(example, axis=0)
-            result = self.snn.subnet.model(example_as_batch, training=False)
-            encoded_example = np.squeeze(result, axis=0)
-            print(encoded_example.shape)
+        # TODO not tested yet
+        if self.config.snn_variant in ['fast_simple', 'fast_ffnn']:
+            example = self.snn.encode_example(example)
 
         # calculate the similarities to all examples of the case base using the nn
         sims = self.snn.get_sims(example)
 
-        # get labels without onehot encoding
+        # get labels without one hot encoding
         y_train = self.snn.dataset.one_hot_encoder.inverse_transform(self.snn.dataset.y_train)
 
         # argsort is ascending only, but descending is needed, so 'invert' the array content
@@ -467,7 +464,7 @@ def main():
 
         # classify as until interrupted
         while 1:
-            start_time = time.clock()
+            start_time = time.perf_counter()
             # read data for a single example from kafka, results contains lists of single messages
             results = read_single_example(consumers, limiting_consumer, config)
 

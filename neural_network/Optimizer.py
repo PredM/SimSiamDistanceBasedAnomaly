@@ -19,25 +19,24 @@ class Optimizer:
         self.dataset: Dataset = dataset
         self.hyper: Hyperparameters = hyperparameters
         self.config: Configuration = config
-        self.adam_optimizer = tf.keras.optimizers.Adam(learning_rate=self.hyper.learning_rate,
-                                                       clipnorm=self.hyper.gradient_cap)
+        self.adam_optimizer = tf.keras.optimizers.Adam(learning_rate=self.hyper.learning_rate)
 
     def optimize(self):
         current_epoch = 0
         train_loss_results = []
 
-        # TODO Continuation not tested yet
         if self.config.continue_training:
             self.snn.load_model(self.config)
 
             try:
                 # Get the epoch by the directory name
-                current_epoch = int(self.config.directory_model_to_use.split('-')[-1])
+                epoch_as_string = self.config.directory_model_to_use.rstrip('/').split('-')[-1]
+                current_epoch = int(epoch_as_string)
                 print('Continuing the training at epoch', current_epoch)
 
             except ValueError:
                 current_epoch = 0
-                print('Continuing the training but the epoch could not be determined', current_epoch)
+                print('Continuing the training but the epoch could not be determined')
                 print('Using loaded model but starting at epoch 0')
 
         for epoch in range(current_epoch, self.hyper.epochs):
@@ -84,18 +83,21 @@ class Optimizer:
         with tf.GradientTape() as tape:
             pred_similarities = self.snn.get_sims_batch(model_input)
 
-            # Get parameters of subnet and ffnn
+            # Get parameters of subnet and ffnn (if complex sim measure)
             if self.config.snn_variant in ['standard_ffnn', 'fast_ffnn']:
-                trainable_params = self.snn.subnet.model.trainable_variables
-            else:
                 trainable_params = self.snn.ffnn.model.trainable_variables + self.snn.subnet.model.trainable_variables
+            else:
+                trainable_params = self.snn.subnet.model.trainable_variables
 
             # Calculate the loss and the gradients
             loss = tf.keras.losses.binary_crossentropy(y_true=true_similarities, y_pred=pred_similarities)
             grads = tape.gradient(loss, trainable_params)
 
+            # maybe change back to clipnorm=self.hyper.gradient_cap in adam initialisation
+            clipped_grads, _ = tf.clip_by_global_norm(grads, self.hyper.gradient_cap)
+
             # Apply the gradients to the trainable parameters
-            self.adam_optimizer.apply_gradients(zip(grads, trainable_params))
+            self.adam_optimizer.apply_gradients(zip(clipped_grads, trainable_params))
 
             return loss
 

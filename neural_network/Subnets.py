@@ -140,7 +140,7 @@ class RNN(NN):
             num_units = layers[i]
 
             # First layer must be handled separately because the input shape parameter must be set
-            # Choice of parameters ensure usage of cuDNN TODO must be tested if working
+            # Choice of parameters ensure usage of cuDNN TODO Must be tested if working
             if i == 0:
                 layer = tf.keras.layers.LSTM(units=num_units, activation='tanh', recurrent_activation='sigmoid',
                                              recurrent_dropout=0, unroll=False, use_bias=True, return_sequences=True,

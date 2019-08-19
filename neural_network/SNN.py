@@ -9,6 +9,7 @@ from neural_network.Dataset import Dataset
 from neural_network.Subnets import CNN, RNN, FFNN
 
 
+# Initialises the correct SNN variant depending on the configuration
 def initialise_snn(config: Configuration, hyper, dataset, training):
     if training and config.snn_variant in ['fast_simple', 'fast_ffnn']:
         print('WARNING:')
@@ -32,7 +33,7 @@ def initialise_snn(config: Configuration, hyper, dataset, training):
 
     elif not training and var == 'fast_ffnn':
         print('Creating fast SNN with FFNN similarity measure')
-        return SNN(config.subnet_variant, hyper, dataset, training)
+        return FastSNN(config.subnet_variant, hyper, dataset, training)
 
     else:
         raise AttributeError('Unknown SNN variant specified:' + config.snn_variant)
@@ -118,10 +119,9 @@ class SimpleSNN:
         # Return the result of the knn classifier using the calculated similarities
         output[pos] = sims_all_examples
 
-    # Todo: Untested
-    # Using new automatic distribution to multiple gpus, this would be preferable if it works
+    # TODO Untested: Using new automatic distribution to multiple gpus, this would be preferable if it works
+    # Otherwise test methods above, if working needs to implemented for fast version
     def get_sims(self, example):
-
         num_train = len(self.dataset.x_train)
         sims_all_examples = np.zeros(num_train)
         batch_size = self.hyper.batch_size
@@ -135,8 +135,6 @@ class SimpleSNN:
             input_pairs = np.zeros((2 * batch_size, self.hyper.time_series_length,
                                     self.hyper.time_series_depth)).astype('float32')
 
-            print('input pairs', input_pairs.shape)
-
             # Create a batch of pairs between the test series and the train series
             for i in range(batch_size):
                 input_pairs[2 * i] = example
@@ -145,7 +143,6 @@ class SimpleSNN:
             with self.strategy.scope():
                 sims_batch = self.get_sims_batch(input_pairs)
 
-            print(index, index + batch_size, batch_size, sims_batch.shape)
             # Collect similarities of all badges
             sims_all_examples[index:index + batch_size] = sims_batch
 
@@ -166,6 +163,7 @@ class SimpleSNN:
         return sims_batch
 
     def get_distance_pair(self, pair_index, batch):
+        # Convert pair from batch to model input and compute the result
         subnet_input = np.array([batch[2 * pair_index], batch[2 * pair_index + 1]])
         subnet_output = self.subnet.model(subnet_input, training=self.training)
         a, b = subnet_output[0], subnet_output[1]
@@ -198,7 +196,7 @@ class SNN(SimpleSNN):
         print('The full model has', self.ffnn.get_parameter_count() + self.subnet.get_parameter_count(), 'parameters\n')
 
     def get_distance_pair(self, pair_index, batch):
-
+        # Convert pair from batch to model input and compute the result
         subnet_input = np.array([batch[2 * pair_index], batch[2 * pair_index + 1]])
         subnet_output = self.subnet.model(subnet_input, training=self.training)
 
@@ -247,11 +245,15 @@ class FastSimpleSNN(SimpleSNN):
     def __init__(self, subnet_variant, hyperparameters, dataset, training):
         super().__init__(subnet_variant, hyperparameters, dataset, training)
 
-    # TODO Implement multigpu if with self.strategy.scope(): not working
+    # TODO not tested yet
+    def encode_example(self, example):
+        ex = np.expand_dims(example, axis=0)  # Model expects array of examples -> add outer dimension
+        context_vector = self.subnet.model(ex, training=self.training)
+        return np.squeeze(context_vector, axis=0)  # Back to a single example
+
+    # TODO Implement multi gpu support if with self.strategy.scope(): not working
     # Example must already be encoded
     def get_sims(self, encoded_example):
-
-        # For the classic version the sims are calculated in batches
         num_train = len(self.dataset.x_train)
         sims_all_examples = np.zeros(num_train)
         batch_size = self.hyper.batch_size
@@ -292,7 +294,6 @@ class FastSimpleSNN(SimpleSNN):
 
         return sims_batch
 
-    @tf.function
     def get_distance_pair(self, a, b):
 
         # This snn version uses the a simple distance measure
@@ -319,7 +320,6 @@ class FastSNN(FastSimpleSNN):
 
     @tf.function
     def get_distance_pair(self, a, b):
-
         indices_a = tf.range(a.shape[0])
         indices_a = tf.tile(indices_a, [a.shape[0]])
         a = tf.gather(a, indices_a)

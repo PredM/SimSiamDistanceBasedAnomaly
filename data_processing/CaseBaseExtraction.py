@@ -62,8 +62,8 @@ def main():
         casebase_features_list.extend(x_train[new_indcies[i]])
 
     # transform list of values back into an array and safe to file
-    casebase_labels = np.stack(casebase_labels_list, axis=0)
-    casebase_features = np.stack(casebase_features_list, axis=0)
+    casebase_labels = np.stack(casebase_labels_list, axis=0).astype('float32')
+    casebase_features = np.stack(casebase_features_list, axis=0).astype('float32')
 
     print('Number of exaples in training data set:', casebase_features.shape[0])
 

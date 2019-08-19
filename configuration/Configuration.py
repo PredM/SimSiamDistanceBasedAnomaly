@@ -16,9 +16,10 @@ class Configuration:
         # ffnn = uses ffnn as distance measure
         # simple = mean absolute difference as distance measure instead of the ffnn
         self.snn_variants = ['standard_simple', 'standard_ffnn', 'fast_simple', 'fast_ffnn']
-        self.snn_variant = self.snn_variants[3]
+        self.snn_variant = self.snn_variants[0]
 
         # Select whether training should be continued from the checkpoint defined below
+        # Use carefully, does not check for equal hyper parameters etc.
         self.continue_training = False
 
         # Defines how often loss is printed and checkpoints are safed during training
@@ -68,7 +69,7 @@ class Configuration:
         self.models_folder = '../data/trained_models/'
 
         # path and file name to the specific model that should be used for testing and live classification
-        self.directory_model_to_use = self.models_folder + 'models_08-19_09-48-24_epoch-100' + '/'
+        self.directory_model_to_use = self.models_folder + 'models_08-19_14-25-08_epoch-200' + '/'
 
         # folder where the preprocessed training and test data for the neural network should be stored
         self.training_data_folder = '../data/training_data/'
