@@ -4,58 +4,121 @@ import pandas as pd
 class Configuration:
 
     def __init__(self, dataset_to_import=0):
-        # in order for Kafka streams to be read,
-        # the following changes must first be made to the raw data for valid JSON:
-        # insert [ at the beginning and ] at the end.
-        # for all line ends: Replace ] with ], (or } with },), except the last one.
+        ###
+        # neural network
+        ###
+
+        self.subnet_variants = ['cnn', 'rnn']
+        self.subnet_variant = self.subnet_variants[0]
+
+        # standard = classic snn behaviour, context vectors calculated each time, also multiple times for the example
+        # fast = encoding of case base only once, example also only once
+        # ffnn = uses ffnn as distance measure
+        # simple = mean absolute difference as distance measure instead of the ffnn
+        self.snn_variants = ['standard_simple', 'standard_ffnn', 'fast_simple', 'fast_ffnn']
+        self.snn_variant = self.snn_variants[0]
+
+        # Select whether training should be continued from the checkpoint defined below
+        # Use carefully, does not check for equal hyper parameters etc.
+        self.continue_training = False
+
+        # Defines how often loss is printed and checkpoints are safed during training
+        self.output_interval = 100
+
+        # How many model checkpoints are kept
+        self.model_files_stored = 5
 
         ###
-        # datasets with raw data
+        # kafka
         ###
-        # ('../data/datasets/XXXXXX/', '', ''),
 
-        # define datasets and the timestamp the recordings started/stopped
-        self.datasets = [
+        # server information
+        self.ip = 'localhost'  # '192.168.1.10'
+        self.port = '9092'
 
-            # txt 15 - type 1
-            ('../data/datasets/txt15_m1_t1_p1/', '2019-05-23 09:30:20', '2019-05-23 10:20:09.85'),  # 0
-            ('../data/datasets/txt15_m1_t1_p2/', '2019-06-07 18:30:42.30', '2019-06-07 20:23:22.96'),  # 1
+        # set to true if using the fabric simulation
+        # will read from the beginning of the topics, so the fabric simulation only has to be run once
+        self.testing_using_fabric_sim = True
 
-            # txt 15 - type 3
-            ('../data/datasets/txt15_m1_t2_p1/', '2019-05-23 10:27:00.45', '2019-05-23 11:12:22.66'),  # 2
-            ('../data/datasets/txt15_m1_t2_p2/', '2019-05-28 07:41:07.26', '2019-05-28 08:50:25.66'),  # 3
+        # settings for exporting the classification results back to kafka
 
-            # txt 16 - type 1
-            ('../data/datasets/txt16_m3_t1_p1/', '2019-05-23 13:21:45.49', '2019-05-23 13:47:07.55'),  # 4
-            ('../data/datasets/txt16_m3_t1_p2/', '2019-06-05 18:41:43.97', '2019-06-05 19:09:33.21'),  # 5
-            ('../data/datasets/txt16_m3_t1_p3/', '2019-06-05 19:15:26.59', '2019-06-05 21:30:59.64'),  # 6
-            ('../data/datasets/txt16_m3_t1_p4/', '2019-06-07 14:18:16.81', '2019-06-07 15:27:57.04'),  # 7
-            ('../data/datasets/txt16_m3_t1_p5/', '2019-06-07 16:39:42.08', '2019-06-07 17:21:52.94'),  # 8
-            ('../data/datasets/txt16_m3_t1_p6/', '2019-06-07 17:33:42.46', '2019-06-07 18:19:17.06'),  # 9
+        # enables the functionality
+        self.export_results_to_kafka = True
 
-            # txt 16 - type 3
-            ('../data/datasets/txt16_m3_t2_p1/', '2019-05-23 16:26:22.13', '2019-05-23 17:35:11.74'),  # 10
-            ('../data/datasets/txt16_m3_t2_p2/', '2019-05-28 18:27:37.74', '2019-05-28 19:37:50.57'),  # 11
+        # topic where the messages should be written to. Automatically created if not existing
+        self.export_topic = 'classification-results'
 
-            # pneumatic failure and no failure
-            ('../data/datasets/no_failure_and_leakage/', '2019-05-23 17:48:59', '2019-05-23 20:30:03.87'),  # 12
+        ###
+        # case base
+        ###
 
-            # light barriers failure
-            ('../data/datasets/light_barrier_txt16_i4/', '2019-05-28 15:03:24.94', '2019-05-28 15:52:48.03'),  # 13
+        # the random seed the index selection is based on
+        self.random_seed_index_selection = 42
 
-            # pneumatic failure
-            ('../data/datasets/leakage_p1/', '2019-06-08 11:38:02.64', '2019-06-08 12:22:42.63')  # 14
+        # the number of examples per class the training data set should be reduced to for the live classification
+        self.examples_per_class = 40
 
-        ]
+        # the k of the knn classifier used for live classification
+        self.k_of_knn = 3
 
-        # select specific dataset with given parameter
-        # preprocessing however will include all defined datasets
-        self.pathPrefix = self.datasets[dataset_to_import][0]
-        self.startTimestamp = self.datasets[dataset_to_import][1]
-        self.endTimestamp = self.datasets[dataset_to_import][2]
+        ###
+        # folders and file names
+        ###
 
-        # query to reduce datasets to the given time interval
-        self.query = "timestamp <= \'" + self.endTimestamp + "\' & timestamp >= \'" + self.startTimestamp + "\' "
+        # folder where the trained models are saved to during learning process
+        self.models_folder = '../data/trained_models/'
+
+        # path and file name to the specific model that should be used for testing and live classification
+        self.directory_model_to_use = self.models_folder + 'models_08-19_14-25-08_epoch-200' + '/'
+
+        # folder where the preprocessed training and test data for the neural network should be stored
+        self.training_data_folder = '../data/training_data/'
+        self.training_data_encoded_folder = '../data/training_data_encoded/'
+
+        # folder where the normalisation models should be stored
+        self.scaler_folder = '../data/scaler/'
+
+        # name of the files the dataframes are saved to after the import and cleaning
+        self.filename_pkl = 'export_data.pkl'
+        self.filename_pkl_cleaned = 'cleaned_data.pkl'
+
+        # folder where the reduced training data set aka. case base is safed to
+        self.case_base_folder = '../data/case_base/'
+        self.case_base_encoded_folder = '../data/case_base_encoded/'
+
+        # folder where text files with extracted cases are safed to
+        self.cases_folder = '../data/cases/'
+
+
+
+        ##
+        # lists of topics separated by types that need different import variants
+        ##
+
+        self.txt_topics = ['txt15', 'txt16', 'txt17', 'txt18', 'txt19']
+
+        # unused topics: 'bmx055-VSG-gyr','bmx055-VSG-mag','bmx055-HRS-gyr','bmx055-HRS-mag'
+        self.acc_topics = ['adxl0', 'adxl1', 'adxl2', 'adxl3']
+
+        self.bmx_acc_topics = []  # unused topics: 'bmx055-VSG-acc', 'bmx055-HRS-acc'
+
+        self.pressure_topics = ['pressureSensors']
+
+        # combination of all topics in a single list
+        self.topic_list = self.txt_topics + self.acc_topics + self.bmx_acc_topics + self.pressure_topics
+
+        # determines on which topic's messages the time interval for creating an example is based
+        # only txt topics possible
+        self.limiting_topic = 'txt15'
+
+        # mapping for topic name to prefix of sensor streams, relevant to get the same order of streams
+        self.prefixes = {'txt15': 'txt15', 'txt16': 'txt16', 'txt17': 'txt17', 'txt18': 'txt18', 'txt19': 'txt19',
+                         # 'bmx055-HRS-acc': 'hrs_acc', 'bmx055-HRS-gyr': 'hrs_gyr', 'bmx055-HRS-mag': 'hrs_mag',
+                         # 'bmx055-VSG-acc': 'vsg_acc', 'bmx055-VSG-gyr': 'vsg_gyr', 'bmx055-VSG-mag': 'vsg_mag',
+                         'adxl1': 'a_15_1', 'adxl0': 'a_15_c', 'adxl3': 'a_16_3', 'adxl2': 'a_18_1',
+                         'Sorter': '15', 'Oven': '17', 'VSG': '18'}
+
+        self.pressure_sensor_names = ['Oven', 'VSG']  # 'Sorter' not used
 
         ###
         # import and data visualisation
@@ -102,97 +165,103 @@ class Configuration:
         self.cases_datasets = generate_timestamps()
 
         ###
-        # neural network
+        # datasets with raw data
         ###
 
-        self.subnet_variants = ['cnn', 'rnn']
-        self.subnet_variant = self.subnet_variants[1]
+        # in order for Kafka streams to be read,
+        # the following changes must first be made to the raw data for valid JSON:
+        # insert [ at the beginning and ] at the end.
+        # for all line ends: Replace ] with ], (or } with },), except the last one.
 
-        # Use the mean absolute difference as distance measure instead of the ffnn
-        self.simple_similarity_measure = False
+        # define datasets and the timestamp the recordings started/stopped
+        self.datasets = [
 
-        # Select whether training should be continued from the checkpoint defined below
-        self.continue_training = False
+            # txt 15 - type 1
+            ('../data/datasets/txt15_m1_t1_p1/', '2019-05-23 09:30:20', '2019-05-23 10:20:09.85'),  # 0
+            ('../data/datasets/txt15_m1_t1_p2/', '2019-06-07 18:30:42.30', '2019-06-07 20:23:22.96'),  # 1
 
-        # Defines how often loss is printed and checkpoints are safed during training
-        self.output_interval = 100
+            # txt 15 - type 3
+            ('../data/datasets/txt15_m1_t2_p1/', '2019-05-23 10:27:00.45', '2019-05-23 11:12:22.66'),  # 2
+            ('../data/datasets/txt15_m1_t2_p2/', '2019-05-28 07:41:07.26', '2019-05-28 08:50:25.66'),  # 3
 
-        # How many model checkpoints are kept
-        self.model_files_stored = 50
+            # txt 16 - type 1
+            ('../data/datasets/txt16_m3_t1_p1/', '2019-05-23 13:21:45.49', '2019-05-23 13:47:07.55'),  # 4
+            ('../data/datasets/txt16_m3_t1_p2/', '2019-06-05 18:41:43.97', '2019-06-05 19:09:33.21'),  # 5
+            ('../data/datasets/txt16_m3_t1_p3/', '2019-06-05 19:15:26.59', '2019-06-05 21:30:59.64'),  # 6
+            ('../data/datasets/txt16_m3_t1_p4/', '2019-06-07 14:18:16.81', '2019-06-07 15:27:57.04'),  # 7
+            ('../data/datasets/txt16_m3_t1_p5/', '2019-06-07 16:39:42.08', '2019-06-07 17:21:52.94'),  # 8
+            ('../data/datasets/txt16_m3_t1_p6/', '2019-06-07 17:33:42.46', '2019-06-07 18:19:17.06'),  # 9
 
-        ###
-        # kafka
-        ###
+            # txt 16 - type 3
+            ('../data/datasets/txt16_m3_t2_p1/', '2019-05-23 16:26:22.13', '2019-05-23 17:35:11.74'),  # 10
+            ('../data/datasets/txt16_m3_t2_p2/', '2019-05-28 18:27:37.74', '2019-05-28 19:37:50.57'),  # 11
 
-        # server information
-        self.ip = 'localhost'  # '192.168.1.10'
-        self.port = '9092'
+            # pneumatic failure and no failure
+            ('../data/datasets/no_failure_and_leakage/', '2019-05-23 17:48:59', '2019-05-23 20:30:03.87'),  # 12
 
-        # set to true if using the fabric simulation
-        # will read from the beginning of the topics, so the fabric simulation only has to be run once
-        self.testing_using_fabric_sim = True
+            # light barriers failure
+            ('../data/datasets/light_barrier_txt16_i4/', '2019-05-28 15:03:24.94', '2019-05-28 15:52:48.03'),  # 13
 
-        # settings for exporting the classification results back to kafka
+            # pneumatic failure
+            ('../data/datasets/leakage_p1/', '2019-06-08 11:38:02.64', '2019-06-08 12:22:42.63')  # 14
 
-        # enables the functionality
-        self.export_results_to_kafka = True
+        ]
 
-        # topic where the messages should be written to. Automatically created if not existing
-        self.export_topic = 'classification-results'
+        # select specific dataset with given parameter
+        # preprocessing however will include all defined datasets
+        self.pathPrefix = self.datasets[dataset_to_import][0]
+        self.startTimestamp = self.datasets[dataset_to_import][1]
+        self.endTimestamp = self.datasets[dataset_to_import][2]
 
-        # list of topics separated by types that need different import variants
+        # query to reduce datasets to the given time interval
+        self.query = "timestamp <= \'" + self.endTimestamp + "\' & timestamp >= \'" + self.startTimestamp + "\' "
 
-        self.txt_topics = ['txt15', 'txt16', 'txt17', 'txt18', 'txt19']
+        # define file names for all topics
+        self.topic15File = self.pathPrefix + 'raw_data/txt15.txt'
+        self.topic16File = self.pathPrefix + 'raw_data/txt16.txt'
+        self.topic17File = self.pathPrefix + 'raw_data/txt17.txt'
+        self.topic18File = self.pathPrefix + 'raw_data/txt18.txt'
+        self.topic19File = self.pathPrefix + 'raw_data/txt19.txt'
 
-        # unused topics: 'bmx055-VSG-gyr','bmx055-VSG-mag','bmx055-HRS-gyr','bmx055-HRS-mag'
-        self.acc_topics = ['adxl0', 'adxl1', 'adxl2', 'adxl3']
+        self.topicPressureSensorsFile = self.pathPrefix + 'raw_data/pressureSensors.txt'
 
-        self.bmx_acc_topics = []  # unused topics: 'bmx055-VSG-acc', 'bmx055-HRS-acc'
+        self.acc_txt15_m1 = self.pathPrefix + 'raw_data/TXT15_m1_acc.txt'
+        self.acc_txt15_comp = self.pathPrefix + 'raw_data/TXT15_o8Compressor_acc.txt'
+        self.acc_txt16_m3 = self.pathPrefix + 'raw_data/TXT16_m3_acc.txt'
+        self.acc_txt18_m1 = self.pathPrefix + 'raw_data/TXT18_m1_acc.txt'
 
-        self.pressure_topics = ['pressureSensors']
+        self.bmx055_HRS_acc = self.pathPrefix + 'raw_data/bmx055-HRS-acc.txt'
+        self.bmx055_HRS_gyr = self.pathPrefix + 'raw_data/bmx055-HRS-gyr.txt'
+        self.bmx055_HRS_mag = self.pathPrefix + 'raw_data/bmx055-HRS-mag.txt'
 
-        # combination of all topics in a single list
-        self.topic_list = self.txt_topics + self.acc_topics + self.bmx_acc_topics + self.pressure_topics
-
-        # determines on which topic's messages the time interval for creating an example is based
-        # only txt topics possible
-        self.limiting_topic = 'txt15'
-
-        # mapping for topic name to prefix of sensor streams, relevant to get the same order of streams
-        self.prefixes = {'txt15': 'txt15',
-                         'txt16': 'txt16',
-                         'txt17': 'txt17',
-                         'txt18': 'txt18',
-                         'txt19': 'txt19',
-                         # 'bmx055-HRS-acc': 'hrs_acc',
-                         # 'bmx055-HRS-gyr': 'hrs_gyr',
-                         # 'bmx055-HRS-mag': 'hrs_mag',
-                         # 'bmx055-VSG-acc': 'vsg_acc',
-                         # 'bmx055-VSG-gyr': 'vsg_gyr',
-                         # 'bmx055-VSG-mag': 'vsg_mag',
-                         'adxl1': 'a_15_1',
-                         'adxl0': 'a_15_c',
-                         'adxl3': 'a_16_3',
-                         'adxl2': 'a_18_1',
-                         'Sorter': '15',
-                         'Oven': '17',
-                         'VSG': '18'
-                         }
-
-        self.pressure_sensor_names = ['Oven', 'VSG']  # 'Sorter' not used
+        self.bmx055_VSG_acc = self.pathPrefix + 'raw_data/bmx055-VSG-acc.txt'
+        self.bmx055_VSG_gyr = self.pathPrefix + 'raw_data/bmx055-VSG-gyr.txt'
+        self.bmx055_VSG_mag = self.pathPrefix + 'raw_data/bmx055-VSG-mag.txt'
 
         ###
-        # case base
+        # error descriptions
         ###
 
-        # the random seed the index selection is based on
-        self.random_seed_index_selection = 42
+        self.error_dict = {
+            'no_failure': 'No failure predicted for the current time interval',
 
-        # the number of examples per class the training data set should be reduced to for the live classification
-        self.examples_per_class = 40
+            'txt_18_comp_leak': 'Leak on the compressor of TXT module 18',
+            'txt_17_comp_leak': 'Leak on the compressor of TXT module 17',
 
-        # the k of the knn classifier used for live classification
-        self.k_of_knn = 3
+            'txt15_m1_t1_high_wear': 'High wear of type 1 on motor m1 of TXT module 15',
+            'txt15_m1_t1_low_wear': 'Low wear of type 1 on motor m1 of TXT module 15',
+            'txt15_m1_t1_wear': 'Wear of type 1 on motor m1 of TXT module 15',
+            'txt15_m1_t2_wear': 'Wear of type 2 on motor m1 of TXT module 15',
+
+            'txt16_m3_t1_high_wear': 'High wear of type 1 on motor m3 of TXT module 16',
+            'txt16_m3_t1_low_wear': 'Low wear of type 1 on motor m3 of TXT module 16',
+            'txt16_m3_t1_wear': 'Wear of type 1 on motor m3 of TXT module 16',
+            'txt16_m3_t2_wear': 'Wear of type 2 on motor m3 of TXT module 16',
+
+            'txt16_i4': 'Failure of light barrier i4 of TXT module 16',
+        }
+
+        # TODO Change to csv files
 
         ###
         # columns
@@ -242,78 +311,6 @@ class Configuration:
 
         self.bools = ['txt15_m1.finished', 'txt16_m3.finished', ]
 
-        ###
-        # folders and file names
-        ###
-
-        # folder where the preprocessed training and test data for the neural network should be stored
-        self.training_data_folder = '../data/training_data/'
-
-        # folder where the normalisation models should be stored
-        self.scaler_folder = '../data/scaler/'
-
-        # name of the files the dataframes are saved to after the import and cleaning
-        self.filename_pkl = 'export_data.pkl'
-        self.filename_pkl_cleaned = 'cleaned_data.pkl'
-
-        # folder where the trained models are saved to during learning process
-        self.models_folder = '../data/trained_models/'
-
-        # folder where the reduced training data set aka. case base is safed to
-        self.case_base_folder = '../data/case_base/'
-
-        # folder where text files with extracted cases are safed to
-        self.cases_folder = '../data/cases/'
-
-        # path and file name to the specific model that should be used for testing and live classification
-        # 4774, 4597, 4875
-        self.directory_model_to_use = self.models_folder + '' + '/'
-
-        # define file names for all topics
-        self.topic15File = self.pathPrefix + 'raw_data/txt15.txt'
-        self.topic16File = self.pathPrefix + 'raw_data/txt16.txt'
-        self.topic17File = self.pathPrefix + 'raw_data/txt17.txt'
-        self.topic18File = self.pathPrefix + 'raw_data/txt18.txt'
-        self.topic19File = self.pathPrefix + 'raw_data/txt19.txt'
-
-        self.topicPressureSensorsFile = self.pathPrefix + 'raw_data/pressureSensors.txt'
-
-        self.acc_txt15_m1 = self.pathPrefix + 'raw_data/TXT15_m1_acc.txt'
-        self.acc_txt15_comp = self.pathPrefix + 'raw_data/TXT15_o8Compressor_acc.txt'
-        self.acc_txt16_m3 = self.pathPrefix + 'raw_data/TXT16_m3_acc.txt'
-        self.acc_txt18_m1 = self.pathPrefix + 'raw_data/TXT18_m1_acc.txt'
-
-        self.bmx055_HRS_acc = self.pathPrefix + 'raw_data/bmx055-HRS-acc.txt'
-        self.bmx055_HRS_gyr = self.pathPrefix + 'raw_data/bmx055-HRS-gyr.txt'
-        self.bmx055_HRS_mag = self.pathPrefix + 'raw_data/bmx055-HRS-mag.txt'
-
-        self.bmx055_VSG_acc = self.pathPrefix + 'raw_data/bmx055-VSG-acc.txt'
-        self.bmx055_VSG_gyr = self.pathPrefix + 'raw_data/bmx055-VSG-gyr.txt'
-        self.bmx055_VSG_mag = self.pathPrefix + 'raw_data/bmx055-VSG-mag.txt'
-
-        ###
-        # error descriptions
-        ###
-
-        self.error_dict = {
-            'no_failure': 'No failure predicted for the current time interval',
-
-            'txt_18_comp_leak': 'Leak on the compressor of TXT module 18',
-            'txt_17_comp_leak': 'Leak on the compressor of TXT module 17',
-
-            'txt15_m1_t1_high_wear': 'High wear of type 1 on motor m1 of TXT module 15',
-            'txt15_m1_t1_low_wear': 'Low wear of type 1 on motor m1 of TXT module 15',
-            'txt15_m1_t1_wear': 'Wear of type 1 on motor m1 of TXT module 15',
-            'txt15_m1_t2_wear': 'Wear of type 2 on motor m1 of TXT module 15',
-
-            'txt16_m3_t1_high_wear': 'High wear of type 1 on motor m3 of TXT module 16',
-            'txt16_m3_t1_low_wear': 'Low wear of type 1 on motor m3 of TXT module 16',
-            'txt16_m3_t1_wear': 'Wear of type 1 on motor m3 of TXT module 16',
-            'txt16_m3_t2_wear': 'Wear of type 2 on motor m3 of TXT module 16',
-
-            'txt16_i4': 'Failure of light barrier i4 of TXT module 16',
-        }
-
     def get_error_description(self, error_label: str):
         # return the error case description for the passed label
         return self.error_dict[error_label]
@@ -322,6 +319,7 @@ class Configuration:
         return self.ip + ':' + self.port
 
 
+# TODO Change to csv file
 def generate_timestamps():
     # for each dataset configure all possible classes / failure cases with their time interval
     # note: Parentheses must be set for list to contain tuples.

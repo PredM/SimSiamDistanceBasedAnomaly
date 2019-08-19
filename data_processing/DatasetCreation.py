@@ -237,6 +237,8 @@ def main():
     # normalize each sensor stream to contain values in [0,1]
     x_train, x_test = normalise(x_train, x_test, config)
 
+    x_train, x_test, = x_train.astype('float32'), x_test.astype('float32')
+
     # save the np arrays
     print('\nSave to np arrays in ' + config.training_data_folder)
 

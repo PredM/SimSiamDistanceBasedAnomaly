@@ -1,16 +1,18 @@
 import sys
+from os import listdir
 
 import tensorflow as tf
 
+from configuration import Configuration
 from configuration.Hyperparameter import Hyperparameters
 
 
 class NN:
 
-    def __init__(self, hyperparameters, dataset):
-        self.model: tf.keras.Sequential = tf.keras.Sequential()
-        self.dataset = dataset
+    def __init__(self, hyperparameters, input_shape):
         self.hyper: Hyperparameters = hyperparameters
+        self.input_shape = input_shape
+        self.model: tf.keras.Sequential = tf.keras.Sequential()
 
     def create_model(self):
         raise AssertionError('No model creation for abstract NN class possible')
@@ -29,12 +31,37 @@ class NN:
 
         return total_parameters
 
+    # TODO Maybe handel matching filename with wrong content
+    def load_model(self, config: Configuration):
+        self.model = None
+
+        if type(self) == CNN or type(self) == RNN:
+            prefix = 'subnet'
+        elif type(self) == FFNN:
+            prefix = 'ffnn'
+        else:
+            raise AttributeError('Can not import models of type', type(self))
+
+        for file_name in listdir(config.directory_model_to_use):
+
+            # Compile must be set to false because the standard optimizer was not used and this would otherwise
+            # generate an error
+            if file_name.startswith(prefix):
+                self.model = tf.keras.models.load_model(config.directory_model_to_use + file_name, compile=False)
+
+            if self.model is not None:
+                break
+
+        if self.model is None:
+            print('Model file for this type could not be found in ', config.directory_model_to_use)
+        else:
+            print('Model has been loaded successfully\n')
+
 
 class FFNN(NN):
 
-    def __init__(self, hyperparameters, dataset, input_shape):
-        super().__init__(hyperparameters, dataset)
-        self.input_shape = input_shape
+    def __init__(self, hyperparameters, input_shape):
+        super().__init__(hyperparameters, input_shape)
 
     def create_model(self):
 
@@ -50,7 +77,7 @@ class FFNN(NN):
         # First layer must be handled separately because the input shape parameter must be set
         num_units_first = layers.pop(0)
         model.add(tf.keras.layers.Dense(units=num_units_first, activation=tf.keras.activations.relu,
-                                        batch_input_shape=self.input_shape))
+                                        input_shape=self.input_shape))
 
         for num_units in layers:
             model.add(tf.keras.layers.Dense(units=num_units, activation=tf.keras.activations.relu))
@@ -64,9 +91,8 @@ class FFNN(NN):
 
 class RNN(NN):
 
-    def __init__(self, hyperparameters, dataset, input_shape):
-        super().__init__(hyperparameters, dataset)
-        self.input_shape = input_shape
+    def __init__(self, hyperparameters, input_shape):
+        super().__init__(hyperparameters, input_shape)
 
     # RNN structure matching the description in the neural warp paper,
     # currently not used
@@ -91,7 +117,7 @@ class RNN(NN):
         rnn = tf.keras.layers.RNN(stacked_cells, return_sequences=True)
 
         # Create a bidirectional network using the created timeline, backward timeline will be generated automatically
-        model.add(tf.keras.layers.Bidirectional(rnn, batch_input_shape=self.input_shape))
+        model.add(tf.keras.layers.Bidirectional(rnn, input_shape=self.input_shape))
 
         # Add Batch Norm and Dropout Layers
         model.add(tf.keras.layers.BatchNormalization())
@@ -114,11 +140,11 @@ class RNN(NN):
             num_units = layers[i]
 
             # First layer must be handled separately because the input shape parameter must be set
-            # Choice of parameters ensure usage of cuDNN TODO must be tested if working
+            # Choice of parameters ensure usage of cuDNN TODO Must be tested if working
             if i == 0:
                 layer = tf.keras.layers.LSTM(units=num_units, activation='tanh', recurrent_activation='sigmoid',
-                                             recurrent_dropout=0, unroll=False, use_bias=True,
-                                             batch_input_shape=self.input_shape, return_sequences=True)
+                                             recurrent_dropout=0, unroll=False, use_bias=True, return_sequences=True,
+                                             input_shape=self.input_shape, )
             else:
                 layer = tf.keras.layers.LSTM(units=num_units, activation='tanh', recurrent_activation='sigmoid',
                                              recurrent_dropout=0, unroll=False, use_bias=True, return_sequences=True)
@@ -133,9 +159,8 @@ class RNN(NN):
 
 class CNN(NN):
 
-    def __init__(self, hyperparameters, dataset, input_shape):
-        super().__init__(hyperparameters, dataset)
-        self.input_shape = input_shape
+    def __init__(self, hyperparameters, input_shape):
+        super().__init__(hyperparameters, input_shape)
 
     def create_model(self):
         print('Creating CNN subnet')
@@ -155,7 +180,7 @@ class CNN(NN):
             # First layer must be handled separately because the input shape parameter must be set
             if i == 0:
                 conv_layer = tf.keras.layers.Conv1D(filters=num_filter, padding='VALID', kernel_size=filter_size,
-                                                    strides=stride, batch_input_shape=self.input_shape)
+                                                    strides=stride, input_shape=self.input_shape)
             else:
                 conv_layer = tf.keras.layers.Conv1D(filters=num_filter, padding='VALID', kernel_size=filter_size,
                                                     strides=stride)

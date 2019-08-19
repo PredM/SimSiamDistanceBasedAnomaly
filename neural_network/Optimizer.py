@@ -19,25 +19,24 @@ class Optimizer:
         self.dataset: Dataset = dataset
         self.hyper: Hyperparameters = hyperparameters
         self.config: Configuration = config
-        self.adam_optimizer = tf.keras.optimizers.Adam(learning_rate=self.hyper.learning_rate,
-                                                       clipnorm=self.hyper.gradient_cap)
+        self.adam_optimizer = tf.keras.optimizers.Adam(learning_rate=self.hyper.learning_rate)
 
     def optimize(self):
         current_epoch = 0
         train_loss_results = []
 
-        # TODO Continuation not tested yet
         if self.config.continue_training:
-            self.snn.load_models(self.config)
+            self.snn.load_model(self.config)
 
             try:
                 # Get the epoch by the directory name
-                current_epoch = int(self.config.directory_model_to_use.split('-')[-1])
+                epoch_as_string = self.config.directory_model_to_use.rstrip('/').split('-')[-1]
+                current_epoch = int(epoch_as_string)
                 print('Continuing the training at epoch', current_epoch)
 
             except ValueError:
                 current_epoch = 0
-                print('Continuing the training but the epoch could not be determined', current_epoch)
+                print('Continuing the training but the epoch could not be determined')
                 print('Using loaded model but starting at epoch 0')
 
         for epoch in range(current_epoch, self.hyper.epochs):
@@ -65,7 +64,7 @@ class Optimizer:
             # Get the example pairs by the selected indices
             model_input = np.take(a=self.dataset.x_train, indices=batch_pairs_indices, axis=0)
 
-            batch_loss, pred_similarities = self.update_model(model_input, true_similarities)
+            batch_loss = self.update_model(model_input, true_similarities)
 
             # Track progress
             epoch_loss_avg.update_state(batch_loss)  # Add current batch loss
@@ -80,27 +79,27 @@ class Optimizer:
                 self.delete_old_checkpoints(epoch)
                 self.save_models(epoch)
 
-    @tf.function
     def update_model(self, model_input, true_similarities):
-
         with tf.GradientTape() as tape:
             pred_similarities = self.snn.get_sims_batch(model_input)
 
-            # TODO  needs to be changed for FastSNN
-            # Get parameters of subnet and ffnn
-            if self.config.simple_similarity_measure:
-                trainable_params = self.snn.subnet.model.trainable_variables
-            else:
+            # Get parameters of subnet and ffnn (if complex sim measure)
+            if self.config.snn_variant in ['standard_ffnn', 'fast_ffnn']:
                 trainable_params = self.snn.ffnn.model.trainable_variables + self.snn.subnet.model.trainable_variables
+            else:
+                trainable_params = self.snn.subnet.model.trainable_variables
 
             # Calculate the loss and the gradients
             loss = tf.keras.losses.binary_crossentropy(y_true=true_similarities, y_pred=pred_similarities)
             grads = tape.gradient(loss, trainable_params)
 
-            # Apply the gradients to the trainable parameters
-            self.adam_optimizer.apply_gradients(zip(grads, trainable_params))
+            # maybe change back to clipnorm=self.hyper.gradient_cap in adam initialisation
+            clipped_grads, _ = tf.clip_by_global_norm(grads, self.hyper.gradient_cap)
 
-            return loss, pred_similarities
+            # Apply the gradients to the trainable parameters
+            self.adam_optimizer.apply_gradients(zip(clipped_grads, trainable_params))
+
+            return loss
 
     def delete_old_checkpoints(self, current_epoch):
 
@@ -126,12 +125,10 @@ class Optimizer:
         dir_name = self.config.models_folder + '_'.join(['models', dt_string, epoch_string]) + '/'
         os.mkdir(dir_name)
 
-        # TODO Needs to be changed for FastSNN
-
         # Generate the file names and save the model files in the directory created before
         subnet_file_name = '_'.join(['subnet', self.config.subnet_variant, epoch_string]) + '.h5'
         self.snn.subnet.model.save(dir_name + subnet_file_name)
 
-        if not self.config.simple_similarity_measure:
+        if self.config.snn_variant in ['standard_ffnn', 'fast_ffnn']:
             ffnn_file_name = '_'.join(['ffnn', epoch_string]) + '.h5'
             self.snn.ffnn.model.save(dir_name + ffnn_file_name)
