@@ -42,7 +42,7 @@ class Inference:
     def infer_test_dataset(self):
         correct, num_infers = 0, 0
 
-        start_time = time.clock()
+        #start_time = time.clock()
 
         # Infer all examples in the given range
         for idx_test in range(self.dataset.num_test_instances):
@@ -88,7 +88,7 @@ class Inference:
                 print("{: <25} {: <25}".format(*row))
             print('')
 
-        elapsed_time = time.clock() - start_time
+        #elapsed_time = time.clock() - start_time
 
         # Calculate the classification accuracy for all classes and save in the intended column
         self.results['accuracy'] = self.results['true_positive'] / self.results['total']
@@ -98,8 +98,8 @@ class Inference:
         print('-------------------------------------------------------------')
         print('Final Result:')
         print('-------------------------------------------------------------')
-        print('Elapsed time:', elapsed_time, 'Seconds')
-        print('Average time per example:', elapsed_time / self.dataset.num_test_instances, 'Seconds')
+        #print('Elapsed time:', elapsed_time, 'Seconds')
+        #print('Average time per example:', elapsed_time / self.dataset.num_test_instances, 'Seconds')
         print('Classification accuracy split by classes:')
         print(self.results)
         print('-------------------------------------------------------------')

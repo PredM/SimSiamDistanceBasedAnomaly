@@ -81,16 +81,14 @@ class Optimizer:
                 self.save_models(epoch)
 
     def update_model(self, model_input, true_similarities):
-
         with tf.GradientTape() as tape:
-
             pred_similarities = self.snn.get_sims_batch(model_input)
 
             # Get parameters of subnet and ffnn
             if self.config.snn_variant in ['standard_ffnn', 'fast_ffnn']:
-                trainable_params = self.snn.ffnn.model.trainable_variables + self.snn.subnet.model.trainable_variables
-            else:
                 trainable_params = self.snn.subnet.model.trainable_variables
+            else:
+                trainable_params = self.snn.ffnn.model.trainable_variables + self.snn.subnet.model.trainable_variables
 
             # Calculate the loss and the gradients
             loss = tf.keras.losses.binary_crossentropy(y_true=true_similarities, y_pred=pred_similarities)
