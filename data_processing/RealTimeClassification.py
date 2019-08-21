@@ -218,7 +218,7 @@ def list_to_dataframe(results: [[object]], config: Configuration):
 
         # remove unnecessary columns
         # errors for non existing columns are ignored because not all datasets have the same
-        df_temp.drop(config.unnecessary_columns, 1, inplace=True, errors='ignore')
+        df_temp.drop(config.unnecessary_cols, 1, inplace=True, errors='ignore')
 
         # remove duplicated timestamps, first will be kept
         df_temp = df_temp.loc[~df_temp['timestamp'].duplicated(keep='first')]
@@ -283,7 +283,7 @@ def load_scalers(config):
 
     # calculate the number of columns
     all_cols = config.bools + config.intNumbers + config.zeroOne + config.realValues
-    number_of_scalers = len(set(all_cols) - set(config.unnecessary_columns))
+    number_of_scalers = len(set(all_cols) - set(config.unnecessary_cols))
 
     # load scaler for each attribute and store in list
     for i in range(number_of_scalers):
@@ -301,7 +301,9 @@ class Classifier(threading.Thread):
         self.examples_to_classify = multiprocessing.Manager().Queue(10)
         self.config = config
         self.dataset = Dataset(config.training_data_folder, config, training=False)
-        self.snn = SNN.initialise_snn(config, Hyperparameters(), self.dataset, training=False)
+        hyper = Hyperparameters()
+        hyper.load_from_file(config.hyper_file, config.use_hyper_file)
+        self.snn = SNN.initialise_snn(config, hyper, self.dataset, training=False)
         self.snn.load_model(config)
         self.stop = False
 

@@ -176,6 +176,7 @@ def normalise(x_train: np.ndarray, x_test: np.ndarray, config: Configuration):
 
 def main():
     config = Configuration()  # Get config for data directory
+    config.import_timestamps()
     number_data_sets = len(config.datasets)
 
     # list of all examples

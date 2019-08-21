@@ -7,24 +7,31 @@ from data_processing.DataImport import import_txt
 
 
 def export_cases_all(dfs: [(int, pd.DataFrame)], config: Configuration):
-    with open(config.cases_folder + 'all_cases.txt', 'w') as file:
+    with open(config.cases_folder + 'cases.csv', 'w') as file:
 
         # exporting in a format the can directly be pasted into the configuration file
         for element in dfs:
             dataset = element[0]
             df = element[1]
-
-            file.write('cases_dataset_' + str(dataset) + ' = [\n')
-
             for index, row in df.iterrows():
                 failure_type = row['failure']
                 start = row['ts_start'].strftime('%Y-%m-%d %H:%M:%S.%f')
                 end = row['ts_end'].strftime('%Y-%m-%d %H:%M:%S.%f')
-
-                case = '\t(gen_timestamp(\'' + failure_type + '\',\'' + start + '\',\'' + end + '\')),'
-                # print(case)
+                case = ', '.join([df, failure_type, start, end])
+                print(case)
                 file.write(case + '\n')
-            file.write(']\n\n')
+            # old version
+            # file.write('cases_dataset_' + str(dataset) + ' = [\n')
+            #
+            # for index, row in df.iterrows():
+            #     failure_type = row['failure']
+            #     start = row['ts_start'].strftime('%Y-%m-%d %H:%M:%S.%f')
+            #     end = row['ts_end'].strftime('%Y-%m-%d %H:%M:%S.%f')
+            #
+            #     case = '\t(gen_timestamp(\'' + failure_type + '\',\'' + start + '\',\'' + end + '\')),'
+            #     # print(case)
+            #     file.write(case + '\n')
+            # file.write(']\n\n')
 
 
 # export cases to a text file in the right format

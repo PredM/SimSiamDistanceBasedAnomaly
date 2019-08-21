@@ -110,6 +110,8 @@ def main():
 
     config = Configuration()
     hyperparameters = Hyperparameters()
+    hyperparameters.load_from_file(config.hyper_file, config.use_hyper_file)
+
     inference = Inference(config, hyperparameters, config.training_data_folder)
 
     print('\nEnsure right model file is used:')

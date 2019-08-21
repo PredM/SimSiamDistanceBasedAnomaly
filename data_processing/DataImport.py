@@ -320,7 +320,7 @@ def main():
 
     print('\nDelete unnecessary streams')
     print('Number of streams before:', df_combined.shape)
-    df_combined = df_combined.drop(config.unnecessary_columns, 1, errors='ignore')
+    df_combined = df_combined.drop(config.unnecessary_cols, 1, errors='ignore')
     print('Number of streams after:', df_combined.shape)
 
     print('\nSort streams by name to ensure same order like live data')
