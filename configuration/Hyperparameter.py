@@ -1,4 +1,3 @@
-# TODO Add functionality to read config from file for easier management of multiple models
 import json
 
 
@@ -9,7 +8,7 @@ class Hyperparameters:
         self.time_series_length = 250
         self.time_series_depth = 58
 
-        self.batch_size = 23  # Fixme maybe needs to be even
+        self.batch_size = 23
         self.epochs = 100000
         self.learning_rate = 0.0001
         self.gradient_cap = 10

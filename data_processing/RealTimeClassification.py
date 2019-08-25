@@ -1,15 +1,15 @@
 import contextlib
 import json
 import os
+import sys
 import threading
 import time
 import multiprocessing
 import joblib
 import numpy as np
 import pandas as pd
-import tensorflow as tf
 # noinspection PyProtectedMember
-from kafka import KafkaConsumer, TopicPartition, KafkaProducer
+from kafka import KafkaConsumer, TopicPartition, KafkaProducer, errors
 from sklearn.preprocessing import MinMaxScaler
 
 from configuration.Configuration import Configuration
@@ -17,7 +17,6 @@ from configuration.Hyperparameter import Hyperparameters
 from data_processing.DataframeCleaning import clean_up_dataframe
 from neural_network import SNN
 from neural_network.Dataset import Dataset
-from neural_network.Inference import Inference
 
 
 class Importer(threading.Thread):
@@ -418,7 +417,7 @@ def main():
     config = Configuration()
 
     # suppress debugging messages of tensorflow
-    os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+    # os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
     # load the scalers of the training data for the normalisation
     scalers = load_scalers(config)
@@ -430,35 +429,36 @@ def main():
 
     # if using the fabric simulation start at the start of the topics
     # for live classification start at newest messages possible
-    offset = 'smallest' if config.testing_using_fabric_sim else 'latest'
+    offset = 'earliest' if config.testing_using_fabric_sim else 'latest'
 
-    # create consumers for all topics
-    for topic in config.topic_list:
-        c = KafkaConsumer(topic, bootstrap_servers=config.get_connection(),
-                          value_deserializer=lambda m: json.loads(m.decode('utf-8')),
-                          auto_offset_reset=offset)
+    try:
+        # create consumers for all topics
+        for topic in config.topic_list:
+            c = KafkaConsumer(topic, bootstrap_servers=config.get_connection(),
+                              value_deserializer=lambda m: json.loads(m.decode('utf-8')),
+                              auto_offset_reset=offset)
 
-        # based on the topic select one of the consumers for time interval determination
-        if topic == config.limiting_topic:
-            limiting_consumer = c
+            # based on the topic select one of the consumers for time interval determination
+            if topic == config.limiting_topic:
+                limiting_consumer = c
 
-        consumers.append(c)
-
-    print('Initializing neural network ...')
-    print('Used model file:')
-    print(config.directory_model_to_use, '\n')
+            consumers.append(c)
+    except errors.NoBrokersAvailable:
+        print('Configured kafka server is not available. Please check the connection or change the configuration.')
+        sys.exit(0)
 
     # create and start a classifier thread that handles the classification of processed examples
-    classifier = Classifier(config)
-
     print('\nCreating classifier ...')
+    print('\nUsed model file:')
+    print(config.directory_model_to_use, '\n')
+
     print('The classifier will use k=' + str(config.k_of_knn) + ' for the k-NN algorithm')
     print('The mean similarity output is calculated on the basis of the k most similar cases')
     print('The time span is the time between the end timestamp of the')
     print('interval and the current time right before the output.')
     print('The total time is the time needed for the completely processing the example,')
     print('including the time in the queue.\n')
-
+    classifier = Classifier(config)
     classifier.start()
 
     print('Waiting for data to classify ...\n')

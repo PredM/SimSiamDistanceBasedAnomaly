@@ -2,6 +2,7 @@ import os
 import shutil
 from datetime import datetime
 from os import listdir
+from time import perf_counter
 
 from configuration.Configuration import Configuration
 from configuration.Hyperparameter import Hyperparameters
@@ -39,7 +40,10 @@ class Optimizer:
                 print('Continuing the training but the epoch could not be determined')
                 print('Using loaded model but starting at epoch 0')
 
+        last_output_time = perf_counter()
+
         for epoch in range(current_epoch, self.hyper.epochs):
+
             epoch_loss_avg = tf.keras.metrics.Mean()
 
             batch_true_similarities = []
@@ -71,13 +75,15 @@ class Optimizer:
             train_loss_results.append(epoch_loss_avg.result())
 
             if epoch % self.config.output_interval == 0:
-                print("Timestamp: {} Epoch: {} Loss: {:.5f}".format(
+                print("Timestamp: {} Epoch: {} Loss: {:.5f} Seconds since last output: {:.3f}".format(
                     datetime.now().strftime('%d.%m %H:%M:%S'),
                     epoch,
-                    epoch_loss_avg.result()))
+                    epoch_loss_avg.result(),
+                    perf_counter() - last_output_time))
 
                 self.delete_old_checkpoints(epoch)
                 self.save_models(epoch)
+                last_output_time = perf_counter()
 
     def update_model(self, model_input, true_similarities):
         with tf.GradientTape() as tape:

@@ -18,10 +18,10 @@ class Configuration:
         # ffnn = uses ffnn as distance measure
         # simple = mean absolute difference as distance measure instead of the ffnn
         self.snn_variants = ['standard_simple', 'standard_ffnn', 'fast_simple', 'fast_ffnn']
-        self.snn_variant = self.snn_variants[0]
+        self.snn_variant = self.snn_variants[1]
 
         # Hyperparameter file to use
-        self.hyper_file = '../configuration/hyperparameter_combinations/' + 'neural_warp.json'
+        self.hyper_file = '../configuration/hyperparameter_combinations/' + 'ba_cnn.json'
         self.use_hyper_file = True
 
         # Select whether training should be continued from the checkpoint defined below

@@ -106,7 +106,7 @@ class Inference:
 
 def main():
     # suppress debugging messages of TensorFlow
-    os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+    # os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
     config = Configuration()
     hyperparameters = Hyperparameters()
