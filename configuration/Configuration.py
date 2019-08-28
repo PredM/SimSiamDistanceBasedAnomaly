@@ -18,7 +18,7 @@ class Configuration:
         # ffnn = uses ffnn as distance measure
         # simple = mean absolute difference as distance measure instead of the ffnn
         self.snn_variants = ['standard_simple', 'standard_ffnn', 'fast_simple', 'fast_ffnn']
-        self.snn_variant = self.snn_variants[3]
+        self.snn_variant = self.snn_variants[2]
 
         # Hyperparameter file to use
         self.hyper_file = '../configuration/hyperparameter_combinations/' + 'testing.json'
@@ -77,7 +77,7 @@ class Configuration:
         self.models_folder = '../data/trained_models/'
 
         # path and file name to the specific model that should be used for testing and live classification
-        self.directory_model_to_use = self.models_folder + 'models_epoch-100' + '/'
+        self.directory_model_to_use = self.models_folder + 'models_08-28_16-19-11_epoch-400' + '/'
 
         # folder where the preprocessed training and test data for the neural network should be stored
         self.training_data_folder = '../data/training_data/'

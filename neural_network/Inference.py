@@ -118,7 +118,7 @@ def main():
 
     inference = Inference(config, hyperparameters, config.training_data_folder)
 
-    print('\nEnsure right model file is used:')
+    print('Ensure right model file is used:')
     print(config.directory_model_to_use, '\n')
 
     inference.infer_test_dataset()

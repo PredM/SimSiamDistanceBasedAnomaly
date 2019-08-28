@@ -55,7 +55,7 @@ class NN:
         if self.model is None:
             print('Model file for this type could not be found in ', config.directory_model_to_use)
         else:
-            print('Model has been loaded successfully\n')
+            print('Model has been loaded successfully')
 
 
 class FFNN(NN):

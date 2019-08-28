@@ -29,12 +29,11 @@ class Dataset:
         if self.config.snn_variant in ['standard_simple', 'standard_ffnn'] or training:
             pass  # nothing to do if standard variant
         elif self.config.snn_variant in ['fast_simple', 'fast_ffnn']:
-            print('Fast SNN variant configured, encoding the dataset with subnet')
-            print('Encoding feature files ...')
+            print('Fast SNN variant configured, encoding the dataset with subnet ...')
             encoder = DatasetEncoder(self.dataset_folder, config)
             encoder.encode()
             self.dataset_folder = encoder.target_folder
-            print('Encoding finished')
+            print('Encoding finished\n')
         else:
             raise AttributeError('Unknown SNN variant.')
 

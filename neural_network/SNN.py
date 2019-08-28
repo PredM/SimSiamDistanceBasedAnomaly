@@ -14,8 +14,8 @@ def initialise_snn(config: Configuration, hyper, dataset, training):
     if training and config.snn_variant in ['fast_simple', 'fast_ffnn']:
         print('WARNING:')
         print('The fast version can only be used for inference.')
-        print('Training will still use the standard version, ')
-        print('because the encoding must be recalculated after each epoch any way')
+        print('The training routine will use the standard version, otherwise the encoding')
+        print('would have to be recalculated after each iteration anyway.\n')
 
     var = config.snn_variant
 
@@ -46,9 +46,8 @@ class SimpleSNN:
         self.dataset: Dataset = dataset
         self.training = training
         self.sims_batch = None
-        # self.strategy = tf.distribute.MirroredStrategy()  # Todo remove if not working
+        # self.strategy = tf.distribute.MirroredStrategy()  # Todo test as soon as possible
         self.subnet = None
-        self.context_vectors = None
 
         # shape of a single example, is left flexible
         input_shape_subnet = (self.hyper.time_series_length, self.hyper.time_series_depth)
@@ -60,6 +59,7 @@ class SimpleSNN:
         elif subnet_variant == 'rnn':
             self.subnet = RNN(hyperparameters, input_shape_subnet)
             self.subnet.create_model()
+
         else:
             print('Unknown subnet variant, use "cnn" or "rnn"')
             print(subnet_variant)
@@ -105,20 +105,20 @@ class SimpleSNN:
     @tf.function
     def get_distance_batch(self, batch):
 
-        self.context_vectors = self.subnet.model(batch, training=self.training)
+        context_vectors = self.subnet.model(batch, training=self.training)
 
-        distances_batch = tf.map_fn(lambda pair_index: self.get_distance_pair(pair_index),
+        distances_batch = tf.map_fn(lambda pair_index: self.get_distance_pair(context_vectors, pair_index),
                                     tf.range(batch.shape[0] // 2, dtype=tf.int32),
-                                    back_prop=True,name='PairWiseDistMap', dtype=tf.float32)
+                                    back_prop=True, name='PairWiseDistMap', dtype=tf.float32)
 
         sims_batch = tf.exp(-distances_batch)
 
         return sims_batch
 
     @tf.function
-    def get_distance_pair(self, pair_index):
-        a = self.context_vectors[2 * pair_index, :, :]
-        b = self.context_vectors[2 * pair_index + 1, :, :]
+    def get_distance_pair(self, context_vectors, pair_index):
+        a = context_vectors[2 * pair_index, :, :]
+        b = context_vectors[2 * pair_index + 1, :, :]
 
         diff = tf.abs(a - b)
         mean = tf.reduce_mean(diff)
@@ -148,9 +148,9 @@ class SNN(SimpleSNN):
         print('The full model has', self.ffnn.get_parameter_count() + self.subnet.get_parameter_count(), 'parameters\n')
 
     @tf.function
-    def get_distance_pair(self, pair_index):
-        a = self.context_vectors[2 * pair_index, :, :]
-        b = self.context_vectors[2 * pair_index + 1, :, :]
+    def get_distance_pair(self, context_vectors, pair_index):
+        a = context_vectors[2 * pair_index, :, :]
+        b = context_vectors[2 * pair_index + 1, :, :]
 
         indices_a = tf.range(a.shape[0])
         indices_a = tf.tile(indices_a, [a.shape[0]])
@@ -195,13 +195,11 @@ class FastSimpleSNN(SimpleSNN):
     def __init__(self, subnet_variant, hyperparameters, dataset, training):
         super().__init__(subnet_variant, hyperparameters, dataset, training)
 
-    # TODO not tested yet
     def encode_example(self, example):
         ex = np.expand_dims(example, axis=0)  # Model expects array of examples -> add outer dimension
         context_vector = self.subnet.model(ex, training=self.training)
         return np.squeeze(context_vector, axis=0)  # Back to a single example
 
-    # TODO Implement multi gpu support if with self.strategy.scope(): not working
     # Example must already be encoded
     def get_sims(self, encoded_example):
         num_train = len(self.dataset.x_train)
@@ -255,6 +253,10 @@ class FastSimpleSNN(SimpleSNN):
 
         return distance_example
 
+    def load_model(self, config: Configuration):
+        # Simple and fast version --> Neither subnet nor ffnn is needs to be loaded
+        pass
+
 
 class FastSNN(FastSimpleSNN):
 
@@ -268,10 +270,9 @@ class FastSNN(FastSimpleSNN):
         self.ffnn = FFNN(self.hyper, input_shape_ffnn)
         self.ffnn.create_model()
 
-        print('The full model has', self.ffnn.get_parameter_count() + self.subnet.get_parameter_count(), 'parameters\n')
-
     @tf.function
     def get_distance_pair(self, a, b):
+
         indices_a = tf.range(a.shape[0])
         indices_a = tf.tile(indices_a, [a.shape[0]])
         a = tf.gather(a, indices_a)
@@ -294,17 +295,14 @@ class FastSNN(FastSimpleSNN):
         return tf.reduce_mean(warped_dists)
 
     def load_model(self, config: Configuration):
-        self.subnet.load_model(config)
         self.ffnn.load_model(config)
 
-        if self.subnet.model is None or self.ffnn.model is None:
+        if self.ffnn.model is None:
             sys.exit(1)
         else:
             self.print_detailed_model_info()
 
     def print_detailed_model_info(self):
-        print('')
-        self.subnet.model.summary()
         print('')
         self.ffnn.model.summary()
         print('')
