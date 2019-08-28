@@ -46,8 +46,9 @@ class SimpleSNN:
         self.dataset: Dataset = dataset
         self.training = training
         self.sims_batch = None
-        self.strategy = tf.distribute.MirroredStrategy()  # Todo remove if not working
+        # self.strategy = tf.distribute.MirroredStrategy()  # Todo remove if not working
         self.subnet = None
+        self.context_vectors = None
 
         # shape of a single example, is left flexible
         input_shape_subnet = (self.hyper.time_series_length, self.hyper.time_series_depth)
@@ -72,53 +73,6 @@ class SimpleSNN:
         else:
             self.print_detailed_model_info()
 
-    # TODO Untested because no gpu pc available
-    # Manual distribution to all available gpus, currently to automatic version is used, see below
-    def get_sims_2(self, example: np.ndarray):
-
-        gpu_list = tf.config.experimental.list_logical_devices('GPU')
-
-        order_list = np.arange(len(gpu_list))
-        parts_list = np.array_split(self.dataset.x_train, len(gpu_list))
-        output = np.ndarray(order_list.shape, dtype=np.ndarray)
-
-        for pos, gpu, part in zip(order_list, gpu_list, parts_list):
-            with tf.device(gpu):
-                self.get_sims_per_gpu(part, example, output, pos)
-
-        # Fixme maybe, unsure if this works without some kind of join, but should
-        # see: https://www.tensorflow.org/beta/guide/using_gpu#manual_placement
-        return np.concatenate(output)
-
-    def get_sims_per_gpu(self, part, example, output, pos):
-
-        # For the classic version the sims are calculated in batches
-        num_train = len(part)
-        sims_all_examples = np.zeros(num_train)
-        batch_size = self.hyper.batch_size
-
-        for index in range(0, num_train, batch_size):
-
-            # Fix batch size if it would exceed the number of train instances
-            if index + batch_size >= num_train:
-                batch_size = num_train - index
-
-            input_pairs = np.zeros((2 * batch_size, self.hyper.time_series_length,
-                                    self.hyper.time_series_depth)).astype('float32')
-
-            # Create a batch of pairs between the test series and the train series
-            for i in range(batch_size):
-                input_pairs[2 * i] = example
-                input_pairs[2 * i + 1] = self.dataset.x_train[index + i]
-
-            sims_batch = self.get_sims_batch(input_pairs)
-
-            # Collect similarities of all badges
-            sims_all_examples[index:index + batch_size] = sims_batch
-
-        # Return the result of the knn classifier using the calculated similarities
-        output[pos] = sims_all_examples
-
     # TODO Untested: Using new automatic distribution to multiple gpus, this would be preferable if it works
     # Otherwise test methods above, if working needs to implemented for fast version
     def get_sims(self, example):
@@ -127,7 +81,6 @@ class SimpleSNN:
         batch_size = self.hyper.batch_size
 
         for index in range(0, num_train, batch_size):
-
             # Fix batch size if it would exceed the number of train instances
             if index + batch_size >= num_train:
                 batch_size = num_train - index
@@ -140,8 +93,8 @@ class SimpleSNN:
                 input_pairs[2 * i] = example
                 input_pairs[2 * i + 1] = self.dataset.x_train[index + i]
 
-            with self.strategy.scope():
-                sims_batch = self.get_sims_batch(input_pairs)
+            # with self.strategy.scope():
+            sims_batch = self.get_distance_batch(input_pairs)
 
             # Collect similarities of all badges
             sims_all_examples[index:index + batch_size] = sims_batch
@@ -149,31 +102,30 @@ class SimpleSNN:
         # Return the result of the knn classifier using the calculated similarities
         return sims_all_examples
 
-    # Reminder: Cant use tf.function decorator because each parameter passed would be interpreted as tensor of the graph
-    # -> Cant be used like a normal parameter (e.g. leakage error and can't get the passed value)
-    def get_sims_batch(self, batch):
+    @tf.function
+    def get_distance_batch(self, batch):
 
-        # Get the distances for the hole batch by calculating it for each pair
-        distances_batch = tf.map_fn(lambda pair_index: self.get_distance_pair(pair_index, batch),
+        self.context_vectors = self.subnet.model(batch, training=self.training)
+
+        distances_batch = tf.map_fn(lambda pair_index: self.get_distance_pair(pair_index),
                                     tf.range(batch.shape[0] // 2, dtype=tf.int32),
-                                    back_prop=True, dtype='float32')  # dtype is necessary
+                                    back_prop=True,name='PairWiseDistMap', dtype=tf.float32)
 
         sims_batch = tf.exp(-distances_batch)
 
         return sims_batch
 
-    def get_distance_pair(self, pair_index, batch):
-        # Convert pair from batch to model input and compute the result
-        subnet_input = np.array([batch[2 * pair_index], batch[2 * pair_index + 1]])
-        subnet_output = self.subnet.model(subnet_input, training=self.training)
-        a, b = subnet_output[0], subnet_output[1]
+    @tf.function
+    def get_distance_pair(self, pair_index):
+        a = self.context_vectors[2 * pair_index, :, :]
+        b = self.context_vectors[2 * pair_index + 1, :, :]
 
-        # This snn version (SimpleSNN) uses the a simple distance measure
-        # by calculating the mean of the absolute difference at matching timestamps
         diff = tf.abs(a - b)
-        distance_example = tf.reduce_mean(diff)
+        mean = tf.reduce_mean(diff)
 
-        return distance_example
+        sims_batch = tf.exp(-mean)
+
+        return sims_batch
 
     def print_detailed_model_info(self):
         print('')
@@ -195,17 +147,15 @@ class SNN(SimpleSNN):
 
         print('The full model has', self.ffnn.get_parameter_count() + self.subnet.get_parameter_count(), 'parameters\n')
 
-    def get_distance_pair(self, pair_index, batch):
-        # Convert pair from batch to model input and compute the result
-        subnet_input = np.array([batch[2 * pair_index], batch[2 * pair_index + 1]])
-        subnet_output = self.subnet.model(subnet_input, training=self.training)
+    @tf.function
+    def get_distance_pair(self, pair_index):
+        a = self.context_vectors[2 * pair_index, :, :]
+        b = self.context_vectors[2 * pair_index + 1, :, :]
 
-        a = subnet_output[0]
         indices_a = tf.range(a.shape[0])
         indices_a = tf.tile(indices_a, [a.shape[0]])
         a = tf.gather(a, indices_a)
 
-        b = subnet_output[1]
         indices_b = tf.range(b.shape[0])
         indices_b = tf.reshape(indices_b, [-1, 1])
         indices_b = tf.tile(indices_b, [1, b.shape[0]])
@@ -272,8 +222,8 @@ class FastSimpleSNN(SimpleSNN):
             for i in range(batch_size):
                 section_train[i] = self.dataset.x_train[index + i]
 
-            with self.strategy.scope():
-                sims_batch = self.get_sims_section(section_train, encoded_example)
+            # with self.strategy.scope():
+            sims_batch = self.get_sims_section(section_train, encoded_example)
 
             # Collect similarities of all badges
             sims_all_examples[index:index + batch_size] = sims_batch
@@ -281,9 +231,10 @@ class FastSimpleSNN(SimpleSNN):
         # Return the result of the knn classifier using the calculated similarities
         return sims_all_examples
 
-    def get_sims_batch(self, batch):
+    def get_distance_batch(self, batch):
         raise NotImplemented('This method is not supported by this SNN variant by design.')
 
+    @tf.function
     def get_sims_section(self, section_train, encoded_example):
 
         # Get the distances for the hole batch by calculating it for each pair
@@ -294,6 +245,7 @@ class FastSimpleSNN(SimpleSNN):
 
         return sims_batch
 
+    @tf.function
     def get_distance_pair(self, a, b):
 
         # This snn version uses the a simple distance measure
