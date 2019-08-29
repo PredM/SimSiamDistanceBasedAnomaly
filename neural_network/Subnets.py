@@ -31,7 +31,6 @@ class NN:
 
         return total_parameters
 
-    # TODO Maybe handel matching filename with wrong content
     def load_model(self, config: Configuration):
         self.model = None
 
@@ -94,8 +93,8 @@ class RNN(NN):
     def __init__(self, hyperparameters, input_shape):
         super().__init__(hyperparameters, input_shape)
 
-    # RNN structure matching the description in the neural warp paper,
-    # currently not used
+    # RNN structure matching the description in the neural warp paper
+    # Currently not used
     def create_model_nw(self):
         print('Creating LSTM subnet')
 
@@ -139,12 +138,13 @@ class RNN(NN):
         for i in range(len(layers)):
             num_units = layers[i]
 
+            # TODO Must be tested if working
             # First layer must be handled separately because the input shape parameter must be set
-            # Choice of parameters ensure usage of cuDNN TODO Must be tested if working
+            # Choice of parameters ensures usage of cuDNN
             if i == 0:
                 layer = tf.keras.layers.LSTM(units=num_units, activation='tanh', recurrent_activation='sigmoid',
                                              recurrent_dropout=0, unroll=False, use_bias=True, return_sequences=True,
-                                             input_shape=self.input_shape, )
+                                             input_shape=self.input_shape)
             else:
                 layer = tf.keras.layers.LSTM(units=num_units, activation='tanh', recurrent_activation='sigmoid',
                                              recurrent_dropout=0, unroll=False, use_bias=True, return_sequences=True)
