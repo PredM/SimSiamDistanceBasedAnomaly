@@ -50,6 +50,8 @@ class DatasetEncoder:
         x_train_encoded = np.zeros(new_train_shape, dtype='float32')
         x_test_encoded = np.zeros(new_test_shape, dtype='float32')
 
+        # TODO Add timer
+        # TODO Change to batch processing
         # TODO Add multi gpu support when tested in snn implementation
         for i in range(len(x_train)):
             ex = np.expand_dims(x_train[i], axis=0)  # Model expects array of examples -> add outer dimension

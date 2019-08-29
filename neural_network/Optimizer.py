@@ -87,7 +87,7 @@ class Optimizer:
 
     def update_model(self, model_input, true_similarities):
         with tf.GradientTape() as tape:
-            pred_similarities = self.snn.get_distance_batch(model_input)
+            pred_similarities = self.snn.get_sims_batch(model_input)
 
             # Get parameters of subnet and ffnn (if complex sim measure)
             if self.config.snn_variant in ['standard_ffnn', 'fast_ffnn']:
@@ -99,7 +99,7 @@ class Optimizer:
             loss = tf.keras.losses.binary_crossentropy(y_true=true_similarities, y_pred=pred_similarities)
             grads = tape.gradient(loss, trainable_params)
 
-            # maybe change back to clipnorm=self.hyper.gradient_cap in adam initialisation
+            # maybe change back to clipnorm = self.hyper.gradient_cap in adam initialisation
             clipped_grads, _ = tf.clip_by_global_norm(grads, self.hyper.gradient_cap)
 
             # Apply the gradients to the trainable parameters

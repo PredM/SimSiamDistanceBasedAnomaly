@@ -79,11 +79,11 @@ class Inference:
 
             # Print result for this example
             example_results = [
-                ['Example', str(idx_test + 1) + '/' + str(self.dataset.num_test_instances)],
+                ['Example:', str(idx_test + 1) + '/' + str(self.dataset.num_test_instances)],
+                ['Correctly classified:', str(correct) + '/' + str(idx_test + 1)],
                 ['Classified as:', max_sim_class],
                 ['Correct class:', real],
                 ['Similarity:', max_sim],
-                ['Correctly classified:', correct],
                 ['Current accuracy:', correct / num_infers]
             ]
 
@@ -101,9 +101,9 @@ class Inference:
         print('-------------------------------------------------------------')
         print('Final Result:')
         print('-------------------------------------------------------------')
-        print('Elapsed time:', elapsed_time, 'Seconds')
-        print('Average time per example:', elapsed_time / self.dataset.num_test_instances, 'Seconds')
-        print('Classification accuracy split by classes:')
+        print('Elapsed time:', round(elapsed_time, 4), 'Seconds')
+        print('Average time per example:', round(elapsed_time / self.dataset.num_test_instances, 4), 'Seconds')
+        print('Classification accuracy split by classes:\n')
         print(self.results)
         print('-------------------------------------------------------------')
 
