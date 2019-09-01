@@ -138,16 +138,15 @@ class RNN(NN):
         for i in range(len(layers)):
             num_units = layers[i]
 
-            # TODO Must be tested if working
-            # First layer must be handled separately because the input shape parameter must be set
-            # Choice of parameters ensures usage of cuDNN
+            # First layer must be handled separately because the input shape parameter must be set Usage of default
+            # parameters should ensure cuDNN usage (
+            # https://www.tensorflow.org/beta/guide/keras/rnn#using_cudnn_kernels_when_available)
+            # But this would be faster:
+            # tf.keras.layers.RNN(tf.keras.layers.LSTMCell(num_units), return_sequences=True)
             if i == 0:
-                layer = tf.keras.layers.LSTM(units=num_units, activation='tanh', recurrent_activation='sigmoid',
-                                             recurrent_dropout=0, unroll=False, use_bias=True, return_sequences=True,
-                                             input_shape=self.input_shape)
+                layer = tf.keras.layers.LSTM(units=num_units, return_sequences=True, input_shape=self.input_shape)
             else:
-                layer = tf.keras.layers.LSTM(units=num_units, activation='tanh', recurrent_activation='sigmoid',
-                                             recurrent_dropout=0, unroll=False, use_bias=True, return_sequences=True)
+                layer = tf.keras.layers.LSTM(units=num_units, return_sequences=True)
             model.add(layer)
 
         # Add Batch Norm and Dropout Layers

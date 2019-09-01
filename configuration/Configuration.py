@@ -11,7 +11,7 @@ class Configuration:
         ###
 
         self.subnet_variants = ['cnn', 'rnn']
-        self.subnet_variant = self.subnet_variants[0]
+        self.subnet_variant = self.subnet_variants[1]
 
         # standard = classic snn behaviour, context vectors calculated each time, also multiple times for the example
         # fast = encoding of case base only once, example also only once
@@ -21,7 +21,7 @@ class Configuration:
         self.snn_variant = self.snn_variants[3]
 
         # Hyperparameter file to use
-        self.hyper_file = '../configuration/hyperparameter_combinations/' + 'ba_cnn.json'
+        self.hyper_file = '../configuration/hyperparameter_combinations/' + 'ba_lstm.json'
         self.use_hyper_file = True
 
         # Select whether training should be continued from the checkpoint defined below
@@ -29,7 +29,7 @@ class Configuration:
         self.continue_training = False
 
         # Defines how often loss is printed and checkpoints are safed during training
-        self.output_interval = 200
+        self.output_interval = 100
 
         # How many model checkpoints are kept
         self.model_files_stored = 100
