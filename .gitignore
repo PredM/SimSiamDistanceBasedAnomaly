@@ -133,9 +133,11 @@ data/datasets/*
 data/training_data/*
 !data/training_data/.gitkeep
 
-data/trained_models/*
+data/trained_models/temp_*
 !data/trained_models/.gitkeep
 
 data/training_data_encoded/*
 !data/training_data_encoded/.gitkeep
 
+logs/*
+!logs/.gitkeep

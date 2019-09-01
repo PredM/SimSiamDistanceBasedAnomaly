@@ -18,10 +18,10 @@ class Configuration:
         # ffnn = uses ffnn as distance measure
         # simple = mean absolute difference as distance measure instead of the ffnn
         self.snn_variants = ['standard_simple', 'standard_ffnn', 'fast_simple', 'fast_ffnn']
-        self.snn_variant = self.snn_variants[2]
+        self.snn_variant = self.snn_variants[3]
 
         # Hyperparameter file to use
-        self.hyper_file = '../configuration/hyperparameter_combinations/' + 'testing.json'
+        self.hyper_file = '../configuration/hyperparameter_combinations/' + 'ba_cnn.json'
         self.use_hyper_file = True
 
         # Select whether training should be continued from the checkpoint defined below
@@ -29,10 +29,10 @@ class Configuration:
         self.continue_training = False
 
         # Defines how often loss is printed and checkpoints are safed during training
-        self.output_interval = 100
+        self.output_interval = 200
 
         # How many model checkpoints are kept
-        self.model_files_stored = 5
+        self.model_files_stored = 100
 
         ###
         # kafka / real time classification
@@ -42,7 +42,7 @@ class Configuration:
         self.ip = 'localhost'  # '192.168.1.10'
         self.port = '9092'
 
-        self.error_dict = None # Read from config.json
+        self.error_dict = None  # Read from config.json
 
         # set to true if using the fabric simulation
         # will read from the beginning of the topics, so the fabric simulation only has to be run once
@@ -77,7 +77,7 @@ class Configuration:
         self.models_folder = '../data/trained_models/'
 
         # path and file name to the specific model that should be used for testing and live classification
-        self.directory_model_to_use = self.models_folder + 'models_08-28_16-19-11_epoch-400' + '/'
+        self.directory_model_to_use = self.models_folder + 'ba_cnn_378200_96_percent' + '/'
 
         # folder where the preprocessed training and test data for the neural network should be stored
         self.training_data_folder = '../data/training_data/'

@@ -128,7 +128,7 @@ class Optimizer:
         # Generate a name and create the directory, where the model files of this epoch should be stored
         epoch_string = 'epoch-' + str(current_epoch)
         dt_string = datetime.now().strftime("%m-%d_%H-%M-%S")
-        dir_name = self.config.models_folder + '_'.join(['models', dt_string, epoch_string]) + '/'
+        dir_name = self.config.models_folder + '_'.join(['temp', 'models', dt_string, epoch_string]) + '/'
         os.mkdir(dir_name)
 
         # Generate the file names and save the model files in the directory created before
