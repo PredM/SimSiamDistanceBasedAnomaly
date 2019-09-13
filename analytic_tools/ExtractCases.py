@@ -206,9 +206,9 @@ def extract_cases(info, plot):
 
     file = None
     if sensor == 'txt15':
-        file = config.topic15File
+        file = config.txt15
     elif sensor == 'txt16':
-        file = config.topic16File
+        file = config.txt16
 
     # import using the method for importing datasets
     df: pd.DataFrame = import_txt(file, sensor)

@@ -76,6 +76,7 @@ def downsample_dataframe(df: pd.DataFrame, config):
     return df_downsampled
 
 
+# TODO Config.bools muss mit existierenden columns geschnitten werden da diese jetzt alle enthätl
 def clean_up_dataframe(df: pd.DataFrame, config: Configuration):
     print('\nCleaning up dataframe ...')
 

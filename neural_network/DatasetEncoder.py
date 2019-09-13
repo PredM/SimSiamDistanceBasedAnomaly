@@ -12,7 +12,7 @@ class DatasetEncoder:
         self.source_folder = source_folder
         self.config: Configuration = config
         self.target_folder = ''
-        self.subnet = None  # Cant be initialized here because input shape is unknown
+        self.encoder = None  # Cant be initialized here because input shape is unknown
 
         # Depending on whether it is training data or case base,
         # a corresponding target folder is set for the encoded files
@@ -33,17 +33,17 @@ class DatasetEncoder:
         input_shape = (time_series_length, time_series_depth)
 
         # Create the subnet encoder and load the configured model
-        if self.config.subnet_variant == 'cnn':
-            self.subnet = CNN(Hyperparameters(), input_shape)
-        elif self.config.subnet_variant == 'rnn':
-            self.subnet = RNN(Hyperparameters(), input_shape)
+        if self.config.encoder_variant == 'cnn':
+            self.encoder = CNN(Hyperparameters(), input_shape)
+        elif self.config.encoder_variant == 'rnn':
+            self.encoder = RNN(Hyperparameters(), input_shape)
         else:
             print('Unknown subnet variant, use "cnn" or "rnn"')
 
-        self.subnet.load_model(self.config)
+        self.encoder.load_model(self.config)
 
         # Calculate the shape of the arrays that store the encoded examples and create empty ones
-        output_shape = self.subnet.model.output_shape
+        output_shape = self.encoder.model.output_shape
         new_train_shape = (x_train.shape[0], output_shape[1], output_shape[2])
         new_test_shape = (x_test.shape[0], output_shape[1], output_shape[2])
 
@@ -55,12 +55,12 @@ class DatasetEncoder:
         # TODO Add multi gpu support when tested in snn implementation
         for i in range(len(x_train)):
             ex = np.expand_dims(x_train[i], axis=0)  # Model expects array of examples -> add outer dimension
-            context_vector = self.subnet.model(ex, training=False)
+            context_vector = self.encoder.model(ex, training=False)
             x_train_encoded[i] = np.squeeze(context_vector, axis=0)  # Back to a single example
 
         for i in range(len(x_test)):
             ex = np.expand_dims(x_test[i], axis=0)
-            context_vector = self.subnet.model(ex, training=False)
+            context_vector = self.encoder.model(ex, training=False)
             x_test_encoded[i] = np.squeeze(context_vector, axis=0)
 
         np.save(self.target_folder + 'train_features.npy', x_train_encoded)

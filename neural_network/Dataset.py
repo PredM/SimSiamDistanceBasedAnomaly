@@ -26,9 +26,9 @@ class Dataset:
         self.num_classes = None
         self.classes = None
 
-        if self.config.snn_variant in ['standard_simple', 'standard_ffnn'] or training:
+        if self.config.architecture_variant in ['standard_simple', 'standard_ffnn'] or training:
             pass  # nothing to do if standard variant
-        elif self.config.snn_variant in ['fast_simple', 'fast_ffnn']:
+        elif self.config.architecture_variant in ['fast_simple', 'fast_ffnn']:
             print('Fast SNN variant configured, encoding the dataset with subnet ...')
             encoder = DatasetEncoder(self.dataset_folder, config)
             encoder.encode()

@@ -220,7 +220,7 @@ def list_to_dataframe(results: [[object]], config: Configuration):
 
         # remove unnecessary columns
         # errors for non existing columns are ignored because not all datasets have the same
-        df_temp.drop(config.unnecessary_cols, 1, inplace=True, errors='ignore')
+        df_temp.drop(config.unused_attributes, 1, inplace=True, errors='ignore')
 
         # remove duplicated timestamps, first will be kept
         df_temp = df_temp.loc[~df_temp['timestamp'].duplicated(keep='first')]
@@ -385,7 +385,7 @@ class Classifier(threading.Thread):
     def knn(self, example: np.ndarray):
 
         # TODO not tested yet
-        if self.config.snn_variant in ['fast_simple', 'fast_ffnn']:
+        if self.config.architecture_variant in ['fast_simple', 'fast_ffnn']:
             example = self.snn.encode_example(example)
 
         # calculate the similarities to all examples of the case base using the nn

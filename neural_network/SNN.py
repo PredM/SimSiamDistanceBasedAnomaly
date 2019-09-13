@@ -11,32 +11,32 @@ from neural_network.Subnets import CNN, RNN, FFNN
 
 # Initialises the correct SNN variant depending on the configuration
 def initialise_snn(config: Configuration, hyper, dataset, training):
-    if training and config.snn_variant in ['fast_simple', 'fast_ffnn']:
+    if training and config.architecture_variant in ['fast_simple', 'fast_ffnn']:
         print('WARNING:')
         print('The fast version can only be used for inference.')
         print('The training routine will use the standard version, otherwise the encoding')
         print('would have to be recalculated after each iteration anyway.\n')
 
-    var = config.snn_variant
+    var = config.architecture_variant
 
     if training and var.endswith('simple') or not training and var == 'standard_simple':
         print('Creating standard SNN with simple similarity measure')
-        return SimpleSNN(config.subnet_variant, hyper, dataset, training)
+        return SimpleSNN(config.encoder_variant, hyper, dataset, training)
 
     elif training and var.endswith('ffnn') or not training and var == 'standard_ffnn':
         print('Creating standard SNN with FFNN similarity measure')
-        return SNN(config.subnet_variant, hyper, dataset, training)
+        return SNN(config.encoder_variant, hyper, dataset, training)
 
     elif not training and var == 'fast_simple':
         print('Creating fast SNN with simple similarity measure')
-        return FastSimpleSNN(config.subnet_variant, hyper, dataset, training)
+        return FastSimpleSNN(config.encoder_variant, hyper, dataset, training)
 
     elif not training and var == 'fast_ffnn':
         print('Creating fast SNN with FFNN similarity measure')
-        return FastSNN(config.subnet_variant, hyper, dataset, training)
+        return FastSNN(config.encoder_variant, hyper, dataset, training)
 
     else:
-        raise AttributeError('Unknown SNN variant specified:' + config.snn_variant)
+        raise AttributeError('Unknown SNN variant specified:' + config.architecture_variant)
 
 
 class SimpleSNN:

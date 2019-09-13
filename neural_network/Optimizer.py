@@ -90,7 +90,7 @@ class Optimizer:
             pred_similarities = self.snn.get_sims_batch(model_input)
 
             # Get parameters of subnet and ffnn (if complex sim measure)
-            if self.config.snn_variant in ['standard_ffnn', 'fast_ffnn']:
+            if self.config.architecture_variant in ['standard_ffnn', 'fast_ffnn']:
                 trainable_params = self.snn.ffnn.model.trainable_variables + self.snn.subnet.model.trainable_variables
             else:
                 trainable_params = self.snn.subnet.model.trainable_variables
@@ -132,9 +132,9 @@ class Optimizer:
         os.mkdir(dir_name)
 
         # Generate the file names and save the model files in the directory created before
-        subnet_file_name = '_'.join(['subnet', self.config.subnet_variant, epoch_string]) + '.h5'
+        subnet_file_name = '_'.join(['subnet', self.config.encoder_variant, epoch_string]) + '.h5'
         self.snn.subnet.model.save(dir_name + subnet_file_name)
 
-        if self.config.snn_variant in ['standard_ffnn', 'fast_ffnn']:
+        if self.config.architecture_variant in ['standard_ffnn', 'fast_ffnn']:
             ffnn_file_name = '_'.join(['ffnn', epoch_string]) + '.h5'
             self.snn.ffnn.model.save(dir_name + ffnn_file_name)

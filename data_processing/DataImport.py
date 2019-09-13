@@ -62,11 +62,11 @@ def import_all_txts(config: Configuration):
     print('Importing TXT controller data')
 
     # import the single txt sensors
-    df15: pd.DataFrame = import_txt(config.topic15File, 'txt15')
-    df16: pd.DataFrame = import_txt(config.topic16File, 'txt16')
-    df17: pd.DataFrame = import_txt(config.topic17File, 'txt17')
-    df18: pd.DataFrame = import_txt(config.topic18File, 'txt18')
-    df19: pd.DataFrame = import_txt(config.topic19File, 'txt19')
+    df15: pd.DataFrame = import_txt(config.txt15, 'txt15')
+    df16: pd.DataFrame = import_txt(config.txt16, 'txt16')
+    df17: pd.DataFrame = import_txt(config.txt17, 'txt17')
+    df18: pd.DataFrame = import_txt(config.txt18, 'txt18')
+    df19: pd.DataFrame = import_txt(config.txt19, 'txt19')
 
     # plot the data if enabled
     plot_export_txt(df15, 'txt_15', config)
@@ -320,7 +320,7 @@ def main():
 
     print('\nDelete unnecessary streams')
     print('Number of streams before:', df_combined.shape)
-    df_combined = df_combined.drop(config.unnecessary_cols, 1, errors='ignore')
+    df_combined = df_combined.drop(config.unused_attributes, 1, errors='ignore')
     print('Number of streams after:', df_combined.shape)
 
     print('\nSort streams by name to ensure same order like live data')
