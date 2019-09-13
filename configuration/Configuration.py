@@ -13,6 +13,7 @@ class Configuration:
         self.encoder_variants = ['cnn', 'rnn']
         self.encoder_variant = self.encoder_variants[1]
 
+        # Architecture independent of whether snn or cbs is used
         # standard = classic snn behaviour, context vectors calculated each time, also multiple times for the example
         # fast = encoding of case base only once, example also only once
         # ffnn = uses ffnn as distance measure
@@ -20,7 +21,7 @@ class Configuration:
         self.architecture_variants = ['standard_simple', 'standard_ffnn', 'fast_simple', 'fast_ffnn']
         self.architecture_variant = self.architecture_variants[1]
 
-        # Todo should be changed to folder, file names should correspond to failure cases
+        # TODO Needs to be changed to folder if every encoder should use different hyperparameters
         # Hyperparameter file to use
         self.hyper_file = '../configuration/hyperparameter_combinations/' + 'ba_lstm.json'
         self.use_hyper_file = True
