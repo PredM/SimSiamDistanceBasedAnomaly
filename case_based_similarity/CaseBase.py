@@ -5,7 +5,7 @@ from configuration.Configuration import Configuration
 
 
 # TODO Completely untested
-class Dataset:
+class CaseBase:
 
     def __init__(self, dataset_folder, config: Configuration, case, features_used=None):
         self.dataset_folder = dataset_folder

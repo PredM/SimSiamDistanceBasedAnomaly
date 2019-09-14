@@ -19,7 +19,7 @@ class Configuration:
         # ffnn = uses ffnn as distance measure
         # simple = mean absolute difference as distance measure instead of the ffnn
         self.architecture_variants = ['standard_simple', 'standard_ffnn', 'fast_simple', 'fast_ffnn']
-        self.architecture_variant = self.architecture_variants[1]
+        self.architecture_variant = self.architecture_variants[0]
 
         # TODO Needs to be changed to folder if every encoder should use different hyperparameters
         # Hyperparameter file to use
@@ -169,7 +169,7 @@ class Configuration:
         # mapping for topic name to prefix of sensor streams, relevant to get the same order of streams
         self.prefixes = None
 
-        self.relevant_attributes, self.unused_attributes = None, None
+        self.relevant_features, self.unused_attributes = None, None
         self.zeroOne, self.intNumbers, self.realValues, self.bools = None, None, None, None
 
         self.load_config_json('../configuration/config.json')
@@ -213,7 +213,7 @@ class Configuration:
         self.prefixes = data['prefixes']
         self.error_descriptions = data['error_descriptions']
 
-        self.relevant_attributes: dict = data['relevant_attributes']
+        self.relevant_features: dict = data['relevant_features']
         self.zeroOne = data['zeroOne']
         self.intNumbers = data['intNumbers']
         self.realValues = data['realValues']
@@ -222,7 +222,7 @@ class Configuration:
         def flatten(l):
             return [item for sublist in l for item in sublist]
 
-        all_used = flatten(self.relevant_attributes.values())
+        all_used = flatten(self.relevant_features.values())
         all_total = self.zeroOne + self.intNumbers + self.realValues + self.bools
         self.unused_attributes = list(set(all_total) - set(all_used))
 

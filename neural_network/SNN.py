@@ -47,15 +47,9 @@ class SimpleSNN:
         self.training = training
         self.subnet = None
 
-        # Used for automatic distribution across multiple gpus
-        self.strategy = tf.distribute.MirroredStrategy()
-
         # Shape of a single example, batch size is left flexible
         input_shape_subnet = (self.hyper.time_series_length, self.hyper.time_series_depth)
 
-        # if type(self) == FastSNN or FastSimpleSNN:
-        #     # Fast versions dont need to initialise a subnet, encoded before
-        #     pass
         if subnet_variant == 'cnn':
             self.subnet = CNN(hyperparameters, input_shape_subnet)
             self.subnet.create_model()
@@ -89,9 +83,7 @@ class SimpleSNN:
                 input_pairs[2 * i] = example
                 input_pairs[2 * i + 1] = self.dataset.x_train[index + i]
 
-            # Automatic distribution of the calculation to all available gpus
-            with self.strategy.scope():
-                sims_batch = self.get_sims_batch(input_pairs)
+            sims_batch = self.get_sims_batch(input_pairs)
 
             # Collect similarities of all badges
             sims_all_examples[index:index + batch_size] = sims_batch
@@ -219,9 +211,7 @@ class FastSimpleSNN(SimpleSNN):
 
             section_train = self.dataset.x_train[index: index + batch_size].astype('float32')
 
-            # Automatic distribution of the calculation to all available gpus
-            with self.strategy.scope():
-                sims_batch = self.get_sims_section(section_train, encoded_example)
+            sims_batch = self.get_sims_section(section_train, encoded_example)
 
             # Collect similarities of all badges
             sims_all_examples[index:index + batch_size] = sims_batch
