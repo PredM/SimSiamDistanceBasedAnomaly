@@ -130,9 +130,6 @@ dmypy.json
 data/datasets/*
 !data/datasets/.gitkeep
 
-data/training_data/*
-!data/training_data/.gitkeep
-
 data/trained_models/temp_*
 !data/trained_models/.gitkeep
 
