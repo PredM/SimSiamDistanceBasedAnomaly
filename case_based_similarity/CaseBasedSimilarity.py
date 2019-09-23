@@ -1,10 +1,3 @@
-# DataSet Generation must occur in encoder
-# Change DataSet so it gets indexes the file should be reduced to as parameter
-# with default "all"
-
-# Todo Rename everything that contains "snn" so it also matches the new sim measure
-
-# Initialises the correct SNN variant depending on the configuration
 from case_based_similarity.CaseBase import CaseBase
 from configuration.Configuration import Configuration
 from neural_network.Subnets import CNN, RNN

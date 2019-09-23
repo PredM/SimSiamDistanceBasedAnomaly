@@ -160,7 +160,7 @@ class Configuration:
         self.test_split_size = 0.1
 
         # specifies the maximum number of cores to be used in parallel during data processing.
-        self.max_parallel_cores = 7
+        self.max_parallel_cores = 40
 
         # All None Variables are read from file
         self.cases_datasets = None
@@ -169,7 +169,7 @@ class Configuration:
         # mapping for topic name to prefix of sensor streams, relevant to get the same order of streams
         self.prefixes = None
 
-        self.relevant_features, self.unused_attributes = None, None
+        self.relevant_features, self.all_features_used = None, None
         self.zeroOne, self.intNumbers, self.realValues, self.bools = None, None, None, None
 
         self.load_config_json('../configuration/config.json')
@@ -222,9 +222,10 @@ class Configuration:
         def flatten(l):
             return [item for sublist in l for item in sublist]
 
-        all_used = flatten(self.relevant_features.values())
-        all_total = self.zeroOne + self.intNumbers + self.realValues + self.bools
-        self.unused_attributes = list(set(all_total) - set(all_used))
+        # TODO FIX for classic snn dataset
+        self.all_features_used = list(set(flatten(self.relevant_features.values())))
+        # all_total = self.zeroOne + self.intNumbers + self.realValues + self.bools
+        # self.unused_attributes = list(set(all_total) - set(all_used))
 
     def get_error_description(self, error_label: str):
         # return the error case description for the passed label
@@ -237,7 +238,7 @@ class Configuration:
         datasets = []
         number_to_array = {}
 
-        with open('../configuration/ cases.csv', 'r') as file:
+        with open('../configuration/cases.csv', 'r') as file:
             for line in file.readlines():
                 parts = line.split(',')
                 parts = [part.strip(' ') for part in parts]

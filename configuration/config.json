@@ -229,12 +229,82 @@
     "txt19_m3.finished",
     "txt19_m4.finished"
   ],
-
   "relevant_features": {
     "no_failure": [
-      "a1",
-      "a2",
-      "a3"
+      "hPa_18",
+      "a_18_1_x",
+      "a_18_1_y",
+      "a_18_1_z",
+      "hPa_17",
+      "txt15_m1.speed",
+      "a_15_1_x",
+      "a_15_1_y",
+      "a_15_1_z",
+      "txt16_m3.speed",
+      "a_16_3_x",
+      "a_16_3_y",
+      "a_16_3_z",
+      "txt19_i4"
+    ],
+    "txt_18_comp_leak": [
+      "hPa_18",
+      "a_18_1_x",
+      "a_18_1_y",
+      "a_18_1_z"
+    ],
+    "txt_17_comp_leak": [
+      "hPa_17"
+    ],
+    "txt15_m1_t1_high_wear": [
+      "txt15_m1.speed",
+      "a_15_1_x",
+      "a_15_1_y",
+      "a_15_1_z"
+    ],
+    "txt15_m1_t1_low_wear": [
+      "txt15_m1.speed",
+      "a_15_1_x",
+      "a_15_1_y",
+      "a_15_1_z"
+    ],
+    "txt15_m1_t1_wear": [
+      "txt15_m1.speed",
+      "a_15_1_x",
+      "a_15_1_y",
+      "a_15_1_z"
+    ],
+    "txt15_m1_t2_wear": [
+      "txt15_m1.speed",
+      "a_15_1_x",
+      "a_15_1_y",
+      "a_15_1_z"
+    ],
+    "txt16_m3_t1_high_wear": [
+      "txt16_m3.speed",
+      "a_16_3_x",
+      "a_16_3_y",
+      "a_16_3_z"
+    ],
+    "txt16_m3_t1_low_wear": [
+      "txt16_m3.speed",
+      "a_16_3_x",
+      "a_16_3_y",
+      "a_16_3_z"
+    ],
+    "txt16_m3_t1_wear": [
+      "txt16_m3.speed",
+      "a_16_3_x",
+      "a_16_3_y",
+      "a_16_3_z"
+    ],
+    "txt16_m3_t2_wear": [
+      "txt16_m3.speed",
+      "a_16_3_x",
+      "a_16_3_y",
+      "a_16_3_z"
+    ],
+    "txt16_i4": [
+      "txt19_i4"
     ]
   }
 }

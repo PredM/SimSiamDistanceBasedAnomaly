@@ -1,8 +1,5 @@
 import sys
 import os
-
-sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
-
 import contextlib
 import json
 import threading
@@ -11,9 +8,12 @@ import multiprocessing
 import joblib
 import numpy as np
 import pandas as pd
+
 # noinspection PyProtectedMember
 from kafka import KafkaConsumer, TopicPartition, KafkaProducer, errors
 from sklearn.preprocessing import MinMaxScaler
+
+sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 
 from configuration.Configuration import Configuration
 from configuration.Hyperparameter import Hyperparameters

@@ -1,9 +1,11 @@
 import sys
+import os
 import threading
-
 import gc
 import numpy as np
 import pandas as pd
+
+sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 
 from configuration.Configuration import Configuration
 
@@ -76,20 +78,24 @@ def downsample_dataframe(df: pd.DataFrame, config):
     return df_downsampled
 
 
-# TODO Config.bools muss mit existierenden columns geschnitten werden da diese jetzt alle enthätl
 def clean_up_dataframe(df: pd.DataFrame, config: Configuration):
     print('\nCleaning up dataframe ...')
 
+    # get list of attributes by type and remove those that aren't in the dataframe
+    used = set(config.all_features_used)
+    bools = list(set(config.bools).intersection(used))
+    combined = list(set(config.bools + config.zeroOne + config.intNumbers).intersection(used))
+    real_values = list(set(config.realValues).intersection(used))
+
     print('\tReplace True/False with 1/0')
-    df[config.bools] = df[config.bools].replace({'True': '1', 'False': '0'})
-    df[config.bools] = df[config.bools].apply(pd.to_numeric)
+    df[bools] = df[bools].replace({'True': '1', 'False': '0'})
+    df[bools] = df[bools].apply(pd.to_numeric)
 
     print('\tFill NA for boolean and integer columns with values')
-    combined_columns = config.bools + config.zeroOne + config.intNumbers
-    df[combined_columns] = df[combined_columns].fillna(method='ffill')
+    df[combined] = df[combined].fillna(method='ffill')
 
     print('\tInterpolate NA values for real valued streams')
-    df[config.realValues] = df[config.realValues].apply(pd.Series.interpolate, args=('linear',))
+    df[real_values] = df[real_values].apply(pd.Series.interpolate, args=('linear',))
 
     print('\tDrop first/last rows that contain NA for any of the streams')
     df = df.dropna(axis=0)

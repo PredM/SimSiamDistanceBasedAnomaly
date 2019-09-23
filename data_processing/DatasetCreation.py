@@ -1,12 +1,15 @@
+import sys
+import os
 import pickle
 import threading
-
 import gc
 import joblib
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler
+
+sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 
 from configuration.Configuration import Configuration
 
@@ -236,7 +239,6 @@ def main():
     x_train, x_test, y_train, y_test = train_test_split(examples_array, labels_array, test_size=config.test_split_size,
                                                         random_state=config.random_seed)
 
-    # TODO not tested
     # Sort both datasets by the cases for easier handling
     x_train = x_train[y_train.argsort()]
     y_train = np.sort(y_train)

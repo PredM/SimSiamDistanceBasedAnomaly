@@ -1,5 +1,9 @@
+import sys
+import os
 import pandas as pd
 import matplotlib.pyplot as plt
+
+sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 
 from configuration.Configuration import Configuration
 from data_processing.DataImport import import_txt

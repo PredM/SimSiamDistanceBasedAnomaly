@@ -1,12 +1,10 @@
 import sys
 import os
-
-sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
-
 import time
-
 import numpy as np
 import pandas as pd
+
+sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 
 from configuration.Configuration import Configuration
 from configuration.Hyperparameter import Hyperparameters

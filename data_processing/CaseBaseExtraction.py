@@ -1,6 +1,9 @@
+import sys
+import os
 import numpy as np
-
 from numpy.random.mtrand import RandomState
+
+sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 
 from configuration.Configuration import Configuration
 
