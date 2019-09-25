@@ -21,9 +21,6 @@ def main():
     dataset = Dataset(config.training_data_folder, config, training=True)
     dataset.load()
 
-    hyper.time_series_length = dataset.time_series_length
-    hyper.time_series_depth = dataset.time_series_depth
-
     snn = initialise_snn(config, hyper, dataset, True)
     snn.print_detailed_model_info()
 

@@ -40,11 +40,11 @@ class Dataset:
     def load(self):
         # Dtype conversion necessary because layers use float32 by default
         # .astype('float32') removed because already included in dataset creation
-        self.x_train = np.load(self.dataset_folder + "train_features.npy")  # data training
-        self.x_test = np.load(self.dataset_folder + "test_features.npy")  # data testing
+        self.x_train = np.load(self.dataset_folder + 'train_features.npy')  # data training
+        self.x_test = np.load(self.dataset_folder + 'test_features.npy')  # data testing
 
-        y_train = np.expand_dims(np.load(self.dataset_folder + "train_labels.npy"), axis=-1)  # labels training data
-        y_test = np.expand_dims(np.load(self.dataset_folder + "test_labels.npy"), axis=-1)  # labels testing data
+        y_train = np.expand_dims(np.load(self.dataset_folder + 'train_labels.npy'), axis=-1)  # labels training data
+        y_test = np.expand_dims(np.load(self.dataset_folder + 'test_labels.npy'), axis=-1)  # labels testing data
 
         # Create a encoder, sparse output must be disabled to get the intended output format
         # Added categories='auto' to use future behavior

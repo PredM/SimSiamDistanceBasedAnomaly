@@ -11,7 +11,7 @@ class Configuration:
         ###
 
         self.encoder_variants = ['cnn', 'rnn']
-        self.encoder_variant = self.encoder_variants[1]
+        self.encoder_variant = self.encoder_variants[0]
 
         # Architecture independent of whether snn or cbs is used
         # standard = classic snn behaviour, context vectors calculated each time, also multiple times for the example
@@ -66,7 +66,7 @@ class Configuration:
         self.random_seed_index_selection = 42
 
         # the number of examples per class the training data set should be reduced to for the live classification
-        self.examples_per_class = 40
+        self.examples_per_class = 20
 
         # the k of the knn classifier used for live classification
         self.k_of_knn = 3
@@ -162,7 +162,7 @@ class Configuration:
         # specifies the maximum number of cores to be used in parallel during data processing.
         self.max_parallel_cores = 40
 
-        # All None Variables are read from file
+        # all None Variables are read from the config.json file
         self.cases_datasets = None
         self.datasets = None
 
@@ -214,6 +214,12 @@ class Configuration:
         self.error_descriptions = data['error_descriptions']
 
         self.relevant_features: dict = data['relevant_features']
+
+        # Sort feature names to ensure that the order matches the one in the list of indices of the features in
+        # the case base class
+        for key in self.relevant_features:
+            self.relevant_features[key] = sorted(self.relevant_features[key])
+
         self.zeroOne = data['zeroOne']
         self.intNumbers = data['intNumbers']
         self.realValues = data['realValues']
@@ -222,18 +228,17 @@ class Configuration:
         def flatten(l):
             return [item for sublist in l for item in sublist]
 
-        # TODO FIX for classic snn dataset
-        self.all_features_used = list(set(flatten(self.relevant_features.values())))
-        # all_total = self.zeroOne + self.intNumbers + self.realValues + self.bools
-        # self.unused_attributes = list(set(all_total) - set(all_used))
+        # TODO FIX for classic SNN dataset if this should use other
+        self.all_features_used = sorted(list(set(flatten(self.relevant_features.values()))))
 
+    # return the error case description for the passed label
     def get_error_description(self, error_label: str):
-        # return the error case description for the passed label
         return self.error_descriptions[error_label]
 
     def get_connection(self):
         return self.ip + ':' + self.port
 
+    # import the timestamps of each dataset and class from the cases.csv file
     def import_timestamps(self):
         datasets = []
         number_to_array = {}

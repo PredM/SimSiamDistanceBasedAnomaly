@@ -21,6 +21,10 @@ from data_processing.DataframeCleaning import clean_up_dataframe
 from neural_network import SNN
 from neural_network.Dataset import Dataset
 
+# TODO
+# Ensure generated examples equal the structure of the case base
+# -> Which columns are deleted
+# -> Loading of scalers
 
 class Importer(threading.Thread):
 
@@ -279,7 +283,9 @@ def normalise_dataframe(example: np.ndarray, scalers: [MinMaxScaler]):
 
     return example
 
-
+# FIXME Not working currently because unnecessary_cols doesn't exit anymore
+# Needs to be changed to other way of calculating what to read in
+# using len(config.all_features_used) maybe?
 def load_scalers(config):
     scalers = []
 

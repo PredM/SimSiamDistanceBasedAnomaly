@@ -42,9 +42,11 @@ def initialise_snn(config: Configuration, hyper, dataset, training):
 class SimpleSNN:
 
     def __init__(self, subnet_variant, hyperparameters, dataset, training):
-        self.hyper: Hyperparameters = hyperparameters
-        self.dataset: Dataset = dataset
         self.training = training
+        self.dataset: Dataset = dataset
+        self.hyper: Hyperparameters = hyperparameters
+        self.hyper.set_time_series_properties(dataset.time_series_length, dataset.time_series_depth)
+
         self.subnet = None
 
         # Shape of a single example, batch size is left flexible

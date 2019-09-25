@@ -17,13 +17,8 @@ class Inference:
     def __init__(self, config, hyperparameters, dataset_folder):
         self.hyper: Hyperparameters = hyperparameters
         self.config: Configuration = config
-
         self.dataset: Dataset = Dataset(dataset_folder, config, training=False)
         self.dataset.load()
-
-        # Set hyperparameters to match the properties of the loaded data
-        self.hyper.time_series_length = self.dataset.time_series_length
-        self.hyper.time_series_depth = self.dataset.time_series_depth
 
         # Creation of dataframe in which the classification results are stored
         # Rows contain the classes including a row for combined accuracy
