@@ -1,7 +1,14 @@
-from case_based_similarity.CaseSpecificDataset import CaseSpecificDataset
+import os
+import sys
+import numpy as np
+
+from neural_network.Dataset import CaseSpecificDataset
+from neural_network.SNN import SimpleSNN
+
+sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
+
 from configuration.Configuration import Configuration
 from configuration.Hyperparameter import Hyperparameters
-from neural_network.Subnets import CNN, RNN
 
 
 class CBS:
@@ -10,6 +17,11 @@ class CBS:
         self.training = training
         self.config: Configuration = config
         self.case_handlers: [SimpleCaseHandler] = []
+        self.num_instances_total = 0
+
+        # TODO Implement in the same way for snn, use in inference and real time classification
+        self.class_array = None
+
         self.initialise_case_handlers()
 
     def initialise_case_handlers(self):
@@ -27,73 +39,95 @@ class CBS:
 
             # TODO maybe use different hyperparameters depending on the case
             # should be implemented using another dictionary case -> hyper parameter file name
+            relevant_features = features_cases.get(case)
+
             hyper = Hyperparameters()
             hyper.load_from_file(self.config.hyper_file, self.config.use_hyper_file)
 
-            ch = self.initialise_case_handler(hyper, case, features_cases.get(case))
-            self.case_handlers.append(ch)
+            dataset = CaseSpecificDataset(self.config.training_data_folder, self.config, case, relevant_features)
+            dataset.load()
 
+            # Add up the total number of examples
+            self.num_instances_total += dataset.num_train_instances
+
+            ch: SimpleCaseHandler = self.initialise_case_handler(hyper, dataset)
+            self.case_handlers.append(ch)
             print()
 
+        # Create an array that contains the class labels of all cases matching the order in which
+        # the similarities are returned
+        self.class_array = np.empty(self.num_instances_total, dtype='object_')
+
+        for case_handler in self.case_handlers:
+            self.class_array[case_handler.dataset.indices_cases] = case_handler.dataset.case
+
     # initializes the correct case handler depending on the configured variant
-    def initialise_case_handler(self, hyper, case, relevant_features):
+    def initialise_case_handler(self, hyper, dataset):
         var = self.config.architecture_variant
 
         if self.training and var.endswith('simple') or not self.training and var == 'standard_simple':
-            return SimpleCaseHandler(self.config, hyper, case, relevant_features, self.training)
+            return SimpleCaseHandler(self.config.encoder_variant, hyper, dataset, self.training)
         elif self.training and var.endswith('ffnn') or not self.training and var == 'standard_ffnn':
-            return CaseHandler(self.config, hyper, case, relevant_features, self.training)
+            return CaseHandler(self.config.encoder_variant, hyper, dataset, self.training)
         elif not self.training and var == 'fast_simple':
-            return FastSimpleCaseHandler(self.config, hyper, case, relevant_features, self.training)
+            return FastSimpleCaseHandler(self.config.encoder_variant, hyper, dataset, self.training)
         elif not self.training and var == 'fast_ffnn':
-            return FastCaseHandler(self.config, hyper, case, relevant_features, self.training)
+            return FastCaseHandler(self.config.encoder_variant, hyper, dataset, self.training)
         else:
             raise AttributeError('Unknown variant specified:' + self.config.architecture_variant)
 
     # debugging method, can be removed when implementation is finished
-    def print_info_all_encoders(self):
-        print('')
+    def print_info(self):
+        print()
         for case_handler in self.case_handlers:
             case_handler.print_case_handler_info()
 
+        print()
+        for i in range(len(self.class_array)):
+            print(i, '\t', self.class_array[i])
 
-class SimpleCaseHandler:
+    def get_class_labels(self):
+        return self.class_array
 
-    def __init__(self, config, hyperparameters, case, relevant_features, training):
-        self.training = training
-        self.relevant_features = relevant_features
-        self.case = case
-        self.hyper = hyperparameters
-        self.config: Configuration = config
+    def get_sims(self, example):
+        all_sims = np.zeros(self.num_instances_total)
 
-        self.case_base = CaseSpecificDataset(self.config.training_data_folder, config, case, relevant_features)
-        self.case_base.load()
-        self.hyper.set_time_series_properties(self.case_base.time_series_length, self.case_base.time_series_depth)
+        for case_handler in self.case_handlers:
+            case_handler: CaseHandler = case_handler
 
-        # shape of a single example, batch size is left flexible
-        input_shape_subnet = (self.hyper.time_series_length, self.hyper.time_series_depth)
+            # TODO Add multi-gpu-support here
+            sims_case = case_handler.get_sims(example)
+            all_sims[case_handler.dataset.indices_cases] = sims_case
 
-        if self.config.encoder_variant == 'cnn':
-            self.encoder = CNN(hyperparameters, input_shape_subnet)
-            self.encoder.create_model()
+        return all_sims
 
-        elif self.config.encoder_variant == 'rnn':
-            self.encoder = RNN(hyperparameters, input_shape_subnet)
-            self.encoder.create_model()
+
+class SimpleCaseHandler(SimpleSNN):
+
+    def __init__(self, encoder_variant, hyperparameters, dataset: CaseSpecificDataset, training):
+        super().__init__(encoder_variant, hyperparameters, dataset, training)
+        self.dataset: CaseSpecificDataset = dataset
 
     # debugging method, can be removed when implementation is finished
     def print_case_handler_info(self):
-        import numpy as np
         np.set_printoptions(threshold=np.inf)
-        print('Case Handler for case', self.case)
+        print('Case Handler for case', self.dataset.case)
         print('Relevant features:')
-        print(self.relevant_features)
+        print(self.dataset.features_used)
         print('Indices of relevant features:')
-        print(self.case_base.indices_features)
+        print(self.dataset.indices_features)
         print('Indices of cases in case base with case:')
-        print(self.case_base.indices_cases)
+        print(self.dataset.indices_cases)
         print()
         print()
+
+    def load_model(self, config: Configuration):
+        self.subnet.load_model(config)
+
+        if self.subnet.model is None:
+            sys.exit(1)
+        else:
+            self.print_detailed_model_info()
 
 
 class CaseHandler(SimpleCaseHandler):

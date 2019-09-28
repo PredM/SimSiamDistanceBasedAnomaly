@@ -8,11 +8,11 @@ from scipy.spatial.distance import euclidean
 
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 
-from neural_network.Dataset import Dataset
+from neural_network.Dataset import FullDataset
 from configuration.Configuration import Configuration
 
 
-def execute_dtw(dataset: Dataset, start_index, end_index):
+def execute_dtw(dataset: FullDataset, start_index, end_index):
     score = 0.0
     start_time = time.clock()
 
@@ -61,7 +61,7 @@ def main():
     config = Configuration()
 
     # create data set
-    dataset = Dataset(config.training_data_folder, config, False)
+    dataset = FullDataset(config.training_data_folder, config, False)
     dataset.load()
 
     # execute for all the total test data set

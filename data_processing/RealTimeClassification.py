@@ -19,7 +19,7 @@ from configuration.Configuration import Configuration
 from configuration.Hyperparameter import Hyperparameters
 from data_processing.DataframeCleaning import clean_up_dataframe
 from neural_network import SNN
-from neural_network.Dataset import Dataset
+from neural_network.Dataset import FullDataset
 
 # TODO
 # Ensure generated examples equal the structure of the case base
@@ -308,7 +308,7 @@ class Classifier(threading.Thread):
         super().__init__()
         self.examples_to_classify = multiprocessing.Manager().Queue(10)
         self.config = config
-        self.dataset = Dataset(config.training_data_folder, config, training=False)
+        self.dataset = FullDataset(config.training_data_folder, config, training=False)
         hyper = Hyperparameters()
         hyper.load_from_file(config.hyper_file, config.use_hyper_file)
         self.snn = SNN.initialise_snn(config, hyper, self.dataset, training=False)

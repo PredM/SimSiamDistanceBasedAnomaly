@@ -31,6 +31,7 @@ class NN:
 
         return total_parameters
 
+    # Todo must be changed, must load specific file name
     def load_model(self, config: Configuration):
         self.model = None
 
