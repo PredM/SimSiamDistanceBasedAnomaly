@@ -5,7 +5,7 @@ from configuration.Configuration import Configuration
 def main():
     config = Configuration()
     cbs = CBS(config, True)
-    cbs.print_info_all_encoders()
+    cbs.print_info()
 
 
 if __name__ == '__main__':

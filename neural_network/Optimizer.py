@@ -6,7 +6,7 @@ from time import perf_counter
 
 from configuration.Configuration import Configuration
 from configuration.Hyperparameter import Hyperparameters
-from neural_network.Dataset import Dataset
+from neural_network.Dataset import FullDataset
 from neural_network.SNN import SNN
 
 import tensorflow as tf
@@ -17,7 +17,7 @@ class Optimizer:
 
     def __init__(self, snn, dataset, hyperparameters, config):
         self.snn: SNN = snn
-        self.dataset: Dataset = dataset
+        self.dataset: FullDataset = dataset
         self.hyper: Hyperparameters = hyperparameters
         self.config: Configuration = config
         self.adam_optimizer = tf.keras.optimizers.Adam(learning_rate=self.hyper.learning_rate)

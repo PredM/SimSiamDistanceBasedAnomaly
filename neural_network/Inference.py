@@ -8,7 +8,7 @@ sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 
 from configuration.Configuration import Configuration
 from configuration.Hyperparameter import Hyperparameters
-from neural_network.Dataset import Dataset
+from neural_network.Dataset import FullDataset
 from neural_network.SNN import initialise_snn
 
 
@@ -17,7 +17,7 @@ class Inference:
     def __init__(self, config, hyperparameters, dataset_folder):
         self.hyper: Hyperparameters = hyperparameters
         self.config: Configuration = config
-        self.dataset: Dataset = Dataset(dataset_folder, config, training=False)
+        self.dataset: FullDataset = FullDataset(dataset_folder, config, training=False)
         self.dataset.load()
 
         # Creation of dataframe in which the classification results are stored

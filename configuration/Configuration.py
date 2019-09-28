@@ -165,6 +165,7 @@ class Configuration:
         # all None Variables are read from the config.json file
         self.cases_datasets = None
         self.datasets = None
+        self.subdirectories_by_case = None
 
         # mapping for topic name to prefix of sensor streams, relevant to get the same order of streams
         self.prefixes = None
@@ -212,6 +213,7 @@ class Configuration:
         self.datasets = data['datasets']
         self.prefixes = data['prefixes']
         self.error_descriptions = data['error_descriptions']
+        self.subdirectories_by_case = data['subdirectories_by_case']
 
         self.relevant_features: dict = data['relevant_features']
 

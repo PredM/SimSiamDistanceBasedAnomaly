@@ -5,7 +5,7 @@ sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 
 from configuration.Configuration import Configuration
 from configuration.Hyperparameter import Hyperparameters
-from neural_network.Dataset import Dataset
+from neural_network.Dataset import FullDataset
 from neural_network.Optimizer import Optimizer
 from neural_network.SNN import initialise_snn
 
@@ -18,7 +18,7 @@ def main():
     hyper = Hyperparameters()
     hyper.load_from_file(config.hyper_file, config.use_hyper_file)
 
-    dataset = Dataset(config.training_data_folder, config, training=True)
+    dataset = FullDataset(config.training_data_folder, config, training=True)
     dataset.load()
 
     snn = initialise_snn(config, hyper, dataset, True)
