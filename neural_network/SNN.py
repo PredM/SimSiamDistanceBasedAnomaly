@@ -44,6 +44,7 @@ class SimpleSNN:
     def __init__(self, subnet_variant, hyperparameters, dataset, training):
         self.training = training
         self.dataset: Dataset = dataset
+        self.classes_case_base = self.dataset.y_train_strings
         self.hyper: Hyperparameters = hyperparameters
         self.hyper.set_time_series_properties(dataset.time_series_length, dataset.time_series_depth)
 

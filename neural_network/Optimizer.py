@@ -15,8 +15,8 @@ import numpy as np
 
 class Optimizer:
 
-    def __init__(self, snn, dataset, hyperparameters, config):
-        self.snn: SNN = snn
+    def __init__(self, architecture, dataset, hyperparameters, config):
+        self.architecture = architecture
         self.dataset: FullDataset = dataset
         self.hyper: Hyperparameters = hyperparameters
         self.config: Configuration = config
@@ -27,7 +27,7 @@ class Optimizer:
         train_loss_results = []
 
         if self.config.continue_training:
-            self.snn.load_model(self.config)
+            self.architecture.load_model(self.config)
 
             try:
                 # Get the epoch by the directory name
@@ -87,13 +87,13 @@ class Optimizer:
 
     def update_model(self, model_input, true_similarities):
         with tf.GradientTape() as tape:
-            pred_similarities = self.snn.get_sims_batch(model_input)
+            pred_similarities = self.architecture.get_sims_batch(model_input)
 
             # Get parameters of subnet and ffnn (if complex sim measure)
             if self.config.architecture_variant in ['standard_ffnn', 'fast_ffnn']:
-                trainable_params = self.snn.ffnn.model.trainable_variables + self.snn.subnet.model.trainable_variables
+                trainable_params = self.architecture.ffnn.model.trainable_variables + self.architecture.subnet.model.trainable_variables
             else:
-                trainable_params = self.snn.subnet.model.trainable_variables
+                trainable_params = self.architecture.subnet.model.trainable_variables
 
             # Calculate the loss and the gradients
             loss = tf.keras.losses.binary_crossentropy(y_true=true_similarities, y_pred=pred_similarities)
@@ -133,8 +133,8 @@ class Optimizer:
 
         # Generate the file names and save the model files in the directory created before
         subnet_file_name = '_'.join(['subnet', self.config.encoder_variant, epoch_string]) + '.h5'
-        self.snn.subnet.model.save(dir_name + subnet_file_name)
+        self.architecture.subnet.model.save(dir_name + subnet_file_name)
 
         if self.config.architecture_variant in ['standard_ffnn', 'fast_ffnn']:
             ffnn_file_name = '_'.join(['ffnn', epoch_string]) + '.h5'
-            self.snn.ffnn.model.save(dir_name + ffnn_file_name)
+            self.architecture.ffnn.model.save(dir_name + ffnn_file_name)

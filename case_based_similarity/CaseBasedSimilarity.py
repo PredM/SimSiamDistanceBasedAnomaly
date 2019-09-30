@@ -19,8 +19,7 @@ class CBS:
         self.case_handlers: [SimpleCaseHandler] = []
         self.num_instances_total = 0
 
-        # TODO Implement in the same way for snn, use in inference and real time classification
-        self.class_array = None
+        self.classes_casebase = None
 
         self.initialise_case_handlers()
 
@@ -56,10 +55,10 @@ class CBS:
 
         # Create an array that contains the class labels of all cases matching the order in which
         # the similarities are returned
-        self.class_array = np.empty(self.num_instances_total, dtype='object_')
+        self.classes_casebase = np.empty(self.num_instances_total, dtype='object_')
 
         for case_handler in self.case_handlers:
-            self.class_array[case_handler.dataset.indices_cases] = case_handler.dataset.case
+            self.classes_casebase[case_handler.dataset.indices_cases] = case_handler.dataset.case
 
     # initializes the correct case handler depending on the configured variant
     def initialise_case_handler(self, hyper, dataset):

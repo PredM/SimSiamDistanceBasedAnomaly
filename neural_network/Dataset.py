@@ -13,7 +13,7 @@ class Dataset:
 
         self.x_train = None
         self.y_train = None
-
+        self.y_train_strings = None
         self.one_hot_encoder = None
         self.num_train_instances = None
         self.num_instances = None
@@ -50,6 +50,7 @@ class FullDataset(Dataset):
 
         self.x_test = None
         self.y_test = None
+        self.y_test_strings = None
         self.num_test_instances = None
 
         self.num_classes = None
@@ -72,8 +73,10 @@ class FullDataset(Dataset):
         self.x_train = np.load(self.dataset_folder + 'train_features.npy')  # data training
         self.x_test = np.load(self.dataset_folder + 'test_features.npy')  # data testing
 
-        y_train = np.expand_dims(np.load(self.dataset_folder + 'train_labels.npy'), axis=-1)  # labels training data
-        y_test = np.expand_dims(np.load(self.dataset_folder + 'test_labels.npy'), axis=-1)  # labels testing data
+        self.y_train_strings = np.expand_dims(np.load(self.dataset_folder + 'train_labels.npy'),
+                                              axis=-1)  # labels training data
+        self.y_test_strings = np.expand_dims(np.load(self.dataset_folder + 'test_labels.npy'),
+                                             axis=-1)  # labels testing data
 
         # Create a encoder, sparse output must be disabled to get the intended output format
         # Added categories='auto' to use future behavior
@@ -82,11 +85,12 @@ class FullDataset(Dataset):
         # Prepare the encoder with training and test labels to ensure all are present
         # The fit-function 'learns' the encoding but does not jet transform the data
         # The axis argument specifies on which the two arrays are joined
-        self.one_hot_encoder = self.one_hot_encoder.fit(np.concatenate((y_train, y_test), axis=0))
+        self.one_hot_encoder = self.one_hot_encoder.fit(
+            np.concatenate((self.y_train_strings, self.y_test_strings), axis=0))
 
         # Transforms the vector of labels into a one hot matrix
-        self.y_train = self.one_hot_encoder.transform(y_train)
-        self.y_test = self.one_hot_encoder.transform(y_test)
+        self.y_train = self.one_hot_encoder.transform(self.y_train_strings)
+        self.y_test = self.one_hot_encoder.transform(self.y_test_strings)
 
         ##
         # Safe information about the dataset
@@ -106,7 +110,7 @@ class FullDataset(Dataset):
         self.time_series_depth = self.x_train.shape[2]
 
         # Get the unique classes and the corresponding number
-        self.classes = np.unique(np.concatenate((y_train, y_test), axis=0))
+        self.classes = np.unique(np.concatenate((self.y_train_strings, self.y_test_strings), axis=0))
         self.num_classes = self.classes.size
 
         # Data
@@ -153,7 +157,7 @@ class CaseSpecificDataset(Dataset):
 
     def load(self):
         self.x_train = np.load(self.dataset_folder + 'train_features.npy')  # data training
-        y_train = np.load(self.dataset_folder + 'train_labels.npy')  # labels training data
+        self.y_train_strings = np.load(self.dataset_folder + 'train_labels.npy')  # labels training data
         self.feature_names_all = np.load(self.dataset_folder + 'feature_names.npy')  # names of the features (3. dim)
 
         # get the indices of the features that should be used for this dataset
@@ -167,14 +171,14 @@ class CaseSpecificDataset(Dataset):
         self.x_train = self.x_train[:, :, self.indices_features]
 
         # reduce training data / casebase to those examples that have the right case
-        self.x_train = self.x_train[np.where(y_train == self.case)[0], :, :]
+        self.x_train = self.x_train[np.where(self.y_train_strings == self.case)[0], :, :]
 
         # store the indices of the cases that match case
-        self.indices_cases = [i for i, value in enumerate(y_train) if value == self.case]
+        self.indices_cases = [i for i, value in enumerate(self.y_train_strings) if value == self.case]
 
         # all equal to case but included to be able to use the same evaluation like the snn
-        y_train = y_train[self.indices_cases]
-        y_train = np.expand_dims(y_train, axis=-1)
+        self.y_train_strings = self.y_train_strings[self.indices_cases]
+        self.y_train_strings = np.expand_dims(self.y_train_strings, axis=-1)
 
         # create a encoder, sparse output must be disabled to get the intended output format
         # added categories='auto' to use future behavior
@@ -183,10 +187,10 @@ class CaseSpecificDataset(Dataset):
         # prepare the encoder with training and test labels to ensure all are present
         # the fit-function 'learns' the encoding but does not jet transform the data
         # the axis argument specifies on which the two arrays are joined
-        self.one_hot_encoder = self.one_hot_encoder.fit(y_train)
+        self.one_hot_encoder = self.one_hot_encoder.fit(self.y_train_strings)
 
         # transforms the vector of labels into a one hot matrix
-        self.y_train = self.one_hot_encoder.transform(y_train)
+        self.y_train = self.one_hot_encoder.transform(self.y_train_strings)
 
         ##
         # safe information about the dataset
