@@ -9,12 +9,14 @@ sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 from configuration.Configuration import Configuration
 from configuration.Hyperparameter import Hyperparameters
 from neural_network.Dataset import FullDataset
+from neural_network.SNN import initialise_snn
 
 
 class Inference:
 
     def __init__(self, config, hyperparameters, architecture, dataset: FullDataset):
         self.config: Configuration = config
+
         self.hyper: Hyperparameters = hyperparameters
         self.architecture = architecture
         self.dataset: FullDataset = dataset
@@ -33,9 +35,6 @@ class Inference:
         # Load the models from the file configured
         self.architecture.load_model(config)
 
-        # For easier access to the inverse transformation
-        self.revert_transform = self.dataset.one_hot_encoder.inverse_transform
-
     def infer_test_dataset(self):
         correct, num_infers = 0, 0
         start_time = time.perf_counter()
@@ -47,7 +46,7 @@ class Inference:
             max_sim_index = 0
 
             # Measure the similarity between the test series and the training batch series
-            sims = self.architecture.get_sims(self.dataset.x_test[idx_test])
+            sims, labels = self.architecture.get_sims(self.dataset.x_test[idx_test])
 
             # Check similarities of all pairs and record the index of the closest training series
             for i in range(len(sims)):
@@ -55,8 +54,9 @@ class Inference:
                     max_sim = sims[i]
                     max_sim_index = i
 
+
             real = self.dataset.y_test_strings[idx_test]
-            max_sim_class = self.architecture.classes_case_base[max_sim_index]
+            max_sim_class = labels[max_sim_index]
 
             # If correctly classified increase the true positive field of the correct class and the of all classes
             if real == max_sim_class:

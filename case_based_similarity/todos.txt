@@ -1,9 +1,6 @@
 
 Implementation
-* Write Optimizer for CBS
-    * Should train all case handlers in a single process
-    * Inherent from SNN Optimizer if possible
-    * Train each case handler for output interval many epochs, print loss for each, save all in a single routine
+* Write Inference starter
 * Implement the other case handler classes, which use FFNNs and or encoding at startup (fast...)
     * After the simplest version was successfully tested
     * Implement encoding for CaseSpecificDataset
@@ -39,3 +36,7 @@ Future features:
 * Change loading of CaseSpecificDataset
     * Load a FullDataset in CBS
     * Create CaseSpecificDatasets with that one instead of reloading from files every time
+* Use os.path.join for all operation, including config
+* Store configuration when saving models
+    * Those configs that are must match safed model
+        * e.g. used cases

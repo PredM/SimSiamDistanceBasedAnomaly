@@ -13,7 +13,7 @@ class Configuration:
         self.encoder_variants = ['cnn', 'rnn']
         self.encoder_variant = self.encoder_variants[0]
 
-        # Architecture independent of whether snn or cbs is used
+        # architecture independent of whether snn or cbs is used
         # standard = classic snn behaviour, context vectors calculated each time, also multiple times for the example
         # fast = encoding of case base only once, example also only once
         # ffnn = uses ffnn as distance measure
@@ -22,19 +22,26 @@ class Configuration:
         self.architecture_variant = self.architecture_variants[0]
 
         # TODO Needs to be changed to folder if every encoder should use different hyperparameters
-        # Hyperparameter file to use
+        # hyperparameter file to use
         self.hyper_file = '../configuration/hyperparameter_combinations/' + 'ba_lstm.json'
         self.use_hyper_file = True
 
-        # Select whether training should be continued from the checkpoint defined below
-        # Use carefully, does not check for equal hyper parameters etc.
+        # select whether training should be continued from the checkpoint defined below
+        # use carefully, does not check for equal hyper parameters etc.
         self.continue_training = False
 
-        # Defines how often loss is printed and checkpoints are safed during training
+        # defines how often loss is printed and checkpoints are safed during training
         self.output_interval = 100
 
-        # How many model checkpoints are kept
-        self.model_files_stored = 100
+        # how many model checkpoints are kept
+        self.model_files_stored = 5
+
+        # defines for which failure cases a case handler in the case based similarity measure is created,
+        # subset of all can be used for debugging purposes
+        all_cases = ['no_failure', 'txt_18_comp_leak', 'txt_17_comp_leak', 'txt15_m1_t1_high_wear',
+                     'txt15_m1_t1_low_wear', 'txt15_m1_t2_wear', 'txt16_m3_t1_high_wear', 'txt16_m3_t1_low_wear',
+                     'txt16_m3_t2_wear', 'txt16_i4']
+        self.cases_used = all_cases[0:1]
 
         ###
         # kafka / real time classification
@@ -50,7 +57,9 @@ class Configuration:
         # will read from the beginning of the topics, so the fabric simulation only has to be run once
         self.testing_using_fabric_sim = True
 
+        ##
         # settings for exporting the classification results back to kafka
+        ##
 
         # enables the functionality
         self.export_results_to_kafka = True
@@ -79,7 +88,8 @@ class Configuration:
         self.models_folder = '../data/trained_models/'
 
         # path and file name to the specific model that should be used for testing and live classification
-        self.directory_model_to_use = self.models_folder + 'ba_cnn_378200_96_percent' + '/'
+        self.filename_model_to_use = 'ba_cnn_378200_96_percent'
+        self.directory_model_to_use = self.models_folder + self.filename_model_to_use + '/'
 
         # folder where the preprocessed training and test data for the neural network should be stored
         self.training_data_folder = '../data/training_data/'
@@ -215,7 +225,10 @@ class Configuration:
         self.error_descriptions = data['error_descriptions']
         self.subdirectories_by_case = data['subdirectories_by_case']
 
-        self.relevant_features: dict = data['relevant_features']
+        features_all_cases = data['relevant_features']
+
+        self.relevant_features = {case: features_all_cases[case] for case in self.cases_used if
+                                  case in features_all_cases}
 
         # Sort feature names to ensure that the order matches the one in the list of indices of the features in
         # the case base class

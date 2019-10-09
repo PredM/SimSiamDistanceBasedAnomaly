@@ -91,6 +91,10 @@ class FullDataset(Dataset):
         self.y_train = self.one_hot_encoder.transform(self.y_train_strings)
         self.y_test = self.one_hot_encoder.transform(self.y_test_strings)
 
+        # Reduce to 1d array
+        self.y_train_strings = np.squeeze(self.y_train_strings)
+        self.y_test_strings = np.squeeze(self.y_test_strings)
+
         ##
         # Safe information about the dataset
         ##
@@ -209,6 +213,9 @@ class CaseSpecificDataset(Dataset):
 
         # transforms the vector of labels into a one hot matrix
         self.y_train = self.one_hot_encoder.transform(self.y_train_strings)
+
+        # Reduce to 1d array
+        self.y_train_strings = np.squeeze(self.y_train_strings)
 
         ##
         # safe information about the dataset

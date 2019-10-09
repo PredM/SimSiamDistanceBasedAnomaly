@@ -43,11 +43,10 @@ class NN:
             raise AttributeError('Can not import models of type', type(self))
 
         # subdirectory is used for case based similarity measure, each one contains model files for one case handler
-        # todo not tested
-        directory = path.join(path_model_folder, subdirectory)
+        # todo ensure right /'s ...
+        directory = path_model_folder + subdirectory
 
         for file_name in listdir(directory):
-
             # Compile must be set to false because the standard optimizer was not used and this would otherwise
             # generate an error
             if file_name.startswith(prefix):
@@ -57,7 +56,7 @@ class NN:
                 break
 
         if self.model is None:
-            print('Model file for this type could not be found in ', config.directory_model_to_use)
+            raise FileNotFoundError('Model file for this type could not be found in ', directory)
         else:
             print('Model has been loaded successfully')
 

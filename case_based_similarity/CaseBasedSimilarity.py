@@ -1,14 +1,14 @@
+import contextlib
 import os
 import sys
 import numpy as np
-
-from neural_network.Dataset import CaseSpecificDataset
-from neural_network.SNN import SimpleSNN, AbstractSimilarityMeasure
 
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 
 from configuration.Configuration import Configuration
 from configuration.Hyperparameter import Hyperparameters
+from neural_network.Dataset import CaseSpecificDataset
+from neural_network.SNN import SimpleSNN, AbstractSimilarityMeasure
 
 
 class CBS(AbstractSimilarityMeasure):
@@ -19,7 +19,10 @@ class CBS(AbstractSimilarityMeasure):
         self.config: Configuration = config
         self.case_handlers: [SimpleCaseHandler] = []
         self.num_instances_total = 0
-        self.initialise_case_handlers()
+        self.number_of_cases = 0
+
+        with contextlib.redirect_stdout(None):
+            self.initialise_case_handlers()
 
     def initialise_case_handlers(self):
 
@@ -30,11 +33,12 @@ class CBS(AbstractSimilarityMeasure):
             print('would have to be recalculated after each iteration anyway.\n')
 
         features_cases: dict = self.config.relevant_features
+        self.number_of_cases = len(features_cases.keys())
 
         for case in features_cases.keys():
             print('Creating case handler for case', case)
 
-            # TODO maybe use different hyperparameters depending on the case
+            # TODO different hyperparameters depending on the case could be implemented here
             # should be implemented using another dictionary case -> hyper parameter file name
             relevant_features = features_cases.get(case)
 
@@ -44,19 +48,12 @@ class CBS(AbstractSimilarityMeasure):
             dataset = CaseSpecificDataset(self.config.training_data_folder, self.config, case, relevant_features)
             dataset.load()
 
-            # Add up the total number of examples
+            # idd up the total number of examples
             self.num_instances_total += dataset.num_train_instances
 
             ch: SimpleCaseHandler = self.initialise_case_handler(hyper, dataset)
             self.case_handlers.append(ch)
             print()
-
-        # Create an array that contains the class labels of all cases matching the order in which
-        # the similarities are returned
-        self.classes_case_base = np.empty(self.num_instances_total, dtype='object_')
-
-        for case_handler in self.case_handlers:
-            self.classes_case_base[case_handler.dataset.indices_cases] = case_handler.dataset.case
 
     # initializes the correct case handler depending on the configured variant
     def initialise_case_handler(self, hyper, dataset):
@@ -74,10 +71,11 @@ class CBS(AbstractSimilarityMeasure):
             raise AttributeError('Unknown variant specified:' + self.config.architecture_variant)
 
     def load_model(self, config=None):
-
-        for case_handler in self.case_handlers:
-            case_handler: CaseHandler = case_handler
-            case_handler.load_model(self.config)
+        # suppress output which would contain the same model info for each handler
+        with contextlib.redirect_stdout(None):
+            for case_handler in self.case_handlers:
+                case_handler: CaseHandler = case_handler
+                case_handler.load_model(self.config)
 
     def print_info(self):
         print()
@@ -85,17 +83,21 @@ class CBS(AbstractSimilarityMeasure):
             case_handler.print_case_handler_info()
 
     def get_sims(self, example):
-        all_sims = np.zeros(self.num_instances_total)
+        # used to combine the results of all case handlers
+        # using a numpy array instead of a simple list to ensure index_sims == index_labels
+        sims_cases = np.empty(self.number_of_cases, dtype='object_')
+        labels_cases = np.empty(self.number_of_cases, dtype='object_')
 
-        for case_handler in self.case_handlers:
+        for i in range(self.number_of_cases):
             # TODO Add multi-gpu-support here
-            sims_case = case_handler.get_sims(example)
-            all_sims[case_handler.dataset.indices_cases] = sims_case
+            sims_cases[i], labels_cases[i] = self.case_handlers[i].get_sims(example)
 
-        return all_sims
+        return np.concatenate(sims_cases), np.concatenate(labels_cases)
 
     def get_sims_batch(self, batch):
-        raise NotImplementedError()
+        raise NotImplementedError(
+            'Not implemented for this architecture'
+            'The optimizer will use the dedicated function of each case handler')
 
 
 class SimpleCaseHandler(SimpleSNN):
@@ -119,15 +121,17 @@ class SimpleCaseHandler(SimpleSNN):
 
     def load_model(self, config: Configuration):
         subdirectory = config.subdirectories_by_case.get(self.dataset.case)
-
         self.subnet.load_model(config.directory_model_to_use, subdirectory)
 
-        if self.subnet.model is None:
-            sys.exit(1)
-        else:
-            self.print_detailed_model_info()
+    # input must be the 'complete' example with all features of a 'full dataset'
+    def get_sims(self, example):
+        # example must be reduced to the features used for this cases
+        # before the super class method can be called to calculate the similarities to the case base
+        example = example[:, self.dataset.indices_features]
+        return super().get_sims(example)
 
 
+# TODO Rather inherent from corresponding SNN
 class CaseHandler(SimpleCaseHandler):
     pass
 

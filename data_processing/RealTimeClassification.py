@@ -394,6 +394,8 @@ class Classifier(threading.Thread):
         if self.config.architecture_variant in ['fast_simple', 'fast_ffnn']:
             example = self.snn.encode_example(example)
 
+
+        # TODO needs to be changed to returned 2d array
         # calculate the similarities to all examples of the case base using the nn
         sims = self.snn.get_sims(example)
 

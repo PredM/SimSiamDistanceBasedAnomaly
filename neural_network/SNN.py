@@ -41,9 +41,8 @@ def initialise_snn(config: Configuration, hyper, dataset, training):
 
 class AbstractSimilarityMeasure:
 
-    def __init__(self, training, classes_case_base=None):
+    def __init__(self, training):
         self.training = training
-        self.classes_case_base = classes_case_base
 
     def load_model(self, config: Configuration):
         raise NotImplementedError()
@@ -58,7 +57,7 @@ class AbstractSimilarityMeasure:
 class SimpleSNN(AbstractSimilarityMeasure):
 
     def __init__(self, subnet_variant, hyperparameters, dataset, training):
-        super().__init__(training, dataset.y_train_strings)
+        super().__init__(training)
         self.dataset: Dataset = dataset
         self.hyper: Hyperparameters = hyperparameters
         self.hyper.set_time_series_properties(dataset.time_series_length, dataset.time_series_depth)
@@ -106,7 +105,8 @@ class SimpleSNN(AbstractSimilarityMeasure):
             # Collect similarities of all badges
             sims_all_examples[index:index + batch_size] = sims_batch
 
-        return sims_all_examples
+        # returns 2d array [[sim, label], [sim, label], ...]
+        return sims_all_examples, self.dataset.y_train_strings
 
     @tf.function
     def get_sims_batch(self, batch):
@@ -134,7 +134,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
         return distance_example
 
     def load_model(self, config: Configuration):
-        self.subnet.load_model(config.models_folder)
+        self.subnet.load_model(config.directory_model_to_use)
 
         if self.subnet.model is None:
             sys.exit(1)
@@ -189,8 +189,8 @@ class SNN(SimpleSNN):
         return tf.reduce_mean(warped_dists)
 
     def load_model(self, config: Configuration):
-        self.subnet.load_model(config.models_folder)
-        self.ffnn.load_model(config.models_folder)
+        self.subnet.load_model(config.directory_model_to_use)
+        self.ffnn.load_model(config.directory_model_to_use)
 
         if self.subnet.model is None or self.ffnn.model is None:
             sys.exit(1)
@@ -302,7 +302,7 @@ class FastSNN(FastSimpleSNN):
         return tf.reduce_mean(warped_dists)
 
     def load_model(self, config: Configuration):
-        self.ffnn.load_model(config.models_folder)
+        self.ffnn.load_model(config.directory_model_to_use)
 
         if self.ffnn.model is None:
             sys.exit(1)
