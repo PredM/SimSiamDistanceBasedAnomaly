@@ -39,12 +39,27 @@ def initialise_snn(config: Configuration, hyper, dataset, training):
         raise AttributeError('Unknown SNN variant specified:' + config.architecture_variant)
 
 
-class SimpleSNN:
+class AbstractSimilarityMeasure:
+
+    def __init__(self, training, classes_case_base=None):
+        self.training = training
+        self.classes_case_base = classes_case_base
+
+    def load_model(self, config: Configuration):
+        raise NotImplementedError()
+
+    def get_sims(self, example):
+        raise NotImplementedError()
+
+    def get_sims_batch(self, batch):
+        raise NotImplementedError()
+
+
+class SimpleSNN(AbstractSimilarityMeasure):
 
     def __init__(self, subnet_variant, hyperparameters, dataset, training):
-        self.training = training
+        super().__init__(training, dataset.y_train_strings)
         self.dataset: Dataset = dataset
-        self.classes_case_base = self.dataset.y_train_strings
         self.hyper: Hyperparameters = hyperparameters
         self.hyper.set_time_series_properties(dataset.time_series_length, dataset.time_series_depth)
 
@@ -119,7 +134,7 @@ class SimpleSNN:
         return distance_example
 
     def load_model(self, config: Configuration):
-        self.subnet.load_model(config)
+        self.subnet.load_model(config.models_folder)
 
         if self.subnet.model is None:
             sys.exit(1)
@@ -174,8 +189,8 @@ class SNN(SimpleSNN):
         return tf.reduce_mean(warped_dists)
 
     def load_model(self, config: Configuration):
-        self.subnet.load_model(config)
-        self.ffnn.load_model(config)
+        self.subnet.load_model(config.models_folder)
+        self.ffnn.load_model(config.models_folder)
 
         if self.subnet.model is None or self.ffnn.model is None:
             sys.exit(1)
@@ -287,7 +302,7 @@ class FastSNN(FastSimpleSNN):
         return tf.reduce_mean(warped_dists)
 
     def load_model(self, config: Configuration):
-        self.ffnn.load_model(config)
+        self.ffnn.load_model(config.models_folder)
 
         if self.ffnn.model is None:
             sys.exit(1)

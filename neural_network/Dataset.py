@@ -56,6 +56,7 @@ class FullDataset(Dataset):
         self.num_classes = None
         self.classes = None
 
+        # Todo maybe change parameter to "encode" and use simpler if
         if self.config.architecture_variant in ['standard_simple', 'standard_ffnn'] or training:
             pass  # nothing to do if standard variant
         elif self.config.architecture_variant in ['fast_simple', 'fast_ffnn']:
@@ -73,10 +74,8 @@ class FullDataset(Dataset):
         self.x_train = np.load(self.dataset_folder + 'train_features.npy')  # data training
         self.x_test = np.load(self.dataset_folder + 'test_features.npy')  # data testing
 
-        self.y_train_strings = np.expand_dims(np.load(self.dataset_folder + 'train_labels.npy'),
-                                              axis=-1)  # labels training data
-        self.y_test_strings = np.expand_dims(np.load(self.dataset_folder + 'test_labels.npy'),
-                                             axis=-1)  # labels testing data
+        self.y_train_strings = np.expand_dims(np.load(self.dataset_folder + 'train_labels.npy'), axis=-1)
+        self.y_test_strings = np.expand_dims(np.load(self.dataset_folder + 'test_labels.npy'), axis=-1)
 
         # Create a encoder, sparse output must be disabled to get the intended output format
         # Added categories='auto' to use future behavior
@@ -129,6 +128,25 @@ class FullDataset(Dataset):
         num_instances = self.num_test_instances if from_test else self.num_train_instances
 
         return Dataset.draw_from_ds(ds_y, num_instances, is_positive)
+
+    def draw_pair_cbs(self, is_positive, indices_positive):
+
+        while True:
+            first_idx_in_list = np.random.randint(0, len(indices_positive), size=1)[0]
+            first_idx = indices_positive[first_idx_in_list]
+
+            # positive --> both examples' indices need to be in indices_positive
+            if is_positive:
+                second_idx_in_list = np.random.randint(0, len(indices_positive), size=1)[0]
+                second_idx = indices_positive[second_idx_in_list]
+            else:
+                while True:
+                    second_idx = np.random.randint(0, self.num_train_instances, size=1)[0]
+
+                    if second_idx not in indices_positive:
+                        break
+
+            return first_idx, second_idx
 
 
 # variation of the dataset class that consists only of examples of the same case

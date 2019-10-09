@@ -3,7 +3,7 @@ import sys
 import numpy as np
 
 from neural_network.Dataset import CaseSpecificDataset
-from neural_network.SNN import SimpleSNN
+from neural_network.SNN import SimpleSNN, AbstractSimilarityMeasure
 
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 
@@ -11,16 +11,14 @@ from configuration.Configuration import Configuration
 from configuration.Hyperparameter import Hyperparameters
 
 
-class CBS:
+class CBS(AbstractSimilarityMeasure):
 
     def __init__(self, config: Configuration, training):
-        self.training = training
+        super().__init__(training)
+
         self.config: Configuration = config
         self.case_handlers: [SimpleCaseHandler] = []
         self.num_instances_total = 0
-
-        self.classes_casebase = None
-
         self.initialise_case_handlers()
 
     def initialise_case_handlers(self):
@@ -55,10 +53,10 @@ class CBS:
 
         # Create an array that contains the class labels of all cases matching the order in which
         # the similarities are returned
-        self.classes_casebase = np.empty(self.num_instances_total, dtype='object_')
+        self.classes_case_base = np.empty(self.num_instances_total, dtype='object_')
 
         for case_handler in self.case_handlers:
-            self.classes_casebase[case_handler.dataset.indices_cases] = case_handler.dataset.case
+            self.classes_case_base[case_handler.dataset.indices_cases] = case_handler.dataset.case
 
     # initializes the correct case handler depending on the configured variant
     def initialise_case_handler(self, hyper, dataset):
@@ -75,24 +73,16 @@ class CBS:
         else:
             raise AttributeError('Unknown variant specified:' + self.config.architecture_variant)
 
-    def load_models(self):
+    def load_model(self, config=None):
 
         for case_handler in self.case_handlers:
             case_handler: CaseHandler = case_handler
             case_handler.load_model(self.config)
 
-    # debugging method, can be removed when implementation is finished
     def print_info(self):
         print()
         for case_handler in self.case_handlers:
             case_handler.print_case_handler_info()
-
-        print()
-        for i in range(len(self.class_array)):
-            print(i, '\t', self.class_array[i])
-
-    def get_class_labels(self):
-        return self.class_array
 
     def get_sims(self, example):
         all_sims = np.zeros(self.num_instances_total)
@@ -103,6 +93,9 @@ class CBS:
             all_sims[case_handler.dataset.indices_cases] = sims_case
 
         return all_sims
+
+    def get_sims_batch(self, batch):
+        raise NotImplementedError()
 
 
 class SimpleCaseHandler(SimpleSNN):
