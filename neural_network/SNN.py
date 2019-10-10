@@ -62,8 +62,6 @@ class SimpleSNN(AbstractSimilarityMeasure):
         self.hyper: Hyperparameters = hyperparameters
         self.hyper.set_time_series_properties(dataset.time_series_length, dataset.time_series_depth)
 
-        self.subnet = None
-
         # Shape of a single example, batch size is left flexible
         input_shape_subnet = (self.hyper.time_series_length, self.hyper.time_series_depth)
 
@@ -81,7 +79,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
             sys.exit(1)
 
     # Get the similarities of the example to each example in the dataset
-    def get_sims(self, example):
+    def get_sims_old(self, example):
         num_train = len(self.dataset.x_train)
         sims_all_examples = np.zeros(num_train)
         batch_size = self.hyper.batch_size
@@ -107,6 +105,21 @@ class SimpleSNN(AbstractSimilarityMeasure):
 
         # returns 2d array [[sim, label], [sim, label], ...]
         return sims_all_examples, self.dataset.y_train_strings
+
+    # Get the similarities of the example to each example in the dataset
+    def get_sims(self, example):
+        batch_size = len(self.dataset.x_train)
+
+        input_pairs = np.zeros((2 * batch_size, self.hyper.time_series_length,
+                                self.hyper.time_series_depth)).astype('float32')
+
+        for index in range(batch_size):
+            input_pairs[2 * index] = example
+            input_pairs[2 * index + 1] = self.dataset.x_train[index]
+
+        sims = self.get_sims_batch(input_pairs)
+
+        return sims
 
     @tf.function
     def get_sims_batch(self, batch):
@@ -216,7 +229,7 @@ class FastSimpleSNN(SimpleSNN):
         return np.squeeze(context_vector, axis=0)  # Back to a single example
 
     # Example must already be encoded
-    def get_sims(self, encoded_example):
+    def get_sims_old(self, encoded_example):
         num_train = len(self.dataset.x_train)
         sims_all_examples = np.zeros(num_train)
         batch_size = self.hyper.batch_size
@@ -236,6 +249,10 @@ class FastSimpleSNN(SimpleSNN):
 
         # Return the result of the knn classifier using the calculated similarities
         return sims_all_examples
+
+    # Example must already be encoded
+    def get_sims(self, encoded_example):
+        return self.get_sims_section(self.dataset.x_train, encoded_example)
 
     def get_sims_batch(self, batch):
         raise NotImplemented('This method is not supported by this SNN variant by design.')

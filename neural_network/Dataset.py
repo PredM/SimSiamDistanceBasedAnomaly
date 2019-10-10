@@ -64,7 +64,7 @@ class FullDataset(Dataset):
             encoder = DatasetEncoder(self.dataset_folder, config)
             encoder.encode()
             self.dataset_folder = encoder.target_folder
-            print('Encoding finished\n')
+            print('Encoding finished. Duration:', encoder.encoding_duration, '\n')
         else:
             raise AttributeError('Unknown SNN variant.')
 

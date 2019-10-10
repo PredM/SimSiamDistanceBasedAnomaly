@@ -4,6 +4,7 @@ import numpy as np
 
 from configuration.Hyperparameter import Hyperparameters
 from neural_network.Subnets import CNN, RNN
+from time import perf_counter
 
 
 class DatasetEncoder:
@@ -12,7 +13,8 @@ class DatasetEncoder:
         self.source_folder = source_folder
         self.config: Configuration = config
         self.target_folder = ''
-        self.encoder = None  # Cant be initialized here because input shape is unknown
+        self.subnet = None  # Cant be initialized here because input shape is unknown
+        self.encoding_duration = 0
 
         # Depending on whether it is training data or case base,
         # a corresponding target folder is set for the encoded files
@@ -24,8 +26,8 @@ class DatasetEncoder:
             raise AttributeError('Unknown source folder for dataset encoder')
 
     def encode(self):
-        x_train = np.load(self.source_folder + "train_features.npy").astype('float32')
-        x_test = np.load(self.source_folder + "test_features.npy").astype('float32')
+        x_train = np.load(self.source_folder + "train_features.npy")
+        x_test = np.load(self.source_folder + "test_features.npy")
 
         time_series_length = x_train.shape[1]
         time_series_depth = x_train.shape[2]
@@ -42,26 +44,16 @@ class DatasetEncoder:
 
         self.encoder.load_model(self.config)
 
-        # Calculate the shape of the arrays that store the encoded examples and create empty ones
-        output_shape = self.encoder.model.output_shape
-        new_train_shape = (x_train.shape[0], output_shape[1], output_shape[2])
-        new_test_shape = (x_test.shape[0], output_shape[1], output_shape[2])
+        start_time_encoding = perf_counter()
 
-        x_train_encoded = np.zeros(new_train_shape, dtype='float32')
-        x_test_encoded = np.zeros(new_test_shape, dtype='float32')
+        # TODO Check if saving as float32 leads to lower accuracy
+        x_train_encoded = self.subnet.model(x_train, training=False)
+        x_test_encoded = self.subnet.model(x_test, training=False)
 
-        # TODO Add timer
-        # TODO Change to batch processing
-        # TODO Add multi gpu support when tested in snn implementation
-        for i in range(len(x_train)):
-            ex = np.expand_dims(x_train[i], axis=0)  # Model expects array of examples -> add outer dimension
-            context_vector = self.encoder.model(ex, training=False)
-            x_train_encoded[i] = np.squeeze(context_vector, axis=0)  # Back to a single example
+        x_train_encoded = np.asarray(x_train_encoded).astype('float32')
+        x_test_encoded = np.asarray(x_test_encoded).astype('float32')
 
-        for i in range(len(x_test)):
-            ex = np.expand_dims(x_test[i], axis=0)
-            context_vector = self.encoder.model(ex, training=False)
-            x_test_encoded[i] = np.squeeze(context_vector, axis=0)
+        self.encoding_duration = perf_counter() - start_time_encoding
 
         np.save(self.target_folder + 'train_features.npy', x_train_encoded)
         np.save(self.target_folder + 'test_features.npy', x_test_encoded)
