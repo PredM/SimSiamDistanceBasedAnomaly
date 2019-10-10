@@ -58,7 +58,7 @@ def plot_export_txt(df: pd.DataFrame, file_name: str, config, timestamps):
 
 
 # used for case determination of a light barrier failure dataset
-if __name__ == '__main__':
+def main():
     config = Configuration(13)
 
     df = import_txt(config.txt16, 'txt16')
@@ -81,3 +81,7 @@ if __name__ == '__main__':
     timestamps = transform(timestamps)
 
     plot_export_txt(df, 'txt16_i4_only', config, timestamps)
+
+
+if __name__ == '__main__':
+    main()

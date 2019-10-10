@@ -121,7 +121,7 @@ class SimpleCaseHandler(SimpleSNN):
 
     def load_model(self, config: Configuration):
         subdirectory = config.subdirectories_by_case.get(self.dataset.case)
-        self.subnet.load_model(config.directory_model_to_use, subdirectory)
+        self.encoder.load_model(config.directory_model_to_use, subdirectory)
 
     # input must be the 'complete' example with all features of a 'full dataset'
     def get_sims(self, example):

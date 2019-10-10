@@ -31,17 +31,18 @@ class Configuration:
         self.continue_training = False
 
         # defines how often loss is printed and checkpoints are safed during training
-        self.output_interval = 100
+        self.output_interval = 300
 
         # how many model checkpoints are kept
-        self.model_files_stored = 5
+        self.model_files_stored = 100
 
         # defines for which failure cases a case handler in the case based similarity measure is created,
         # subset of all can be used for debugging purposes
+        # if cases_used == [] or == None all in config.json will be used
         all_cases = ['no_failure', 'txt_18_comp_leak', 'txt_17_comp_leak', 'txt15_m1_t1_high_wear',
                      'txt15_m1_t1_low_wear', 'txt15_m1_t2_wear', 'txt16_m3_t1_high_wear', 'txt16_m3_t1_low_wear',
                      'txt16_m3_t2_wear', 'txt16_i4']
-        self.cases_used = all_cases[0:1]
+        self.cases_used = all_cases[0:2]
 
         ###
         # kafka / real time classification
@@ -87,8 +88,8 @@ class Configuration:
         # folder where the trained models are saved to during learning process
         self.models_folder = '../data/trained_models/'
 
-        # path and file name to the specific model that should be used for testing and live classification
-        self.filename_model_to_use = 'ba_cnn_378200_96_percent'
+        # file name and path to the specific model that should be used for testing and live classification
+        self.filename_model_to_use = 'temp_models_10-10_15-59-40_epoch-600'
         self.directory_model_to_use = self.models_folder + self.filename_model_to_use + '/'
 
         # folder where the preprocessed training and test data for the neural network should be stored
@@ -227,10 +228,13 @@ class Configuration:
 
         features_all_cases = data['relevant_features']
 
-        self.relevant_features = {case: features_all_cases[case] for case in self.cases_used if
-                                  case in features_all_cases}
+        if self.cases_used is None or self.cases_used == 0:
+            self.relevant_features = features_all_cases
+        else:
+            self.relevant_features = {case: features_all_cases[case] for case in self.cases_used if
+                                      case in features_all_cases}
 
-        # Sort feature names to ensure that the order matches the one in the list of indices of the features in
+        # sort feature names to ensure that the order matches the one in the list of indices of the features in
         # the case base class
         for key in self.relevant_features:
             self.relevant_features[key] = sorted(self.relevant_features[key])
@@ -243,7 +247,10 @@ class Configuration:
         def flatten(l):
             return [item for sublist in l for item in sublist]
 
-        # TODO FIX for classic SNN dataset if this should use other
+        # will be used to determine which attributes will be in the generated dataset
+        # when using the dataset for a snn, the full dataset will be used
+        # so these attributes must still be configured in the config.json file in "relevant_features"
+        # it is irrelevant however under which error case these are entered there.
         self.all_features_used = sorted(list(set(flatten(self.relevant_features.values()))))
 
     # return the error case description for the passed label

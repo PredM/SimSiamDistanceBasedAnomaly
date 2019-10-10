@@ -12,7 +12,7 @@ from neural_network.Optimizer import CBSOptimizer
 
 def main():
     # suppress debugging messages of TensorFlow
-    os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+    os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
     config = Configuration()
 
@@ -24,7 +24,7 @@ def main():
 
     print('Initializing case based similarity measure ...\n')
     cbs = CBS(config, True)
-    # cbs.print_info()
+    #cbs.print_info()
 
     print('Training:\n')
     optimizer = CBSOptimizer(cbs, dataset, hyper, config)

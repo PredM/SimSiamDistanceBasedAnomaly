@@ -3,7 +3,7 @@ from os import listdir, path
 
 import tensorflow as tf
 
-from configuration import Configuration
+
 from configuration.Hyperparameter import Hyperparameters
 
 
@@ -31,10 +31,10 @@ class NN:
 
         return total_parameters
 
-    # Todo must be changed, must load specific file name
     def load_model(self, path_model_folder: str, subdirectory=''):
         self.model = None
 
+        # TODO add temporal cnn if not done already
         if type(self) == CNN or type(self) == RNN:
             prefix = 'encoder'
         elif type(self) == FFNN:
@@ -47,7 +47,7 @@ class NN:
         directory = path_model_folder + subdirectory
 
         for file_name in listdir(directory):
-            # Compile must be set to false because the standard optimizer was not used and this would otherwise
+            # compile must be set to false because the standard optimizer was not used and this would otherwise
             # generate an error
             if file_name.startswith(prefix):
                 self.model = tf.keras.models.load_model(path.join(directory, file_name), compile=False)
@@ -77,7 +77,7 @@ class FFNN(NN):
             print('FFNN with less than one layer is not possible')
             sys.exit(1)
 
-        # First layer must be handled separately because the input shape parameter must be set
+        # first layer must be handled separately because the input shape parameter must be set
         num_units_first = layers.pop(0)
         model.add(tf.keras.layers.Dense(units=num_units_first, activation=tf.keras.activations.relu,
                                         input_shape=self.input_shape))
@@ -85,7 +85,7 @@ class FFNN(NN):
         for num_units in layers:
             model.add(tf.keras.layers.Dense(units=num_units, activation=tf.keras.activations.relu))
 
-        # Regardless of the configured number of layers, add a layer with
+        # regardless of the configured number of layers, add a layer with
         # a single neuron that provides the indicator function output.
         model.add(tf.keras.layers.Dense(units=1, activation=tf.keras.activations.sigmoid))
 
@@ -98,7 +98,7 @@ class RNN(NN):
         super().__init__(hyperparameters, input_shape)
 
     # RNN structure matching the description in the neural warp paper
-    # Currently not used
+    # currently not used
     def create_model_nw(self):
         print('Creating LSTM subnet')
 
@@ -110,8 +110,8 @@ class RNN(NN):
             print('LSTM subnet with less than one layer is not possible')
             sys.exit(1)
 
-        # Bidirectional LSTM network, type where timelines are only combined ones
-        # Create one timeline and stack into StackedRNNCell
+        # bidirectional LSTM network, type where timelines are only combined ones
+        # create one timeline and stack into StackedRNNCell
         cells = []
         for num_units in layers:
             cells.append(tf.keras.layers.LSTMCell(units=num_units, activation=tf.keras.activations.tanh))
@@ -119,10 +119,10 @@ class RNN(NN):
         stacked_cells = tf.keras.layers.StackedRNNCells(cells)
         rnn = tf.keras.layers.RNN(stacked_cells, return_sequences=True)
 
-        # Create a bidirectional network using the created timeline, backward timeline will be generated automatically
+        # create a bidirectional network using the created timeline, backward timeline will be generated automatically
         model.add(tf.keras.layers.Bidirectional(rnn, input_shape=self.input_shape))
 
-        # Add Batch Norm and Dropout Layers
+        # add Batch Norm and Dropout Layers
         model.add(tf.keras.layers.BatchNormalization())
         model.add(tf.keras.layers.Dropout(rate=self.hyper.dropout_rate))
 
@@ -142,10 +142,10 @@ class RNN(NN):
         for i in range(len(layers)):
             num_units = layers[i]
 
-            # First layer must be handled separately because the input shape parameter must be set Usage of default
+            # first layer must be handled separately because the input shape parameter must be set Usage of default
             # parameters should ensure cuDNN usage (
             # https://www.tensorflow.org/beta/guide/keras/rnn#using_cudnn_kernels_when_available)
-            # But this would be faster:
+            # but this would be faster:
             # tf.keras.layers.RNN(tf.keras.layers.LSTMCell(num_units), return_sequences=True)
             if i == 0:
                 layer = tf.keras.layers.LSTM(units=num_units, return_sequences=True, input_shape=self.input_shape)
@@ -153,7 +153,7 @@ class RNN(NN):
                 layer = tf.keras.layers.LSTM(units=num_units, return_sequences=True)
             model.add(layer)
 
-        # Add Batch Norm and Dropout Layers
+        # add Batch Norm and Dropout Layers
         model.add(tf.keras.layers.BatchNormalization())
         model.add(tf.keras.layers.Dropout(rate=self.hyper.dropout_rate))
 
@@ -180,7 +180,7 @@ class CNN(NN):
         for i in range(len(layer_properties)):
             num_filter, filter_size, stride = layer_properties[i][0], layer_properties[i][1], layer_properties[i][2]
 
-            # First layer must be handled separately because the input shape parameter must be set
+            # first layer must be handled separately because the input shape parameter must be set
             if i == 0:
                 conv_layer = tf.keras.layers.Conv1D(filters=num_filter, padding='VALID', kernel_size=filter_size,
                                                     strides=stride, input_shape=self.input_shape)

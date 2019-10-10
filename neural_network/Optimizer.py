@@ -136,13 +136,13 @@ class Optimizer:
         if current_epoch <= 0:
             return
 
-        # Generate a name and create the directory, where the model files of this epoch should be stored
+        # generate a name and create the directory, where the model files of this epoch should be stored
         epoch_string = 'epoch-' + str(current_epoch)
         dt_string = datetime.now().strftime("%m-%d_%H-%M-%S")
         dir_name = self.config.models_folder + '_'.join(['temp', 'models', dt_string, epoch_string]) + '/'
         os.mkdir(dir_name)
 
-        # Generate the file names and save the model files in the directory created before
+        # generate the file names and save the model files in the directory created before
         subnet_file_name = '_'.join(['encoder', self.config.encoder_variant, epoch_string]) + '.h5'
         self.architecture.subnet.model.save(dir_name + subnet_file_name)
 
@@ -186,19 +186,19 @@ class CBSOptimizer(Optimizer):
                 batch_pairs_indices.append(neg_pair[1])
                 batch_true_similarities.append(0.0)
 
-            # Change the list of ground truth similarities to an array
+            # change the list of ground truth similarities to an array
             true_similarities = np.asarray(batch_true_similarities)
 
-            # Get the example pairs by the selected indices
+            # get the example pairs by the selected indices
             model_input = np.take(a=self.dataset.x_train, indices=batch_pairs_indices, axis=0)
 
-            # Reduce to the features used by this case handler
+            # reduce to the features used by this case handler
             model_input = model_input[:, :, case_handler.dataset.indices_features]
 
             batch_loss = self.update_single_model(model_input, true_similarities, case_handler,
                                                   self.optimizer[case_handler.dataset.case])
 
-            # Track progress
+            # track progress
             epoch_loss_avg.update_state(batch_loss)
             self.losses.get(case_handler.dataset.case).append(epoch_loss_avg.result())
 
@@ -222,7 +222,7 @@ class CBSOptimizer(Optimizer):
         if current_epoch <= 0:
             return
 
-            # Generate a name and create the directory, where the model files of this epoch should be stored
+        # generate a name and create the directory, where the model files of this epoch should be stored
         epoch_string = 'epoch-' + str(current_epoch)
         dt_string = datetime.now().strftime("%m-%d_%H-%M-%S")
         dir_name = self.config.models_folder + '_'.join(['temp', 'models', dt_string, epoch_string]) + '/'
@@ -230,12 +230,12 @@ class CBSOptimizer(Optimizer):
 
         for case_handler in self.architecture.case_handlers:
 
-            # Create a subdirectory for the model files of this case handler
+            # create a subdirectory for the model files of this case handler
             subdirectory = self.config.subdirectories_by_case.get(case_handler.dataset.case)
             full_path = os.path.join(dir_name, subdirectory)
             os.mkdir(full_path)
 
-            # Generate the file names and save the model files in the directory created before
+            # generate the file names and save the model files in the directory created before
             subnet_file_name = '_'.join(['encoder', self.config.encoder_variant, epoch_string]) + '.h5'
             case_handler.subnet.model.save(os.path.join(full_path, subnet_file_name))
 

@@ -6,10 +6,10 @@ import numpy as np
 from configuration.Configuration import Configuration
 from configuration.Hyperparameter import Hyperparameters
 from neural_network.Dataset import Dataset
-from neural_network.Subnets import CNN, RNN, FFNN
+from neural_network.BasicNeuralNetworks import CNN, RNN, FFNN
 
 
-# Initialises the correct SNN variant depending on the configuration
+# initialises the correct SNN variant depending on the configuration
 def initialise_snn(config: Configuration, hyper, dataset, training):
     if training and config.architecture_variant in ['fast_simple', 'fast_ffnn']:
         print('WARNING:')
@@ -56,57 +56,57 @@ class AbstractSimilarityMeasure:
 
 class SimpleSNN(AbstractSimilarityMeasure):
 
-    def __init__(self, subnet_variant, hyperparameters, dataset, training):
+    def __init__(self, encoder_variant, hyperparameters, dataset, training):
         super().__init__(training)
         self.dataset: Dataset = dataset
         self.hyper: Hyperparameters = hyperparameters
         self.hyper.set_time_series_properties(dataset.time_series_length, dataset.time_series_depth)
 
-        # Shape of a single example, batch size is left flexible
-        input_shape_subnet = (self.hyper.time_series_length, self.hyper.time_series_depth)
+        # shape of a single example, batch size is left flexible
+        input_shape_encoder = (self.hyper.time_series_length, self.hyper.time_series_depth)
 
-        if subnet_variant == 'cnn':
-            self.subnet = CNN(hyperparameters, input_shape_subnet)
-            self.subnet.create_model()
+        if encoder_variant == 'cnn':
+            self.encoder = CNN(hyperparameters, input_shape_encoder)
+            self.encoder.create_model()
 
-        elif subnet_variant == 'rnn':
-            self.subnet = RNN(hyperparameters, input_shape_subnet)
-            self.subnet.create_model()
+        elif encoder_variant == 'rnn':
+            self.encoder = RNN(hyperparameters, input_shape_encoder)
+            self.encoder.create_model()
 
         else:
-            print('Unknown subnet variant, use "cnn" or "rnn"')
-            print(subnet_variant)
+            print('Unknown encoder variant, use "cnn" or "rnn"')
+            print(encoder_variant)
             sys.exit(1)
 
-    # Get the similarities of the example to each example in the dataset
+    # get the similarities of the example to each example in the dataset
     def get_sims_old(self, example):
         num_train = len(self.dataset.x_train)
         sims_all_examples = np.zeros(num_train)
         batch_size = self.hyper.batch_size
 
-        # Similarities are calculated in batches
+        # similarities are calculated in batches
         for index in range(0, num_train, batch_size):
-            # Fix batch size if it would exceed the number of train instances
+            # fix batch size if it would exceed the number of train instances
             if index + batch_size >= num_train:
                 batch_size = num_train - index
 
             input_pairs = np.zeros((2 * batch_size, self.hyper.time_series_length,
                                     self.hyper.time_series_depth)).astype('float32')
 
-            # Create a batch of pairs between the example to test and the examples in the dataset
+            # create a batch of pairs between the example to test and the examples in the dataset
             for i in range(batch_size):
                 input_pairs[2 * i] = example
                 input_pairs[2 * i + 1] = self.dataset.x_train[index + i]
 
             sims_batch = self.get_sims_batch(input_pairs)
 
-            # Collect similarities of all badges
+            # collect similarities of all badges
             sims_all_examples[index:index + batch_size] = sims_batch
 
         # returns 2d array [[sim, label], [sim, label], ...]
         return sims_all_examples, self.dataset.y_train_strings
 
-    # Get the similarities of the example to each example in the dataset
+    # get the similarities of the example to each example in the dataset
     def get_sims(self, example):
         batch_size = len(self.dataset.x_train)
 
@@ -124,13 +124,13 @@ class SimpleSNN(AbstractSimilarityMeasure):
     @tf.function
     def get_sims_batch(self, batch):
 
-        # Calculate the output of the subnet for the examples in the batch
-        context_vectors = self.subnet.model(batch, training=self.training)
+        # calculate the output of the subnet for the examples in the batch
+        context_vectors = self.encoder.model(batch, training=self.training)
 
         distances_batch = tf.map_fn(lambda pair_index: self.get_distance_pair(context_vectors, pair_index),
                                     tf.range(batch.shape[0] // 2, dtype=tf.int32), back_prop=True, dtype=tf.float32)
 
-        # Transform distances into a similarity measure
+        # transform distances into a similarity measure
         sims_batch = tf.exp(-distances_batch)
 
         return sims_batch
@@ -140,39 +140,39 @@ class SimpleSNN(AbstractSimilarityMeasure):
         a = context_vectors[2 * pair_index, :, :]
         b = context_vectors[2 * pair_index + 1, :, :]
 
-        # Simple similarity measure, mean of absolute difference
+        # simple similarity measure, mean of absolute difference
         diff = tf.abs(a - b)
         distance_example = tf.reduce_mean(diff)
 
         return distance_example
 
     def load_model(self, config: Configuration):
-        self.subnet.load_model(config.directory_model_to_use)
+        self.encoder.load_model(config.directory_model_to_use)
 
-        if self.subnet.model is None:
+        if self.encoder.model is None:
             sys.exit(1)
         else:
             self.print_detailed_model_info()
 
     def print_detailed_model_info(self):
         print('')
-        self.subnet.model.summary()
+        self.encoder.model.summary()
         print('')
 
 
 class SNN(SimpleSNN):
 
-    def __init__(self, subnet_variant, hyperparameters, dataset, training):
-        super().__init__(subnet_variant, hyperparameters, dataset, training)
+    def __init__(self, encoder_variant, hyperparameters, dataset, training):
+        super().__init__(encoder_variant, hyperparameters, dataset, training)
 
-        # In addition to the simple snn version the ffnn needs to be initialised
-        subnet_output_shape = self.subnet.model.output_shape
-        input_shape_ffnn = (subnet_output_shape[1] ** 2, subnet_output_shape[2] * 2)
+        # in addition to the simple snn version the ffnn needs to be initialised
+        encoder_output_shape = self.encoder.model.output_shape
+        input_shape_ffnn = (encoder_output_shape[1] ** 2, encoder_output_shape[2] * 2)
 
         self.ffnn = FFNN(self.hyper, input_shape_ffnn)
         self.ffnn.create_model()
 
-        print('The full model has', self.ffnn.get_parameter_count() + self.subnet.get_parameter_count(), 'parameters\n')
+        print('The full model has', self.ffnn.get_parameter_count() + self.encoder.get_parameter_count(), 'parameters\n')
 
     @tf.function
     def get_distance_pair(self, context_vectors, pair_index):
@@ -189,7 +189,7 @@ class SNN(SimpleSNN):
         indices_b = tf.reshape(indices_b, [-1])
         b = tf.gather(b, indices_b)
 
-        # Input of FFNN are all time stamp combinations of a and b
+        # input of FFNN are all time stamp combinations of a and b
         ffnn_input = tf.concat([a, b], axis=1)
 
         ffnn = self.ffnn.model(ffnn_input, training=self.training)
@@ -202,17 +202,17 @@ class SNN(SimpleSNN):
         return tf.reduce_mean(warped_dists)
 
     def load_model(self, config: Configuration):
-        self.subnet.load_model(config.directory_model_to_use)
+        self.encoder.load_model(config.directory_model_to_use)
         self.ffnn.load_model(config.directory_model_to_use)
 
-        if self.subnet.model is None or self.ffnn.model is None:
+        if self.encoder.model is None or self.ffnn.model is None:
             sys.exit(1)
         else:
             self.print_detailed_model_info()
 
     def print_detailed_model_info(self):
         print('')
-        self.subnet.model.summary()
+        self.encoder.model.summary()
         print('')
         self.ffnn.model.summary()
         print('')
@@ -220,15 +220,15 @@ class SNN(SimpleSNN):
 
 class FastSimpleSNN(SimpleSNN):
 
-    def __init__(self, subnet_variant, hyperparameters, dataset, training):
-        super().__init__(subnet_variant, hyperparameters, dataset, training)
+    def __init__(self, encoder_variant, hyperparameters, dataset, training):
+        super().__init__(encoder_variant, hyperparameters, dataset, training)
 
     def encode_example(self, example):
         ex = np.expand_dims(example, axis=0)  # Model expects array of examples -> add outer dimension
-        context_vector = self.subnet.model(ex, training=self.training)
+        context_vector = self.encoder.model(ex, training=self.training)
         return np.squeeze(context_vector, axis=0)  # Back to a single example
 
-    # Example must already be encoded
+    # example must already be encoded
     def get_sims_old(self, encoded_example):
         num_train = len(self.dataset.x_train)
         sims_all_examples = np.zeros(num_train)
@@ -236,7 +236,7 @@ class FastSimpleSNN(SimpleSNN):
 
         for index in range(0, num_train, batch_size):
 
-            # Fix batch size if it would exceed the number of train instances
+            # fix batch size if it would exceed the number of train instances
             if index + batch_size >= num_train:
                 batch_size = num_train - index
 
@@ -244,13 +244,13 @@ class FastSimpleSNN(SimpleSNN):
 
             sims_batch = self.get_sims_section(section_train, encoded_example)
 
-            # Collect similarities of all badges
+            # collect similarities of all badges
             sims_all_examples[index:index + batch_size] = sims_batch
 
-        # Return the result of the knn classifier using the calculated similarities
+        # return the result of the knn classifier using the calculated similarities
         return sims_all_examples
 
-    # Example must already be encoded
+    # example must already be encoded
     def get_sims(self, encoded_example):
         return self.get_sims_section(self.dataset.x_train, encoded_example)
 
@@ -260,7 +260,7 @@ class FastSimpleSNN(SimpleSNN):
     @tf.function
     def get_sims_section(self, section_train, encoded_example):
 
-        # Get the distances for the hole batch by calculating it for each pair, dtype is necessary
+        # get the distances for the hole batch by calculating it for each pair, dtype is necessary
         distances_batch = tf.map_fn(lambda index: self.get_distance_pair(section_train[index], encoded_example),
                                     tf.range(section_train.shape[0], dtype=tf.int32), back_prop=True, dtype='float32')
         sims_batch = tf.exp(-distances_batch)
@@ -270,24 +270,24 @@ class FastSimpleSNN(SimpleSNN):
     @tf.function
     def get_distance_pair(self, a, b):
 
-        # Simple similarity measure, mean of absolute difference
+        # simple similarity measure, mean of absolute difference
         diff = tf.abs(a - b)
         distance_example = tf.reduce_mean(diff)
 
         return distance_example
 
     def load_model(self, config: Configuration):
-        # Simple and fast version --> Neither subnet nor ffnn is needs to be loaded
+        # simple and fast version --> Neither subnet nor ffnn is needs to be loaded
         pass
 
 
 class FastSNN(FastSimpleSNN):
 
-    def __init__(self, subnet_variant, hyperparameters, dataset, training):
-        super().__init__(subnet_variant, hyperparameters, dataset, training)
+    def __init__(self, encoder_variant, hyperparameters, dataset, training):
+        super().__init__(encoder_variant, hyperparameters, dataset, training)
 
-        # In addition to the simple snn version the ffnn needs to be initialised
-        subnet_output_shape = self.subnet.model.output_shape
+        # in addition to the simple snn version the ffnn needs to be initialised
+        subnet_output_shape = self.encoder.model.output_shape
         input_shape_ffnn = (subnet_output_shape[1] ** 2, subnet_output_shape[2] * 2)
 
         self.ffnn = FFNN(self.hyper, input_shape_ffnn)
@@ -306,7 +306,7 @@ class FastSNN(FastSimpleSNN):
         indices_b = tf.reshape(indices_b, [-1])
         b = tf.gather(b, indices_b)
 
-        # Input of FFNN are all time stamp combinations of a and b
+        # input of FFNN are all time stamp combinations of a and b
         ffnn_input = tf.concat([a, b], axis=1)
 
         ffnn = self.ffnn.model(ffnn_input, training=self.training)
