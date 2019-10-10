@@ -1,15 +1,18 @@
 import time
-
 import math
+import sys
+import os
 import numpy as np
 from fastdtw import fastdtw
 from scipy.spatial.distance import euclidean
 
+sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
+
+from neural_network.Dataset import FullDataset
 from configuration.Configuration import Configuration
-from neural_network.dataset import Dataset
 
 
-def execute_dtw(dataset: Dataset, start_index, end_index):
+def execute_dtw(dataset: FullDataset, start_index, end_index):
     score = 0.0
     start_time = time.clock()
 
@@ -58,9 +61,8 @@ def main():
     config = Configuration()
 
     # create data set
-    dataset_folder = config.training_data_folder
-    dataset = Dataset()
-    dataset.load_multivariate(dataset_folder)
+    dataset = FullDataset(config.training_data_folder, config, False)
+    dataset.load()
 
     # execute for all the total test data set
     start_index = 0

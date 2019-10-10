@@ -1,5 +1,9 @@
+import sys
+import os
 import pandas as pd
 import matplotlib.pyplot as plt
+
+sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 
 from configuration.Configuration import Configuration
 from data_processing.DataImport import import_txt
@@ -57,7 +61,7 @@ def plot_export_txt(df: pd.DataFrame, file_name: str, config, timestamps):
 if __name__ == '__main__':
     config = Configuration(13)
 
-    df = import_txt(config.topic16File, 'txt16')
+    df = import_txt(config.txt16, 'txt16')
     df = df[['txt16_i4', 'txt16_label']]
 
     # get timestamps of labels

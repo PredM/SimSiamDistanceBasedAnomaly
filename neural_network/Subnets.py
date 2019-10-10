@@ -1,5 +1,5 @@
 import sys
-from os import listdir
+from os import listdir, path
 
 import tensorflow as tf
 
@@ -31,28 +31,32 @@ class NN:
 
         return total_parameters
 
-    def load_model(self, config: Configuration):
+    # Todo must be changed, must load specific file name
+    def load_model(self, path_model_folder: str, subdirectory=''):
         self.model = None
 
         if type(self) == CNN or type(self) == RNN:
-            prefix = 'subnet'
+            prefix = 'encoder'
         elif type(self) == FFNN:
             prefix = 'ffnn'
         else:
             raise AttributeError('Can not import models of type', type(self))
 
-        for file_name in listdir(config.directory_model_to_use):
+        # subdirectory is used for case based similarity measure, each one contains model files for one case handler
+        # todo ensure right /'s ...
+        directory = path_model_folder + subdirectory
 
+        for file_name in listdir(directory):
             # Compile must be set to false because the standard optimizer was not used and this would otherwise
             # generate an error
             if file_name.startswith(prefix):
-                self.model = tf.keras.models.load_model(config.directory_model_to_use + file_name, compile=False)
+                self.model = tf.keras.models.load_model(path.join(directory, file_name), compile=False)
 
             if self.model is not None:
                 break
 
         if self.model is None:
-            print('Model file for this type could not be found in ', config.directory_model_to_use)
+            raise FileNotFoundError('Model file for this type could not be found in ', directory)
         else:
             print('Model has been loaded successfully')
 

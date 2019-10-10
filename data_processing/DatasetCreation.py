@@ -1,12 +1,15 @@
+import sys
+import os
 import pickle
 import threading
-
 import gc
 import joblib
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler
+
+sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 
 from configuration.Configuration import Configuration
 
@@ -183,6 +186,8 @@ def main():
     examples: [np.ndarray] = []
     labels_of_examples: [str] = []
 
+    attributes = None
+
     for i in range(number_data_sets):
         print('\n\nImporting dataframe ' + str(i) + '/' + str(number_data_sets - 1) + ' from file')
 
@@ -197,6 +202,10 @@ def main():
 
         # split the dataframe into the configured cases
         cases_df, labels_df = split_by_cases(df, i, config)
+
+        # TODO Must be tested
+        if i == 0:
+            attributes = np.stack(df.columns, axis=0)
 
         del df
         gc.collect()
@@ -230,6 +239,13 @@ def main():
     x_train, x_test, y_train, y_test = train_test_split(examples_array, labels_array, test_size=config.test_split_size,
                                                         random_state=config.random_seed)
 
+    # Sort both datasets by the cases for easier handling
+    x_train = x_train[y_train.argsort()]
+    y_train = np.sort(y_train)
+
+    x_test = x_test[y_test.argsort()]
+    y_test = np.sort(y_test)
+
     print('Training data set shape: ', x_train.shape)
     print('Training label set shape: ', y_train.shape)
     print('Test data set shape: ', x_test.shape)
@@ -243,14 +259,16 @@ def main():
     # save the np arrays
     print('\nSave to np arrays in ' + config.training_data_folder)
 
-    print('Step 1/4')
+    print('Step 1/5')
     np.save(config.training_data_folder + 'train_features.npy', x_train)
-    print('Step 2/4')
+    print('Step 2/5')
     np.save(config.training_data_folder + 'test_features.npy', x_test)
-    print('Step 3/4')
+    print('Step 3/5')
     np.save(config.training_data_folder + 'train_labels.npy', y_train)
-    print('Step 4/4')
+    print('Step 4/5')
     np.save(config.training_data_folder + 'test_labels.npy', y_test)
+    print('Step 5/5')
+    np.save(config.training_data_folder + 'feature_names.npy', attributes)
 
 
 if __name__ == '__main__':

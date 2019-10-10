@@ -35,14 +35,14 @@ class DatasetEncoder:
         input_shape = (time_series_length, time_series_depth)
 
         # Create the subnet encoder and load the configured model
-        if self.config.subnet_variant == 'cnn':
-            self.subnet = CNN(Hyperparameters(), input_shape)
-        elif self.config.subnet_variant == 'rnn':
-            self.subnet = RNN(Hyperparameters(), input_shape)
+        if self.config.encoder_variant == 'cnn':
+            self.encoder = CNN(Hyperparameters(), input_shape)
+        elif self.config.encoder_variant == 'rnn':
+            self.encoder = RNN(Hyperparameters(), input_shape)
         else:
             print('Unknown subnet variant, use "cnn" or "rnn"')
 
-        self.subnet.load_model(self.config)
+        self.encoder.load_model(self.config)
 
         start_time_encoding = perf_counter()
 

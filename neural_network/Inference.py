@@ -1,31 +1,25 @@
 import sys
 import os
-
-sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
-
 import time
-
 import numpy as np
 import pandas as pd
 
+sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
+
 from configuration.Configuration import Configuration
 from configuration.Hyperparameter import Hyperparameters
-from neural_network.Dataset import Dataset
+from neural_network.Dataset import FullDataset
 from neural_network.SNN import initialise_snn
 
 
 class Inference:
 
-    def __init__(self, config, hyperparameters, dataset_folder):
-        self.hyper: Hyperparameters = hyperparameters
+    def __init__(self, config, hyperparameters, architecture, dataset: FullDataset):
         self.config: Configuration = config
 
-        self.dataset: Dataset = Dataset(dataset_folder, config, training=False)
-        self.dataset.load()
-
-        # Set hyperparameters to match the properties of the loaded data
-        self.hyper.time_series_length = self.dataset.time_series_length
-        self.hyper.time_series_depth = self.dataset.time_series_depth
+        self.hyper: Hyperparameters = hyperparameters
+        self.architecture = architecture
+        self.dataset: FullDataset = dataset
 
         # Creation of dataframe in which the classification results are stored
         # Rows contain the classes including a row for combined accuracy
@@ -38,10 +32,8 @@ class Inference:
         self.results.set_index('classes', inplace=True)
         self.results.loc['combined', 'total'] = self.dataset.num_test_instances
 
-        self.snn = initialise_snn(config, hyperparameters, self.dataset, False)
-
         # Load the models from the file configured
-        self.snn.load_model(config)
+        self.architecture.load_model(config)
 
     def infer_test_dataset(self):
         correct, num_infers = 0, 0
@@ -54,7 +46,7 @@ class Inference:
             max_sim_index = 0
 
             # Measure the similarity between the test series and the training batch series
-            sims = self.snn.get_sims(self.snn.dataset.x_test[idx_test])
+            sims, labels = self.architecture.get_sims(self.dataset.x_test[idx_test])
 
             # Check similarities of all pairs and record the index of the closest training series
             for i in range(len(sims)):
@@ -62,10 +54,9 @@ class Inference:
                     max_sim = sims[i]
                     max_sim_index = i
 
-            # Revert selected classes back to simple string labels
-            revert = self.dataset.one_hot_encoder.inverse_transform
-            real = revert([self.dataset.y_test[idx_test]])[0][0]
-            max_sim_class = revert([self.dataset.y_train[max_sim_index]])[0][0]
+
+            real = self.dataset.y_test_strings[idx_test]
+            max_sim_class = labels[max_sim_index]
 
             # If correctly classified increase the true positive field of the correct class and the of all classes
             if real == max_sim_class:
@@ -115,8 +106,12 @@ def main():
     config = Configuration()
     hyperparameters = Hyperparameters()
     hyperparameters.load_from_file(config.hyper_file, config.use_hyper_file)
+    dataset: FullDataset = FullDataset(config.training_data_folder, config, training=False)
+    dataset.load()
 
-    inference = Inference(config, hyperparameters, config.training_data_folder)
+    architecture = initialise_snn(config, hyperparameters, dataset, False)
+
+    inference = Inference(config, hyperparameters, architecture, dataset)
 
     print('Ensure right model file is used:')
     print(config.directory_model_to_use, '\n')

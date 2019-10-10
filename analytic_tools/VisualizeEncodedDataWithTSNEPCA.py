@@ -1,13 +1,15 @@
 from datetime import datetime
 
 import numpy as np
+import sys
+import os
 from sklearn.manifold import TSNE
-from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
 from sklearn import preprocessing
 
+sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
+
 from configuration.Configuration import Configuration
-from neural_network.DatasetEncoder import DatasetEncoder
 
 # In progress. For visualization of encoded data of an SNN using T-SNE or PCA.
 if __name__ == '__main__':

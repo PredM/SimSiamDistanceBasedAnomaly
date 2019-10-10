@@ -11,48 +11,60 @@ from neural_network.Subnets import CNN, RNN, FFNN
 
 # Initialises the correct SNN variant depending on the configuration
 def initialise_snn(config: Configuration, hyper, dataset, training):
-    if training and config.snn_variant in ['fast_simple', 'fast_ffnn']:
+    if training and config.architecture_variant in ['fast_simple', 'fast_ffnn']:
         print('WARNING:')
         print('The fast version can only be used for inference.')
         print('The training routine will use the standard version, otherwise the encoding')
         print('would have to be recalculated after each iteration anyway.\n')
 
-    var = config.snn_variant
+    var = config.architecture_variant
 
     if training and var.endswith('simple') or not training and var == 'standard_simple':
         print('Creating standard SNN with simple similarity measure')
-        return SimpleSNN(config.subnet_variant, hyper, dataset, training)
+        return SimpleSNN(config.encoder_variant, hyper, dataset, training)
 
     elif training and var.endswith('ffnn') or not training and var == 'standard_ffnn':
         print('Creating standard SNN with FFNN similarity measure')
-        return SNN(config.subnet_variant, hyper, dataset, training)
+        return SNN(config.encoder_variant, hyper, dataset, training)
 
     elif not training and var == 'fast_simple':
         print('Creating fast SNN with simple similarity measure')
-        return FastSimpleSNN(config.subnet_variant, hyper, dataset, training)
+        return FastSimpleSNN(config.encoder_variant, hyper, dataset, training)
 
     elif not training and var == 'fast_ffnn':
         print('Creating fast SNN with FFNN similarity measure')
-        return FastSNN(config.subnet_variant, hyper, dataset, training)
+        return FastSNN(config.encoder_variant, hyper, dataset, training)
 
     else:
-        raise AttributeError('Unknown SNN variant specified:' + config.snn_variant)
+        raise AttributeError('Unknown SNN variant specified:' + config.architecture_variant)
 
 
-class SimpleSNN:
+class AbstractSimilarityMeasure:
+
+    def __init__(self, training):
+        self.training = training
+
+    def load_model(self, config: Configuration):
+        raise NotImplementedError()
+
+    def get_sims(self, example):
+        raise NotImplementedError()
+
+    def get_sims_batch(self, batch):
+        raise NotImplementedError()
+
+
+class SimpleSNN(AbstractSimilarityMeasure):
 
     def __init__(self, subnet_variant, hyperparameters, dataset, training):
-        self.hyper: Hyperparameters = hyperparameters
+        super().__init__(training)
         self.dataset: Dataset = dataset
-        self.training = training
-        self.subnet = None
+        self.hyper: Hyperparameters = hyperparameters
+        self.hyper.set_time_series_properties(dataset.time_series_length, dataset.time_series_depth)
 
         # Shape of a single example, batch size is left flexible
         input_shape_subnet = (self.hyper.time_series_length, self.hyper.time_series_depth)
 
-        # if type(self) == FastSNN or FastSimpleSNN:
-        #     # Fast versions dont need to initialise a subnet, encoded before
-        #     pass
         if subnet_variant == 'cnn':
             self.subnet = CNN(hyperparameters, input_shape_subnet)
             self.subnet.create_model()
@@ -86,13 +98,13 @@ class SimpleSNN:
                 input_pairs[2 * i] = example
                 input_pairs[2 * i + 1] = self.dataset.x_train[index + i]
 
-            # Automatic distribution of the calculation to all available gpus
             sims_batch = self.get_sims_batch(input_pairs)
 
             # Collect similarities of all badges
             sims_all_examples[index:index + batch_size] = sims_batch
 
-        return sims_all_examples
+        # returns 2d array [[sim, label], [sim, label], ...]
+        return sims_all_examples, self.dataset.y_train_strings
 
     # Get the similarities of the example to each example in the dataset
     def get_sims(self, example):
@@ -135,7 +147,7 @@ class SimpleSNN:
         return distance_example
 
     def load_model(self, config: Configuration):
-        self.subnet.load_model(config)
+        self.subnet.load_model(config.directory_model_to_use)
 
         if self.subnet.model is None:
             sys.exit(1)
@@ -190,8 +202,8 @@ class SNN(SimpleSNN):
         return tf.reduce_mean(warped_dists)
 
     def load_model(self, config: Configuration):
-        self.subnet.load_model(config)
-        self.ffnn.load_model(config)
+        self.subnet.load_model(config.directory_model_to_use)
+        self.ffnn.load_model(config.directory_model_to_use)
 
         if self.subnet.model is None or self.ffnn.model is None:
             sys.exit(1)
@@ -230,7 +242,6 @@ class FastSimpleSNN(SimpleSNN):
 
             section_train = self.dataset.x_train[index: index + batch_size].astype('float32')
 
-            # Automatic distribution of the calculation to all available gpus
             sims_batch = self.get_sims_section(section_train, encoded_example)
 
             # Collect similarities of all badges
@@ -308,7 +319,7 @@ class FastSNN(FastSimpleSNN):
         return tf.reduce_mean(warped_dists)
 
     def load_model(self, config: Configuration):
-        self.ffnn.load_model(config)
+        self.ffnn.load_model(config.directory_model_to_use)
 
         if self.ffnn.model is None:
             sys.exit(1)

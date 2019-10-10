@@ -1,8 +1,5 @@
 import sys
 import os
-
-sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
-
 import contextlib
 import json
 import threading
@@ -11,16 +8,23 @@ import multiprocessing
 import joblib
 import numpy as np
 import pandas as pd
+
 # noinspection PyProtectedMember
 from kafka import KafkaConsumer, TopicPartition, KafkaProducer, errors
 from sklearn.preprocessing import MinMaxScaler
+
+sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 
 from configuration.Configuration import Configuration
 from configuration.Hyperparameter import Hyperparameters
 from data_processing.DataframeCleaning import clean_up_dataframe
 from neural_network import SNN
-from neural_network.Dataset import Dataset
+from neural_network.Dataset import FullDataset
 
+# TODO
+# Ensure generated examples equal the structure of the case base
+# -> Which columns are deleted
+# -> Loading of scalers
 
 class Importer(threading.Thread):
 
@@ -220,7 +224,7 @@ def list_to_dataframe(results: [[object]], config: Configuration):
 
         # remove unnecessary columns
         # errors for non existing columns are ignored because not all datasets have the same
-        df_temp.drop(config.unnecessary_cols, 1, inplace=True, errors='ignore')
+        df_temp.drop(config.unused_attributes, 1, inplace=True, errors='ignore')
 
         # remove duplicated timestamps, first will be kept
         df_temp = df_temp.loc[~df_temp['timestamp'].duplicated(keep='first')]
@@ -279,7 +283,9 @@ def normalise_dataframe(example: np.ndarray, scalers: [MinMaxScaler]):
 
     return example
 
-
+# FIXME Not working currently because unnecessary_cols doesn't exit anymore
+# Needs to be changed to other way of calculating what to read in
+# using len(config.all_features_used) maybe?
 def load_scalers(config):
     scalers = []
 
@@ -302,7 +308,7 @@ class Classifier(threading.Thread):
         super().__init__()
         self.examples_to_classify = multiprocessing.Manager().Queue(10)
         self.config = config
-        self.dataset = Dataset(config.training_data_folder, config, training=False)
+        self.dataset = FullDataset(config.training_data_folder, config, training=False)
         hyper = Hyperparameters()
         hyper.load_from_file(config.hyper_file, config.use_hyper_file)
         self.snn = SNN.initialise_snn(config, hyper, self.dataset, training=False)
@@ -385,9 +391,11 @@ class Classifier(threading.Thread):
     def knn(self, example: np.ndarray):
 
         # TODO not tested yet
-        if self.config.snn_variant in ['fast_simple', 'fast_ffnn']:
+        if self.config.architecture_variant in ['fast_simple', 'fast_ffnn']:
             example = self.snn.encode_example(example)
 
+
+        # TODO needs to be changed to returned 2d array
         # calculate the similarities to all examples of the case base using the nn
         sims = self.snn.get_sims(example)
 
