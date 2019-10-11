@@ -22,10 +22,6 @@ class Optimizer:
         self.config: Configuration = config
         self.last_output_time = None
 
-        # Todo not used in CBS Optimizer -> Create superclass for with the ones above and SNNOptimizer with these
-        self.adam_optimizer = tf.keras.optimizers.Adam(learning_rate=self.hyper.learning_rate)
-        self.train_loss_results = []
-
     def optimize(self):
         current_epoch = 0
 
@@ -47,6 +43,59 @@ class Optimizer:
 
         for epoch in range(current_epoch, self.hyper.epochs):
             self.single_epoch(epoch)
+
+    def single_epoch(self, epoch):
+        pass
+
+    def delete_old_checkpoints(self, current_epoch):
+        if current_epoch <= 0:
+            return
+
+        # For each directory in the folder check which epoch was safed
+        for dir_name in listdir(self.config.models_folder):
+            try:
+                epoch = int(dir_name.split('-')[-1])
+
+                # Delete the directory if the stored epoch is smaller than the ones should be kept
+                # in with respect to the configured amount of models that should be kept
+                if epoch <= current_epoch - self.config.model_files_stored * self.config.output_interval:
+                    # Maybe needs to be set to true
+                    shutil.rmtree(self.config.models_folder + dir_name, ignore_errors=False)
+
+            except ValueError:
+                pass
+
+    def update_single_model(self, model_input, true_similarities, model, optimizer):
+        with tf.GradientTape() as tape:
+            pred_similarities = model.get_sims_batch(model_input)
+
+            # Get parameters of subnet and ffnn (if complex sim measure)
+            if self.config.architecture_variant in ['standard_ffnn', 'fast_ffnn']:
+                trainable_params = model.ffnn.model.trainable_variables + model.subnet.model.trainable_variables
+            else:
+                trainable_params = model.subnet.model.trainable_variables
+
+            # Calculate the loss and the gradients
+            loss = tf.keras.losses.binary_crossentropy(y_true=true_similarities, y_pred=pred_similarities)
+            grads = tape.gradient(loss, trainable_params)
+
+            # Todo needs to be changed for individual hyper parameters for cbs
+            # Maybe change back to clipnorm = self.hyper.gradient_cap in adam initialisation
+            clipped_grads, _ = tf.clip_by_global_norm(grads, self.hyper.gradient_cap)
+
+            # Apply the gradients to the trainable parameters
+            optimizer.apply_gradients(zip(clipped_grads, trainable_params))
+
+            return loss
+
+
+class SNNOptimizer(Optimizer):
+
+    def __init__(self, architecture, dataset, hyperparameters, config):
+
+        super().__init__(architecture, dataset, hyperparameters, config)
+        self.adam_optimizer = tf.keras.optimizers.Adam(learning_rate=self.hyper.learning_rate)
+        self.train_loss_results = []
 
     def single_epoch(self, epoch):
         epoch_loss_avg = tf.keras.metrics.Mean()
@@ -91,47 +140,6 @@ class Optimizer:
             self.save_models(epoch)
             self.last_output_time = perf_counter()
 
-    def update_single_model(self, model_input, true_similarities, model, optimizer):
-        with tf.GradientTape() as tape:
-            pred_similarities = model.get_sims_batch(model_input)
-
-            # Get parameters of subnet and ffnn (if complex sim measure)
-            if self.config.architecture_variant in ['standard_ffnn', 'fast_ffnn']:
-                trainable_params = model.ffnn.model.trainable_variables + model.subnet.model.trainable_variables
-            else:
-                trainable_params = model.subnet.model.trainable_variables
-
-            # Calculate the loss and the gradients
-            loss = tf.keras.losses.binary_crossentropy(y_true=true_similarities, y_pred=pred_similarities)
-            grads = tape.gradient(loss, trainable_params)
-
-            # Todo needs to be changed for individual hyper parameters for cbs
-            # Maybe change back to clipnorm = self.hyper.gradient_cap in adam initialisation
-            clipped_grads, _ = tf.clip_by_global_norm(grads, self.hyper.gradient_cap)
-
-            # Apply the gradients to the trainable parameters
-            optimizer.apply_gradients(zip(clipped_grads, trainable_params))
-
-            return loss
-
-    def delete_old_checkpoints(self, current_epoch):
-        if current_epoch <= 0:
-            return
-
-        # For each directory in the folder check which epoch was safed
-        for dir_name in listdir(self.config.models_folder):
-            try:
-                epoch = int(dir_name.split('-')[-1])
-
-                # Delete the directory if the stored epoch is smaller than the ones should be kept
-                # in with respect to the configured amount of models that should be kept
-                if epoch <= current_epoch - self.config.model_files_stored * self.config.output_interval:
-                    # Maybe needs to be set to true
-                    shutil.rmtree(self.config.models_folder + dir_name, ignore_errors=False)
-
-            except ValueError:
-                pass
-
     def save_models(self, current_epoch):
         if current_epoch <= 0:
             return
@@ -151,7 +159,8 @@ class Optimizer:
             self.architecture.ffnn.model.save(dir_name + ffnn_file_name)
 
 
-# TODO Maybe change in a way that not each epoch switches between cases
+# Maybe change in a way that not each epoch switches between cases
+# But performance wise this shouldn't be an issue
 class CBSOptimizer(Optimizer):
 
     def __init__(self, architecture, dataset, hyperparameters, config):

@@ -1,21 +1,20 @@
+TODOs as of 11.10
 
-Implementation
-* Implement the other case handler classes, which use FFNNs and or encoding at startup (fast...)
-    * After the simplest version was successfully tested
-    * Implement encoding for CaseSpecificDataset
-    * Use multiple inheritance to avoid code duplicates if necessary and possible
+* Remove .astype('float32') wherever possible
 * Fix SNNs
     * Check if inference is working correctly
-    * Remove if test from draw pair
+    * Remove if test from draw pair, because this is never used
+* Encoding for fast version of cbs
+    * Way of encoding must be changed in comparison to the one for snns
+      because it can't be safed in single file if the same feature is used for multiple cases
+    * Add method to dataset for encoding it after it was loaded, one parameter is the encoder that should be used
+    * Adapt this version for the snn
+* Implement the other case handler classes, which use FFNNs and or encoding at startup (fast...)
 * Fix real time classification
-    * First ensure new implementation of the SNNs is working
-    * Then test CBS
-    * Should also use self.classes_case_base to get the label of max_sim
-    * Preprocessing must be changed in the same way like the SNNs
-
-Merge with master
-* After merge: Rename snn.subnet to encoder
-* Remove .astype('float32') wherever possible
+    * Preprocessing must be changed in the same way like the data generation was
+    * Adaptation to new type of return values
+* Work through the other inline todos including small fixes
+* General optimisation and testing with new datasets
 
 Future features:
 * Include multi-gpu-usage for cbs
