@@ -22,6 +22,9 @@ class Hyperparameters:
 
         self.lstm_layers = [192, 96, 48]
 
+        self.tcn_layers = [256, 128, 64]
+        self.tcn_kernel_length = [5, 5, 3]
+
     def load_from_file(self, file_path, use_file):
 
         if not use_file:
@@ -43,3 +46,6 @@ class Hyperparameters:
         self.cnn_strides = data['cnn_strides']
 
         self.lstm_layers = data['lstm_layers']
+
+        self.tcn_layers = data['tcn_layers']
+        self.tcn_kernel_length = data['tcn_kernel_length']

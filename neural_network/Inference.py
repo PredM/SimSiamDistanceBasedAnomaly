@@ -39,9 +39,14 @@ class Inference:
         self.results.loc['combined', 'total'] = self.dataset.num_test_instances
 
         self.snn = initialise_snn(config, hyperparameters, self.dataset, False)
-
         # Load the models from the file configured
-        self.snn.load_model(config)
+        if self.config.subnet_variant == 'tcn':
+            self.snn.subnet.create_model()
+            self.snn.load_model(config)
+            #self.snn.subnet.model.network.build(input_shape=(10, 250, 58))
+            #self.snn.subnet.model.network.load_weights("../data/trained_models/temp_models_10-10_11-06-27_epoch-300/subnet_tcn_epoch-300.h5")
+        else:
+            self.snn.load_model(config)
 
     def infer_test_dataset(self):
         correct, num_infers = 0, 0

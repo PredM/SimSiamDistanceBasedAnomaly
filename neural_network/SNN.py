@@ -6,7 +6,7 @@ import numpy as np
 from configuration.Configuration import Configuration
 from configuration.Hyperparameter import Hyperparameters
 from neural_network.Dataset import Dataset
-from neural_network.Subnets import CNN, RNN, FFNN
+from neural_network.Subnets import CNN, RNN, FFNN, TCN
 
 
 # Initialises the correct SNN variant depending on the configuration
@@ -61,8 +61,12 @@ class SimpleSNN:
             self.subnet = RNN(hyperparameters, input_shape_subnet)
             self.subnet.create_model()
 
+        elif subnet_variant == 'tcn':
+            self.subnet = TCN(hyperparameters, input_shape_subnet)
+            self.subnet.create_model()
+
         else:
-            print('Unknown subnet variant, use "cnn" or "rnn"')
+            print('Unknown subnet variant, use "cnn" or "rnn" or "tcn"')
             print(subnet_variant)
             sys.exit(1)
 
@@ -97,7 +101,6 @@ class SimpleSNN:
     # Get the similarities of the example to each example in the dataset
     def get_sims(self, example):
         batch_size = len(self.dataset.x_train)
-
         input_pairs = np.zeros((2 * batch_size, self.hyper.time_series_length,
                                 self.hyper.time_series_depth)).astype('float32')
 
@@ -105,7 +108,31 @@ class SimpleSNN:
             input_pairs[2 * index] = example
             input_pairs[2 * index + 1] = self.dataset.x_train[index]
 
-        sims = self.get_sims_batch(input_pairs)
+        # Splitting the batch size for inference in the case of using a TCN with warping FFNN due to GPU memory issues
+        if type(self.subnet) == TCN:
+            splitfactor = 25 #splitting the calculation of similiarties in parts
+            for partOfBatch in range(splitfactor):
+                numOfInputPairs = batch_size*2
+                if partOfBatch ==0:
+                    startPos = 0
+                    lastPos = int(numOfInputPairs / splitfactor)
+                    #print("Input shape: ", input_pairs[startPos:lastPos,:,:].shape)
+                    partOfSims = self.get_sims_batch(input_pairs[startPos:lastPos,:,:])
+                    simBetweenQueryAndCases = partOfSims
+                else:
+                    startPos = lastPos #int((numOfInputPairs / splitfactor)*partOfBatch)
+                    lastPos = int((numOfInputPairs / splitfactor) * (partOfBatch + 1))
+                    #print("Input shape: ", input_pairs[startPos:lastPos, :, :].shape)
+                    partOfSims = self.get_sims_batch(input_pairs[startPos:lastPos, :, :])
+                    simBetweenQueryAndCases = np.concatenate((simBetweenQueryAndCases, partOfSims))
+                #print("partOfBatch: ", partOfBatch, "startPos: ",startPos, " lastPos: ", lastPos)
+                #print("partOfSims: ", partOfSims.shape)
+                #print("simBetweenQueryAndCases: ", simBetweenQueryAndCases.shape)
+
+            sims = simBetweenQueryAndCases
+            #sims = self.get_sims_batch(input_pairs[0:1000,:,:])
+        else:
+            sims = self.get_sims_batch(input_pairs[0:1000,:,:])
 
         return sims
 
@@ -114,10 +141,8 @@ class SimpleSNN:
 
         # Calculate the output of the subnet for the examples in the batch
         context_vectors = self.subnet.model(batch, training=self.training)
-
         distances_batch = tf.map_fn(lambda pair_index: self.get_distance_pair(context_vectors, pair_index),
                                     tf.range(batch.shape[0] // 2, dtype=tf.int32), back_prop=True, dtype=tf.float32)
-
         # Transform distances into a similarity measure
         sims_batch = tf.exp(-distances_batch)
 
@@ -154,13 +179,16 @@ class SNN(SimpleSNN):
         super().__init__(subnet_variant, hyperparameters, dataset, training)
 
         # In addition to the simple snn version the ffnn needs to be initialised
-        subnet_output_shape = self.subnet.model.output_shape
+        if subnet_variant == 'tcn':
+            subnet_output_shape = self.subnet.model.outputshape
+        else:
+            subnet_output_shape = self.subnet.model.output_shape
         input_shape_ffnn = (subnet_output_shape[1] ** 2, subnet_output_shape[2] * 2)
 
         self.ffnn = FFNN(self.hyper, input_shape_ffnn)
         self.ffnn.create_model()
 
-        print('The full model has', self.ffnn.get_parameter_count() + self.subnet.get_parameter_count(), 'parameters\n')
+        #print('The full model has', self.ffnn.get_parameter_count() + self.subnet.get_parameter_count(), 'parameters\n')
 
     @tf.function
     def get_distance_pair(self, context_vectors, pair_index):
@@ -200,6 +228,8 @@ class SNN(SimpleSNN):
 
     def print_detailed_model_info(self):
         print('')
+        if type(self.subnet) == TCN:
+            self.subnet.model.build(input_shape=(10, self.dataset.time_series_length, self.dataset.time_series_depth))
         self.subnet.model.summary()
         print('')
         self.ffnn.model.summary()

@@ -8,6 +8,7 @@ from configuration.Configuration import Configuration
 from configuration.Hyperparameter import Hyperparameters
 from neural_network.Dataset import Dataset
 from neural_network.SNN import SNN
+from neural_network.Subnets import TCN
 
 import tensorflow as tf
 import numpy as np
@@ -64,7 +65,6 @@ class Optimizer:
 
             # Change the list of ground truth similarities to an array
             true_similarities = np.asarray(batch_true_similarities)
-
             # Get the example pairs by the selected indices
             model_input = np.take(a=self.dataset.x_train, indices=batch_pairs_indices, axis=0)
 
@@ -133,7 +133,15 @@ class Optimizer:
 
         # Generate the file names and save the model files in the directory created before
         subnet_file_name = '_'.join(['subnet', self.config.subnet_variant, epoch_string]) + '.h5'
-        self.snn.subnet.model.save(dir_name + subnet_file_name)
+        if type(self.snn.subnet) == TCN:
+            #tf.keras.experimental.export_saved_model(self.snn.subnet.model.network,dir_name + subnet_file_name, serving_only=True,save_format="tf")
+            #tf.keras.models.save_model(model = self.snn.subnet.model.network,filepath = dir_name + subnet_file_name, save_format="tf")
+            self.snn.subnet.model.network.save_weights(dir_name + subnet_file_name)
+            #self.snn.subnet.model.network.save(dir_name + subnet_file_name)
+            #json_config = self.snn.subnet.model.network
+            #open(dir_name + "modelConfig.json", 'w').write(json_config)
+        else:
+            self.snn.subnet.model.save(dir_name + subnet_file_name)
 
         if self.config.snn_variant in ['standard_ffnn', 'fast_ffnn']:
             ffnn_file_name = '_'.join(['ffnn', epoch_string]) + '.h5'
