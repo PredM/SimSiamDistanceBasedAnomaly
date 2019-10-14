@@ -19,11 +19,11 @@ class Configuration:
         # ffnn = uses ffnn as distance measure
         # simple = mean absolute difference as distance measure instead of the ffnn
         self.architecture_variants = ['standard_simple', 'standard_ffnn', 'fast_simple', 'fast_ffnn']
-        self.architecture_variant = self.architecture_variants[0]
+        self.architecture_variant = self.architecture_variants[1]
 
         # TODO Needs to be changed to folder if every encoder should use different hyperparameters
         # hyperparameter file to use
-        self.hyper_file = '../configuration/hyperparameter_combinations/' + 'ba_lstm.json'
+        self.hyper_file = '../configuration/hyperparameter_combinations/' + 'ba_cnn.json'
         self.use_hyper_file = True
 
         # select whether training should be continued from the checkpoint defined below
@@ -31,7 +31,7 @@ class Configuration:
         self.continue_training = False
 
         # defines how often loss is printed and checkpoints are safed during training
-        self.output_interval = 300
+        self.output_interval = 100
 
         # how many model checkpoints are kept
         self.model_files_stored = 100

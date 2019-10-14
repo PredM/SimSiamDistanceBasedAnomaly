@@ -12,7 +12,7 @@ from configuration.Configuration import Configuration
 from configuration.Hyperparameter import Hyperparameters
 from neural_network.Dataset import Dataset
 from neural_network.SNN import SNN
-from neural_network.Subnets import TCN
+from neural_network.BasicNeuralNetworks import TCN
 
 import tensorflow as tf
 import numpy as np
@@ -77,9 +77,9 @@ class Optimizer:
 
             # Get parameters of subnet and ffnn (if complex sim measure)
             if self.config.architecture_variant in ['standard_ffnn', 'fast_ffnn']:
-                trainable_params = model.ffnn.model.trainable_variables + model.subnet.model.trainable_variables
+                trainable_params = model.ffnn.model.trainable_variables + model.encoder.model.trainable_variables
             else:
-                trainable_params = model.subnet.model.trainable_variables
+                trainable_params = model.encoder.model.trainable_variables
 
             # Calculate the loss and the gradients
             loss = tf.keras.losses.binary_crossentropy(y_true=true_similarities, y_pred=pred_similarities)
@@ -162,7 +162,15 @@ class SNNOptimizer(Optimizer):
 
         # generate the file names and save the model files in the directory created before
         subnet_file_name = '_'.join(['encoder', self.config.encoder_variant, epoch_string]) + '.h5'
-        self.architecture.subnet.model.save(dir_name + subnet_file_name)
+        if type(self.architecture.encoder) == TCN:
+            # tf.keras.experimental.export_saved_model(self.snn.subnet.model.network,dir_name + subnet_file_name, serving_only=True,save_format="tf")
+            # tf.keras.models.save_model(model = self.snn.subnet.model.network,filepath = dir_name + subnet_file_name, save_format="tf")
+            self.architecture.encoder.model.network.save_weights(dir_name + subnet_file_name)
+            # self.snn.subnet.model.network.save(dir_name + subnet_file_name)
+            # json_config = self.snn.subnet.model.network
+            # open(dir_name + "modelConfig.json", 'w').write(json_config)
+        else:
+            self.architecture.encoder.model.save(dir_name + subnet_file_name)
 
         if self.config.architecture_variant in ['standard_ffnn', 'fast_ffnn']:
             ffnn_file_name = '_'.join(['ffnn', epoch_string]) + '.h5'
@@ -256,15 +264,7 @@ class CBSOptimizer(Optimizer):
 
             # generate the file names and save the model files in the directory created before
             subnet_file_name = '_'.join(['encoder', self.config.encoder_variant, epoch_string]) + '.h5'
-            if type(self.snn.subnet) == TCN:
-                # tf.keras.experimental.export_saved_model(self.snn.subnet.model.network,dir_name + subnet_file_name, serving_only=True,save_format="tf")
-                # tf.keras.models.save_model(model = self.snn.subnet.model.network,filepath = dir_name + subnet_file_name, save_format="tf")
-                case_handler.subnet.model.network.save_weights(dir_name + subnet_file_name)
-                # self.snn.subnet.model.network.save(dir_name + subnet_file_name)
-                # json_config = self.snn.subnet.model.network
-                # open(dir_name + "modelConfig.json", 'w').write(json_config)
-            else:
-                case_handler.subnet.model.save(os.path.join(full_path, subnet_file_name))
+            case_handler.subnet.model.save(os.path.join(full_path, subnet_file_name))
 
             if self.config.architecture_variant in ['standard_ffnn', 'fast_ffnn']:
                 ffnn_file_name = '_'.join(['ffnn', epoch_string]) + '.h5'

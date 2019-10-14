@@ -10,5 +10,8 @@
     "cnn_kernel_length" : [5, 5, 3],
     "cnn_strides" : [2, 1, 1],
 
-    "lstm_layers" : [256, 128, 64]
+    "lstm_layers" : [256, 128, 64],
+
+    "tcn_layers" : [1024, 256, 64],
+    "tcn_kernel_length" : [5, 5, 3]
 }

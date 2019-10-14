@@ -73,9 +73,9 @@ class SimpleSNN(AbstractSimilarityMeasure):
             self.encoder = RNN(hyperparameters, input_shape_encoder)
             self.encoder.create_model()
 
-        elif subnet_variant == 'tcn':
-            self.subnet = TCN(hyperparameters, input_shape_subnet)
-            self.subnet.create_model()
+        elif encoder_variant == 'tcn':
+            self.encoder = TCN(hyperparameters, input_shape_encoder)
+            self.encoder.create_model()
 
         else:
             print('Unknown encoder variant, use "cnn" or "rnn" or "tcn"')
@@ -121,7 +121,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
             input_pairs[2 * index + 1] = self.dataset.x_train[index]
 
         # Splitting the batch size for inference in the case of using a TCN with warping FFNN due to GPU memory issues
-        if type(self.subnet) == TCN:
+        if type(self.encoder) == TCN:
             splitfactor = 25 #splitting the calculation of similiarties in parts
             for partOfBatch in range(splitfactor):
                 numOfInputPairs = batch_size*2
@@ -144,9 +144,10 @@ class SimpleSNN(AbstractSimilarityMeasure):
             sims = simBetweenQueryAndCases
             #sims = self.get_sims_batch(input_pairs[0:1000,:,:])
         else:
-            sims = self.get_sims_batch(input_pairs[0:1000,:,:])
-
-        return sims
+            sims = self.get_sims_batch(input_pairs)
+        #Fix: labels_dummy
+        labels_dummy = np.empty(len(self.dataset.x_train), dtype='object_')
+        return sims, labels_dummy
 
     @tf.function
     def get_sims_batch(self, batch):
@@ -183,6 +184,8 @@ class SimpleSNN(AbstractSimilarityMeasure):
 
     def print_detailed_model_info(self):
         print('')
+        if type(self.encoder) == TCN:
+            self.encoder.model.build(input_shape=(10, self.dataset.time_series_length, self.dataset.time_series_depth))
         self.encoder.model.summary()
         print('')
 
@@ -194,10 +197,9 @@ class SNN(SimpleSNN):
 
         # In addition to the simple snn version the ffnn needs to be initialised
         if encoder_variant == 'tcn':
-            encoder_output_shape = self.encoder.model.output_shape
+            encoder_output_shape = self.encoder.model.outputshape
         else:
             encoder_output_shape = self.encoder.model.output_shape
-        input_shape_ffnn = (subnet_output_shape[1] ** 2, subnet_output_shape[2] * 2)
         # in addition to the simple snn version the ffnn needs to be initialised
 
         input_shape_ffnn = (encoder_output_shape[1] ** 2, encoder_output_shape[2] * 2)
