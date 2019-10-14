@@ -1,6 +1,9 @@
+import sys
+import os
 import json
-
 import pandas as pd
+
+sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 
 from configuration.Configuration import Configuration
 from data_processing.DataImport import import_single_pressure_sensor

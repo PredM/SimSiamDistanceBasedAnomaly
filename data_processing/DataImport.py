@@ -1,10 +1,12 @@
-import json
 import sys
-
+import os
+import json
 import gc
 import matplotlib.pyplot as plt
 import pandas as pd
 from pandas.plotting import register_matplotlib_converters
+
+sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 
 from configuration.Configuration import Configuration
 
@@ -62,11 +64,11 @@ def import_all_txts(config: Configuration):
     print('Importing TXT controller data')
 
     # import the single txt sensors
-    df15: pd.DataFrame = import_txt(config.topic15File, 'txt15')
-    df16: pd.DataFrame = import_txt(config.topic16File, 'txt16')
-    df17: pd.DataFrame = import_txt(config.topic17File, 'txt17')
-    df18: pd.DataFrame = import_txt(config.topic18File, 'txt18')
-    df19: pd.DataFrame = import_txt(config.topic19File, 'txt19')
+    df15: pd.DataFrame = import_txt(config.txt15, 'txt15')
+    df16: pd.DataFrame = import_txt(config.txt16, 'txt16')
+    df17: pd.DataFrame = import_txt(config.txt17, 'txt17')
+    df18: pd.DataFrame = import_txt(config.txt18, 'txt18')
+    df19: pd.DataFrame = import_txt(config.txt19, 'txt19')
 
     # plot the data if enabled
     plot_export_txt(df15, 'txt_15', config)
@@ -239,7 +241,7 @@ def import_bmx_sensors(config: Configuration):
     # combine into a single dataframe
     df_hrs_acc['timestamp'] = pd.to_datetime(df_hrs_acc['timestamp'])
     df_hrs = df_hrs_acc.set_index('timestamp').join(df_hrs_gyr.set_index('timestamp'), how='outer')
-    #df_hrs_gyr['timestamp'] = pd.to_datetime(df_hrs_gyr['timestamp'])
+    # df_hrs_gyr['timestamp'] = pd.to_datetime(df_hrs_gyr['timestamp'])
     df_hrs = df_hrs.set_index('timestamp').join(df_hrs_mag.set_index('timestamp'), how='outer')
     df_hrs.query(config.query, inplace=True)
 
@@ -281,12 +283,8 @@ def check_dupblicates(df):
     print('Current index dublicates:', df.shape)
 
 
-def main():
+def import_dataset(dataset_to_import=0):
     register_matplotlib_converters()
-
-    # select the dataset that should be imported
-    # importing all data records together is not possible due to the computational effort.
-    dataset_to_import = 0
 
     config = Configuration(dataset_to_import=dataset_to_import)
 
@@ -320,7 +318,12 @@ def main():
 
     print('\nDelete unnecessary streams')
     print('Number of streams before:', df_combined.shape)
-    df_combined = df_combined.drop(config.unnecessary_cols, 1, errors='ignore')
+    # df_combined = df_combined.drop(config.unused_attributes, 1, errors='ignore')
+    try:
+        df_combined = df_combined[config.all_features_used]
+    except:
+        raise AttributeError('Relevant feature not found in current dataset.')
+
     print('Number of streams after:', df_combined.shape)
 
     print('\nSort streams by name to ensure same order like live data')
@@ -351,6 +354,21 @@ def main():
         plt.show()
 
     print('\nImporting of datset', dataset_to_import, 'finished')
+
+
+def main():
+    config = Configuration()
+    nbr_datasets = len(config.datasets)
+
+    for i in range(0, nbr_datasets):
+        print('-------------------------------')
+        print('Importing dataset', i)
+        print('-------------------------------')
+
+        import_dataset(i)
+
+        print('-------------------------------')
+        print()
 
 
 if __name__ == '__main__':

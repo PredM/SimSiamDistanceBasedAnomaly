@@ -10,29 +10,39 @@ class Configuration:
         # neural network
         ###
 
-        self.subnet_variants = ['cnn', 'rnn','tcn']
-        self.subnet_variant = self.subnet_variants[2]
+        self.encoder_variants = ['cnn', 'rnn', 'tcn']
+        self.encoder_variant = self.encoder_variants[0]
 
+        # architecture independent of whether snn or cbs is used
         # standard = classic snn behaviour, context vectors calculated each time, also multiple times for the example
         # fast = encoding of case base only once, example also only once
         # ffnn = uses ffnn as distance measure
         # simple = mean absolute difference as distance measure instead of the ffnn
-        self.snn_variants = ['standard_simple', 'standard_ffnn', 'fast_simple', 'fast_ffnn']
-        self.snn_variant = self.snn_variants[1]
+        self.architecture_variants = ['standard_simple', 'standard_ffnn', 'fast_simple', 'fast_ffnn']
+        self.architecture_variant = self.architecture_variants[0]
 
-        # Hyperparameter file to use
-        self.hyper_file = '../configuration/hyperparameter_combinations/' + 'tcn.json'
+        # TODO Needs to be changed to folder if every encoder should use different hyperparameters
+        # hyperparameter file to use
+        self.hyper_file = '../configuration/hyperparameter_combinations/' + 'ba_lstm.json'
         self.use_hyper_file = True
 
-        # Select whether training should be continued from the checkpoint defined below
-        # Use carefully, does not check for equal hyper parameters etc.
+        # select whether training should be continued from the checkpoint defined below
+        # use carefully, does not check for equal hyper parameters etc.
         self.continue_training = False
 
-        # Defines how often loss is printed and checkpoints are safed during training
-        self.output_interval = 100
+        # defines how often loss is printed and checkpoints are safed during training
+        self.output_interval = 300
 
-        # How many model checkpoints are kept
+        # how many model checkpoints are kept
         self.model_files_stored = 100
+
+        # defines for which failure cases a case handler in the case based similarity measure is created,
+        # subset of all can be used for debugging purposes
+        # if cases_used == [] or == None all in config.json will be used
+        all_cases = ['no_failure', 'txt_18_comp_leak', 'txt_17_comp_leak', 'txt15_m1_t1_high_wear',
+                     'txt15_m1_t1_low_wear', 'txt15_m1_t2_wear', 'txt16_m3_t1_high_wear', 'txt16_m3_t1_low_wear',
+                     'txt16_m3_t2_wear', 'txt16_i4']
+        self.cases_used = all_cases[0:2]
 
         ###
         # kafka / real time classification
@@ -42,13 +52,15 @@ class Configuration:
         self.ip = 'localhost'  # '192.168.1.10'
         self.port = '9092'
 
-        self.error_dict = None  # Read from config.json
+        self.error_descriptions = None  # Read from config.json
 
         # set to true if using the fabric simulation
         # will read from the beginning of the topics, so the fabric simulation only has to be run once
         self.testing_using_fabric_sim = True
 
+        ##
         # settings for exporting the classification results back to kafka
+        ##
 
         # enables the functionality
         self.export_results_to_kafka = True
@@ -64,7 +76,7 @@ class Configuration:
         self.random_seed_index_selection = 42
 
         # the number of examples per class the training data set should be reduced to for the live classification
-        self.examples_per_class = 40
+        self.examples_per_class = 20
 
         # the k of the knn classifier used for live classification
         self.k_of_knn = 3
@@ -77,8 +89,7 @@ class Configuration:
         self.models_folder = '../data/trained_models/'
 
         # path and file name to the specific model that should be used for testing and live classification
-        #self.filename_model_to_use = 'ba_rnn-67400_92_percent'
-        self.filename_model_to_use = 'temp_models_10-13_08-41-05_epoch-399900'
+        self.filename_model_to_use = 'ba_cnn_378200_96_percent'
         self.directory_model_to_use = self.models_folder + self.filename_model_to_use + '/'
 
         # folder where the preprocessed training and test data for the neural network should be stored
@@ -118,13 +129,6 @@ class Configuration:
         # determines on which topic's messages the time interval for creating an example is based
         # only txt topics possible
         self.limiting_topic = 'txt15'
-
-        # mapping for topic name to prefix of sensor streams, relevant to get the same order of streams
-        self.prefixes = {'txt15': 'txt15', 'txt16': 'txt16', 'txt17': 'txt17', 'txt18': 'txt18', 'txt19': 'txt19',
-                         # 'bmx055-HRS-acc': 'hrs_acc', 'bmx055-HRS-gyr': 'hrs_gyr', 'bmx055-HRS-mag': 'hrs_mag',
-                         # 'bmx055-VSG-acc': 'vsg_acc', 'bmx055-VSG-gyr': 'vsg_gyr', 'bmx055-VSG-mag': 'vsg_mag',
-                         'adxl1': 'a_15_1', 'adxl0': 'a_15_c', 'adxl3': 'a_16_3', 'adxl2': 'a_18_1',
-                         'Sorter': '15', 'Oven': '17', 'VSG': '18'}
 
         self.pressure_sensor_names = ['Oven', 'VSG']  # 'Sorter' not used
 
@@ -167,12 +171,18 @@ class Configuration:
         self.test_split_size = 0.1
 
         # specifies the maximum number of cores to be used in parallel during data processing.
-        self.max_parallel_cores = 7
+        self.max_parallel_cores = 40
 
-        # All read from config.json
+        # all None Variables are read from the config.json file
         self.cases_datasets = None
         self.datasets = None
-        self.unnecessary_cols, self.zeroOne, self.intNumbers, self.realValues, self.bools = None, None, None, None, None
+        self.subdirectories_by_case = None
+
+        # mapping for topic name to prefix of sensor streams, relevant to get the same order of streams
+        self.prefixes = None
+
+        self.relevant_features, self.all_features_used = None, None
+        self.zeroOne, self.intNumbers, self.realValues, self.bools = None, None, None, None
 
         self.load_config_json('../configuration/config.json')
 
@@ -186,11 +196,11 @@ class Configuration:
         self.query = "timestamp <= \'" + self.endTimestamp + "\' & timestamp >= \'" + self.startTimestamp + "\' "
 
         # define file names for all topics
-        self.topic15File = self.pathPrefix + 'raw_data/txt15.txt'
-        self.topic16File = self.pathPrefix + 'raw_data/txt16.txt'
-        self.topic17File = self.pathPrefix + 'raw_data/txt17.txt'
-        self.topic18File = self.pathPrefix + 'raw_data/txt18.txt'
-        self.topic19File = self.pathPrefix + 'raw_data/txt19.txt'
+        self.txt15 = self.pathPrefix + 'raw_data/txt15.txt'
+        self.txt16 = self.pathPrefix + 'raw_data/txt16.txt'
+        self.txt17 = self.pathPrefix + 'raw_data/txt17.txt'
+        self.txt18 = self.pathPrefix + 'raw_data/txt18.txt'
+        self.txt19 = self.pathPrefix + 'raw_data/txt19.txt'
 
         self.topicPressureSensorsFile = self.pathPrefix + 'raw_data/pressureSensors.txt'
 
@@ -212,25 +222,50 @@ class Configuration:
             data = json.load(f)
 
         self.datasets = data['datasets']
-        self.error_dict = data['error_dict']
-        self.unnecessary_cols = data['unnecessary_cols']
+        self.prefixes = data['prefixes']
+        self.error_descriptions = data['error_descriptions']
+        self.subdirectories_by_case = data['subdirectories_by_case']
+
+        features_all_cases = data['relevant_features']
+
+        if self.cases_used is None or self.cases_used == 0:
+            self.relevant_features = features_all_cases
+        else:
+            self.relevant_features = {case: features_all_cases[case] for case in self.cases_used if
+                                      case in features_all_cases}
+
+        # sort feature names to ensure that the order matches the one in the list of indices of the features in
+        # the case base class
+        for key in self.relevant_features:
+            self.relevant_features[key] = sorted(self.relevant_features[key])
+
         self.zeroOne = data['zeroOne']
         self.intNumbers = data['intNumbers']
         self.realValues = data['realValues']
         self.bools = data['bools']
 
+        def flatten(l):
+            return [item for sublist in l for item in sublist]
+
+        # will be used to determine which attributes will be in the generated dataset
+        # when using the dataset for a snn, the full dataset will be used
+        # so these attributes must still be configured in the config.json file in "relevant_features"
+        # it is irrelevant however under which error case these are entered there.
+        self.all_features_used = sorted(list(set(flatten(self.relevant_features.values()))))
+
+    # return the error case description for the passed label
     def get_error_description(self, error_label: str):
-        # return the error case description for the passed label
-        return self.error_dict[error_label]
+        return self.error_descriptions[error_label]
 
     def get_connection(self):
         return self.ip + ':' + self.port
 
+    # import the timestamps of each dataset and class from the cases.csv file
     def import_timestamps(self):
         datasets = []
         number_to_array = {}
 
-        with open('../configuration/ cases.csv', 'r') as file:
+        with open('../configuration/cases.csv', 'r') as file:
             for line in file.readlines():
                 parts = line.split(',')
                 parts = [part.strip(' ') for part in parts]

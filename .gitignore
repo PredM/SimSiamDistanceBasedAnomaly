@@ -136,5 +136,8 @@ data/trained_models/temp_*
 data/training_data_encoded/*
 !data/training_data_encoded/.gitkeep
 
+data/case_base/*
+!data/case_base/.gitkeep
+
 logs/*
 !logs/.gitkeep

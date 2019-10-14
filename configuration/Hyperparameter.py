@@ -4,9 +4,9 @@ import json
 class Hyperparameters:
 
     def __init__(self):
-        # Changed when dataset was loaded
-        self.time_series_length = 250
-        self.time_series_depth = 58
+        # Need to be changed after dataset was loaded
+        self.time_series_length = 999
+        self.time_series_depth = 999
 
         self.batch_size = 23
         self.epochs = 100000
@@ -25,8 +25,12 @@ class Hyperparameters:
         self.tcn_layers = [256, 128, 64]
         self.tcn_kernel_length = [5, 5, 3]
 
-    def load_from_file(self, file_path, use_file):
+    def set_time_series_properties(self, time_series_length, time_series_depth):
+        self.time_series_length = time_series_length
+        self.time_series_depth = time_series_depth
 
+    # allows the import of a hyper parameter configuration from a json file
+    def load_from_file(self, file_path, use_file):
         if not use_file:
             return
 

@@ -1,6 +1,9 @@
+import sys
+import os
 import numpy as np
-
 from numpy.random.mtrand import RandomState
+
+sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 
 from configuration.Configuration import Configuration
 
@@ -25,8 +28,9 @@ def test(casebase_labels, casebase_features, index_in_original, x_train, y_train
 def main():
     config = Configuration()
 
-    y_train = np.load(config.training_data_folder + "train_labels.npy")  # labels of the training data
-    x_train = np.load(config.training_data_folder + "train_features.npy")  # labels of the training data
+    y_train = np.load(config.training_data_folder + 'train_labels.npy')  # labels of the training data
+    x_train = np.load(config.training_data_folder + 'train_features.npy')  # labels of the training data
+    feature_names = np.load(config.training_data_folder + 'feature_names.npy')
 
     # get unique classes
     classes = np.unique(y_train)
@@ -62,18 +66,21 @@ def main():
         casebase_features_list.extend(x_train[new_indcies[i]])
 
     # transform list of values back into an array and safe to file
-    casebase_labels = np.stack(casebase_labels_list, axis=0).astype('float32')
-    casebase_features = np.stack(casebase_features_list, axis=0).astype('float32')
+    casebase_labels = np.stack(casebase_labels_list, axis=0)
+    casebase_features = np.stack(casebase_features_list, axis=0)
 
     print('Number of exaples in training data set:', casebase_features.shape[0])
 
-    np.save(config.case_base_folder + 'train_features.npy', casebase_features)
+    np.save(config.case_base_folder + 'train_features.npy', casebase_features.astype('float32'))
     np.save(config.case_base_folder + 'train_labels.npy', casebase_labels)
 
     # in order for the dataset object to be created, there must also be files for test data in the folder,
     # even if these are not used for live processing.
-    np.save(config.case_base_folder + 'test_features.npy', casebase_features)
+    np.save(config.case_base_folder + 'test_features.npy', casebase_features.astype('float32'))
     np.save(config.case_base_folder + 'test_labels.npy', casebase_labels)
+
+    # also copy the file that stores the names of the features
+    np.save(config.case_base_folder + 'feature_names.npy', feature_names)
 
 
 # this script is used to reduce the training data to a specific amount of examples per class

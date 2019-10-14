@@ -1,6 +1,10 @@
+import sys
+import os
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+
+sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 
 from configuration.Configuration import Configuration
 from data_processing.DataImport import import_txt
@@ -206,9 +210,9 @@ def extract_cases(info, plot):
 
     file = None
     if sensor == 'txt15':
-        file = config.topic15File
+        file = config.txt15
     elif sensor == 'txt16':
-        file = config.topic16File
+        file = config.txt16
 
     # import using the method for importing datasets
     df: pd.DataFrame = import_txt(file, sensor)
