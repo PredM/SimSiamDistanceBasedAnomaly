@@ -16,6 +16,9 @@ class NN:
     def create_model(self):
         raise AssertionError('No model creation for abstract NN class possible')
 
+    def print_model_info(self):
+        self.model.summary()
+
     def get_parameter_count(self):
         total_parameters = 0
 
@@ -31,13 +34,13 @@ class NN:
         return total_parameters
 
     def load_model(self, path_model_folder: str, subdirectory=''):
-        if type(self) == TCN:
-            if self.model == None:
-                print("Failure, TCN is not initialized to load weights")
-        else:
-            self.model = None
+        # # todo still necessary
+        # if type(self) == TCN:
+        #     if self.model == None:
+        #         print("Failure, TCN is not initialized to load weights")
+        # else:
+        self.model = None
 
-        # TODO add temporal cnn if not done already
         if type(self) == CNN or type(self) == RNN or type(self) == TCN:
             prefix = 'encoder'
         elif type(self) == FFNN:
@@ -53,11 +56,13 @@ class NN:
             # compile must be set to false because the standard optimizer was not used and this would otherwise
             # generate an error
             if file_name.startswith(prefix):
-                if type(self) == TCN:
-                    self.model.network.load_weights(path.join(directory, file_name))
-
-                else:
-                    self.model = tf.keras.models.load_model(path.join(directory, file_name), compile=False)
+                # # todo still necassary
+                # if type(self) == TCN:
+                #     self.model.network.load_weights(path.join(directory, file_name))
+                #
+                # else:
+                #
+                self.model = tf.keras.models.load_model(path.join(directory, file_name), compile=False)
 
             if self.model is not None:
                 break
@@ -205,12 +210,27 @@ class CNN(NN):
 
 class TemporalBlock(tf.keras.Model):
 
+    def compute_output_signature(self, input_signature):
+        pass
+
+    # TODO Make this look nice
+    def print_layer_info(self):
+        print("dilation_rate: ", self.dilation_rate, "|nb_filters: ", self.nb_filters, "|kernel_size: ",
+              self.kernel_size,
+              "|padding: ", self.padding, "|dropout_rate: ", self.dropout_rate)
+
     def __init__(self, dilation_rate, nb_filters, kernel_size, padding, dropout_rate=0.0, input_shape=None):
         super(TemporalBlock, self).__init__()
-        init = tf.keras.initializers.RandomNormal(mean=0.0, stddev=0.01)
         assert padding in ['causal', 'same']
-        print("dilation_rate: ", dilation_rate, "|nb_filters: ", nb_filters, "|kernel_size: ", kernel_size,
-              "|padding: ", padding, "|dropout_rate: ", dropout_rate)
+
+        self.dilation_rate = dilation_rate
+        self.nb_filters = nb_filters
+        self.kernel_size = kernel_size
+        self.padding = padding
+        self.dropout_rate = dropout_rate
+
+        init = tf.keras.initializers.RandomNormal(mean=0.0, stddev=0.01)
+
         # block1
         if input_shape is not None:
             self.conv1 = tf.keras.layers.Conv1D(filters=nb_filters, kernel_size=kernel_size,
@@ -236,7 +256,7 @@ class TemporalBlock(tf.keras.Model):
                                                  kernel_initializer=init)
         self.ac3 = tf.keras.layers.Activation('relu')
 
-    def call(self, x, training):
+    def call(self, x, training=False):
         # print("x: ",x.shape," training:", training)
         prev_x = x
         x = self.conv1(x)
@@ -265,57 +285,38 @@ class TemporalBlock(tf.keras.Model):
         return self.ac3(prev_x + x)  # skip connection
 
 
-class TemporalConvNet(tf.keras.Model):
-
-    def __init__(self, num_channels, kernel_size, dropout, input_shape=None):
-        # num_channels is a list that contains hidden sizes of Conv1D
-        super(TemporalConvNet, self).__init__()
-        assert isinstance(num_channels, list)
-
-        # model
-        model = tf.keras.Sequential()
-        # print("self.input_shape: ", input_shape)
-        # The model contains "num_levels" TemporalBlock
-        num_levels = len(num_channels)
-        for i in range(num_levels):
-            dilation_rate = 2 ** i  # exponential growth
-            if i == 0:
-                model.add(TemporalBlock(dilation_rate, num_channels[i], kernel_size[i], padding='causal',
-                                        dropout_rate=dropout, input_shape=input_shape))
-            else:
-                model.add(TemporalBlock(dilation_rate, num_channels[i], kernel_size[i], padding='causal',
-                                        dropout_rate=dropout))
-        self.network = model
-        self.network.build(input_shape=(10, input_shape[0], input_shape[1]))  # None verursacht AssertionError
-        # self.network.save_weights("../data/trained_models/test.h5")
-        print("Model summary: ", self.network.summary())
-        # self.network.load_weights("../data/trained_models/test.h5")
-        # self.network.load_weights("../data/trained_models/temp_models_10-10_11-06-27_epoch-300/subnet_tcn_epoch-300.h5")
-        # self.network.load_weights("../data/trained_models/temp_models_10-09_18-15-55_epoch-0/subnet_tcn_epoch-0.h5")
-        self.outputshape = (None, input_shape[0], num_channels[num_levels - 1])
-
-    def call(self, x, training):
-        return self.network(x, training=training)
-
-
 class TCN(NN):
+
     def __init__(self, hyperparameters, input_shape):
-        # num_channels is a list contains hidden sizes of Conv1D
         super().__init__(hyperparameters, input_shape)
-        # assert isinstance(num_channels, list)
+        self.output_shape = None
+        self.layers = []
 
     def create_model(self):
         print('Creating TCN subnet')
-        num_channels = self.hyper.tcn_layers  # [8, 16] #[100]*5 [1024, 256, 64]
-        # print("num_channels (layer size / number of kernels): ", num_channels)
+        num_channels = self.hyper.tcn_layers
+        num_levels = len(num_channels)
         kernel_size = self.hyper.tcn_kernel_length
         dropout = self.hyper.dropout_rate
-        print("self.input_shape: ", self.input_shape)
-        self.model = TemporalConvNet(num_channels, kernel_size, dropout, input_shape=self.input_shape)
-        # print("Model summary: ",self.model.summary())
-        # self.model.network.build(input_shape=(5, 58, 8))
 
-    def call(self, x, training=True):
-        y = self.temporalCN(x, training=training)
-        # y = self.linear(y[:, -1, :])    # use the last element to output the result
-        return y
+        model = tf.keras.Sequential(name='TCN')
+
+        for i in range(num_levels):
+            dilation_rate = 2 ** i  # exponential growth
+            if i == 0:
+                tb = TemporalBlock(dilation_rate, num_channels[i], kernel_size[i], padding='causal',
+                                   dropout_rate=dropout, input_shape=self.input_shape)
+            else:
+                tb = TemporalBlock(dilation_rate, num_channels[i], kernel_size[i], padding='causal',
+                                   dropout_rate=dropout)
+            self.layers.append(tb)
+            model.add(tb)
+
+        self.model = model
+        self.output_shape = (None, self.input_shape[0], num_channels[num_levels - 1])
+
+    def print_model_info(self):
+
+        for i in range(len(self.layers)):
+            print('Layer', i, self.layers[i].name)
+            self.layers[i].print_layer_info()

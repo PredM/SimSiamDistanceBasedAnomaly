@@ -156,15 +156,12 @@ class SNNOptimizer(Optimizer):
         # generate the file names and save the model files in the directory created before
         subnet_file_name = '_'.join(['encoder', self.config.encoder_variant, epoch_string]) + '.h5'
 
-        if type(self.architecture.encoder) == TCN:
-            # tf.keras.experimental.export_saved_model(self.snn.subnet.model.network,dir_name + subnet_file_name, serving_only=True,save_format="tf")
-            # tf.keras.models.save_model(model = self.snn.subnet.model.network,filepath = dir_name + subnet_file_name, save_format="tf")
-            self.architecture.encoder.model.network.save_weights(dir_name + subnet_file_name)
-            # self.snn.subnet.model.network.save(dir_name + subnet_file_name)
-            # json_config = self.snn.subnet.model.network
-            # open(dir_name + "modelConfig.json", 'w').write(json_config)
-        else:
-            self.architecture.encoder.model.save(dir_name + subnet_file_name)
+        # tf.keras.experimental.export_saved_model(self.snn.subnet.model.network,dir_name + subnet_file_name, serving_only=True,save_format="tf")
+        # tf.keras.models.save_model(model = self.snn.subnet.model.network,filepath = dir_name + subnet_file_name, save_format="tf")
+        self.architecture.encoder.model.save_weights(dir_name + subnet_file_name)
+        # self.snn.subnet.model.network.save(dir_name + subnet_file_name)
+        # json_config = self.snn.subnet.model.network
+        # open(dir_name + "modelConfig.json", 'w').write(json_config)
 
         if self.config.architecture_variant in ['standard_ffnn', 'fast_ffnn']:
             ffnn_file_name = '_'.join(['ffnn', epoch_string]) + '.h5'

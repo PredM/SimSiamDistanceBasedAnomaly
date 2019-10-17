@@ -83,7 +83,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
             sys.exit(1)
 
     # get the similarities of the example to each example in the dataset
-    def get_sims_old(self, example):
+    def get_sims_in_batches(self, example):
         num_train = len(self.dataset.x_train)
         sims_all_examples = np.zeros(num_train)
         batch_size = self.hyper.batch_size
@@ -112,41 +112,22 @@ class SimpleSNN(AbstractSimilarityMeasure):
 
     # get the similarities of the example to each example in the dataset
     def get_sims(self, example):
-        batch_size = len(self.dataset.x_train)
-        input_pairs = np.zeros((2 * batch_size, self.hyper.time_series_length,
-                                self.hyper.time_series_depth)).astype('float32')
-
-        for index in range(batch_size):
-            input_pairs[2 * index] = example
-            input_pairs[2 * index + 1] = self.dataset.x_train[index]
 
         # Splitting the batch size for inference in the case of using a TCN with warping FFNN due to GPU memory issues
         if type(self.encoder) == TCN:
-            splitfactor = 25  # splitting the calculation of similiarties in parts
-            for partOfBatch in range(splitfactor):
-                numOfInputPairs = batch_size * 2
-                if partOfBatch == 0:
-                    startPos = 0
-                    lastPos = int(numOfInputPairs / splitfactor)
-                    # print("Input shape: ", input_pairs[startPos:lastPos,:,:].shape)
-                    partOfSims = self.get_sims_batch(input_pairs[startPos:lastPos, :, :])
-                    simBetweenQueryAndCases = partOfSims
-                else:
-                    startPos = lastPos  # int((numOfInputPairs / splitfactor)*partOfBatch)
-                    lastPos = int((numOfInputPairs / splitfactor) * (partOfBatch + 1))
-                    # print("Input shape: ", input_pairs[startPos:lastPos, :, :].shape)
-                    partOfSims = self.get_sims_batch(input_pairs[startPos:lastPos, :, :])
-                    simBetweenQueryAndCases = np.concatenate((simBetweenQueryAndCases, partOfSims))
-                # print("partOfBatch: ", partOfBatch, "startPos: ",startPos, " lastPos: ", lastPos)
-                # print("partOfSims: ", partOfSims.shape)
-                # print("simBetweenQueryAndCases: ", simBetweenQueryAndCases.shape)
-
-            sims = simBetweenQueryAndCases
-            # sims = self.get_sims_batch(input_pairs[0:1000,:,:])
+            return self.get_sims_in_batches(example)
         else:
+            batch_size = len(self.dataset.x_train)
+            input_pairs = np.zeros((2 * batch_size, self.hyper.time_series_length,
+                                    self.hyper.time_series_depth)).astype('float32')
+
+            for index in range(batch_size):
+                input_pairs[2 * index] = example
+                input_pairs[2 * index + 1] = self.dataset.x_train[index]
+
             sims = self.get_sims_batch(input_pairs)
 
-        return sims, self.dataset.y_train_strings
+            return sims, self.dataset.y_train_strings
 
     @tf.function
     def get_sims_batch(self, batch):
@@ -183,9 +164,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
 
     def print_detailed_model_info(self):
         print('')
-        if type(self.encoder) == TCN:
-            self.encoder.model.build(input_shape=(10, self.dataset.time_series_length, self.dataset.time_series_depth))
-        self.encoder.model.summary()
+        self.encoder.print_model_info()
         print('')
 
 
@@ -195,10 +174,7 @@ class SNN(SimpleSNN):
         super().__init__(encoder_variant, hyperparameters, dataset, training)
 
         # In addition to the simple snn version the ffnn needs to be initialised
-        if encoder_variant == 'tcn':
-            encoder_output_shape = self.encoder.model.outputshape
-        else:
-            encoder_output_shape = self.encoder.model.output_shape
+        encoder_output_shape = self.encoder.model.output_shape
         # in addition to the simple snn version the ffnn needs to be initialised
 
         input_shape_ffnn = (encoder_output_shape[1] ** 2, encoder_output_shape[2] * 2)
@@ -206,7 +182,6 @@ class SNN(SimpleSNN):
         self.ffnn = FFNN(self.hyper, input_shape_ffnn)
         self.ffnn.create_model()
 
-        # print('The full model has', self.ffnn.get_parameter_count() + self.subnet.get_parameter_count(), 'parameters\n')
         print('The full model has', self.ffnn.get_parameter_count() + self.encoder.get_parameter_count(),
               'parameters\n')
 
@@ -248,11 +223,9 @@ class SNN(SimpleSNN):
 
     def print_detailed_model_info(self):
         print('')
-        if type(self.encoder) == TCN:
-            self.encoder.model.build(input_shape=(10, self.dataset.time_series_length, self.dataset.time_series_depth))
-        self.encoder.model.summary()
+        self.encoder.print_model_info()
         print('')
-        self.ffnn.model.summary()
+        self.ffnn.print_model_info()
         print('')
 
 
@@ -267,7 +240,7 @@ class FastSimpleSNN(SimpleSNN):
         return np.squeeze(context_vector, axis=0)  # Back to a single example
 
     # example must already be encoded
-    def get_sims_old(self, encoded_example):
+    def get_sims_in_batches(self, encoded_example):
         num_train = len(self.dataset.x_train)
         sims_all_examples = np.zeros(num_train)
         batch_size = self.hyper.batch_size
@@ -366,5 +339,5 @@ class FastSNN(FastSimpleSNN):
 
     def print_detailed_model_info(self):
         print('')
-        self.ffnn.model.summary()
+        self.ffnn.print_model_info()
         print('')
