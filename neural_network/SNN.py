@@ -122,32 +122,31 @@ class SimpleSNN(AbstractSimilarityMeasure):
 
         # Splitting the batch size for inference in the case of using a TCN with warping FFNN due to GPU memory issues
         if type(self.encoder) == TCN:
-            splitfactor = 25 #splitting the calculation of similiarties in parts
+            splitfactor = 25  # splitting the calculation of similiarties in parts
             for partOfBatch in range(splitfactor):
-                numOfInputPairs = batch_size*2
-                if partOfBatch ==0:
+                numOfInputPairs = batch_size * 2
+                if partOfBatch == 0:
                     startPos = 0
                     lastPos = int(numOfInputPairs / splitfactor)
-                    #print("Input shape: ", input_pairs[startPos:lastPos,:,:].shape)
-                    partOfSims = self.get_sims_batch(input_pairs[startPos:lastPos,:,:])
+                    # print("Input shape: ", input_pairs[startPos:lastPos,:,:].shape)
+                    partOfSims = self.get_sims_batch(input_pairs[startPos:lastPos, :, :])
                     simBetweenQueryAndCases = partOfSims
                 else:
-                    startPos = lastPos #int((numOfInputPairs / splitfactor)*partOfBatch)
+                    startPos = lastPos  # int((numOfInputPairs / splitfactor)*partOfBatch)
                     lastPos = int((numOfInputPairs / splitfactor) * (partOfBatch + 1))
-                    #print("Input shape: ", input_pairs[startPos:lastPos, :, :].shape)
+                    # print("Input shape: ", input_pairs[startPos:lastPos, :, :].shape)
                     partOfSims = self.get_sims_batch(input_pairs[startPos:lastPos, :, :])
                     simBetweenQueryAndCases = np.concatenate((simBetweenQueryAndCases, partOfSims))
-                #print("partOfBatch: ", partOfBatch, "startPos: ",startPos, " lastPos: ", lastPos)
-                #print("partOfSims: ", partOfSims.shape)
-                #print("simBetweenQueryAndCases: ", simBetweenQueryAndCases.shape)
+                # print("partOfBatch: ", partOfBatch, "startPos: ",startPos, " lastPos: ", lastPos)
+                # print("partOfSims: ", partOfSims.shape)
+                # print("simBetweenQueryAndCases: ", simBetweenQueryAndCases.shape)
 
             sims = simBetweenQueryAndCases
-            #sims = self.get_sims_batch(input_pairs[0:1000,:,:])
+            # sims = self.get_sims_batch(input_pairs[0:1000,:,:])
         else:
             sims = self.get_sims_batch(input_pairs)
-        #Fix: labels_dummy
-        labels_dummy = np.empty(len(self.dataset.x_train), dtype='object_')
-        return sims, labels_dummy
+
+        return sims, self.dataset.y_train_strings
 
     @tf.function
     def get_sims_batch(self, batch):
@@ -207,8 +206,9 @@ class SNN(SimpleSNN):
         self.ffnn = FFNN(self.hyper, input_shape_ffnn)
         self.ffnn.create_model()
 
-        #print('The full model has', self.ffnn.get_parameter_count() + self.subnet.get_parameter_count(), 'parameters\n')
-        print('The full model has', self.ffnn.get_parameter_count() + self.encoder.get_parameter_count(), 'parameters\n')
+        # print('The full model has', self.ffnn.get_parameter_count() + self.subnet.get_parameter_count(), 'parameters\n')
+        print('The full model has', self.ffnn.get_parameter_count() + self.encoder.get_parameter_count(),
+              'parameters\n')
 
     @tf.function
     def get_distance_pair(self, context_vectors, pair_index):
@@ -286,11 +286,11 @@ class FastSimpleSNN(SimpleSNN):
             sims_all_examples[index:index + batch_size] = sims_batch
 
         # return the result of the knn classifier using the calculated similarities
-        return sims_all_examples
+        return sims_all_examples, self.dataset.y_train_strings
 
     # example must already be encoded
     def get_sims(self, encoded_example):
-        return self.get_sims_section(self.dataset.x_train, encoded_example)
+        return self.get_sims_section(self.dataset.x_train, encoded_example), self.dataset.y_train_strings
 
     def get_sims_batch(self, batch):
         raise NotImplemented('This method is not supported by this SNN variant by design.')

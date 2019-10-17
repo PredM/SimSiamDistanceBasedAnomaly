@@ -3,7 +3,6 @@ from os import listdir, path
 
 import tensorflow as tf
 
-
 from configuration.Hyperparameter import Hyperparameters
 
 
@@ -205,106 +204,118 @@ class CNN(NN):
 
 
 class TemporalBlock(tf.keras.Model):
+
     def __init__(self, dilation_rate, nb_filters, kernel_size, padding, dropout_rate=0.0, input_shape=None):
         super(TemporalBlock, self).__init__()
         init = tf.keras.initializers.RandomNormal(mean=0.0, stddev=0.01)
         assert padding in ['causal', 'same']
-        print("dilation_rate: ",dilation_rate,"|nb_filters: ",nb_filters,"|kernel_size: ",kernel_size,"|padding: ",padding,"|dropout_rate: ",dropout_rate)
+        print("dilation_rate: ", dilation_rate, "|nb_filters: ", nb_filters, "|kernel_size: ", kernel_size,
+              "|padding: ", padding, "|dropout_rate: ", dropout_rate)
         # block1
         if input_shape is not None:
-            self.conv1 = tf.keras.layers.Conv1D(filters=nb_filters, kernel_size=kernel_size, dilation_rate=dilation_rate, padding=padding, kernel_initializer=init, input_shape=input_shape)
+            self.conv1 = tf.keras.layers.Conv1D(filters=nb_filters, kernel_size=kernel_size,
+                                                dilation_rate=dilation_rate, padding=padding, kernel_initializer=init,
+                                                input_shape=input_shape)
         else:
-            self.conv1 = tf.keras.layers.Conv1D(filters=nb_filters, kernel_size=kernel_size,dilation_rate=dilation_rate, padding=padding, kernel_initializer=init)
+            self.conv1 = tf.keras.layers.Conv1D(filters=nb_filters, kernel_size=kernel_size,
+                                                dilation_rate=dilation_rate, padding=padding, kernel_initializer=init)
 
         self.batch1 = tf.keras.layers.BatchNormalization(axis=-1)
         self.ac1 = tf.keras.layers.Activation('relu')
         self.drop1 = tf.keras.layers.Dropout(rate=dropout_rate)
 
         # block2
-        self.conv2 = tf.keras.layers.Conv1D(filters=nb_filters, kernel_size=kernel_size,dilation_rate=dilation_rate, padding=padding, kernel_initializer=init)
+        self.conv2 = tf.keras.layers.Conv1D(filters=nb_filters, kernel_size=kernel_size, dilation_rate=dilation_rate,
+                                            padding=padding, kernel_initializer=init)
         self.batch2 = tf.keras.layers.BatchNormalization(axis=-1)
         self.ac2 = tf.keras.layers.Activation('relu')
         self.drop2 = tf.keras.layers.Dropout(rate=dropout_rate)
 
         #
-        self.downsample = tf.keras.layers.Conv1D(filters=nb_filters, kernel_size=1,padding='same', kernel_initializer=init)
+        self.downsample = tf.keras.layers.Conv1D(filters=nb_filters, kernel_size=1, padding='same',
+                                                 kernel_initializer=init)
         self.ac3 = tf.keras.layers.Activation('relu')
 
     def call(self, x, training):
-        #print("x: ",x.shape," training:", training)
+        # print("x: ",x.shape," training:", training)
         prev_x = x
         x = self.conv1(x)
-        #print("self.conv1.get_config(): ", self.conv1.get_config())
-        #print("conv1 x: ", x.shape)
+        # print("self.conv1.get_config(): ", self.conv1.get_config())
+        # print("conv1 x: ", x.shape)
         x = self.batch1(x)
-        #print("batch1 x: ", x.shape)
+        # print("batch1 x: ", x.shape)
         x = self.ac1(x)
-        #print("ac1 x: ", x.shape)
+        # print("ac1 x: ", x.shape)
         x = self.drop1(x) if training else x
-        #print("drop1 x: ", x.shape)
+        # print("drop1 x: ", x.shape)
         x = self.conv2(x)
-        #print("conv2 x: ", x.shape)
+        # print("conv2 x: ", x.shape)
         x = self.batch2(x)
-        #print("batch2 x: ", x.shape)
+        # print("batch2 x: ", x.shape)
         x = self.ac2(x)
-        #print("ac2 x: ", x.shape)
+        # print("ac2 x: ", x.shape)
         x = self.drop2(x) if training else x
-        #print("drop2 x: ",x.shape)
+        # print("drop2 x: ",x.shape)
 
-        #print("prev_x.shape[-1]: ", prev_x.shape[-1], "x.shape[-1]: ", x.shape[-1])
+        # print("prev_x.shape[-1]: ", prev_x.shape[-1], "x.shape[-1]: ", x.shape[-1])
         if prev_x.shape[-1] != x.shape[-1]:  # match the dimention
             prev_x = self.downsample(prev_x)
-        #print("prev_x.shape: ", prev_x.shape, "x.shape: ", x.shape)
+        # print("prev_x.shape: ", prev_x.shape, "x.shape: ", x.shape)
         assert prev_x.shape == x.shape
         return self.ac3(prev_x + x)  # skip connection
 
+
 class TemporalConvNet(tf.keras.Model):
+
     def __init__(self, num_channels, kernel_size, dropout, input_shape=None):
-    	# num_channels is a list that contains hidden sizes of Conv1D
+        # num_channels is a list that contains hidden sizes of Conv1D
         super(TemporalConvNet, self).__init__()
         assert isinstance(num_channels, list)
 
         # model
         model = tf.keras.Sequential()
-        #print("self.input_shape: ", input_shape)
+        # print("self.input_shape: ", input_shape)
         # The model contains "num_levels" TemporalBlock
         num_levels = len(num_channels)
         for i in range(num_levels):
-            dilation_rate = 2 ** i                  # exponential growth
+            dilation_rate = 2 ** i  # exponential growth
             if i == 0:
-                model.add(TemporalBlock(dilation_rate, num_channels[i], kernel_size[i], padding='causal', dropout_rate=dropout,input_shape=input_shape))
+                model.add(TemporalBlock(dilation_rate, num_channels[i], kernel_size[i], padding='causal',
+                                        dropout_rate=dropout, input_shape=input_shape))
             else:
-                model.add(TemporalBlock(dilation_rate, num_channels[i], kernel_size[i], padding='causal', dropout_rate=dropout))
+                model.add(TemporalBlock(dilation_rate, num_channels[i], kernel_size[i], padding='causal',
+                                        dropout_rate=dropout))
         self.network = model
-        self.network.build(input_shape=(10,input_shape[0],input_shape[1])) # None verursacht AssertionError
-        #self.network.save_weights("../data/trained_models/test.h5")
+        self.network.build(input_shape=(10, input_shape[0], input_shape[1]))  # None verursacht AssertionError
+        # self.network.save_weights("../data/trained_models/test.h5")
         print("Model summary: ", self.network.summary())
-        #self.network.load_weights("../data/trained_models/test.h5")
-        #self.network.load_weights("../data/trained_models/temp_models_10-10_11-06-27_epoch-300/subnet_tcn_epoch-300.h5")
-        #self.network.load_weights("../data/trained_models/temp_models_10-09_18-15-55_epoch-0/subnet_tcn_epoch-0.h5")
-        self.outputshape = (None, input_shape[0], num_channels[num_levels-1])
+        # self.network.load_weights("../data/trained_models/test.h5")
+        # self.network.load_weights("../data/trained_models/temp_models_10-10_11-06-27_epoch-300/subnet_tcn_epoch-300.h5")
+        # self.network.load_weights("../data/trained_models/temp_models_10-09_18-15-55_epoch-0/subnet_tcn_epoch-0.h5")
+        self.outputshape = (None, input_shape[0], num_channels[num_levels - 1])
+
     def call(self, x, training):
         return self.network(x, training=training)
 
+
 class TCN(NN):
     def __init__(self, hyperparameters, input_shape):
-    	# num_channels is a list contains hidden sizes of Conv1D
+        # num_channels is a list contains hidden sizes of Conv1D
         super().__init__(hyperparameters, input_shape)
-        #assert isinstance(num_channels, list)
+        # assert isinstance(num_channels, list)
 
     def create_model(self):
         print('Creating TCN subnet')
-        num_channels = self.hyper.tcn_layers #[8, 16] #[100]*5 [1024, 256, 64]
-        #print("num_channels (layer size / number of kernels): ", num_channels)
+        num_channels = self.hyper.tcn_layers  # [8, 16] #[100]*5 [1024, 256, 64]
+        # print("num_channels (layer size / number of kernels): ", num_channels)
         kernel_size = self.hyper.tcn_kernel_length
         dropout = self.hyper.dropout_rate
         print("self.input_shape: ", self.input_shape)
         self.model = TemporalConvNet(num_channels, kernel_size, dropout, input_shape=self.input_shape)
-        #print("Model summary: ",self.model.summary())
-        #self.model.network.build(input_shape=(5, 58, 8))
+        # print("Model summary: ",self.model.summary())
+        # self.model.network.build(input_shape=(5, 58, 8))
 
     def call(self, x, training=True):
         y = self.temporalCN(x, training=training)
-        #y = self.linear(y[:, -1, :])    # use the last element to output the result
+        # y = self.linear(y[:, -1, :])    # use the last element to output the result
         return y
-
