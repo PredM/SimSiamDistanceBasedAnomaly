@@ -12,7 +12,7 @@ from neural_network.SNN import initialise_snn
 
 def main():
     # suppress debugging messages of TensorFlow
-    # os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+    #os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
     config = Configuration()
     hyper = Hyperparameters()

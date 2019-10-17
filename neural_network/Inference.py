@@ -65,13 +65,16 @@ class Inference:
                     max_sim = sims[i]
                     max_sim_index = i
 
-            #real = self.dataset.y_test_strings[idx_test]
-            #max_sim_class = labels[max_sim_index]
+            # real = self.dataset.y_test_strings[idx_test]
+            # max_sim_class = labels[max_sim_index]
 
             # Revert selected classes back to simple string labels
-            revert = self.dataset.one_hot_encoder.inverse_transform
-            real = revert([self.dataset.y_test[idx_test]])[0][0]
-            max_sim_class = revert([self.dataset.y_train[max_sim_index]])[0][0]
+            # revert = self.dataset.one_hot_encoder.inverse_transform
+            # real = revert([self.dataset.y_test[idx_test]])[0][0]
+            # max_sim_class = revert([self.dataset.y_train[max_sim_index]])[0][0]
+
+            real = self.dataset.y_test_strings[idx_test]
+            max_sim_class = labels[max_sim_index]
 
             # if correctly classified increase the true positive field of the correct class and the of all classes
             if real == max_sim_class:

@@ -1,5 +1,6 @@
 import os
 import shutil
+
 import tensorflow as tf
 import numpy as np
 
@@ -10,12 +11,8 @@ from time import perf_counter
 from case_based_similarity.CaseBasedSimilarity import CBS, SimpleCaseHandler
 from configuration.Configuration import Configuration
 from configuration.Hyperparameter import Hyperparameters
-from neural_network.Dataset import Dataset
-from neural_network.SNN import SNN
 from neural_network.BasicNeuralNetworks import TCN
 
-import tensorflow as tf
-import numpy as np
 from neural_network.Dataset import FullDataset
 
 
@@ -51,7 +48,7 @@ class Optimizer:
             self.single_epoch(epoch)
 
     def single_epoch(self, epoch):
-        pass
+        raise NotImplementedError('Not implemented for abstract class')
 
     def delete_old_checkpoints(self, current_epoch):
         if current_epoch <= 0:
@@ -122,10 +119,6 @@ class SNNOptimizer(Optimizer):
             batch_pairs_indices.append(neg_pair[1])
             batch_true_similarities.append(0.0)
 
-            # Change the list of ground truth similarities to an array
-            true_similarities = np.asarray(batch_true_similarities)
-            # Get the example pairs by the selected indices
-            model_input = np.take(a=self.dataset.x_train, indices=batch_pairs_indices, axis=0)
         # Change the list of ground truth similarities to an array
         true_similarities = np.asarray(batch_true_similarities)
 
@@ -162,6 +155,7 @@ class SNNOptimizer(Optimizer):
 
         # generate the file names and save the model files in the directory created before
         subnet_file_name = '_'.join(['encoder', self.config.encoder_variant, epoch_string]) + '.h5'
+
         if type(self.architecture.encoder) == TCN:
             # tf.keras.experimental.export_saved_model(self.snn.subnet.model.network,dir_name + subnet_file_name, serving_only=True,save_format="tf")
             # tf.keras.models.save_model(model = self.snn.subnet.model.network,filepath = dir_name + subnet_file_name, save_format="tf")
@@ -264,7 +258,7 @@ class CBSOptimizer(Optimizer):
 
             # generate the file names and save the model files in the directory created before
             subnet_file_name = '_'.join(['encoder', self.config.encoder_variant, epoch_string]) + '.h5'
-            case_handler.subnet.model.save(os.path.join(full_path, subnet_file_name))
+            case_handler.encoder.model.save(os.path.join(full_path, subnet_file_name))
 
             if self.config.architecture_variant in ['standard_ffnn', 'fast_ffnn']:
                 ffnn_file_name = '_'.join(['ffnn', epoch_string]) + '.h5'
