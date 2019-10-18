@@ -1,5 +1,3 @@
-import sys
-
 import tensorflow as tf
 import numpy as np
 
@@ -10,7 +8,7 @@ from neural_network.BasicNeuralNetworks import CNN, RNN, FFNN, TCN
 
 
 # initialises the correct SNN variant depending on the configuration
-def initialise_snn(config: Configuration, hyper, dataset, training):
+def initialise_snn(config: Configuration, dataset, training):
     if training and config.architecture_variant in ['fast_simple', 'fast_ffnn']:
         print('WARNING:')
         print('The fast version can only be used for inference.')
@@ -21,19 +19,19 @@ def initialise_snn(config: Configuration, hyper, dataset, training):
 
     if training and var.endswith('simple') or not training and var == 'standard_simple':
         print('Creating standard SNN with simple similarity measure')
-        return SimpleSNN(config.encoder_variant, hyper, dataset, training)
+        return SimpleSNN(config, dataset, training)
 
     elif training and var.endswith('ffnn') or not training and var == 'standard_ffnn':
         print('Creating standard SNN with FFNN similarity measure')
-        return SNN(config.encoder_variant, hyper, dataset, training)
+        return SNN(config, dataset, training)
 
     elif not training and var == 'fast_simple':
         print('Creating fast SNN with simple similarity measure')
-        return FastSimpleSNN(config.encoder_variant, hyper, dataset, training)
+        return FastSimpleSNN(config, dataset, training)
 
     elif not training and var == 'fast_ffnn':
         print('Creating fast SNN with FFNN similarity measure')
-        return FastSNN(config.encoder_variant, hyper, dataset, training)
+        return FastSNN(config, dataset, training)
 
     else:
         raise AttributeError('Unknown SNN variant specified:' + config.architecture_variant)
@@ -44,7 +42,7 @@ class AbstractSimilarityMeasure:
     def __init__(self, training):
         self.training = training
 
-    def load_model(self, config: Configuration):
+    def load_model(self, model_folder=None, training=None):
         raise NotImplementedError()
 
     def get_sims(self, example):
@@ -56,31 +54,20 @@ class AbstractSimilarityMeasure:
 
 class SimpleSNN(AbstractSimilarityMeasure):
 
-    def __init__(self, encoder_variant, hyperparameters, dataset, training):
+    def __init__(self, config, dataset, training):
         super().__init__(training)
         self.dataset: Dataset = dataset
-        self.hyper: Hyperparameters = hyperparameters
-        self.hyper.set_time_series_properties(dataset.time_series_length, dataset.time_series_depth)
+        self.config: Configuration = config
+        self.hyper = None
+        self.encoder = None
 
-        # shape of a single example, batch size is left flexible
-        input_shape_encoder = (self.hyper.time_series_length, self.hyper.time_series_depth)
+        # TODO find better solution
+        self.need_encoder = [SimpleSNN, SNN, FastSNN]
+        self.need_ffnn = [SNN, FastSNN]
 
-        if encoder_variant == 'cnn':
-            self.encoder = CNN(hyperparameters, input_shape_encoder)
-            self.encoder.create_model()
-
-        elif encoder_variant == 'rnn':
-            self.encoder = RNN(hyperparameters, input_shape_encoder)
-            self.encoder.create_model()
-
-        elif encoder_variant == 'tcn':
-            self.encoder = TCN(hyperparameters, input_shape_encoder)
-            self.encoder.create_model()
-
-        else:
-            print('Unknown encoder variant, use "cnn" or "rnn" or "tcn"')
-            print(encoder_variant)
-            sys.exit(1)
+        # Load model only if init was not called by subclass, would otherwise be executed multiple times
+        if type(self) is SimpleSNN:
+            self.load_model()
 
     # get the similarities of the example to each example in the dataset
     def get_sims_in_batches(self, example):
@@ -154,13 +141,57 @@ class SimpleSNN(AbstractSimilarityMeasure):
 
         return distance_example
 
-    def load_model(self, config: Configuration):
-        self.encoder.load_model(config.directory_model_to_use)
+    def load_model(self, model_folder=None, training=None):
+        # todo cant use == simple case handler because circle decencies
+        # check if working and change to subdirectory
+        # if self.training is False and type(self) == SimpleCaseHandler and model_folder is None:
+        #    raise AttributeError('Model folder must be specified if loading a case handler')
+        training = self.training if training is None else training
 
-        if self.encoder.model is None:
-            sys.exit(1)
+        model_folder = self.config.directory_model_to_use if model_folder is None else model_folder
+
+        self.hyper = Hyperparameters()
+
+        if training:
+            self.hyper.load_from_file(self.config.hyper_file, self.config.use_hyper_file)
         else:
-            self.print_detailed_model_info()
+            # maybe add filename to config
+            self.hyper.load_from_file(model_folder + 'hyperparameters_used.json', True)
+
+        self.hyper.set_time_series_properties(self.dataset.time_series_length, self.dataset.time_series_depth)
+
+        # TODO Remove FastSNN, when encoding changed for cbs
+        if type(self) in self.need_encoder:
+
+            input_shape_encoder = (self.hyper.time_series_length, self.hyper.time_series_depth)
+
+            if self.hyper.encoder_variant == 'cnn':
+                self.encoder = CNN(self.hyper, input_shape_encoder)
+            elif self.hyper.encoder_variant == 'rnn':
+                self.encoder = RNN(self.hyper, input_shape_encoder)
+            elif self.hyper.encoder_variant == 'tcn':
+                self.encoder = TCN(self.hyper, input_shape_encoder)
+            else:
+                raise AttributeError('Unknown encoder variant, use "cnn" or "rnn" or "tcn": ',
+                                     self.hyper.encoder_variant)
+
+            self.encoder.create_model()
+
+            if not training:
+                self.encoder.load_model_weights(model_folder)
+
+        if type(self) in self.need_ffnn:
+            print(type(self))
+            print(self.need_ffnn)
+
+            encoder_output_shape = self.encoder.model.output_shape
+            input_shape_ffnn = (encoder_output_shape[1] ** 2, encoder_output_shape[2] * 2)
+
+            self.ffnn = FFNN(self.hyper, input_shape_ffnn)
+            self.ffnn.create_model()
+
+            if not training:
+                self.ffnn.load_model_weights(model_folder)
 
     def print_detailed_model_info(self):
         print('')
@@ -170,20 +201,15 @@ class SimpleSNN(AbstractSimilarityMeasure):
 
 class SNN(SimpleSNN):
 
-    def __init__(self, encoder_variant, hyperparameters, dataset, training):
-        super().__init__(encoder_variant, hyperparameters, dataset, training)
+    def __init__(self, config, dataset, training):
+        super().__init__(config, dataset, training)
 
-        # In addition to the simple snn version the ffnn needs to be initialised
-        encoder_output_shape = self.encoder.model.output_shape
-        # in addition to the simple snn version the ffnn needs to be initialised
+        # in addition to the simple snn version this one uses a feed forward neural net as sim measure
+        self.ffnn = None
 
-        input_shape_ffnn = (encoder_output_shape[1] ** 2, encoder_output_shape[2] * 2)
-
-        self.ffnn = FFNN(self.hyper, input_shape_ffnn)
-        self.ffnn.create_model()
-
-        print('The full model has', self.ffnn.get_parameter_count() + self.encoder.get_parameter_count(),
-              'parameters\n')
+        # load model only if init was not called by subclass, would otherwise be executed multiple times
+        if type(self) is SNN:
+            self.load_model()
 
     @tf.function
     def get_distance_pair(self, context_vectors, pair_index):
@@ -212,15 +238,6 @@ class SNN(SimpleSNN):
 
         return tf.reduce_mean(warped_dists)
 
-    def load_model(self, config: Configuration):
-        self.encoder.load_model(config.directory_model_to_use)
-        self.ffnn.load_model(config.directory_model_to_use)
-
-        if self.encoder.model is None or self.ffnn.model is None:
-            sys.exit(1)
-        else:
-            self.print_detailed_model_info()
-
     def print_detailed_model_info(self):
         print('')
         self.encoder.print_model_info()
@@ -231,8 +248,8 @@ class SNN(SimpleSNN):
 
 class FastSimpleSNN(SimpleSNN):
 
-    def __init__(self, encoder_variant, hyperparameters, dataset, training):
-        super().__init__(encoder_variant, hyperparameters, dataset, training)
+    def __init__(self, config, dataset, training):
+        super().__init__(config, dataset, training)
 
     def encode_example(self, example):
         ex = np.expand_dims(example, axis=0)  # Model expects array of examples -> add outer dimension
@@ -287,26 +304,21 @@ class FastSimpleSNN(SimpleSNN):
 
         return distance_example
 
-    def load_model(self, config: Configuration):
-        # simple and fast version --> Neither subnet nor ffnn is needs to be loaded
-        pass
-
 
 class FastSNN(FastSimpleSNN):
 
-    def __init__(self, encoder_variant, hyperparameters, dataset, training):
-        super().__init__(encoder_variant, hyperparameters, dataset, training)
+    def __init__(self, config, dataset, training):
+        super().__init__(config, dataset, training)
 
-        # in addition to the simple snn version the ffnn needs to be initialised
-        subnet_output_shape = self.encoder.model.output_shape
-        input_shape_ffnn = (subnet_output_shape[1] ** 2, subnet_output_shape[2] * 2)
+        # in addition to the simple snn version this one uses a feed forward neural net as sim measure
+        self.ffnn = None
 
-        self.ffnn = FFNN(self.hyper, input_shape_ffnn)
-        self.ffnn.create_model()
+        # load model only if init was not called by subclass, would otherwise be executed multiple times
+        if type(self) is FastSNN:
+            self.load_model()
 
     @tf.function
     def get_distance_pair(self, a, b):
-
         indices_a = tf.range(a.shape[0])
         indices_a = tf.tile(indices_a, [a.shape[0]])
         a = tf.gather(a, indices_a)
@@ -328,14 +340,6 @@ class FastSNN(FastSimpleSNN):
         warped_dists = tf.multiply(smallest_abs_difference, ffnn)
 
         return tf.reduce_mean(warped_dists)
-
-    def load_model(self, config: Configuration):
-        self.ffnn.load_model(config.directory_model_to_use)
-
-        if self.ffnn.model is None:
-            sys.exit(1)
-        else:
-            self.print_detailed_model_info()
 
     def print_detailed_model_info(self):
         print('')

@@ -10,8 +10,9 @@ class Configuration:
         # neural network
         ###
 
-        self.encoder_variants = ['cnn', 'rnn', 'tcn']
-        self.encoder_variant = self.encoder_variants[2]
+        # now a hyper parameter
+        # self.encoder_variants = ['cnn', 'rnn', 'tcn']
+        # self.encoder_variant = self.encoder_variants[2]
 
         # architecture independent of whether snn or cbs is used
         # standard = classic snn behaviour, context vectors calculated each time, also multiple times for the example
@@ -27,7 +28,6 @@ class Configuration:
         self.use_hyper_file = True
 
         # select whether training should be continued from the checkpoint defined below
-        # use carefully, does not check for equal hyper parameters etc.
         self.continue_training = False
 
         # defines how often loss is printed and checkpoints are safed during training
@@ -89,7 +89,7 @@ class Configuration:
         self.models_folder = '../data/trained_models/'
 
         # path and file name to the specific model that should be used for testing and live classification
-        self.filename_model_to_use = 'temp_models_10-17_13-08-41_epoch-1400'
+        self.filename_model_to_use = 'temp_models_10-18_13-31-13_epoch-200'
         self.directory_model_to_use = self.models_folder + self.filename_model_to_use + '/'
 
         # folder where the preprocessed training and test data for the neural network should be stored

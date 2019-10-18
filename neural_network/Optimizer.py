@@ -18,34 +18,14 @@ from neural_network.Dataset import FullDataset
 
 class Optimizer:
 
-    def __init__(self, architecture, dataset, hyperparameters, config):
+    def __init__(self, architecture, dataset, config):
         self.architecture = architecture
         self.dataset: FullDataset = dataset
-        self.hyper: Hyperparameters = hyperparameters
         self.config: Configuration = config
         self.last_output_time = None
 
     def optimize(self):
-        current_epoch = 0
-
-        if self.config.continue_training:
-            self.architecture.load_model(self.config)
-
-            try:
-                # Get the epoch by the directory name
-                epoch_as_string = self.config.directory_model_to_use.rstrip('/').split('-')[-1]
-                current_epoch = int(epoch_as_string)
-                print('Continuing the training at epoch', current_epoch)
-
-            except ValueError:
-                current_epoch = 0
-                print('Continuing the training but the epoch could not be determined')
-                print('Using loaded model but starting at epoch 0')
-
-        self.last_output_time = perf_counter()
-
-        for epoch in range(current_epoch, self.hyper.epochs):
-            self.single_epoch(epoch)
+        raise NotImplementedError('Not implemented for abstract class')
 
     def single_epoch(self, epoch):
         raise NotImplementedError('Not implemented for abstract class')
@@ -84,7 +64,7 @@ class Optimizer:
 
             # Todo needs to be changed for individual hyper parameters for cbs
             # Maybe change back to clipnorm = self.hyper.gradient_cap in adam initialisation
-            clipped_grads, _ = tf.clip_by_global_norm(grads, self.hyper.gradient_cap)
+            clipped_grads, _ = tf.clip_by_global_norm(grads, model.hyper.gradient_cap)
 
             # Apply the gradients to the trainable parameters
             optimizer.apply_gradients(zip(clipped_grads, trainable_params))
@@ -94,11 +74,30 @@ class Optimizer:
 
 class SNNOptimizer(Optimizer):
 
-    def __init__(self, architecture, dataset, hyperparameters, config):
+    def __init__(self, architecture, dataset, config):
 
-        super().__init__(architecture, dataset, hyperparameters, config)
-        self.adam_optimizer = tf.keras.optimizers.Adam(learning_rate=self.hyper.learning_rate)
+        super().__init__(architecture, dataset, config)
+        self.adam_optimizer = tf.keras.optimizers.Adam(learning_rate=self.architecture.hyper.learning_rate)
         self.train_loss_results = []
+
+    def optimize(self):
+        current_epoch = 0
+
+        if self.config.continue_training:
+            self.architecture.load_model(training=False)
+            current_epoch = self.architecture.hyper.epochs_current
+
+            if current_epoch >= self.architecture.hyper.epochs:
+                print(
+                    'Training already finished. If training should be continued'
+                    ' increase the number of epochs in the hyperparameter file of the safed model')
+            else:
+                print('Continuing the training at epoch', current_epoch)
+
+        self.last_output_time = perf_counter()
+
+        for epoch in range(current_epoch, self.architecture.hyper.epochs):
+            self.single_epoch(epoch)
 
     def single_epoch(self, epoch):
         epoch_loss_avg = tf.keras.metrics.Mean()
@@ -108,7 +107,7 @@ class SNNOptimizer(Optimizer):
 
         # Compose batch
         # // 2 because each iteration one similar and one dissimilar pair is added
-        for i in range(self.hyper.batch_size // 2):
+        for i in range(self.architecture.hyper.batch_size // 2):
             pos_pair = self.dataset.draw_pair(True, from_test=False)
             batch_pairs_indices.append(pos_pair[0])
             batch_pairs_indices.append(pos_pair[1])
@@ -154,32 +153,48 @@ class SNNOptimizer(Optimizer):
         os.mkdir(dir_name)
 
         # generate the file names and save the model files in the directory created before
-        subnet_file_name = '_'.join(['encoder', self.config.encoder_variant, epoch_string]) + '.h5'
+        subnet_file_name = '_'.join(['encoder', self.architecture.hyper.encoder_variant, epoch_string]) + '.h5'
 
-        # tf.keras.experimental.export_saved_model(self.snn.subnet.model.network,dir_name + subnet_file_name, serving_only=True,save_format="tf")
-        # tf.keras.models.save_model(model = self.snn.subnet.model.network,filepath = dir_name + subnet_file_name, save_format="tf")
+        # write model configuration to file
+        self.architecture.hyper.epochs_current = current_epoch
+        self.architecture.hyper.write_to_file(dir_name + 'hyperparameters_used.json')
+
         self.architecture.encoder.model.save_weights(dir_name + subnet_file_name)
-        # self.snn.subnet.model.network.save(dir_name + subnet_file_name)
-        # json_config = self.snn.subnet.model.network
-        # open(dir_name + "modelConfig.json", 'w').write(json_config)
 
         if self.config.architecture_variant in ['standard_ffnn', 'fast_ffnn']:
             ffnn_file_name = '_'.join(['ffnn', epoch_string]) + '.h5'
-            self.architecture.ffnn.model.save(dir_name + ffnn_file_name)
+            self.architecture.ffnn.model.save_weights(dir_name + ffnn_file_name)
 
 
 # Maybe change in a way that not each epoch switches between cases
 # But performance wise this shouldn't be an issue
 class CBSOptimizer(Optimizer):
 
-    def __init__(self, architecture, dataset, hyperparameters, config):
-        super().__init__(architecture, dataset, hyperparameters, config)
+    def __init__(self, architecture, dataset, config):
+        super().__init__(architecture, dataset, config)
         self.architecture: CBS = architecture
         self.losses = dict()
+
+        # todo create same dict for epochs to be able to train each model to different epochs
         self.optimizer = dict()
         for case_handler in self.architecture.case_handlers:
             self.losses[case_handler.dataset.case] = []
-            self.optimizer[case_handler.dataset.case] = tf.keras.optimizers.Adam(learning_rate=self.hyper.learning_rate)
+            self.optimizer[case_handler.dataset.case] = tf.keras.optimizers.Adam(
+                learning_rate=case_handler.hyper.learning_rate)
+
+    def optimize(self):
+        current_epoch = 0
+
+        if self.config.continue_training:
+            raise NotImplementedError()
+
+        self.last_output_time = perf_counter()
+
+        # todo has to be changed when using individual hyper parameters per case handler
+        goal = self.architecture.case_handlers[0].hyper.epochs
+
+        for epoch in range(current_epoch, goal):
+            self.single_epoch(epoch)
 
     def single_epoch(self, epoch):
 
@@ -193,7 +208,7 @@ class CBSOptimizer(Optimizer):
 
             # compose batch
             # // 2 because each iteration one similar and one dissimilar pair is added
-            for i in range(self.hyper.batch_size // 2):
+            for i in range(case_handler.hyper.batch_size // 2):
                 pos_pair = self.dataset.draw_pair_cbs(True, case_handler.dataset.indices_cases)
                 batch_pairs_indices.append(pos_pair[0])
                 batch_pairs_indices.append(pos_pair[1])
@@ -253,10 +268,14 @@ class CBSOptimizer(Optimizer):
             full_path = os.path.join(dir_name, subdirectory)
             os.mkdir(full_path)
 
+            # write model configuration to file
+            case_handler.hyper.epochs_current = current_epoch
+            case_handler.hyper.write_to_file(full_path + '/' + 'hyperparameters_used.json')
+
             # generate the file names and save the model files in the directory created before
-            subnet_file_name = '_'.join(['encoder', self.config.encoder_variant, epoch_string]) + '.h5'
-            case_handler.encoder.model.save(os.path.join(full_path, subnet_file_name))
+            encoder_file_name = '_'.join(['encoder', case_handler.hyper.encoder_variant, epoch_string]) + '.h5'
+            case_handler.encoder.model.save_weights(os.path.join(full_path, encoder_file_name))
 
             if self.config.architecture_variant in ['standard_ffnn', 'fast_ffnn']:
                 ffnn_file_name = '_'.join(['ffnn', epoch_string]) + '.h5'
-                case_handler.ffnn.model.save(os.path.join(full_path, ffnn_file_name))
+                case_handler.ffnn.model.save_weights(os.path.join(full_path, ffnn_file_name))

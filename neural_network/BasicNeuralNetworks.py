@@ -33,13 +33,9 @@ class NN:
 
         return total_parameters
 
-    def load_model(self, path_model_folder: str, subdirectory=''):
-        # # todo still necessary
-        # if type(self) == TCN:
-        #     if self.model == None:
-        #         print("Failure, TCN is not initialized to load weights")
-        # else:
-        self.model = None
+    def load_model_weights(self, model_folder):
+        if self.model is None:
+            raise AttributeError('Model not initialised. Can not load weights.')
 
         if type(self) == CNN or type(self) == RNN or type(self) == TCN:
             prefix = 'encoder'
@@ -48,27 +44,16 @@ class NN:
         else:
             raise AttributeError('Can not import models of type', type(self))
 
-        # subdirectory is used for case based similarity measure, each one contains model files for one case handler
-        # todo ensure right /'s ...
-        directory = path_model_folder + subdirectory
+        for file_name in listdir(model_folder):
 
-        for file_name in listdir(directory):
-            # compile must be set to false because the standard optimizer was not used and this would otherwise
-            # generate an error
             if file_name.startswith(prefix):
-                # # todo still necassary
-                # if type(self) == TCN:
-                #     self.model.network.load_weights(path.join(directory, file_name))
-                #
-                # else:
-                #
-                self.model = tf.keras.models.load_model(path.join(directory, file_name), compile=False)
+                self.model.load_weights(path.join(model_folder, file_name))
 
             if self.model is not None:
                 break
 
         if self.model is None:
-            raise FileNotFoundError('Model file for this type could not be found in ', directory)
+            raise FileNotFoundError('Model file for this type could not be found in ', model_folder)
         else:
             print('Model has been loaded successfully')
 
@@ -83,7 +68,7 @@ class FFNN(NN):
         print('Creating FFNN')
         model = tf.keras.Sequential(name='FFNN')
 
-        layers = self.hyper.ffnn_layers
+        layers = self.hyper.ffnn_layers.copy()
 
         if len(layers) < 1:
             print('FFNN with less than one layer is not possible')
@@ -112,14 +97,14 @@ class RNN(NN):
     # RNN structure matching the description in the neural warp paper
     # currently not used
     def create_model_nw(self):
-        print('Creating LSTM subnet')
+        print('Creating LSTM encoder')
 
         model = tf.keras.Sequential(name='RNN')
 
         layers = self.hyper.lstm_layers
 
         if len(layers) < 1:
-            print('LSTM subnet with less than one layer is not possible')
+            print('LSTM encoder with less than one layer is not possible')
             sys.exit(1)
 
         # bidirectional LSTM network, type where timelines are only combined ones
@@ -141,14 +126,14 @@ class RNN(NN):
         self.model = model
 
     def create_model(self):
-        print('Creating LSTM subnet')
+        print('Creating LSTM encoder')
 
         model = tf.keras.Sequential(name='RNN')
 
         layers = self.hyper.lstm_layers
 
         if len(layers) < 1:
-            print('LSTM subnet with less than one layer is not possible')
+            print('LSTM encoder with less than one layer is not possible')
             sys.exit(1)
 
         for i in range(len(layers)):
@@ -178,13 +163,13 @@ class CNN(NN):
         super().__init__(hyperparameters, input_shape)
 
     def create_model(self):
-        print('Creating CNN subnet')
+        print('Creating CNN encoder')
         model = tf.keras.Sequential(name='CNN')
 
         layers = self.hyper.cnn_layers
 
         if len(layers) < 1:
-            print('CNN subnet with less than one layer is not possible')
+            print('CNN encoder with less than one layer is not possible')
             sys.exit(1)
 
         layer_properties = list(zip(self.hyper.cnn_layers, self.hyper.cnn_kernel_length, self.hyper.cnn_strides))
@@ -293,7 +278,7 @@ class TCN(NN):
         self.layers = []
 
     def create_model(self):
-        print('Creating TCN subnet')
+        print('Creating TCN encoder')
         num_channels = self.hyper.tcn_layers
         num_levels = len(num_channels)
         kernel_size = self.hyper.tcn_kernel_length
