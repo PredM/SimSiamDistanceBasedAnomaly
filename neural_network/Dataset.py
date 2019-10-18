@@ -11,12 +11,14 @@ class Dataset:
         self.dataset_folder = dataset_folder
         self.config: Configuration = config
 
-        self.x_train = None
-        self.y_train = None
-        self.y_train_strings = None
-        self.one_hot_encoder = None
+        self.x_train = None # training data (examples,time,channels)
+        self.y_train = None # One hot encoded class labels (numExampl,numClasses)
+        self.y_train_strings = None # # class labels as strings (numExampl,1)
+        self.one_hot_encoder_labels = None # one hot label encoder
         self.num_train_instances = None
         self.num_instances = None
+        self.classIdx_to_trainExamplIdxPos = {} #Dictionary with key:class as integer and value: array with index positions
+        self.classIdx_to_classString = {} # Dictonary with key:integer (0 to numOfClasses-1) which corresponds to one column entry and value string (class name)
 
         self.time_series_length = None
         self.time_series_depth = None
@@ -30,6 +32,23 @@ class Dataset:
         # draw as long as is_positive criterion is not satisfied
         while True:
 
+            # draw two random examples index
+            first_idx = np.random.randint(0, num_instances, size=1)[0]
+            second_idx = np.random.randint(0, num_instances, size=1)[0]
+
+            # return the two indexes if they match the is_positive criterion
+            if is_positive:
+                if np.array_equal(dataset[first_idx], dataset[second_idx]):
+                    return first_idx, second_idx
+            else:
+                if not np.array_equal(dataset[first_idx], dataset[second_idx]):
+                    return first_idx, second_idx
+
+    @staticmethod
+    def draw_from_ds_byClass(dataset, num_instances, is_positive, byClass):
+
+        # draw as long as is_positive criterion is not satisfied
+        while True:
             # draw two random examples index
             first_idx = np.random.randint(0, num_instances, size=1)[0]
             second_idx = np.random.randint(0, num_instances, size=1)[0]
@@ -95,6 +114,7 @@ class FullDataset(Dataset):
         self.y_train_strings = np.squeeze(self.y_train_strings)
         self.y_test_strings = np.squeeze(self.y_test_strings)
 
+
         ##
         # safe information about the dataset
         ##
@@ -116,13 +136,20 @@ class FullDataset(Dataset):
         self.classes = np.unique(np.concatenate((self.y_train_strings, self.y_test_strings), axis=0))
         self.num_classes = self.classes.size
 
+        # Create two dictionaries to link/associate each class with all its training examples
+        for i in range(self.num_classes):
+            self.classIdx_to_trainExamplIdxPos[i] = np.argwhere(self.y_train[:,i]>0)
+            self.classIdx_to_classString[i]  = self.classes[i]
+
         # data
         # 1. dimension: example
         # 2. dimension: time index
         # 3. dimension: array of all channels
         print('Dataset loaded')
-        print('\tShape of training set:', self.x_train.shape)
-        print('\tShape of test set:', self.x_test.shape, '\n')
+        print('\tShape of training set (example, time, channels):', self.x_train.shape)
+        print('\tShape of test set (example, time, channels):', self.x_test.shape)
+        print('\tNum of classes:',self.num_classes)
+        print('\tClasses used in training:',self.classes,'\n')
 
     # draw a random pair of instances
     def draw_pair(self, is_positive, from_test):
