@@ -27,40 +27,38 @@ class Dataset:
         raise NotImplemented('Not implemented for abstract class')
 
     @staticmethod
-    def draw_from_ds(dataset, num_instances, is_positive):
+    def draw_from_ds(self, dataset, num_instances, is_positive, classIdx=None):
 
         # draw as long as is_positive criterion is not satisfied
-        while True:
 
             # draw two random examples index
-            first_idx = np.random.randint(0, num_instances, size=1)[0]
-            second_idx = np.random.randint(0, num_instances, size=1)[0]
-
-            # return the two indexes if they match the is_positive criterion
-            if is_positive:
-                if np.array_equal(dataset[first_idx], dataset[second_idx]):
-                    return first_idx, second_idx
+            if classIdx is None:
+                while True:
+                    first_idx = np.random.randint(0, num_instances, size=1)[0]
+                    second_idx = np.random.randint(0, num_instances, size=1)[0]
+                    # return the two indexes if they match the is_positive criterion
+                    if is_positive:
+                        if np.array_equal(dataset[first_idx], dataset[second_idx]):
+                            return first_idx, second_idx
+                    else:
+                        if not np.array_equal(dataset[first_idx], dataset[second_idx]):
+                            return first_idx, second_idx
             else:
-                if not np.array_equal(dataset[first_idx], dataset[second_idx]):
-                    return first_idx, second_idx
-
-    @staticmethod
-    def draw_from_ds_byClass(dataset, num_instances, is_positive, byClass):
-
-        # draw as long as is_positive criterion is not satisfied
-        while True:
-            # draw two random examples index
-            first_idx = np.random.randint(0, num_instances, size=1)[0]
-            second_idx = np.random.randint(0, num_instances, size=1)[0]
-
-            # return the two indexes if they match the is_positive criterion
-            if is_positive:
-                if np.array_equal(dataset[first_idx], dataset[second_idx]):
-                    return first_idx, second_idx
-            else:
-                if not np.array_equal(dataset[first_idx], dataset[second_idx]):
-                    return first_idx, second_idx
-
+                #examples are drawn by a given class index
+                classIdxArr = self.classIdx_to_trainExamplIdxPos[classIdx]
+                first_rand_idx = np.random.randint(0, len(classIdxArr)-1, size=1)[0]
+                first_idx = classIdxArr[first_rand_idx]
+                if is_positive:
+                    while True:
+                        second_rand_idx = np.random.randint(0, len(classIdxArr)-1, size=1)[0]
+                        second_idx = classIdxArr[second_rand_idx]
+                        if first_idx != second_idx:
+                            return first_idx, second_idx
+                else:
+                    while True:
+                        second_idx = np.random.randint(0, num_instances, size=1)[0]
+                        if not second_idx in classIdxArr[:, 0]:
+                            return first_idx, second_idx
 
 class FullDataset(Dataset):
 
@@ -158,7 +156,15 @@ class FullDataset(Dataset):
         ds_y = self.y_test if from_test else self.y_train
         num_instances = self.num_test_instances if from_test else self.num_train_instances
 
-        return Dataset.draw_from_ds(ds_y, num_instances, is_positive)
+        return Dataset.draw_from_ds(self, ds_y, num_instances, is_positive)
+
+    def draw_pair_by_ClassIdx(self, is_positive, from_test, classIdx):
+
+        # select dataset depending on parameter
+        ds_y = self.y_test if from_test else self.y_train
+        num_instances = self.num_test_instances if from_test else self.num_train_instances
+
+        return Dataset.draw_from_ds(self, ds_y, num_instances, is_positive, classIdx)
 
     def draw_pair_cbs(self, is_positive, indices_positive):
 
@@ -269,4 +275,4 @@ class CaseSpecificDataset(Dataset):
     # draw a random pair of instances
     def draw_pair(self, is_positive):
 
-        return Dataset.draw_from_ds(self.y_train, self.num_train_instances, is_positive)
+        return Dataset.draw_from_ds(self, self.y_train, self.num_train_instances, is_positive)
