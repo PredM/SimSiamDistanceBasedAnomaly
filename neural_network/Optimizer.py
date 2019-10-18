@@ -108,12 +108,18 @@ class SNNOptimizer(Optimizer):
         # Compose batch
         # // 2 because each iteration one similar and one dissimilar pair is added
         for i in range(self.architecture.hyper.batch_size // 2):
-            pos_pair = self.dataset.draw_pair(True, from_test=False)
+            if self.config.equalClassConsideration == True:
+                pos_pair = self.dataset.draw_pair_by_ClassIdx(True, from_test=False,classIdx=(i%self.dataset.num_classes))
+            else:
+                pos_pair = self.dataset.draw_pair(True, from_test=False)
             batch_pairs_indices.append(pos_pair[0])
             batch_pairs_indices.append(pos_pair[1])
             batch_true_similarities.append(1.0)
 
-            neg_pair = self.dataset.draw_pair(False, from_test=False)
+            if self.config.equalClassConsideration == True:
+                neg_pair = self.dataset.draw_pair_by_ClassIdx(False, from_test=False,classIdx=(i%self.dataset.num_classes))
+            else:
+                neg_pair = self.dataset.draw_pair(False, from_test=False)
             batch_pairs_indices.append(neg_pair[0])
             batch_pairs_indices.append(neg_pair[1])
             batch_true_similarities.append(0.0)

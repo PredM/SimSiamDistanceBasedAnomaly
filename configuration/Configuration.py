@@ -20,11 +20,11 @@ class Configuration:
         # ffnn = uses ffnn as distance measure
         # simple = mean absolute difference as distance measure instead of the ffnn
         self.architecture_variants = ['standard_simple', 'standard_ffnn', 'fast_simple', 'fast_ffnn']
-        self.architecture_variant = self.architecture_variants[0]
+        self.architecture_variant = self.architecture_variants[1]
 
         # TODO Needs to be changed to folder if every encoder should use different hyperparameters
         # hyperparameter file to use
-        self.hyper_file = '../configuration/hyperparameter_combinations/' + 'ba_cnn.json'
+        self.hyper_file = '../configuration/hyperparameter_combinations/' + 'ba_cnn.json'#'tcn.json'
         self.use_hyper_file = True
 
         # select whether training should be continued from the checkpoint defined below
@@ -81,6 +81,10 @@ class Configuration:
         # the k of the knn classifier used for live classification
         self.k_of_knn = 3
 
+        # The batch for training is constructed based on the number of classes and not on the number of training examples contained in the training data set.
+        # The Batch size must be at least twice as large as the number of training classes.
+        self.equalClassConsideration = False # normal: False
+
         ###
         # folders and file names
         ###
@@ -89,7 +93,7 @@ class Configuration:
         self.models_folder = '../data/trained_models/'
 
         # path and file name to the specific model that should be used for testing and live classification
-        self.filename_model_to_use = 'temp_models_10-18_13-31-13_epoch-200'
+        self.filename_model_to_use = 'ba_cnn_378200_96_percent'
         self.directory_model_to_use = self.models_folder + self.filename_model_to_use + '/'
 
         # folder where the preprocessed training and test data for the neural network should be stored
