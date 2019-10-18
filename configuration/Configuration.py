@@ -93,7 +93,7 @@ class Configuration:
         self.models_folder = '../data/trained_models/'
 
         # path and file name to the specific model that should be used for testing and live classification
-        self.filename_model_to_use = 'temp_models_10-16_20-18-09_epoch-399900'
+        self.filename_model_to_use = 'ba_cnn_378200_96_percent'
         self.directory_model_to_use = self.models_folder + self.filename_model_to_use + '/'
 
         # folder where the preprocessed training and test data for the neural network should be stored
