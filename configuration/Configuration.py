@@ -24,7 +24,7 @@ class Configuration:
 
         # TODO Needs to be changed to folder if every encoder should use different hyperparameters
         # hyperparameter file to use
-        self.hyper_file = '../configuration/hyperparameter_combinations/' + 'ba_cnn.json'#'tcn.json'
+        self.hyper_file = '../configuration/hyperparameter_combinations/' + 'ba_cnn.json'  # 'tcn.json'
         self.use_hyper_file = True
 
         # select whether training should be continued from the checkpoint defined below
@@ -81,9 +81,10 @@ class Configuration:
         # the k of the knn classifier used for live classification
         self.k_of_knn = 3
 
-        # The batch for training is constructed based on the number of classes and not on the number of training examples contained in the training data set.
-        # The Batch size must be at least twice as large as the number of training classes.
-        self.equalClassConsideration = False # normal: False
+        # the batch for training is constructed based on the number of classes and
+        # not on the number of training examples contained in the training data set.
+        # the batch size must be at least twice as large as the number of training classes.
+        self.equalClassConsideration = False  # default: False
 
         ###
         # folders and file names
