@@ -10,8 +10,9 @@ class Configuration:
         # neural network
         ###
 
-        self.encoder_variants = ['cnn', 'rnn', 'tcn']
-        self.encoder_variant = self.encoder_variants[0]
+        # now a hyper parameter
+        # self.encoder_variants = ['cnn', 'rnn', 'tcn']
+        # self.encoder_variant = self.encoder_variants[2]
 
         # architecture independent of whether snn or cbs is used
         # standard = classic snn behaviour, context vectors calculated each time, also multiple times for the example
@@ -27,7 +28,6 @@ class Configuration:
         self.use_hyper_file = True
 
         # select whether training should be continued from the checkpoint defined below
-        # use carefully, does not check for equal hyper parameters etc.
         self.continue_training = False
 
         # defines how often loss is printed and checkpoints are safed during training

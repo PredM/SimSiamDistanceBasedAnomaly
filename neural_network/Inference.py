@@ -7,17 +7,15 @@ import pandas as pd
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 
 from configuration.Configuration import Configuration
-from configuration.Hyperparameter import Hyperparameters
 from neural_network.Dataset import FullDataset
 from neural_network.SNN import initialise_snn
 
 
 class Inference:
 
-    def __init__(self, config, hyperparameters, architecture, dataset: FullDataset):
+    def __init__(self, config, architecture, dataset: FullDataset):
         self.config: Configuration = config
 
-        self.hyper: Hyperparameters = hyperparameters
         self.architecture = architecture
         self.dataset: FullDataset = dataset
 
@@ -31,20 +29,6 @@ class Inference:
         self.results['classes'] = index
         self.results.set_index('classes', inplace=True)
         self.results.loc['combined', 'total'] = self.dataset.num_test_instances
-
-        ''' TODO: Before Merge prüfen
-        self.snn = initialise_snn(config, hyperparameters, self.dataset, False)
-        # Load the models from the file configured
-        if self.config.subnet_variant == 'tcn':
-            self.snn.subnet.create_model()
-            self.snn.load_model(config)
-            #self.snn.subnet.model.network.build(input_shape=(10, 250, 58))
-            #self.snn.subnet.model.network.load_weights("../data/trained_models/temp_models_10-10_11-06-27_epoch-300/subnet_tcn_epoch-300.h5")
-        else:
-            self.snn.load_model(config)
-        # load the models from the file configured
-        '''
-        self.architecture.load_model(config)
 
     def infer_test_dataset(self):
         correct, num_infers = 0, 0
@@ -64,14 +48,6 @@ class Inference:
                 if sims[i] >= max_sim:
                     max_sim = sims[i]
                     max_sim_index = i
-
-            # real = self.dataset.y_test_strings[idx_test]
-            # max_sim_class = labels[max_sim_index]
-
-            # Revert selected classes back to simple string labels
-            # revert = self.dataset.one_hot_encoder.inverse_transform
-            # real = revert([self.dataset.y_test[idx_test]])[0][0]
-            # max_sim_class = revert([self.dataset.y_train[max_sim_index]])[0][0]
 
             real = self.dataset.y_test_strings[idx_test]
             max_sim_class = labels[max_sim_index]
@@ -122,14 +98,12 @@ def main():
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
     config = Configuration()
-    hyperparameters = Hyperparameters()
-    hyperparameters.load_from_file(config.hyper_file, config.use_hyper_file)
     dataset: FullDataset = FullDataset(config.training_data_folder, config, training=False)
     dataset.load()
 
-    architecture = initialise_snn(config, hyperparameters, dataset, False)
+    architecture = initialise_snn(config, dataset, False)
 
-    inference = Inference(config, hyperparameters, architecture, dataset)
+    inference = Inference(config, architecture, dataset)
 
     print('Ensure right model file is used:')
     print(config.directory_model_to_use, '\n')

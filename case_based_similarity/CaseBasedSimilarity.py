@@ -23,6 +23,7 @@ class CBS(AbstractSimilarityMeasure):
 
         with contextlib.redirect_stdout(None):
             self.initialise_case_handlers()
+        self.load_model()
 
     def initialise_case_handlers(self):
 
@@ -42,40 +43,40 @@ class CBS(AbstractSimilarityMeasure):
             # should be implemented using another dictionary case -> hyper parameter file name
             relevant_features = features_cases.get(case)
 
-            hyper = Hyperparameters()
-            hyper.load_from_file(self.config.hyper_file, self.config.use_hyper_file)
-
             dataset = CaseSpecificDataset(self.config.training_data_folder, self.config, case, relevant_features)
             dataset.load()
 
             # idd up the total number of examples
             self.num_instances_total += dataset.num_train_instances
 
-            ch: SimpleCaseHandler = self.initialise_case_handler(hyper, dataset)
+            ch: SimpleCaseHandler = self.initialise_case_handler(dataset)
             self.case_handlers.append(ch)
             print()
 
     # initializes the correct case handler depending on the configured variant
-    def initialise_case_handler(self, hyper, dataset):
+    def initialise_case_handler(self, dataset):
         var = self.config.architecture_variant
 
         if self.training and var.endswith('simple') or not self.training and var == 'standard_simple':
-            return SimpleCaseHandler(self.config.encoder_variant, hyper, dataset, self.training)
+            return SimpleCaseHandler(self.config, dataset, self.training)
         elif self.training and var.endswith('ffnn') or not self.training and var == 'standard_ffnn':
-            return CaseHandler(self.config.encoder_variant, hyper, dataset, self.training)
+            return CaseHandler(self.config, dataset, self.training)
         elif not self.training and var == 'fast_simple':
-            return FastSimpleCaseHandler(self.config.encoder_variant, hyper, dataset, self.training)
+            return FastSimpleCaseHandler(self.config, dataset, self.training)
         elif not self.training and var == 'fast_ffnn':
-            return FastCaseHandler(self.config.encoder_variant, hyper, dataset, self.training)
+            return FastCaseHandler(self.config, dataset, self.training)
         else:
             raise AttributeError('Unknown variant specified:' + self.config.architecture_variant)
 
-    def load_model(self, config=None):
+    def load_model(self, model_folder=None, training=None):
+
         # suppress output which would contain the same model info for each handler
-        with contextlib.redirect_stdout(None):
-            for case_handler in self.case_handlers:
-                case_handler: CaseHandler = case_handler
-                case_handler.load_model(self.config)
+        for case_handler in self.case_handlers:
+            case_handler: CaseHandler = case_handler
+            print('Creating case handler for ', case_handler.dataset.case)
+            directory = self.config.directory_model_to_use + self.config.subdirectories_by_case.get(
+                case_handler.dataset.case) + '/'
+            case_handler.load_model(model_folder=directory)
 
     def print_info(self):
         print()
@@ -102,9 +103,15 @@ class CBS(AbstractSimilarityMeasure):
 
 class SimpleCaseHandler(SimpleSNN):
 
-    def __init__(self, encoder_variant, hyperparameters, dataset: CaseSpecificDataset, training):
-        super().__init__(encoder_variant, hyperparameters, dataset, training)
+    def __init__(self, config, dataset: CaseSpecificDataset, training):
+        super().__init__(config, dataset, training)
         self.dataset: CaseSpecificDataset = dataset
+
+        # TODO Find better solution
+        self.need_encoder = [SimpleCaseHandler, CaseHandler, FastCaseHandler]
+        self.need_ffnn = [CaseHandler, FastCaseHandler]
+
+        # No model loading here, will be done by CBS for all case handlers
 
     # debugging method, can be removed when implementation is finished
     def print_case_handler_info(self):
@@ -119,10 +126,6 @@ class SimpleCaseHandler(SimpleSNN):
         print()
         print()
 
-    def load_model(self, config: Configuration):
-        subdirectory = config.subdirectories_by_case.get(self.dataset.case)
-        self.encoder.load_model(config.directory_model_to_use, subdirectory)
-
     # input must be the 'complete' example with all features of a 'full dataset'
     def get_sims(self, example):
         # example must be reduced to the features used for this cases
@@ -131,14 +134,19 @@ class SimpleCaseHandler(SimpleSNN):
         return super().get_sims(example)
 
 
-# TODO Rather inherent from corresponding SNN
+# TODO Rather inherent from corresponding SNN / multiple inheritance
 class CaseHandler(SimpleCaseHandler):
-    pass
+
+    def __init__(self):
+        raise NotImplementedError()
 
 
 class FastSimpleCaseHandler(SimpleCaseHandler):
-    pass
+    def __init__(self):
+        raise NotImplementedError()
 
 
 class FastCaseHandler(FastSimpleCaseHandler):
-    pass
+
+    def __init__(self):
+        raise NotImplementedError()

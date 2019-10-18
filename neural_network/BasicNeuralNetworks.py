@@ -16,6 +16,9 @@ class NN:
     def create_model(self):
         raise AssertionError('No model creation for abstract NN class possible')
 
+    def print_model_info(self):
+        self.model.summary()
+
     def get_parameter_count(self):
         total_parameters = 0
 
@@ -30,14 +33,10 @@ class NN:
 
         return total_parameters
 
-    def load_model(self, path_model_folder: str, subdirectory=''):
-        if type(self) == TCN:
-            if self.model == None:
-                print("Failure, TCN is not initialized to load weights")
-        else:
-            self.model = None
+    def load_model_weights(self, model_folder):
+        if self.model is None:
+            raise AttributeError('Model not initialised. Can not load weights.')
 
-        # TODO add temporal cnn if not done already
         if type(self) == CNN or type(self) == RNN or type(self) == TCN:
             prefix = 'encoder'
         elif type(self) == FFNN:
@@ -45,25 +44,16 @@ class NN:
         else:
             raise AttributeError('Can not import models of type', type(self))
 
-        # subdirectory is used for case based similarity measure, each one contains model files for one case handler
-        # todo ensure right /'s ...
-        directory = path_model_folder + subdirectory
+        for file_name in listdir(model_folder):
 
-        for file_name in listdir(directory):
-            # compile must be set to false because the standard optimizer was not used and this would otherwise
-            # generate an error
             if file_name.startswith(prefix):
-                if type(self) == TCN:
-                    self.model.network.load_weights(path.join(directory, file_name))
-
-                else:
-                    self.model = tf.keras.models.load_model(path.join(directory, file_name), compile=False)
+                self.model.load_weights(path.join(model_folder, file_name))
 
             if self.model is not None:
                 break
 
         if self.model is None:
-            raise FileNotFoundError('Model file for this type could not be found in ', directory)
+            raise FileNotFoundError('Model file for this type could not be found in ', model_folder)
         else:
             print('Model has been loaded successfully')
 
@@ -78,7 +68,7 @@ class FFNN(NN):
         print('Creating FFNN')
         model = tf.keras.Sequential(name='FFNN')
 
-        layers = self.hyper.ffnn_layers
+        layers = self.hyper.ffnn_layers.copy()
 
         if len(layers) < 1:
             print('FFNN with less than one layer is not possible')
@@ -107,14 +97,14 @@ class RNN(NN):
     # RNN structure matching the description in the neural warp paper
     # currently not used
     def create_model_nw(self):
-        print('Creating LSTM subnet')
+        print('Creating LSTM encoder')
 
         model = tf.keras.Sequential(name='RNN')
 
         layers = self.hyper.lstm_layers
 
         if len(layers) < 1:
-            print('LSTM subnet with less than one layer is not possible')
+            print('LSTM encoder with less than one layer is not possible')
             sys.exit(1)
 
         # bidirectional LSTM network, type where timelines are only combined ones
@@ -136,14 +126,14 @@ class RNN(NN):
         self.model = model
 
     def create_model(self):
-        print('Creating LSTM subnet')
+        print('Creating LSTM encoder')
 
         model = tf.keras.Sequential(name='RNN')
 
         layers = self.hyper.lstm_layers
 
         if len(layers) < 1:
-            print('LSTM subnet with less than one layer is not possible')
+            print('LSTM encoder with less than one layer is not possible')
             sys.exit(1)
 
         for i in range(len(layers)):
@@ -173,13 +163,13 @@ class CNN(NN):
         super().__init__(hyperparameters, input_shape)
 
     def create_model(self):
-        print('Creating CNN subnet')
+        print('Creating CNN encoder')
         model = tf.keras.Sequential(name='CNN')
 
         layers = self.hyper.cnn_layers
 
         if len(layers) < 1:
-            print('CNN subnet with less than one layer is not possible')
+            print('CNN encoder with less than one layer is not possible')
             sys.exit(1)
 
         layer_properties = list(zip(self.hyper.cnn_layers, self.hyper.cnn_kernel_length, self.hyper.cnn_strides))
@@ -205,12 +195,27 @@ class CNN(NN):
 
 class TemporalBlock(tf.keras.Model):
 
+    def compute_output_signature(self, input_signature):
+        pass
+
+    # TODO Make this look nice
+    def print_layer_info(self):
+        print("dilation_rate: ", self.dilation_rate, "|nb_filters: ", self.nb_filters, "|kernel_size: ",
+              self.kernel_size,
+              "|padding: ", self.padding, "|dropout_rate: ", self.dropout_rate)
+
     def __init__(self, dilation_rate, nb_filters, kernel_size, padding, dropout_rate=0.0, input_shape=None):
         super(TemporalBlock, self).__init__()
-        init = tf.keras.initializers.RandomNormal(mean=0.0, stddev=0.01)
         assert padding in ['causal', 'same']
-        print("dilation_rate: ", dilation_rate, "|nb_filters: ", nb_filters, "|kernel_size: ", kernel_size,
-              "|padding: ", padding, "|dropout_rate: ", dropout_rate)
+
+        self.dilation_rate = dilation_rate
+        self.nb_filters = nb_filters
+        self.kernel_size = kernel_size
+        self.padding = padding
+        self.dropout_rate = dropout_rate
+
+        init = tf.keras.initializers.RandomNormal(mean=0.0, stddev=0.01)
+
         # block1
         if input_shape is not None:
             self.conv1 = tf.keras.layers.Conv1D(filters=nb_filters, kernel_size=kernel_size,
@@ -236,7 +241,7 @@ class TemporalBlock(tf.keras.Model):
                                                  kernel_initializer=init)
         self.ac3 = tf.keras.layers.Activation('relu')
 
-    def call(self, x, training):
+    def call(self, x, training=False):
         # print("x: ",x.shape," training:", training)
         prev_x = x
         x = self.conv1(x)
@@ -265,57 +270,38 @@ class TemporalBlock(tf.keras.Model):
         return self.ac3(prev_x + x)  # skip connection
 
 
-class TemporalConvNet(tf.keras.Model):
+class TCN(NN):
 
-    def __init__(self, num_channels, kernel_size, dropout, input_shape=None):
-        # num_channels is a list that contains hidden sizes of Conv1D
-        super(TemporalConvNet, self).__init__()
-        assert isinstance(num_channels, list)
+    def __init__(self, hyperparameters, input_shape):
+        super().__init__(hyperparameters, input_shape)
+        self.output_shape = None
+        self.layers = []
 
-        # model
-        model = tf.keras.Sequential()
-        # print("self.input_shape: ", input_shape)
-        # The model contains "num_levels" TemporalBlock
+    def create_model(self):
+        print('Creating TCN encoder')
+        num_channels = self.hyper.tcn_layers
         num_levels = len(num_channels)
+        kernel_size = self.hyper.tcn_kernel_length
+        dropout = self.hyper.dropout_rate
+
+        model = tf.keras.Sequential(name='TCN')
+
         for i in range(num_levels):
             dilation_rate = 2 ** i  # exponential growth
             if i == 0:
-                model.add(TemporalBlock(dilation_rate, num_channels[i], kernel_size[i], padding='causal',
-                                        dropout_rate=dropout, input_shape=input_shape))
+                tb = TemporalBlock(dilation_rate, num_channels[i], kernel_size[i], padding='causal',
+                                   dropout_rate=dropout, input_shape=self.input_shape)
             else:
-                model.add(TemporalBlock(dilation_rate, num_channels[i], kernel_size[i], padding='causal',
-                                        dropout_rate=dropout))
-        self.network = model
-        self.network.build(input_shape=(10, input_shape[0], input_shape[1]))  # None verursacht AssertionError
-        # self.network.save_weights("../data/trained_models/test.h5")
-        print("Model summary: ", self.network.summary())
-        # self.network.load_weights("../data/trained_models/test.h5")
-        # self.network.load_weights("../data/trained_models/temp_models_10-10_11-06-27_epoch-300/subnet_tcn_epoch-300.h5")
-        # self.network.load_weights("../data/trained_models/temp_models_10-09_18-15-55_epoch-0/subnet_tcn_epoch-0.h5")
-        self.outputshape = (None, input_shape[0], num_channels[num_levels - 1])
+                tb = TemporalBlock(dilation_rate, num_channels[i], kernel_size[i], padding='causal',
+                                   dropout_rate=dropout)
+            self.layers.append(tb)
+            model.add(tb)
 
-    def call(self, x, training):
-        return self.network(x, training=training)
+        self.model = model
+        self.output_shape = (None, self.input_shape[0], num_channels[num_levels - 1])
 
+    def print_model_info(self):
 
-class TCN(NN):
-    def __init__(self, hyperparameters, input_shape):
-        # num_channels is a list contains hidden sizes of Conv1D
-        super().__init__(hyperparameters, input_shape)
-        # assert isinstance(num_channels, list)
-
-    def create_model(self):
-        print('Creating TCN subnet')
-        num_channels = self.hyper.tcn_layers  # [8, 16] #[100]*5 [1024, 256, 64]
-        # print("num_channels (layer size / number of kernels): ", num_channels)
-        kernel_size = self.hyper.tcn_kernel_length
-        dropout = self.hyper.dropout_rate
-        print("self.input_shape: ", self.input_shape)
-        self.model = TemporalConvNet(num_channels, kernel_size, dropout, input_shape=self.input_shape)
-        # print("Model summary: ",self.model.summary())
-        # self.model.network.build(input_shape=(5, 58, 8))
-
-    def call(self, x, training=True):
-        y = self.temporalCN(x, training=training)
-        # y = self.linear(y[:, -1, :])    # use the last element to output the result
-        return y
+        for i in range(len(self.layers)):
+            print('Layer', i, self.layers[i].name)
+            self.layers[i].print_layer_info()

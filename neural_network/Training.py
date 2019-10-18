@@ -12,20 +12,21 @@ from neural_network.SNN import initialise_snn
 
 def main():
     # suppress debugging messages of TensorFlow
-    #os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+    os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
     config = Configuration()
+
     hyper = Hyperparameters()
     hyper.load_from_file(config.hyper_file, config.use_hyper_file)
 
     dataset = FullDataset(config.training_data_folder, config, training=True)
     dataset.load()
 
-    snn = initialise_snn(config, hyper, dataset, True)
+    snn = initialise_snn(config, dataset, True)
     snn.print_detailed_model_info()
 
     print('Training:')
-    optimizer = SNNOptimizer(snn, dataset, hyper, config)
+    optimizer = SNNOptimizer(snn, dataset, config)
     optimizer.optimize()
 
 
