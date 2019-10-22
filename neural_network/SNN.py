@@ -183,8 +183,10 @@ class SimpleSNN(AbstractSimilarityMeasure):
         if type(self) in self.need_ffnn:
             print(type(self))
             print(self.need_ffnn)
-
-            encoder_output_shape = self.encoder.model.output_shape
+            if self.hyper.encoder_variant == 'tcn':
+                encoder_output_shape = self.encoder.output_shape
+            else:
+                encoder_output_shape = self.encoder.model.output_shape
             input_shape_ffnn = (encoder_output_shape[1] ** 2, encoder_output_shape[2] * 2)
 
             self.ffnn = FFNN(self.hyper, input_shape_ffnn)

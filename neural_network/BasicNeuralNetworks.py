@@ -298,6 +298,7 @@ class TCN(NN):
             model.add(tb)
 
         self.model = model
+        self.model.build(input_shape=(10,self.input_shape[0],self.input_shape[1])) # Required to load previous model, None verursacht AssertionError
         self.output_shape = (None, self.input_shape[0], num_channels[num_levels - 1])
 
     def print_model_info(self):
