@@ -164,6 +164,44 @@ class CNN(NN):
 
     def create_model(self):
         print('Creating CNN encoder')
+        inputs = tf.keras.Input(self.input_shape)
+
+        layers = self.hyper.cnn_layers
+
+        if len(layers) < 1:
+            print('CNN encoder with less than one layer is not possible')
+            sys.exit(1)
+
+        layer_properties = list(zip(self.hyper.cnn_layers, self.hyper.cnn_kernel_length, self.hyper.cnn_strides))
+
+        for i in range(len(layer_properties)):
+            num_filter, filter_size, stride = layer_properties[i][0], layer_properties[i][1], layer_properties[i][2]
+
+            # first layer must be handled separately because the input shape parameter must be set
+            if i == 0:
+                conv_layer1 = tf.keras.layers.Conv1D(filters=num_filter, padding='VALID', kernel_size=filter_size,
+                                                    strides=stride, input_shape=self.input_shape)
+                x = conv_layer1(inputs)
+            else:
+                conv_layer = tf.keras.layers.Conv1D(filters=num_filter, padding='VALID', kernel_size=filter_size,
+                                                    strides=stride)
+                x = conv_layer(x)
+            x = tf.keras.layers.BatchNormalization()(x)
+            x = tf.keras.layers.ReLU()(x)
+
+        x = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(x)
+        # Query-value attention of shape [batch_size, Tq, filters].
+        #print("inputs", inputs)
+        #print("x: ", x)
+        #input_lastConvLayer_attention_seq = tf.keras.layers.Attention()([inputs, x])
+        #x = tf.keras.layers.GlobalAveragePooling1D()(x)
+        #input_lastConvLayer_attention_seq = tf.keras.layers.GlobalAveragePooling1D()(input_lastConvLayer_attention_seq)
+        #x = tf.keras.layers.Concatenate()([x, input_lastConvLayer_attention_seq])
+
+        self.model = tf.keras.Model(inputs=inputs, outputs=x)
+
+        '''
+        print('Creating CNN encoder')
         model = tf.keras.Sequential(name='CNN')
 
         layers = self.hyper.cnn_layers
@@ -191,6 +229,7 @@ class CNN(NN):
         model.add(tf.keras.layers.Dropout(rate=self.hyper.dropout_rate))
 
         self.model = model
+        '''
 
 
 class TemporalBlock(tf.keras.Model):
