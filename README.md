@@ -53,8 +53,8 @@ The following table gives an overview of the purpose of the python scripts inclu
 |configuration / Hyperparameters.py| Contains the class that stores the hyperparameters used by the neural networks.|
 |data_processing / CaseBaseExtraction.py| Provides extraction of a case base from the entire training data set.|
 |data_processing / RealTimeClassification.py|Contains the implementation of the real time data processing.|
+|data_processing / DataImport.py|This script executes the first part of the preprocessing. It consists of reading the unprocessed sensor data from Kafka topics in JSON format as a *.txt file (e.g., acceleration, BMX, txt, print) and then saving it as export_data.pkl in the same folder. This script also defines which attributes/features/streams are used via config.json with the entry "relevant_features". Which data is processed can also be set in config.json with the entry datasets (path, start, and end timestamp). |
 |data_processing / DataframeCleaning.py|This script executes the second part of the preprocessing of the training data.|
-|data_processing / DataImport.py|This script executes the first part of the preprocessing.|
 |data_processing / DatasetCreation.py|Third part of preprocessing. Conversion of the cleaned data frames of all partial data sets into the training data.|
 |fabric_simulation / FabricSimulation.py|Script to simulate the production process for easier development of real time evaluation.|
 |neural_network / Dataset.py|Contains the class that stores the training data and meta data about it, which is used by the neural network.|
