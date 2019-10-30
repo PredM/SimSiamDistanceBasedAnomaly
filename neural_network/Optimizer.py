@@ -49,6 +49,7 @@ class Optimizer:
                 pass
 
     def update_single_model(self, model_input, true_similarities, model, optimizer):
+        #print("model_input: ",tf.shape( model_input))
         with tf.GradientTape() as tape:
             pred_similarities = model.get_sims_batch(model_input)
 
@@ -131,8 +132,17 @@ class SNNOptimizer(Optimizer):
 
         # Get the example pairs by the selected indices
         model_input = np.take(a=self.dataset.x_train, indices=batch_pairs_indices, axis=0)
-
-        batch_loss = self.update_single_model(model_input, true_similarities, self.architecture, self.adam_optimizer)
+        model_input2 = np.take(a=self.dataset.y_train, indices=batch_pairs_indices, axis=0)
+        #print("model_input2: ", model_input2.shape)
+        #model_input2 = model_input2[:16 // 2:2,:]
+        #rows = range(0, 15, 2)
+        #print(rows)
+        model_input2[range(0, self.architecture.hyper.batch_size-1, 2),:] = np.zeros(10) # remove one class attention vector
+        #print(model_input2)
+        #print("model_input: ", model_input.shape)
+        #model_input = np.reshape(model_input, (16, 1, 250, 58))
+        #print("model_input: ", model_input.shape)
+        batch_loss = self.update_single_model([model_input,model_input2], true_similarities, self.architecture, self.adam_optimizer)
 
         # Track progress
         epoch_loss_avg.update_state(batch_loss)  # Add current batch loss

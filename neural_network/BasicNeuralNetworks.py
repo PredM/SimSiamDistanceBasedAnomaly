@@ -163,8 +163,9 @@ class CNN(NN):
         super().__init__(hyperparameters, input_shape)
 
     def create_model(self):
-        print('Creating CNN encoder')
-        inputs = tf.keras.Input(self.input_shape)
+        print('Creating CNN encoder with an input shape: ', self.input_shape)
+        inputs = tf.keras.Input(self.input_shape[0], name="Input0")
+        caseDependentVectors = tf.keras.Input(self.input_shape[1], name="Input1")
 
         layers = self.hyper.cnn_layers
 
@@ -190,15 +191,25 @@ class CNN(NN):
             x = tf.keras.layers.ReLU()(x)
 
         x = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(x)
+
+        #Attention
+        print("caseDependentVectors: ", caseDependentVectors)
+        caseDepVectEmbedding = tf.keras.layers.Dense(64, activation='relu')(caseDependentVectors)
+
+        print("caseDepVectEmbedding: ",caseDepVectEmbedding)
+
+        x = tf.keras.layers.Add()([x, caseDepVectEmbedding])
+        self.model = tf.keras.Model(inputs=[inputs,caseDependentVectors],outputs=x)
+
         # Query-value attention of shape [batch_size, Tq, filters].
         #print("inputs", inputs)
-        #print("x: ", x)
-        #input_lastConvLayer_attention_seq = tf.keras.layers.Attention()([inputs, x])
+        print("x: ", x)
+        #input_lastConvLayer_attention_seq = tf.keras.layers.Attention()([x, caseDepVectEmbedding])
+        #print("input_lastConvLayer_attention_seq: ", input_lastConvLayer_attention_seq)
         #x = tf.keras.layers.GlobalAveragePooling1D()(x)
         #input_lastConvLayer_attention_seq = tf.keras.layers.GlobalAveragePooling1D()(input_lastConvLayer_attention_seq)
         #x = tf.keras.layers.Concatenate()([x, input_lastConvLayer_attention_seq])
 
-        self.model = tf.keras.Model(inputs=inputs, outputs=x)
 
         '''
         print('Creating CNN encoder')

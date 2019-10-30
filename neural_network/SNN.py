@@ -107,23 +107,26 @@ class SimpleSNN(AbstractSimilarityMeasure):
             batch_size = len(self.dataset.x_train)
             input_pairs = np.zeros((2 * batch_size, self.hyper.time_series_length,
                                     self.hyper.time_series_depth)).astype('float32')
+            additionalInput = np.zeros((2 * batch_size, 10))
 
             for index in range(batch_size):
                 input_pairs[2 * index] = example
                 input_pairs[2 * index + 1] = self.dataset.x_train[index]
+                additionalInput[2 * index]  = np.zeros(10)
+                additionalInput[2 * index + 1] = self.dataset.y_train[index]
 
-            sims = self.get_sims_batch(input_pairs)
+            sims = self.get_sims_batch([input_pairs,additionalInput])
 
             return sims, self.dataset.y_train_strings
 
     @tf.function
     def get_sims_batch(self, batch):
-
+        #print("batch shape: ", batch)
         # calculate the output of the subnet for the examples in the batch
         context_vectors = self.encoder.model(batch, training=self.training)
 
         distances_batch = tf.map_fn(lambda pair_index: self.get_distance_pair(context_vectors, pair_index),
-                                    tf.range(batch.shape[0] // 2, dtype=tf.int32), back_prop=True, dtype=tf.float32)
+                                    tf.range(self.hyper.batch_size, dtype=tf.int32), back_prop=True, dtype=tf.float32)
 
         # transform distances into a similarity measure
         sims_batch = tf.exp(-distances_batch)
@@ -165,8 +168,10 @@ class SimpleSNN(AbstractSimilarityMeasure):
 
             input_shape_encoder = (self.hyper.time_series_length, self.hyper.time_series_depth)
 
+
             if self.hyper.encoder_variant == 'cnn':
-                self.encoder = CNN(self.hyper, input_shape_encoder)
+                # Consideration of an encoder with multiple inputs
+                self.encoder = CNN(self.hyper, [input_shape_encoder, self.dataset.y_train.shape[1]])
             elif self.hyper.encoder_variant == 'rnn':
                 self.encoder = RNN(self.hyper, input_shape_encoder)
             elif self.hyper.encoder_variant == 'tcn':
