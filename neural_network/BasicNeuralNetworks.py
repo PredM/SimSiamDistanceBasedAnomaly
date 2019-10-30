@@ -37,7 +37,7 @@ class NN:
         if self.model is None:
             raise AttributeError('Model not initialised. Can not load weights.')
 
-        if type(self) == CNN or type(self) == RNN or type(self) == TCN:
+        if type(self) == CNN or type(self) == RNN or type(self) == TCN or type(self) == CNNWithClassAttention:
             prefix = 'encoder'
         elif type(self) == FFNN:
             prefix = 'ffnn'
@@ -156,8 +156,7 @@ class RNN(NN):
 
         self.model = model
 
-
-class CNN(NN):
+class CNNWithClassAttention(NN):
 
     def __init__(self, hyperparameters, input_shape):
         super().__init__(hyperparameters, input_shape)
@@ -198,7 +197,7 @@ class CNN(NN):
 
         print("caseDepVectEmbedding: ",caseDepVectEmbedding)
 
-        x = tf.keras.layers.Add()([x, caseDepVectEmbedding])
+        x = tf.keras.layers.Multiply()([x, caseDepVectEmbedding])
         self.model = tf.keras.Model(inputs=[inputs,caseDependentVectors],outputs=x)
 
         # Query-value attention of shape [batch_size, Tq, filters].
@@ -211,7 +210,12 @@ class CNN(NN):
         #x = tf.keras.layers.Concatenate()([x, input_lastConvLayer_attention_seq])
 
 
-        '''
+class CNN(NN):
+
+    def __init__(self, hyperparameters, input_shape):
+        super().__init__(hyperparameters, input_shape)
+
+    def create_model(self):
         print('Creating CNN encoder')
         model = tf.keras.Sequential(name='CNN')
 
@@ -240,7 +244,6 @@ class CNN(NN):
         model.add(tf.keras.layers.Dropout(rate=self.hyper.dropout_rate))
 
         self.model = model
-        '''
 
 
 class TemporalBlock(tf.keras.Model):

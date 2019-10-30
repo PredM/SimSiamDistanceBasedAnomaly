@@ -4,7 +4,7 @@ import numpy as np
 from configuration.Configuration import Configuration
 from configuration.Hyperparameter import Hyperparameters
 from neural_network.Dataset import Dataset
-from neural_network.BasicNeuralNetworks import CNN, RNN, FFNN, TCN
+from neural_network.BasicNeuralNetworks import CNN, RNN, FFNN, TCN, CNNWithClassAttention
 
 
 # initialises the correct SNN variant depending on the configuration
@@ -71,6 +71,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
 
     # get the similarities of the example to each example in the dataset
     def get_sims_in_batches(self, example):
+        print("get_sims_in_batches:")
         num_train = len(self.dataset.x_train)
         sims_all_examples = np.zeros(num_train)
         batch_size = self.hyper.batch_size
@@ -98,6 +99,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
         return sims_all_examples, self.dataset.y_train_strings
 
     # get the similarities of the example to each example in the dataset
+    # used for inference
     def get_sims(self, example):
 
         # Splitting the batch size for inference in the case of using a TCN with warping FFNN due to GPU memory issues
@@ -107,21 +109,28 @@ class SimpleSNN(AbstractSimilarityMeasure):
             batch_size = len(self.dataset.x_train)
             input_pairs = np.zeros((2 * batch_size, self.hyper.time_series_length,
                                     self.hyper.time_series_depth)).astype('float32')
-            additionalInput = np.zeros((2 * batch_size, 10))
+            print("self.dataset.x_auxCaseVector_train.shape[0]: ", self.dataset.x_auxCaseVector_train.shape[1])
+            auxiliaryInput = np.zeros((2 * batch_size, self.dataset.x_auxCaseVector_train.shape[1]))
 
             for index in range(batch_size):
                 input_pairs[2 * index] = example
                 input_pairs[2 * index + 1] = self.dataset.x_train[index]
-                additionalInput[2 * index]  = np.zeros(10)
-                additionalInput[2 * index + 1] = self.dataset.y_train[index]
 
-            sims = self.get_sims_batch([input_pairs,additionalInput])
+                if self.hyper.encoder_variant == 'cnnWithCaseAttention':
+                    #Additing an additional/auxiliary input
+                    auxiliaryInput[2 * index] = np.zeros(self.dataset.x_auxCaseVector_train.shape[1])
+                    auxiliaryInput[2 * index + 1] = self.dataset.y_train[index]
+                    sims = self.get_sims_batch([input_pairs, auxiliaryInput])
+                else:
+                    sims = self.get_sims_batch(input_pairs)
+
+
 
             return sims, self.dataset.y_train_strings
 
     @tf.function
     def get_sims_batch(self, batch):
-        #print("batch shape: ", batch)
+        print("get_sims_batch: batch shape: ", batch)
         # calculate the output of the subnet for the examples in the batch
         context_vectors = self.encoder.model(batch, training=self.training)
 
@@ -168,10 +177,11 @@ class SimpleSNN(AbstractSimilarityMeasure):
 
             input_shape_encoder = (self.hyper.time_series_length, self.hyper.time_series_depth)
 
-
             if self.hyper.encoder_variant == 'cnn':
+                self.encoder = CNN(self.hyper, input_shape_encoder)
+            elif self.hyper.encoder_variant == 'cnnwithclassattention':
                 # Consideration of an encoder with multiple inputs
-                self.encoder = CNN(self.hyper, [input_shape_encoder, self.dataset.y_train.shape[1]])
+                self.encoder = CNNWithClassAttention(self.hyper, [input_shape_encoder, self.dataset.y_train.shape[1]])
             elif self.hyper.encoder_variant == 'rnn':
                 self.encoder = RNN(self.hyper, input_shape_encoder)
             elif self.hyper.encoder_variant == 'tcn':

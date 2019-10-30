@@ -20,11 +20,11 @@ class Configuration:
         # ffnn = uses ffnn as distance measure
         # simple = mean absolute difference as distance measure instead of the ffnn
         self.architecture_variants = ['standard_simple', 'standard_ffnn', 'fast_simple', 'fast_ffnn']
-        self.architecture_variant = self.architecture_variants[1]
+        self.architecture_variant = self.architecture_variants[0]
 
         # TODO Needs to be changed to folder if every encoder should use different hyperparameters
         # hyperparameter file to use
-        self.hyper_file = '../configuration/hyperparameter_combinations/' + 'ba_cnn.json'  # 'tcn.json'
+        self.hyper_file = '../configuration/hyperparameter_combinations/' + 'tcn.json'  # 'tcn.json'
         self.use_hyper_file = True
 
         # select whether training should be continued from the checkpoint defined below
@@ -94,7 +94,7 @@ class Configuration:
         self.models_folder = '../data/trained_models/'
 
         # path and file name to the specific model that should be used for testing and live classification
-        self.filename_model_to_use = 'ba_cnn_378200_96_percent'
+        self.filename_model_to_use = 'temp_models_10-30_12-18-45_epoch-100'
         self.directory_model_to_use = self.models_folder + self.filename_model_to_use + '/'
 
         # folder where the preprocessed training and test data for the neural network should be stored

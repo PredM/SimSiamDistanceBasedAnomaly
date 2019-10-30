@@ -23,6 +23,10 @@ class Dataset:
         self.time_series_length = None
         self.time_series_depth = None
 
+        # Additional information to the sensor data about the case e.g., relevant sensor streams ...
+        self.x_auxCaseVector_train = None
+        self.x_auxCaseVector_test = None
+
     def load(self):
         raise NotImplemented('Not implemented for abstract class')
 
@@ -138,6 +142,11 @@ class FullDataset(Dataset):
         for i in range(self.num_classes):
             self.classIdx_to_trainExamplIdxPos[i] = np.argwhere(self.y_train[:,i]>0)
             self.classIdx_to_classString[i]  = self.classes[i]
+
+        # create/load auxiliary information about the case ( in addition to the sensor data)
+        # for test purposes, equal to the one-hot-encoded labels
+        self.x_auxCaseVector_train = self.y_train
+        self.x_auxCaseVector_test = self.y_test
 
         # data
         # 1. dimension: example

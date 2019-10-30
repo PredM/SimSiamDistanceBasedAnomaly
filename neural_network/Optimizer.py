@@ -101,6 +101,11 @@ class SNNOptimizer(Optimizer):
             self.single_epoch(epoch)
 
     def single_epoch(self, epoch):
+        """Compute the loss of one epoch based on a batch that is generated randomly from the training data
+        Generation of batch in a separate method
+          Args:
+            epoch: int. current epoch
+          """
         epoch_loss_avg = tf.keras.metrics.Mean()
 
         batch_true_similarities = []
@@ -132,17 +137,24 @@ class SNNOptimizer(Optimizer):
 
         # Get the example pairs by the selected indices
         model_input = np.take(a=self.dataset.x_train, indices=batch_pairs_indices, axis=0)
-        model_input2 = np.take(a=self.dataset.y_train, indices=batch_pairs_indices, axis=0)
-        #print("model_input2: ", model_input2.shape)
-        #model_input2 = model_input2[:16 // 2:2,:]
-        #rows = range(0, 15, 2)
-        #print(rows)
-        model_input2[range(0, self.architecture.hyper.batch_size-1, 2),:] = np.zeros(10) # remove one class attention vector
-        #print(model_input2)
-        #print("model_input: ", model_input.shape)
-        #model_input = np.reshape(model_input, (16, 1, 250, 58))
-        #print("model_input: ", model_input.shape)
-        batch_loss = self.update_single_model([model_input,model_input2], true_similarities, self.architecture, self.adam_optimizer)
+
+        # Add the auxiliary input if required
+        if self.architecture.hyper.encoder_variant == 'cnnwithclassattention':
+            model_input2 = np.take(a=self.dataset.x_auxCaseVector_train, indices=batch_pairs_indices, axis=0)
+            # remove one class/case vector of each pair to get a similar input as in test/life without knowing the label
+            model_input2[range(0, self.architecture.hyper.batch_size - 1, 2), :] = np.zeros(10)
+            # print("model_input2: ", model_input2.shape)
+            # model_input2 = model_input2[:16 // 2:2,:]
+            # rows = range(0, 15, 2)
+            # print(rows)
+            # print(model_input2)
+            # print("model_input: ", model_input.shape)
+            # model_input = np.reshape(model_input, (16, 1, 250, 58))
+            # print("model_input: ", model_input.shape)
+            batch_loss = self.update_single_model([model_input, model_input2], true_similarities, self.architecture,
+                                                  self.adam_optimizer)
+        else:
+            batch_loss = self.update_single_model(model_input, true_similarities, self.architecture, self.adam_optimizer)
 
         # Track progress
         epoch_loss_avg.update_state(batch_loss)  # Add current batch loss
