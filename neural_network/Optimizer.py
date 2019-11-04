@@ -108,8 +108,9 @@ class SNNOptimizer(Optimizer):
           """
         epoch_loss_avg = tf.keras.metrics.Mean()
 
-        batch_true_similarities = []
-        batch_pairs_indices = []
+        batch_true_similarities = []                    # similarity label for each pair
+        batch_pairs_indices = []                        # index number of each example used in the training
+        batch_pairs_indices_firstUsedforSecond = []     # index numbers where the second is same as first (used for CNN with Att.)
 
         # Compose batch
         # // 2 because each iteration one similar and one dissimilar pair is added
@@ -122,6 +123,8 @@ class SNNOptimizer(Optimizer):
             batch_pairs_indices.append(pos_pair[0])
             batch_pairs_indices.append(pos_pair[1])
             batch_true_similarities.append(1.0)
+            batch_pairs_indices_firstUsedforSecond.append(pos_pair[0])
+            batch_pairs_indices_firstUsedforSecond.append(pos_pair[0])
 
             if self.config.equalClassConsideration == True:
                 neg_pair = self.dataset.draw_pair_by_ClassIdx(False, from_test=False,
@@ -131,6 +134,11 @@ class SNNOptimizer(Optimizer):
             batch_pairs_indices.append(neg_pair[0])
             batch_pairs_indices.append(neg_pair[1])
             batch_true_similarities.append(0.0)
+            batch_pairs_indices_firstUsedforSecond.append(neg_pair[0])
+            batch_pairs_indices_firstUsedforSecond.append(neg_pair[0])
+
+            #create an index vector for CnnWithClassAttention where the first index is used for both examples
+
 
         # Change the list of ground truth similarities to an array
         true_similarities = np.asarray(batch_true_similarities)
@@ -142,7 +150,8 @@ class SNNOptimizer(Optimizer):
         if self.architecture.hyper.encoder_variant == 'cnnwithclassattention':
             model_input2 = np.take(a=self.dataset.x_auxCaseVector_train, indices=batch_pairs_indices, axis=0)
             # remove one class/case vector of each pair to get a similar input as in test/life without knowing the label
-            model_input2[range(0, self.architecture.hyper.batch_size - 1, 2), :] = np.zeros(10)
+            # NOT NEEDED model_input2[range(0, self.architecture.hyper.batch_size - 1, 2), :] = np.zeros(self.dataset.x_auxCaseVector_train.shape[1])
+
             # print("model_input2: ", model_input2.shape)
             # model_input2 = model_input2[:16 // 2:2,:]
             # rows = range(0, 15, 2)
@@ -150,7 +159,6 @@ class SNNOptimizer(Optimizer):
             # print(model_input2)
             # print("model_input: ", model_input.shape)
             # model_input = np.reshape(model_input, (16, 1, 250, 58))
-            # print("model_input: ", model_input.shape)
             batch_loss = self.update_single_model([model_input, model_input2], true_similarities, self.architecture,
                                                   self.adam_optimizer)
         else:

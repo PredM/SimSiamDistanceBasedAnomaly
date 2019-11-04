@@ -84,7 +84,7 @@ class Configuration:
         # the batch for training is constructed based on the number of classes and
         # not on the number of training examples contained in the training data set.
         # the batch size must be at least twice as large as the number of training classes.
-        self.equalClassConsideration = False  # default: False
+        self.equalClassConsideration = True  # default: False
 
         ###
         # folders and file names
@@ -94,7 +94,7 @@ class Configuration:
         self.models_folder = '../data/trained_models/'
 
         # path and file name to the specific model that should be used for testing and live classification
-        self.filename_model_to_use = 'temp_models_10-30_12-18-45_epoch-100'
+        self.filename_model_to_use = 'temp_models_11-04_08-11-58_epoch-160000'
         self.directory_model_to_use = self.models_folder + self.filename_model_to_use + '/'
 
         # folder where the preprocessed training and test data for the neural network should be stored

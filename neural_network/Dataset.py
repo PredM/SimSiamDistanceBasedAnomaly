@@ -15,10 +15,12 @@ class Dataset:
         self.y_train = None # One hot encoded class labels (numExampl,numClasses)
         self.y_train_strings = None # # class labels as strings (numExampl,1)
         self.one_hot_encoder_labels = None # one hot label encoder
+        self.classes_Unique_oneHotEnc = None
         self.num_train_instances = None
         self.num_instances = None
         self.classIdx_to_trainExamplIdxPos = {} #Dictionary with key:class as integer and value: array with index positions
         self.classIdx_to_classString = {} # Dictonary with key:integer (0 to numOfClasses-1) which corresponds to one column entry and value string (class name)
+        self.classes = None # Class names as string
 
         self.time_series_length = None
         self.time_series_depth = None
@@ -136,6 +138,7 @@ class FullDataset(Dataset):
 
         # get the unique classes and the corresponding number
         self.classes = np.unique(np.concatenate((self.y_train_strings, self.y_test_strings), axis=0))
+        self.classes_Unique_oneHotEnc = self.one_hot_encoder.transform(np.expand_dims(self.classes,axis=1))
         self.num_classes = self.classes.size
 
         # Create two dictionaries to link/associate each class with all its training examples

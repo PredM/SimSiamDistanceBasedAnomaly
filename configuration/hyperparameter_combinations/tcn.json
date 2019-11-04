@@ -1,7 +1,7 @@
 {
-    "encoder_variant": "cnn",
+    "encoder_variant": "cnnwithclassattention",
 
-	"batch_size" : 4,
+	"batch_size" : 256,
 
     "epochs" : 400000,
     "epochs_current": 0,
@@ -11,7 +11,7 @@
     "dropout_rate" : 0.05,
     "ffnn_layers" : [64, 16, 1],
 
-	"cnn_layers" : [32, 32, 64],
+	"cnn_layers" : [512, 256, 64],
     "cnn_kernel_length" : [5, 5, 3],
     "cnn_strides" : [2, 1, 1],
 
@@ -19,4 +19,5 @@
 
     "tcn_layers" : [512, 256, 64],
     "tcn_kernel_length" : [5, 5, 3]
+
 }

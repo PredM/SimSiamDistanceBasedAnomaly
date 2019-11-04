@@ -34,6 +34,11 @@ class Inference:
         correct, num_infers = 0, 0
         start_time = time.perf_counter()
 
+        # print the case embeddings for each class
+        if self.architecture.encoder.hyper.encoder_variant == 'cnnwithclassattention':
+            self.architecture.printLearnedCaseVectors()
+
+
         # infer all examples of the test data set
         for idx_test in range(self.dataset.num_test_instances):
 
