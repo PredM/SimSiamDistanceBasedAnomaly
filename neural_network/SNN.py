@@ -124,6 +124,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
 
             #Compute similarities
             if self.hyper.encoder_variant == 'cnnwithclassattention':
+                input_pairs = np.reshape(input_pairs, (input_pairs.shape[0], input_pairs.shape[1], input_pairs.shape[2], 1))
                 sims = self.get_sims_batch([input_pairs, auxiliaryInput])
             else:
                 sims = self.get_sims_batch(input_pairs)
@@ -138,9 +139,13 @@ class SimpleSNN(AbstractSimilarityMeasure):
         context_vectors = self.encoder.model(batch, training=self.training)
         #case_embeddings = self.encoder.intermediate_layer_model(batch[1], training=self.training)
         #tf.print("Case Embedding for this query: ",case_embeddings, output_stream=sys.stderr,summarize = -1)
+        if self.hyper.encoder_variant == 'cnnwithclassattention':
+            sizeOfInput = batch[0].shape[0] // 2
+        else:
+            sizeOfInput = batch.shape[0] // 2
+            
         distances_batch = tf.map_fn(lambda pair_index: self.get_distance_pair(context_vectors, pair_index),
-                                    tf.range(self.hyper.batch_size, dtype=tf.int32), back_prop=True, dtype=tf.float32)
-
+                                    tf.range(sizeOfInput, dtype=tf.int32), back_prop=True, dtype=tf.float32)
         # transform distances into a similarity measure
         sims_batch = tf.exp(-distances_batch)
 
@@ -150,7 +155,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
     def get_distance_pair(self, context_vectors, pair_index):
         #if a concat layer is used, then context vectors need to be reshaped from 2d to 3d
         # context_vectors = tf.reshape(context_vectors,[context_vectors.shape[0],context_vectors.shape[1],1])
-        print("context_vectors.shape: ", context_vectors)
+
         a = context_vectors[2 * pair_index, :, :]
         b = context_vectors[2 * pair_index + 1, :, :]
 

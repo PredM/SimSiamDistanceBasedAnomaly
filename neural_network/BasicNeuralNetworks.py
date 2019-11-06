@@ -2,6 +2,7 @@ import sys
 from os import listdir, path
 
 import tensorflow as tf
+import numpy as np
 
 from configuration.Hyperparameter import Hyperparameters
 
@@ -65,8 +66,9 @@ class FFNN(NN):
 
     def create_model(self):
 
-        print('Creating FFNN')
+        print('Creating FFNN with input shape: ', self.input_shape)
         model = tf.keras.Sequential(name='FFNN')
+        # Input shape für 2dConv anpassen
 
         layers = self.hyper.ffnn_layers.copy()
 
@@ -163,8 +165,27 @@ class CNNWithClassAttention(NN):
 
     def create_model(self):
         print('Creating CNN encoder with an input shape: ', self.input_shape)
-        sensorDataInput = tf.keras.Input(self.input_shape[0], name="Input0")
+        sensorDataInput = tf.keras.Input(shape=(self.input_shape[0][0],self.input_shape[0][1],1), name="Input0")
         caseDependentVectorInput = tf.keras.Input(self.input_shape[1], name="Input1")
+
+        # Preparing Input:
+        # 1. generate a matrix from the case vector input
+        # 2. add this matrix to the sensor data input (batch,length,channels) to (batch,lenght,channels,2)
+
+        # creating a case vector encoder
+        caseDepVectEmbedding = tf.keras.layers.Dense(125*29, activation='sigmoid')(caseDependentVectorInput)
+        caseDepVectEmbedding = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(caseDepVectEmbedding)
+        caseDepVectEmbedding = tf.keras.layers.Dense(250*58, activation='sigmoid')(caseDepVectEmbedding)
+        caseDepVectEmbedding = tf.reshape(caseDepVectEmbedding, [-1,250, 58])
+        #caseDepVectEmbedding = tf.expand_dims(caseDepVectEmbedding,0)
+        #tf.reshape(caseDepVectEmbedding, shape=(-1, )
+        caseDepVectEmbedding = tf.expand_dims(caseDepVectEmbedding, -1)
+        #caseDepVectEmbedding = tf.expand_dims(caseDepVectEmbedding, 0)
+        #caseDepVectEmbedding = tf.reshape(caseDepVectEmbedding, [1, 250, 58,1])
+        print("sensorDataInput: ", sensorDataInput)
+        print("caseDepVectEmbedding: ", caseDepVectEmbedding)
+        sensorDataInput2 = tf.concat([sensorDataInput, caseDepVectEmbedding], axis=3)
+        print("sensorDataInput: ", sensorDataInput)
 
         layers = self.hyper.cnn_layers
 
@@ -180,10 +201,12 @@ class CNNWithClassAttention(NN):
 
             # first layer must be handled separately because the input shape parameter must be set
             if i == 0:
-                conv_layer1 = tf.keras.layers.Conv1D(filters=num_filter, padding='VALID', kernel_size=filter_size,
-                                                    strides=stride, input_shape=self.input_shape)
-                x = conv_layer1(sensorDataInput)
+                conv_layer1 = tf.keras.layers.Conv2D(filters=num_filter, padding='VALID', kernel_size=(filter_size,self.hyper.time_series_depth),
+                                                    strides=stride, input_shape=sensorDataInput2.shape)
+                x = conv_layer1(sensorDataInput2)
+                x = tf.reshape(x, [-1, 246, 512])
             else:
+                #conv_layer = tf.keras.layers.Conv2D(filters=num_filter, padding='VALID', kernel_size=(filter_size,1),strides=stride)
                 conv_layer = tf.keras.layers.Conv1D(filters=num_filter, padding='VALID', kernel_size=filter_size,
                                                     strides=stride)
                 x = conv_layer(x)
@@ -193,12 +216,12 @@ class CNNWithClassAttention(NN):
         x = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(x)
 
         # creating a case vector encoder
-
+        '''
         caseDepVectEmbedding = tf.keras.layers.Dense(32, activation='sigmoid')(caseDependentVectorInput)
         num_filterLastLayer = layer_properties[len(layer_properties)-1][0]
         caseDepVectEmbedding = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(caseDepVectEmbedding)
         caseDepVectEmbedding = tf.keras.layers.Dense(num_filterLastLayer, activation='sigmoid')(caseDepVectEmbedding)
-
+        '''
         # merging case vector and sensor encoding
         # a) ADD
         #caseDepVectEmbedding = tf.keras.layers.Softmax()(caseDepVectEmbedding)
@@ -207,7 +230,7 @@ class CNNWithClassAttention(NN):
         #caseDepVectEmbedding = tf.keras.layers.Softmax()(caseDepVectEmbedding)
         #embedding = tf.keras.layers.Multiply()([x, caseDepVectEmbedding])
         # c) CONCATENATE
-        #'''
+        '''
         flat = tf.keras.layers.Flatten()(x)
         concat = tf.concat([flat, caseDepVectEmbedding],1)
         #concat = tf.keras.layers.Concatenate()([flat, caseDepVectEmbedding])
@@ -219,15 +242,15 @@ class CNNWithClassAttention(NN):
         print("sensorDataInput.shape[0]: ",sensorDataInput.shape[0])
         dim0 = self.hyper.batch_size*2 #for Inference: 16450  #in Training: self.hyper.batch_size*2
         embedding = tf.reshape(embedding, [dim0, embedding.shape[1], 1])
-        #'''
-        self.model = tf.keras.Model(inputs=[sensorDataInput,caseDependentVectorInput],outputs=embedding)
+        '''
+        self.model = tf.keras.Model(inputs=[sensorDataInput,caseDependentVectorInput],outputs=x)
         # Add: softmax
         # Multiply: dense_1
-        self.intermediate_layer_model = tf.keras.Model(inputs=caseDependentVectorInput,outputs=self.model.get_layer("dense_1").output)
+        #self.intermediate_layer_model = tf.keras.Model(inputs=caseDependentVectorInput,outputs=self.model.get_layer("dense_1").output)
 
         # Query-value attention of shape [batch_size, Tq, filters].
         #print("inputs", inputs)
-        print("x: ", x)
+        #print("x: ", x)
         #input_lastConvLayer_attention_seq = tf.keras.layers.Attention()([x, caseDepVectEmbedding])
 
 

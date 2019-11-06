@@ -49,7 +49,7 @@ class Optimizer:
                 pass
 
     def update_single_model(self, model_input, true_similarities, model, optimizer):
-        #print("model_input: ",tf.shape( model_input))
+        #print("model_input: ",tf.shape(model_input))
         with tf.GradientTape() as tape:
             pred_similarities = model.get_sims_batch(model_input)
 
@@ -60,7 +60,12 @@ class Optimizer:
                 trainable_params = model.encoder.model.trainable_variables
 
             # Calculate the loss and the gradients
-            loss = tf.keras.losses.binary_crossentropy(y_true=true_similarities, y_pred=pred_similarities)
+            if(self.config.type_of_loss_function == "binary_cross_entropy"):
+                loss = tf.keras.losses.binary_crossentropy(y_true=true_similarities, y_pred=pred_similarities)
+            else:
+                loss = self.contrastive_loss(y_true=true_similarities, y_pred=pred_similarities)
+
+
             grads = tape.gradient(loss, trainable_params)
 
             # Todo needs to be changed for individual hyper parameters for cbs
@@ -71,6 +76,25 @@ class Optimizer:
             optimizer.apply_gradients(zip(clipped_grads, trainable_params))
 
             return loss
+
+    def contrastive_loss(self, y_true, y_pred):
+        '''Contrastive loss from Hadsell-et-al.'06
+        http://yann.lecun.com/exdb/publis/pdf/hadsell-chopra-lecun-06.pdf
+        '''
+        margin = self.config.margin_of_loss_function
+        square_pred = tf.square(y_pred)
+        margin_square = tf.square(tf.maximum(margin- y_pred, 0))
+        return tf.keras.backend.mean(y_true * square_pred + (1 - y_true) * margin_square)
+
+
+    def contrastive_loss_mod(self, y_true, y_pred):
+        '''Contrastive loss from Hadsell-et-al.'06
+        http://yann.lecun.com/exdb/publis/pdf/hadsell-chopra-lecun-06.pdf
+        '''
+        margin = 1
+        square_pred = tf.square(y_pred)
+        margin_square = tf.maximum(tf.square(margin) - tf.square(y_pred), 0)
+        return tf.keras.backend.mean((1 - y_true) * square_pred + y_true * margin_square)
 
 
 class SNNOptimizer(Optimizer):
@@ -157,8 +181,9 @@ class SNNOptimizer(Optimizer):
             # rows = range(0, 15, 2)
             # print(rows)
             # print(model_input2)
-            # print("model_input: ", model_input.shape)
-            # model_input = np.reshape(model_input, (16, 1, 250, 58))
+            #print("model_input: ", model_input.shape)
+            model_input = np.reshape(model_input, (model_input.shape[0], model_input.shape[1], model_input.shape[2], 1))
+            #print("model_input: ", model_input.shape)
             batch_loss = self.update_single_model([model_input, model_input2], true_similarities, self.architecture,
                                                   self.adam_optimizer)
         else:

@@ -27,6 +27,11 @@ class Configuration:
         self.hyper_file = '../configuration/hyperparameter_combinations/' + 'tcn.json'  # 'tcn.json'
         self.use_hyper_file = True
 
+        # Choose a loss function
+        self.loss_function_variants = ['binary_cross_entropy', 'constrative_loss'] # todo: TripletLoss, Distance-Based Logistic Loss
+        self.type_of_loss_function = self.loss_function_variants[1]
+        self.margin_of_loss_function = 0.8 # required for constrative_loss
+
         # select whether training should be continued from the checkpoint defined below
         self.continue_training = False
 
@@ -94,7 +99,7 @@ class Configuration:
         self.models_folder = '../data/trained_models/'
 
         # path and file name to the specific model that should be used for testing and live classification
-        self.filename_model_to_use = 'temp_models_11-04_08-11-58_epoch-160000'
+        self.filename_model_to_use = 'temp_models_11-06_08-57-18_epoch-292000'
         self.directory_model_to_use = self.models_folder + self.filename_model_to_use + '/'
 
         # folder where the preprocessed training and test data for the neural network should be stored

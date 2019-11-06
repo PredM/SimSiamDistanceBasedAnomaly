@@ -3,6 +3,7 @@ import os
 import time
 import numpy as np
 import pandas as pd
+import tensorflow as tf
 
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 
@@ -36,7 +37,8 @@ class Inference:
 
         # print the case embeddings for each class
         if self.architecture.encoder.hyper.encoder_variant == 'cnnwithclassattention':
-            self.architecture.printLearnedCaseVectors()
+            print()
+            #self.architecture.printLearnedCaseVectors()
 
 
         # infer all examples of the test data set
@@ -47,15 +49,26 @@ class Inference:
 
             # measure the similarity between the test series and the training batch series
             sims, labels = self.architecture.get_sims(self.dataset.x_test[idx_test])
-
+            print("sims shape: ", sims.shape, " label shape: ", labels.shape)
             # check similarities of all pairs and record the index of the closest training series
+            '''
             for i in range(len(sims)):
                 if sims[i] >= max_sim:
                     max_sim = sims[i]
                     max_sim_index = i
+            '''
+            ranking_nearest_neighbors_idx = np.argsort(-sims)
+            k_nn_string =""
+            for i in range(self.config.k_of_knn):
+                #print("ranking_nearest_neighbors_idx[i]: ",ranking_nearest_neighbors_idx[i])
+                k_nn_string = k_nn_string + str(i+1)+". "+ str(self.dataset.y_train_strings[ranking_nearest_neighbors_idx[i]]) + " Sim: "+str(np.asanyarray(sims[ranking_nearest_neighbors_idx[i]])) +" Case id: "+ str(ranking_nearest_neighbors_idx[i])
+                if i != self.config.k_of_knn-1:
+                    k_nn_string = k_nn_string + str("\n")
 
             real = self.dataset.y_test_strings[idx_test]
-            max_sim_class = labels[max_sim_index]
+            #print("max_sim_index: ", max_sim_index, " ranking_nearest_neighbors_idx[0]: ",ranking_nearest_neighbors_idx[0])
+            max_sim_class = self.dataset.y_train_strings[ranking_nearest_neighbors_idx[0]] #labels[max_sim_index]
+            max_sim = np.asanyarray(sims[ranking_nearest_neighbors_idx[0]])
 
             # if correctly classified increase the true positive field of the correct class and the of all classes
             if real == max_sim_class:
@@ -74,11 +87,14 @@ class Inference:
                 ['Classified as:', max_sim_class],
                 ['Correct class:', real],
                 ['Similarity:', max_sim],
+                #['K-nearest Neighbors: ', k_nn_string],
                 ['Current accuracy:', correct / num_infers]
             ]
 
             for row in example_results:
                 print("{: <25} {: <25}".format(*row))
+
+            print("K-nearest Neighbors:\n", k_nn_string)
             print('')
 
         elapsed_time = time.perf_counter() - start_time
