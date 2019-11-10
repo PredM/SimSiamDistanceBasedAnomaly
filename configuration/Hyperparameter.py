@@ -9,7 +9,7 @@ class Hyperparameters:
         # Important: Variable names must match json file entries
         ##
 
-        self.encoder_variants = ['cnn', 'rnn', 'tcn','cnnwithclassattention']
+        self.encoder_variants = ['cnn', 'rnn', 'tcn','cnnwithclassattention', 'cnn1dwithclassattention']
 
         # Need to be changed after dataset was loaded
         self.time_series_length = 999

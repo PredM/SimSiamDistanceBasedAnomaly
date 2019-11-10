@@ -62,8 +62,11 @@ class Optimizer:
             # Calculate the loss and the gradients
             if(self.config.type_of_loss_function == "binary_cross_entropy"):
                 loss = tf.keras.losses.binary_crossentropy(y_true=true_similarities, y_pred=pred_similarities)
-            else:
+            elif(self.config.type_of_loss_function == "constrative_loss"):
                 loss = self.contrastive_loss(y_true=true_similarities, y_pred=pred_similarities)
+            else:
+                raise AttributeError('Unknown loss function name. Use: "binary_cross_entropy" or "constrative_loss": ',
+                                     self.hyper.encoder_variant)
 
 
             grads = tape.gradient(loss, trainable_params)
@@ -91,7 +94,7 @@ class Optimizer:
         '''Contrastive loss from Hadsell-et-al.'06
         http://yann.lecun.com/exdb/publis/pdf/hadsell-chopra-lecun-06.pdf
         '''
-        margin = 1
+        margin = self.config.margin_of_loss_function
         square_pred = tf.square(y_pred)
         margin_square = tf.maximum(tf.square(margin) - tf.square(y_pred), 0)
         return tf.keras.backend.mean((1 - y_true) * square_pred + y_true * margin_square)
@@ -171,10 +174,10 @@ class SNNOptimizer(Optimizer):
         model_input = np.take(a=self.dataset.x_train, indices=batch_pairs_indices, axis=0)
 
         # Add the auxiliary input if required
-        if self.architecture.hyper.encoder_variant == 'cnnwithclassattention':
+        if self.architecture.hyper.encoder_variant == 'cnnwithclassattention' or self.architecture.hyper.encoder_variant == 'cnn1dwithclassattention':
             model_input2 = np.take(a=self.dataset.x_auxCaseVector_train, indices=batch_pairs_indices, axis=0)
             # remove one class/case vector of each pair to get a similar input as in test/life without knowing the label
-            # NOT NEEDED model_input2[range(0, self.architecture.hyper.batch_size - 1, 2), :] = np.zeros(self.dataset.x_auxCaseVector_train.shape[1])
+            # model_input2[range(0, self.architecture.hyper.batch_size - 1, 2), :] = np.zeros(self.dataset.x_auxCaseVector_train.shape[1])
 
             # print("model_input2: ", model_input2.shape)
             # model_input2 = model_input2[:16 // 2:2,:]
@@ -182,7 +185,8 @@ class SNNOptimizer(Optimizer):
             # print(rows)
             # print(model_input2)
             #print("model_input: ", model_input.shape)
-            model_input = np.reshape(model_input, (model_input.shape[0], model_input.shape[1], model_input.shape[2], 1))
+            if self.architecture.hyper.encoder_variant == 'cnnwithclassattention':
+                model_input = np.reshape(model_input, (model_input.shape[0], model_input.shape[1], model_input.shape[2], 1))
             #print("model_input: ", model_input.shape)
             batch_loss = self.update_single_model([model_input, model_input2], true_similarities, self.architecture,
                                                   self.adam_optimizer)

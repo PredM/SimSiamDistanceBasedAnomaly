@@ -6,7 +6,8 @@ import numpy as np
 from configuration.Configuration import Configuration
 from configuration.Hyperparameter import Hyperparameters
 from neural_network.Dataset import Dataset
-from neural_network.BasicNeuralNetworks import CNN, RNN, FFNN, TCN, CNNWithClassAttention
+from neural_network.BasicNeuralNetworks import CNN, RNN, FFNN, TCN, CNNWithClassAttention, CNN1DWithClassAttention
+import matplotlib.pyplot as plt
 
 
 # initialises the correct SNN variant depending on the configuration
@@ -117,14 +118,17 @@ class SimpleSNN(AbstractSimilarityMeasure):
                 input_pairs[2 * index] = example
                 input_pairs[2 * index + 1] = self.dataset.x_train[index]
 
-                if self.hyper.encoder_variant == 'cnnwithclassattention':
+                if self.hyper.encoder_variant == 'cnnwithclassattention' or self.hyper.encoder_variant == 'cnn1dwithclassattention':
                     #Additing an additional/auxiliary input
-                    auxiliaryInput[2 * index] =  self.dataset.x_auxCaseVector_train[index] #np.zeros(self.dataset.x_auxCaseVector_train.shape[1]) #self.dataset.x_auxCaseVector_train[index] #
+                    auxiliaryInput[2 * index] =  self.dataset.x_auxCaseVector_train[index] #np.zeros(self.dataset.x_auxCaseVector_train.shape[1])  #self.dataset.x_auxCaseVector_train[index] #
                     auxiliaryInput[2 * index + 1] = self.dataset.x_auxCaseVector_train[index]
 
             #Compute similarities
             if self.hyper.encoder_variant == 'cnnwithclassattention':
                 input_pairs = np.reshape(input_pairs, (input_pairs.shape[0], input_pairs.shape[1], input_pairs.shape[2], 1))
+                sims = self.get_sims_batch([input_pairs, auxiliaryInput])
+            elif self.hyper.encoder_variant == 'cnn1dwithclassattention':
+                #input_pairs = np.reshape(input_pairs, (input_pairs.shape[0], input_pairs.shape[1], input_pairs.shape[2], 1))
                 sims = self.get_sims_batch([input_pairs, auxiliaryInput])
             else:
                 sims = self.get_sims_batch(input_pairs)
@@ -134,12 +138,12 @@ class SimpleSNN(AbstractSimilarityMeasure):
 
     @tf.function
     def get_sims_batch(self, batch):
-        print("get_sims_batch: batch shape: ", batch)
+        print("get_sims_batch: batch shape: ", batch, "self.hyper.encoder_variant: ",self.hyper.encoder_variant)
         # calculate the output of the subnet for the examples in the batch
         context_vectors = self.encoder.model(batch, training=self.training)
         #case_embeddings = self.encoder.intermediate_layer_model(batch[1], training=self.training)
         #tf.print("Case Embedding for this query: ",case_embeddings, output_stream=sys.stderr,summarize = -1)
-        if self.hyper.encoder_variant == 'cnnwithclassattention':
+        if self.hyper.encoder_variant == 'cnnwithclassattention' or self.hyper.encoder_variant == 'cnn1dwithclassattention':
             sizeOfInput = batch[0].shape[0] // 2
         else:
             sizeOfInput = batch.shape[0] // 2
@@ -153,7 +157,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
 
     @tf.function
     def get_distance_pair(self, context_vectors, pair_index):
-        #if a concat layer is used, then context vectors need to be reshaped from 2d to 3d
+        #if a concat layer is used in the cnn1dclassattention, then context vectors need to be reshaped from 2d to 3d
         # context_vectors = tf.reshape(context_vectors,[context_vectors.shape[0],context_vectors.shape[1],1])
 
         a = context_vectors[2 * pair_index, :, :]
@@ -181,6 +185,22 @@ class SimpleSNN(AbstractSimilarityMeasure):
                 minNPos = minpos[cnt,:numOfMaxPos]
                 print(i," ",self.dataset.classes_Unique_oneHotEnc[cnt],"Max Filter:",maxpos[cnt,:5], "Max Values: ", row[maxNPos],"Min Values: ", row[minNPos])
                 cnt= cnt+1
+
+    def printLearnedCaseMatrix(self):
+        # this methods prints the learned case embeddings for each class and its values
+        cnt = 0
+        case_matrix = self.encoder.intermediate_layer_model(self.dataset.classes_Unique_oneHotEnc,
+                                                                training=self.training)
+        print(case_matrix)
+        # Get positions with maximum values
+        for i in self.dataset.classes:
+            with np.printoptions(precision=3, suppress=True):
+                # Get positions with maximum values
+                matrix = np.array(case_matrix[cnt,:,:])
+                plt.imshow(matrix, cmap='hot', interpolation='nearest')
+                plt.savefig(i+'_matrix.png')
+                cnt= cnt+1
+
 
     def load_model(self, model_folder=None, training=None):
         # todo cant use == simple case handler because circle decencies
@@ -211,6 +231,9 @@ class SimpleSNN(AbstractSimilarityMeasure):
             elif self.hyper.encoder_variant == 'cnnwithclassattention':
                 # Consideration of an encoder with multiple inputs
                 self.encoder = CNNWithClassAttention(self.hyper, [input_shape_encoder, self.dataset.y_train.shape[1]])
+            elif self.hyper.encoder_variant == 'cnn1dwithclassattention':
+                # Consideration of an encoder with multiple inputs
+                self.encoder = CNN1DWithClassAttention(self.hyper, [input_shape_encoder, self.dataset.y_train.shape[1]])
             elif self.hyper.encoder_variant == 'rnn':
                 self.encoder = RNN(self.hyper, input_shape_encoder)
             elif self.hyper.encoder_variant == 'tcn':

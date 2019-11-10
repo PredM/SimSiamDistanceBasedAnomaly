@@ -38,7 +38,7 @@ class NN:
         if self.model is None:
             raise AttributeError('Model not initialised. Can not load weights.')
 
-        if type(self) == CNN or type(self) == RNN or type(self) == TCN or type(self) == CNNWithClassAttention:
+        if type(self) == CNN or type(self) == RNN or type(self) == TCN or type(self) == CNNWithClassAttention or type(self) == CNN1DWithClassAttention:
             prefix = 'encoder'
         elif type(self) == FFNN:
             prefix = 'ffnn'
@@ -172,9 +172,10 @@ class CNNWithClassAttention(NN):
         # 1. generate a matrix from the case vector input
         # 2. add this matrix to the sensor data input (batch,length,channels) to (batch,lenght,channels,2)
 
-        # creating a case vector encoder
+        # creating a case matrix encoder
+        '''
         caseDepVectEmbedding = tf.keras.layers.Dense(125*29, activation='sigmoid')(caseDependentVectorInput)
-        caseDepVectEmbedding = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(caseDepVectEmbedding)
+        #caseDepVectEmbedding = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(caseDepVectEmbedding)
         caseDepVectEmbedding = tf.keras.layers.Dense(250*58, activation='sigmoid')(caseDepVectEmbedding)
         caseDepVectEmbedding = tf.reshape(caseDepVectEmbedding, [-1,250, 58])
         #caseDepVectEmbedding = tf.expand_dims(caseDepVectEmbedding,0)
@@ -182,6 +183,21 @@ class CNNWithClassAttention(NN):
         caseDepVectEmbedding = tf.expand_dims(caseDepVectEmbedding, -1)
         #caseDepVectEmbedding = tf.expand_dims(caseDepVectEmbedding, 0)
         #caseDepVectEmbedding = tf.reshape(caseDepVectEmbedding, [1, 250, 58,1])
+        '''
+        # creating a case vector encoder
+        caseDepVectEmbedding = tf.keras.layers.Dense(58, activation='sigmoid')(caseDependentVectorInput)
+        caseDepVectEmbedding = tf.keras.layers.Softmax()(caseDepVectEmbedding)
+        ones = tf.ones([16450,250, 58])
+        caseDepVectEmbedding = tf.keras.layers.Multiply()([ones, caseDepVectEmbedding])
+
+        #caseDepVectEmbedding2 = tf.ones([self.hyper.batch_size*2,250, 58]) * caseDepVectEmbedding
+        #caseDepVectEmbedding3 = tf.reshape(caseDepVectEmbedding2, [-1, 250, 58])
+        #caseDepVectEmbedding = tf.reshape(caseDepVectEmbedding, [250,58])
+        #caseDepVectEmbedding = tf.reshape(caseDepVectEmbedding, [-1, 250, 58])
+        #caseDepVectEmbedding = tf.tile(caseDepVectEmbedding, [self.hyper.batch_size*2,250,1])
+        #caseDepVectEmbedding = tf.ones([250, 58]) * caseDepVectEmbedding
+        caseDepVectEmbedding = tf.reshape(caseDepVectEmbedding, [-1, 250, 58])
+        caseDepVectEmbedding = tf.expand_dims(caseDepVectEmbedding, -1)
         print("sensorDataInput: ", sensorDataInput)
         print("caseDepVectEmbedding: ", caseDepVectEmbedding)
         sensorDataInput2 = tf.concat([sensorDataInput, caseDepVectEmbedding], axis=3)
@@ -246,12 +262,87 @@ class CNNWithClassAttention(NN):
         self.model = tf.keras.Model(inputs=[sensorDataInput,caseDependentVectorInput],outputs=x)
         # Add: softmax
         # Multiply: dense_1
-        #self.intermediate_layer_model = tf.keras.Model(inputs=caseDependentVectorInput,outputs=self.model.get_layer("dense_1").output)
+        self.intermediate_layer_model = tf.keras.Model(inputs=caseDependentVectorInput,outputs=self.model.get_layer("tf_op_layer_Reshape").output)
 
         # Query-value attention of shape [batch_size, Tq, filters].
         #print("inputs", inputs)
         #print("x: ", x)
         #input_lastConvLayer_attention_seq = tf.keras.layers.Attention()([x, caseDepVectEmbedding])
+
+class CNN1DWithClassAttention(NN):
+
+    def __init__(self, hyperparameters, input_shape):
+        super().__init__(hyperparameters, input_shape)
+
+    def create_model(self):
+        print('Creating CNN encoder with an input shape: ', self.input_shape)
+        sensorDataInput = tf.keras.Input(self.input_shape[0], name="Input0")
+        caseDependentVectorInput = tf.keras.Input(self.input_shape[1], name="Input1")
+
+        layers = self.hyper.cnn_layers
+
+        if len(layers) < 1:
+            print('CNN encoder with less than one layer is not possible')
+            sys.exit(1)
+
+        layer_properties = list(zip(self.hyper.cnn_layers, self.hyper.cnn_kernel_length, self.hyper.cnn_strides))
+
+        # creating CNN encoder for sensor data
+        for i in range(len(layer_properties)):
+            num_filter, filter_size, stride = layer_properties[i][0], layer_properties[i][1], layer_properties[i][2]
+
+            # first layer must be handled separately because the input shape parameter must be set
+            if i == 0:
+                conv_layer1 = tf.keras.layers.Conv1D(filters=num_filter, padding='VALID', kernel_size=filter_size,
+                                                     strides=stride, input_shape=self.input_shape)
+                x = conv_layer1(sensorDataInput)
+            else:
+                conv_layer = tf.keras.layers.Conv1D(filters=num_filter, padding='VALID', kernel_size=filter_size,
+                                                    strides=stride)
+                x = conv_layer(x)
+            x = tf.keras.layers.BatchNormalization()(x)
+            x = tf.keras.layers.ReLU()(x)
+
+        x = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(x)
+
+        # creating a case vector encoder
+
+        caseDepVectEmbedding = tf.keras.layers.Dense(32, activation='sigmoid')(caseDependentVectorInput)
+        num_filterLastLayer = layer_properties[len(layer_properties) - 1][0]
+        caseDepVectEmbedding = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(caseDepVectEmbedding)
+        caseDepVectEmbedding = tf.keras.layers.Dense(num_filterLastLayer, activation='sigmoid')(caseDepVectEmbedding)
+
+        # merging case vector and sensor encoding
+        # a) ADD
+        # caseDepVectEmbedding = tf.keras.layers.Softmax()(caseDepVectEmbedding)
+        # embedding = tf.keras.layers.Add()([x, caseDepVectEmbedding])
+        # b) MULTIPLY
+        # caseDepVectEmbedding = tf.keras.layers.Softmax()(caseDepVectEmbedding)
+        # embedding = tf.keras.layers.Multiply()([x, caseDepVectEmbedding])
+        # c) CONCATENATE
+        # '''
+        flat = tf.keras.layers.Flatten()(x)
+        concat = tf.concat([flat, caseDepVectEmbedding], 1)
+        # concat = tf.keras.layers.Concatenate()([flat, caseDepVectEmbedding])
+        embedding = tf.keras.layers.Dense(1024, activation='relu')(concat)
+        embedding = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(embedding)
+        embedding = tf.keras.layers.Dense(256, activation='relu')(embedding)
+        embedding = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(embedding)
+        embedding = tf.keras.layers.Dense(64, activation='sigmoid')(embedding)
+        print("sensorDataInput.shape[0]: ", sensorDataInput.shape[0])
+        dim0 = self.hyper.batch_size * 2  # for Inference: 16450  #in Training: self.hyper.batch_size*2
+        embedding = tf.reshape(embedding, [dim0, embedding.shape[1], 1])
+        # '''
+        self.model = tf.keras.Model(inputs=[sensorDataInput, caseDependentVectorInput], outputs=embedding)
+        # Add: softmax
+        # Multiply: dense_1
+        self.intermediate_layer_model = tf.keras.Model(inputs=caseDependentVectorInput,
+                                                       outputs=self.model.get_layer("dense_1").output)
+
+        # Query-value attention of shape [batch_size, Tq, filters].
+        # print("inputs", inputs)
+        print("x: ", x)
+        # input_lastConvLayer_attention_seq = tf.keras.layers.Attention()([x, caseDepVectEmbedding])
 
 
 class CNN(NN):
