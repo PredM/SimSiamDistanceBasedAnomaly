@@ -112,7 +112,8 @@ class SimpleSNN(AbstractSimilarityMeasure):
             batch_size = len(self.dataset.x_train)
             input_pairs = np.zeros((2 * batch_size, self.hyper.time_series_length,
                                     self.hyper.time_series_depth)).astype('float32')
-            auxiliaryInput = np.zeros((2 * batch_size, self.dataset.x_auxCaseVector_test.shape[1]))
+            if self.hyper.encoder_variant == 'cnnwithclassattention' or self.hyper.encoder_variant == 'cnn1dwithclassattention':
+                auxiliaryInput = np.zeros((2 * batch_size, self.dataset.x_auxCaseVector_test.shape[1]))
             print("input_pairs shape: ",input_pairs.shape)
             for index in range(batch_size):
                 input_pairs[2 * index] = example

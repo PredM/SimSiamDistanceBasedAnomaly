@@ -372,12 +372,18 @@ class CNN(NN):
             else:
                 conv_layer = tf.keras.layers.Conv1D(filters=num_filter, padding='VALID', kernel_size=filter_size,
                                                     strides=stride)
-            model.add(conv_layer)
+            model.add(conv_layer) # todo: CBS bricht wenn alle Felerfälle im Training sind hier ab mit Process finished with exit code -1073741676 (0xC0000094)
             model.add(tf.keras.layers.BatchNormalization())
             model.add(tf.keras.layers.ReLU())
 
         model.add(tf.keras.layers.Dropout(rate=self.hyper.dropout_rate))
-
+        '''
+        model.add(tf.keras.layers.Dense(64, activation=tf.keras.activations.relu))
+        model.add(tf.keras.layers.Dropout(rate=self.hyper.dropout_rate))
+        model.add(tf.keras.layers.Dense(32, activation=tf.keras.activations.relu))
+        model.add(tf.keras.layers.Dropout(rate=self.hyper.dropout_rate))
+        model.add(tf.keras.layers.Dense(1, activation=tf.keras.activations.sigmoid))
+        '''
         self.model = model
 
 

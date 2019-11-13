@@ -247,7 +247,8 @@ class CBSOptimizer(Optimizer):
         for case_handler in self.architecture.case_handlers:
             self.losses[case_handler.dataset.case] = []
             self.optimizer[case_handler.dataset.case] = tf.keras.optimizers.Adam(
-                learning_rate=case_handler.hyper.learning_rate)
+                learning_rate=0.0001)
+            #TODO: self.optimizer[case_handler.dataset.case] = tf.keras.optimizers.Adam(learning_rate=case_handler.hyper.learning_rate)
 
     def optimize(self):
         current_epoch = 0

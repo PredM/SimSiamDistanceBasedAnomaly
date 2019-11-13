@@ -51,7 +51,6 @@ class CBS(AbstractSimilarityMeasure):
 
             ch: SimpleCaseHandler = self.initialise_case_handler(dataset)
             self.case_handlers.append(ch)
-            print()
 
     # initializes the correct case handler depending on the configured variant
     def initialise_case_handler(self, dataset):

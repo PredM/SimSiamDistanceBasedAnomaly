@@ -36,8 +36,8 @@ class Inference:
         start_time = time.perf_counter()
 
         # print the case embeddings for each class
-        if self.architecture.encoder.hyper.encoder_variant == 'cnnwithclassattention':
-            print()
+        #if self.architecture.encoder.hyper.encoder_variant == 'cnnwithclassattention':
+            #print()
             #self.architecture.printLearnedCaseMatrix()
             #self.architecture.printLearnedCaseVectors()
 

@@ -20,17 +20,17 @@ class Configuration:
         # ffnn = uses ffnn as distance measure
         # simple = mean absolute difference as distance measure instead of the ffnn
         self.architecture_variants = ['standard_simple', 'standard_ffnn', 'fast_simple', 'fast_ffnn']
-        self.architecture_variant = self.architecture_variants[1]
+        self.architecture_variant = self.architecture_variants[0]
 
         # TODO Needs to be changed to folder if every encoder should use different hyperparameters
         # hyperparameter file to use
-        self.hyper_file = '../configuration/hyperparameter_combinations/' + 'tcn.json'  # 'tcn.json'
+        self.hyper_file = '../configuration/hyperparameter_combinations/' + 'ba_cnn.json'  # 'tcn.json'
         self.use_hyper_file = True
 
         # Choose a loss function
         self.loss_function_variants = ['binary_cross_entropy', 'constrative_loss'] # todo: TripletLoss, Distance-Based Logistic Loss
-        self.type_of_loss_function = self.loss_function_variants[1]
-        self.margin_of_loss_function = 0.4 # required for constrative_loss
+        self.type_of_loss_function = self.loss_function_variants[0]
+        self.margin_of_loss_function = 4 # required for constrative_loss
 
         # select whether training should be continued from the checkpoint defined below
         self.continue_training = False
@@ -47,7 +47,7 @@ class Configuration:
         all_cases = ['no_failure', 'txt_18_comp_leak', 'txt_17_comp_leak', 'txt15_m1_t1_high_wear',
                      'txt15_m1_t1_low_wear', 'txt15_m1_t2_wear', 'txt16_m3_t1_high_wear', 'txt16_m3_t1_low_wear',
                      'txt16_m3_t2_wear', 'txt16_i4']
-        self.cases_used = all_cases[0:2]
+        self.cases_used = all_cases[0:9]
 
         ###
         # kafka / real time classification
@@ -89,7 +89,7 @@ class Configuration:
         # the batch for training is constructed based on the number of classes and
         # not on the number of training examples contained in the training data set.
         # the batch size must be at least twice as large as the number of training classes.
-        self.equalClassConsideration = False  # default: False
+        self.equalClassConsideration = True  # default: False
 
         ###
         # folders and file names
@@ -99,7 +99,7 @@ class Configuration:
         self.models_folder = '../data/trained_models/'
 
         # path and file name to the specific model that should be used for testing and live classification
-        self.filename_model_to_use = 'temp_models_11-10_15-13-00_epoch-13500'
+        self.filename_model_to_use = 'temp_models_11-13_09-17-38_epoch-65000'
         self.directory_model_to_use = self.models_folder + self.filename_model_to_use + '/'
 
         # folder where the preprocessed training and test data for the neural network should be stored
