@@ -11,7 +11,7 @@
     "dropout_rate" : 0.05,
     "ffnn_layers" : [64, 16, 1],
 
-	"cnn_layers" : [256, 128, 64],
+	"cnn_layers" : [128, 64, 32],
     "cnn_kernel_length" : [5, 5, 3],
     "cnn_strides" : [1, 1, 2],
 
