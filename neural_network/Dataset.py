@@ -162,7 +162,9 @@ class FullDataset(Dataset):
         print('\tShape of training set (example, time, channels):', self.x_train.shape)
         print('\tShape of test set (example, time, channels):', self.x_test.shape)
         print('\tNum of classes:', self.num_classes)
-        print('\tClasses used in training:', self.classes, '\n')
+        print('\tClasses used in training:')
+        print(self.classes)
+        print()
 
     # draw a random pair of instances
     def draw_pair(self, is_positive, from_test):

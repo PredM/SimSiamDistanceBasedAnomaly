@@ -203,7 +203,6 @@ def main():
         # split the dataframe into the configured cases
         cases_df, labels_df = split_by_cases(df, i, config)
 
-        # TODO Must be tested
         if i == 0:
             attributes = np.stack(df.columns, axis=0)
 

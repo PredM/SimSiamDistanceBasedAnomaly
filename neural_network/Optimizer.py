@@ -70,7 +70,7 @@ class Optimizer:
 
             grads = tape.gradient(loss, trainable_params)
 
-            # Todo needs to be changed for individual hyper parameters for cbs
+            # TODO needs to be changed for individual hyper parameters for cbs
             # Maybe change back to clipnorm = self.hyper.gradient_cap in adam initialisation
             clipped_grads, _ = tf.clip_by_global_norm(grads, model.hyper.gradient_cap)
 

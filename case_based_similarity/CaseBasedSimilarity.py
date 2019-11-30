@@ -8,7 +8,7 @@ sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 from configuration.Configuration import Configuration
 from configuration.Hyperparameter import Hyperparameters
 from neural_network.Dataset import CaseSpecificDataset
-from neural_network.SNN import SimpleSNN, AbstractSimilarityMeasure
+from neural_network.SNN import SimpleSNN, AbstractSimilarityMeasure, SNN
 
 
 class CBS(AbstractSimilarityMeasure):
@@ -100,18 +100,18 @@ class CBS(AbstractSimilarityMeasure):
             'The optimizer will use the dedicated function of each case handler')
 
 
-class SimpleCaseHandler(SimpleSNN):
+class CaseHandlerHelper:
 
-    def __init__(self, config, dataset: CaseSpecificDataset, training):
-        super().__init__(config, dataset, training)
+    # config and training are placeholders for multiple inheritance to work
+    def __init__(self, dataset: CaseSpecificDataset):
+        print('helper init called')
+
         self.dataset: CaseSpecificDataset = dataset
-
         # TODO Find better solution
         self.need_encoder = [SimpleCaseHandler, CaseHandler, FastCaseHandler]
         self.need_ffnn = [CaseHandler, FastCaseHandler]
 
         self.print_case_handler_info()
-        # No model loading here, will be done by CBS for all case handlers
 
     # debugging method, can be removed when implementation is finished
     def print_case_handler_info(self):
@@ -127,18 +127,40 @@ class SimpleCaseHandler(SimpleSNN):
         print()
 
     # input must be the 'complete' example with all features of a 'full dataset'
+
     def get_sims(self, example):
         # example must be reduced to the features used for this cases
         # before the super class method can be called to calculate the similarities to the case base
         example = example[:, self.dataset.indices_features]
+
+        # do not change, calls get_sim of corresponding snn version
+        # noinspection PyUnresolvedReferences
         return super().get_sims(example)
 
 
-# TODO Rather inherent from corresponding SNN / multiple inheritance
-class CaseHandler(SimpleCaseHandler):
+# Order of super classes very important, do not change
+class SimpleCaseHandler(CaseHandlerHelper, SimpleSNN):
 
-    def __init__(self):
-        raise NotImplementedError()
+    def __init__(self, config, dataset: CaseSpecificDataset, training):
+        # Not nice but should work, https://bit.ly/2R7VG3Y
+        # Explicit call of both super class constructors
+        # Order very important, do not change
+        SimpleSNN.__init__(self, config, dataset, training)
+        CaseHandlerHelper.__init__(self, dataset)
+
+        # No model loading here, will be done by CBS for all case handlers
+
+
+class CaseHandler(CaseHandlerHelper, SNN):
+
+    def __init__(self, config, dataset, training):
+        # Not nice but should work, https://bit.ly/2R7VG3Y
+        # Explicit call of both super class constructors
+        # Order very important, do not change
+        SNN.__init__(self, config, dataset, training)
+        CaseHandlerHelper.__init__(self, dataset)
+
+        # No model loading here, will be done by CBS for all case handlers
 
 
 class FastSimpleCaseHandler(SimpleCaseHandler):

@@ -59,6 +59,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
 
     def __init__(self, config, dataset, training):
         super().__init__(training)
+
         self.dataset: Dataset = dataset
         self.config: Configuration = config
         self.hyper = None
@@ -147,7 +148,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
 
     @tf.function
     def get_sims_batch(self, batch):
-        print("get_sims_batch: batch shape: ", batch, "self.hyper.encoder_variant: ", self.hyper.encoder_variant)
+        # print("get_sims_batch: batch shape: ", batch, "self.hyper.encoder_variant: ", self.hyper.encoder_variant)
 
         # calculate the output of the subnet for the examples in the batch
         context_vectors = self.encoder.model(batch, training=self.training)
@@ -213,7 +214,8 @@ class SimpleSNN(AbstractSimilarityMeasure):
                 cnt = cnt + 1
 
     def load_model(self, model_folder=None, training=None):
-        # todo cant use == simple case handler because circle decencies
+
+        # TODO cant use == simple case handler because circle decencies
         # check if working and change to subdirectory
         # if self.training is False and type(self) == SimpleCaseHandler and model_folder is None:
         #    raise AttributeError('Model folder must be specified if loading a case handler')
@@ -258,8 +260,6 @@ class SimpleSNN(AbstractSimilarityMeasure):
                 self.encoder.load_model_weights(model_folder)
 
         if type(self) in self.need_ffnn:
-            print(type(self))
-            print(self.need_ffnn)
             if self.hyper.encoder_variant == 'tcn':
                 encoder_output_shape = self.encoder.output_shape
             else:
@@ -294,6 +294,7 @@ class SNN(SimpleSNN):
     # noinspection DuplicatedCode
     @tf.function
     def get_distance_pair(self, context_vectors, pair_index):
+
         a = context_vectors[2 * pair_index, :, :]
         b = context_vectors[2 * pair_index + 1, :, :]
 
