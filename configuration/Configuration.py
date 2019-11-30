@@ -28,9 +28,10 @@ class Configuration:
         self.use_hyper_file = True
 
         # Choose a loss function
-        self.loss_function_variants = ['binary_cross_entropy', 'constrative_loss'] # todo: TripletLoss, Distance-Based Logistic Loss
+        # TODO: TripletLoss, Distance-Based Logistic Loss
+        self.loss_function_variants = ['binary_cross_entropy', 'constrative_loss']
         self.type_of_loss_function = self.loss_function_variants[0]
-        self.margin_of_loss_function = 4 # required for constrative_loss
+        self.margin_of_loss_function = 4  # required for constrative_loss
 
         # select whether training should be continued from the checkpoint defined below
         self.continue_training = False
@@ -47,7 +48,7 @@ class Configuration:
         all_cases = ['no_failure', 'txt_18_comp_leak', 'txt_17_comp_leak', 'txt15_m1_t1_high_wear',
                      'txt15_m1_t1_low_wear', 'txt15_m1_t2_wear', 'txt16_m3_t1_high_wear', 'txt16_m3_t1_low_wear',
                      'txt16_m3_t2_wear', 'txt16_i4']
-        self.cases_used = all_cases[0:9]
+        self.cases_used = None
 
         ###
         # kafka / real time classification
@@ -191,7 +192,12 @@ class Configuration:
         # mapping for topic name to prefix of sensor streams, relevant to get the same order of streams
         self.prefixes = None
 
-        self.relevant_features, self.all_features_used = None, None
+        # dict, keys: all case names configured above in self.cases_used, value: list of relevant features for
+        # this case (will be loaded from config.json below)
+        self.relevant_features = None
+        # list of all features contained in the relevant_features in config.json, sorted and without duplicates
+        # used for dataset creation
+        self.all_features_configured = None
         self.zeroOne, self.intNumbers, self.realValues, self.bools = None, None, None, None
 
         self.load_config_json('../configuration/config.json')
@@ -238,7 +244,7 @@ class Configuration:
 
         features_all_cases = data['relevant_features']
 
-        if self.cases_used is None or self.cases_used == 0:
+        if self.cases_used is None or len(self.cases_used) == 0:
             self.relevant_features = features_all_cases
         else:
             self.relevant_features = {case: features_all_cases[case] for case in self.cases_used if
@@ -257,11 +263,16 @@ class Configuration:
         def flatten(l):
             return [item for sublist in l for item in sublist]
 
+        ##
+        # Changed: Data Import now keeps all features configured in the json
+        # Not only the ones of the cases currently used
+        ##
+
         # will be used to determine which attributes will be in the generated dataset
         # when using the dataset for a snn, the full dataset will be used
         # so these attributes must still be configured in the config.json file in "relevant_features"
         # it is irrelevant however under which error case these are entered there.
-        self.all_features_used = sorted(list(set(flatten(self.relevant_features.values()))))
+        self.all_features_configured = sorted(list(set(flatten(features_all_cases.values()))))
 
     # return the error case description for the passed label
     def get_error_description(self, error_label: str):

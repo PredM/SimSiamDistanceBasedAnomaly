@@ -320,7 +320,7 @@ def import_dataset(dataset_to_import=0):
     print('Number of streams before:', df_combined.shape)
     # df_combined = df_combined.drop(config.unused_attributes, 1, errors='ignore')
     try:
-        df_combined = df_combined[config.all_features_used]
+        df_combined = df_combined[config.all_features_configured]
     except:
         raise AttributeError('Relevant feature not found in current dataset.')
 

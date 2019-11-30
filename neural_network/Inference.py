@@ -36,11 +36,10 @@ class Inference:
         start_time = time.perf_counter()
 
         # print the case embeddings for each class
-        #if self.architecture.encoder.hyper.encoder_variant == 'cnnwithclassattention':
-            #print()
-            #self.architecture.printLearnedCaseMatrix()
-            #self.architecture.printLearnedCaseVectors()
-
+        # if self.architecture.encoder.hyper.encoder_variant == 'cnnwithclassattention':
+        # print()
+        # self.architecture.printLearnedCaseMatrix()
+        # self.architecture.printLearnedCaseVectors()
 
         # infer all examples of the test data set
         for idx_test in range(self.dataset.num_test_instances):
@@ -59,16 +58,20 @@ class Inference:
                     max_sim_index = i
             '''
             ranking_nearest_neighbors_idx = np.argsort(-sims)
-            k_nn_string =""
+            k_nn_string = ""
             for i in range(self.config.k_of_knn):
-                #print("ranking_nearest_neighbors_idx[i]: ",ranking_nearest_neighbors_idx[i])
-                k_nn_string = k_nn_string + str(i+1)+". "+ str(self.dataset.y_train_strings[ranking_nearest_neighbors_idx[i]]) + " Sim: "+str(np.asanyarray(sims[ranking_nearest_neighbors_idx[i]])) +" Case id: "+ str(ranking_nearest_neighbors_idx[i])
-                if i != self.config.k_of_knn-1:
+                # print("ranking_nearest_neighbors_idx[i]: ",ranking_nearest_neighbors_idx[i])
+                k_nn_string = k_nn_string + str(i + 1) + ". " + str(
+                    self.dataset.y_train_strings[ranking_nearest_neighbors_idx[i]]) + " Sim: " + str(
+                    np.asanyarray(sims[ranking_nearest_neighbors_idx[i]])) + " Case id: " + str(
+                    ranking_nearest_neighbors_idx[i])
+                if i != self.config.k_of_knn - 1:
                     k_nn_string = k_nn_string + str("\n")
 
             real = self.dataset.y_test_strings[idx_test]
-            #print("max_sim_index: ", max_sim_index, " ranking_nearest_neighbors_idx[0]: ",ranking_nearest_neighbors_idx[0])
-            max_sim_class = self.dataset.y_train_strings[ranking_nearest_neighbors_idx[0]] #labels[max_sim_index]
+            # print("max_sim_index: ", max_sim_index, " ranking_nearest_neighbors_idx[0]: ",
+            # ranking_nearest_neighbors_idx[0])
+            max_sim_class = self.dataset.y_train_strings[ranking_nearest_neighbors_idx[0]]  # labels[max_sim_index]
             max_sim = np.asanyarray(sims[ranking_nearest_neighbors_idx[0]])
 
             # if correctly classified increase the true positive field of the correct class and the of all classes
@@ -88,7 +91,7 @@ class Inference:
                 ['Classified as:', max_sim_class],
                 ['Correct class:', real],
                 ['Similarity:', max_sim],
-                #['K-nearest Neighbors: ', k_nn_string],
+                # ['K-nearest Neighbors: ', k_nn_string],
                 ['Current accuracy:', correct / num_infers]
             ]
 

@@ -110,6 +110,7 @@ class SimpleCaseHandler(SimpleSNN):
         self.need_encoder = [SimpleCaseHandler, CaseHandler, FastCaseHandler]
         self.need_ffnn = [CaseHandler, FastCaseHandler]
 
+        self.print_case_handler_info()
         # No model loading here, will be done by CBS for all case handlers
 
     # debugging method, can be removed when implementation is finished

@@ -38,7 +38,8 @@ class NN:
         if self.model is None:
             raise AttributeError('Model not initialised. Can not load weights.')
 
-        if type(self) == CNN or type(self) == RNN or type(self) == TCN or type(self) == CNNWithClassAttention or type(self) == CNN1DWithClassAttention:
+        if type(self) == CNN or type(self) == RNN or type(self) == TCN or type(self) == CNNWithClassAttention or type(
+                self) == CNN1DWithClassAttention:
             prefix = 'encoder'
         elif type(self) == FFNN:
             prefix = 'ffnn'
@@ -158,6 +159,7 @@ class RNN(NN):
 
         self.model = model
 
+
 class CNNWithClassAttention(NN):
 
     def __init__(self, hyperparameters, input_shape):
@@ -165,7 +167,7 @@ class CNNWithClassAttention(NN):
 
     def create_model(self):
         print('Creating CNN encoder with an input shape: ', self.input_shape)
-        sensorDataInput = tf.keras.Input(shape=(self.input_shape[0][0],self.input_shape[0][1],1), name="Input0")
+        sensorDataInput = tf.keras.Input(shape=(self.input_shape[0][0], self.input_shape[0][1], 1), name="Input0")
         caseDependentVectorInput = tf.keras.Input(self.input_shape[1], name="Input1")
 
         # Preparing Input:
@@ -187,15 +189,15 @@ class CNNWithClassAttention(NN):
         # creating a case vector encoder
         caseDepVectEmbedding = tf.keras.layers.Dense(58, activation='sigmoid')(caseDependentVectorInput)
         caseDepVectEmbedding = tf.keras.layers.Softmax()(caseDepVectEmbedding)
-        ones = tf.ones([16450,250, 58])
+        ones = tf.ones([16450, 250, 58])
         caseDepVectEmbedding = tf.keras.layers.Multiply()([ones, caseDepVectEmbedding])
 
-        #caseDepVectEmbedding2 = tf.ones([self.hyper.batch_size*2,250, 58]) * caseDepVectEmbedding
-        #caseDepVectEmbedding3 = tf.reshape(caseDepVectEmbedding2, [-1, 250, 58])
-        #caseDepVectEmbedding = tf.reshape(caseDepVectEmbedding, [250,58])
-        #caseDepVectEmbedding = tf.reshape(caseDepVectEmbedding, [-1, 250, 58])
-        #caseDepVectEmbedding = tf.tile(caseDepVectEmbedding, [self.hyper.batch_size*2,250,1])
-        #caseDepVectEmbedding = tf.ones([250, 58]) * caseDepVectEmbedding
+        # caseDepVectEmbedding2 = tf.ones([self.hyper.batch_size*2,250, 58]) * caseDepVectEmbedding
+        # caseDepVectEmbedding3 = tf.reshape(caseDepVectEmbedding2, [-1, 250, 58])
+        # caseDepVectEmbedding = tf.reshape(caseDepVectEmbedding, [250,58])
+        # caseDepVectEmbedding = tf.reshape(caseDepVectEmbedding, [-1, 250, 58])
+        # caseDepVectEmbedding = tf.tile(caseDepVectEmbedding, [self.hyper.batch_size*2,250,1])
+        # caseDepVectEmbedding = tf.ones([250, 58]) * caseDepVectEmbedding
         caseDepVectEmbedding = tf.reshape(caseDepVectEmbedding, [-1, 250, 58])
         caseDepVectEmbedding = tf.expand_dims(caseDepVectEmbedding, -1)
         print("sensorDataInput: ", sensorDataInput)
@@ -217,12 +219,13 @@ class CNNWithClassAttention(NN):
 
             # first layer must be handled separately because the input shape parameter must be set
             if i == 0:
-                conv_layer1 = tf.keras.layers.Conv2D(filters=num_filter, padding='VALID', kernel_size=(filter_size,self.hyper.time_series_depth),
-                                                    strides=stride, input_shape=sensorDataInput2.shape)
+                conv_layer1 = tf.keras.layers.Conv2D(filters=num_filter, padding='VALID',
+                                                     kernel_size=(filter_size, self.hyper.time_series_depth),
+                                                     strides=stride, input_shape=sensorDataInput2.shape)
                 x = conv_layer1(sensorDataInput2)
                 x = tf.reshape(x, [-1, 246, 512])
             else:
-                #conv_layer = tf.keras.layers.Conv2D(filters=num_filter, padding='VALID', kernel_size=(filter_size,1),strides=stride)
+                # conv_layer = tf.keras.layers.Conv2D(filters=num_filter, padding='VALID', kernel_size=(filter_size,1),strides=stride)
                 conv_layer = tf.keras.layers.Conv1D(filters=num_filter, padding='VALID', kernel_size=filter_size,
                                                     strides=stride)
                 x = conv_layer(x)
@@ -240,11 +243,11 @@ class CNNWithClassAttention(NN):
         '''
         # merging case vector and sensor encoding
         # a) ADD
-        #caseDepVectEmbedding = tf.keras.layers.Softmax()(caseDepVectEmbedding)
-        #embedding = tf.keras.layers.Add()([x, caseDepVectEmbedding])
+        # caseDepVectEmbedding = tf.keras.layers.Softmax()(caseDepVectEmbedding)
+        # embedding = tf.keras.layers.Add()([x, caseDepVectEmbedding])
         # b) MULTIPLY
-        #caseDepVectEmbedding = tf.keras.layers.Softmax()(caseDepVectEmbedding)
-        #embedding = tf.keras.layers.Multiply()([x, caseDepVectEmbedding])
+        # caseDepVectEmbedding = tf.keras.layers.Softmax()(caseDepVectEmbedding)
+        # embedding = tf.keras.layers.Multiply()([x, caseDepVectEmbedding])
         # c) CONCATENATE
         '''
         flat = tf.keras.layers.Flatten()(x)
@@ -259,15 +262,17 @@ class CNNWithClassAttention(NN):
         dim0 = self.hyper.batch_size*2 #for Inference: 16450  #in Training: self.hyper.batch_size*2
         embedding = tf.reshape(embedding, [dim0, embedding.shape[1], 1])
         '''
-        self.model = tf.keras.Model(inputs=[sensorDataInput,caseDependentVectorInput],outputs=x)
+        self.model = tf.keras.Model(inputs=[sensorDataInput, caseDependentVectorInput], outputs=x)
         # Add: softmax
         # Multiply: dense_1
-        self.intermediate_layer_model = tf.keras.Model(inputs=caseDependentVectorInput,outputs=self.model.get_layer("tf_op_layer_Reshape").output)
+        self.intermediate_layer_model = tf.keras.Model(inputs=caseDependentVectorInput,
+                                                       outputs=self.model.get_layer("tf_op_layer_Reshape").output)
 
         # Query-value attention of shape [batch_size, Tq, filters].
-        #print("inputs", inputs)
-        #print("x: ", x)
-        #input_lastConvLayer_attention_seq = tf.keras.layers.Attention()([x, caseDepVectEmbedding])
+        # print("inputs", inputs)
+        # print("x: ", x)
+        # input_lastConvLayer_attention_seq = tf.keras.layers.Attention()([x, caseDepVectEmbedding])
+
 
 class CNN1DWithClassAttention(NN):
 
@@ -287,19 +292,20 @@ class CNN1DWithClassAttention(NN):
 
         layer_properties = list(zip(self.hyper.cnn_layers, self.hyper.cnn_kernel_length, self.hyper.cnn_strides))
 
+        x = sensorDataInput
         # creating CNN encoder for sensor data
         for i in range(len(layer_properties)):
             num_filter, filter_size, stride = layer_properties[i][0], layer_properties[i][1], layer_properties[i][2]
 
             # first layer must be handled separately because the input shape parameter must be set
             if i == 0:
-                conv_layer1 = tf.keras.layers.Conv1D(filters=num_filter, padding='VALID', kernel_size=filter_size,
-                                                     strides=stride, input_shape=self.input_shape)
-                x = conv_layer1(sensorDataInput)
+                conv_layer = tf.keras.layers.Conv1D(filters=num_filter, padding='VALID', kernel_size=filter_size,
+                                                    strides=stride, input_shape=self.input_shape)
             else:
                 conv_layer = tf.keras.layers.Conv1D(filters=num_filter, padding='VALID', kernel_size=filter_size,
                                                     strides=stride)
-                x = conv_layer(x)
+
+            x = conv_layer(x)
             x = tf.keras.layers.BatchNormalization()(x)
             x = tf.keras.layers.ReLU()(x)
 
@@ -372,7 +378,10 @@ class CNN(NN):
             else:
                 conv_layer = tf.keras.layers.Conv1D(filters=num_filter, padding='VALID', kernel_size=filter_size,
                                                     strides=stride)
-            model.add(conv_layer) # todo: CBS bricht wenn alle Felerfälle im Training sind hier ab mit Process finished with exit code -1073741676 (0xC0000094)
+
+            # todo: CBS bricht wenn alle Felerfälle im Training sind hier ab
+            #  mit Process finished with exit code -1073741676 (0xC0000094)
+            model.add(conv_layer)
             model.add(tf.keras.layers.BatchNormalization())
             model.add(tf.keras.layers.ReLU())
 
@@ -435,6 +444,7 @@ class TemporalBlock(tf.keras.Model):
                                                  kernel_initializer=init)
         self.ac3 = tf.keras.layers.Activation('relu')
 
+    # noinspection PyMethodOverriding
     def call(self, x, training=False):
         # print("x: ",x.shape," training:", training)
         prev_x = x
@@ -492,7 +502,8 @@ class TCN(NN):
             model.add(tb)
 
         self.model = model
-        self.model.build(input_shape=(10,self.input_shape[0],self.input_shape[1])) # Required to load previous model, None verursacht AssertionError
+        self.model.build(input_shape=(10, self.input_shape[0], self.input_shape[
+            1]))  # Required to load previous model, None verursacht AssertionError
         self.output_shape = (None, self.input_shape[0], num_channels[num_levels - 1])
 
     def print_model_info(self):

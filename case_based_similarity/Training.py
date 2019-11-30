@@ -13,6 +13,10 @@ from neural_network.Optimizer import CBSOptimizer
 def main():
     # suppress debugging messages of TensorFlow
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+    # import tensorflow as tf
+    # gpus = tf.config.experimental.list_physical_devices('GPU')
+    # tf.config.experimental.set_memory_growth(gpus[0], True)
+    # tf.config.experimental.set_memory_growth(gpus[1], True)
 
     config = Configuration()
 

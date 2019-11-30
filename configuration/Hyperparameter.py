@@ -9,7 +9,8 @@ class Hyperparameters:
         # Important: Variable names must match json file entries
         ##
 
-        self.encoder_variants = ['cnn', 'rnn', 'tcn','cnnwithclassattention', 'cnn1dwithclassattention']
+        self.encoder_variants = ['cnn', 'rnn', 'tcn', 'cnnwithclassattention', 'cnn1dwithclassattention']
+        self.encoder_variant = self.encoder_variants[0]
 
         # Need to be changed after dataset was loaded
         self.time_series_length = 999
@@ -25,7 +26,7 @@ class Hyperparameters:
         self.gradient_cap = 10
         self.dropout_rate = 0.05
 
-        self.ffnn_layers =  [64, 16, 1]
+        self.ffnn_layers = [64, 16, 1]
 
         self.cnn_layers = [1024, 256, 64]
         self.cnn_kernel_length = [5, 5, 3]
@@ -49,7 +50,7 @@ class Hyperparameters:
             data = json.load(f)
 
         self.encoder_variant = data['encoder_variant'].lower()
-        print("encoder_variant: ", self.encoder_variant)
+
         if self.encoder_variant not in self.encoder_variants:
             raise ValueError('Unknown encoder variant:', self.encoder_variants)
 
