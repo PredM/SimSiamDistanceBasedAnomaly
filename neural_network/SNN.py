@@ -66,7 +66,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
         self.encoder = None
 
         # TODO find better solution
-        self.need_encoder = [SimpleSNN, SNN, FastSNN]
+        self.need_encoder = [SimpleSNN, SNN, FastSimpleSNN, FastSNN]
         self.need_ffnn = [SNN, FastSNN]
 
         # Load model only if init was not called by subclass, would otherwise be executed multiple times
@@ -294,7 +294,6 @@ class SNN(SimpleSNN):
     # noinspection DuplicatedCode
     @tf.function
     def get_distance_pair(self, context_vectors, pair_index):
-
         a = context_vectors[2 * pair_index, :, :]
         b = context_vectors[2 * pair_index + 1, :, :]
 
@@ -333,6 +332,11 @@ class FastSimpleSNN(SimpleSNN):
     def __init__(self, config, dataset, training):
         super().__init__(config, dataset, training)
 
+        # Load model only if init was not called by subclass, would otherwise be executed multiple times
+        if type(self) is FastSimpleSNN:
+            self.load_model()
+            self.dataset.encode(self.encoder)
+
     def encode_example(self, example):
         ex = np.expand_dims(example, axis=0)  # Model expects array of examples -> add outer dimension
         context_vector = self.encoder.model(ex, training=self.training)
@@ -360,8 +364,10 @@ class FastSimpleSNN(SimpleSNN):
         # return the result of the knn classifier using the calculated similarities
         return sims_all_examples, self.dataset.y_train_strings
 
-    # example must already be encoded
-    def get_sims(self, encoded_example):
+    # example must be unencoded
+    def get_sims(self, unencoded_example):
+        encoded_example = self.encode_example(unencoded_example)
+
         return self.get_sims_section(self.dataset.x_train, encoded_example), self.dataset.y_train_strings
 
     def get_sims_batch(self, batch):
@@ -398,6 +404,7 @@ class FastSNN(FastSimpleSNN):
         # load model only if init was not called by subclass, would otherwise be executed multiple times
         if type(self) is FastSNN:
             self.load_model()
+            self.dataset.encode(self.encoder)
 
     # noinspection DuplicatedCode
     @tf.function

@@ -7,20 +7,33 @@ from sklearn.manifold import TSNE
 import matplotlib.pyplot as plt
 from sklearn import preprocessing
 
+from neural_network.Dataset import FullDataset
+from neural_network.SNN import initialise_snn
+
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 
 from configuration.Configuration import Configuration
 
 # In progress. For visualization of encoded data of an SNN using T-SNE or PCA.
 if __name__ == '__main__':
+
+    # TODO Test if working
+
     config = Configuration()
-    trainingDataEncodedFolder = config.training_data_encoded_folder
+    config.architecture_variant = config.architecture_variants[0]
+
+    dataset = FullDataset(config.training_data_folder, config, training=False)
+    dataset.load()
+
+    architecture = initialise_snn(config, dataset, False)
+
+    dataset.encode(architecture.encoder, encode_test_data=True)
 
     # Loading encoded data previously created by the DatasetEncoder.py
-    x_train_encoded = np.load(trainingDataEncodedFolder + "train_features.npy").astype('float32')
-    x_test_encoded = np.load(trainingDataEncodedFolder + "test_features.npy").astype('float32')
-    x_train_labels = np.load(trainingDataEncodedFolder + "train_labels.npy")
-    x_test_labels = np.load(trainingDataEncodedFolder + "test_labels.npy")
+    x_train_encoded = dataset.x_train
+    x_test_encoded = dataset.x_test
+    x_train_labels = dataset.y_train_strings
+    x_test_labels = dataset.y_test_strings
     print("Loaded encoded data: ", x_train_encoded.shape, " ", x_test_encoded.shape)
 
     # Encoding / renaming of labels from string value (e.g. no error, ....) to integer (e.g. 0)
@@ -54,7 +67,7 @@ if __name__ == '__main__':
     # np.save(trainingDataEncodedFolder + 'reducedTestFeatures4Viz_'+dt_string+'_'+config.filename_model_to_use+'.npy', X_embedded)
 
     X_embedded = np.load(
-        trainingDataEncodedFolder + "reducedTestFeatures4Viz_09-04_13-00-35_ba_cnn_378200_96_percent.npy").astype(
+        '../data/visualizations/' + "reducedTestFeatures4Viz_09-04_13-00-35_ba_cnn_378200_96_percent.npy").astype(
         'float32')
     print("X_embedded shape: ", X_embedded.shape)
     # print("X_embedded:", X_embedded[0:10,:])

@@ -24,7 +24,7 @@ class Configuration:
 
         # TODO Needs to be changed to folder if every encoder should use different hyperparameters
         # hyperparameter file to use
-        self.hyper_file = '../configuration/hyperparameter_combinations/' + 'ba_cnn.json'  # 'tcn.json'
+        self.hyper_file = '../configuration/hyperparameter_combinations/' + 'small_cnn.json'  # 'tcn.json'
         self.use_hyper_file = True
 
         # Choose a loss function
@@ -100,12 +100,11 @@ class Configuration:
         self.models_folder = '../data/trained_models/'
 
         # path and file name to the specific model that should be used for testing and live classification
-        self.filename_model_to_use = 'temp_models_11-20_08-24-56_epoch-96000'
+        self.filename_model_to_use = 'temp_models_11-30_16-05-16_epoch-100'
         self.directory_model_to_use = self.models_folder + self.filename_model_to_use + '/'
 
         # folder where the preprocessed training and test data for the neural network should be stored
         self.training_data_folder = '../data/training_data/'
-        self.training_data_encoded_folder = '../data/training_data_encoded/'
 
         # folder where the normalisation models should be stored
         self.scaler_folder = '../data/scaler/'
@@ -116,7 +115,6 @@ class Configuration:
 
         # folder where the reduced training data set aka. case base is safed to
         self.case_base_folder = '../data/case_base/'
-        self.case_base_encoded_folder = '../data/case_base_encoded/'
 
         # folder where text files with extracted cases are safed to
         self.cases_folder = '../data/cases/'

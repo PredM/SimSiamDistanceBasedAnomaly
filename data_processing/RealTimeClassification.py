@@ -390,13 +390,9 @@ class Classifier(threading.Thread):
     # k nearest neighbor implementation to select the class based on the k most similar training examples
     def knn(self, example: np.ndarray):
 
-        # TODO not tested yet
-        if self.config.architecture_variant in ['fast_simple', 'fast_ffnn']:
-            example = self.snn.encode_example(example)
-
-
         # TODO needs to be changed to returned 2d array
         # calculate the similarities to all examples of the case base using the nn
+        # example will be encoded by snn variant if necessary
         sims = self.snn.get_sims(example)
 
         # get labels without one hot encoding

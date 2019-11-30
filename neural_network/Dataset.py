@@ -1,8 +1,8 @@
 import numpy as np
 from sklearn import preprocessing
+from time import perf_counter
 
 from configuration.Configuration import Configuration
-from neural_network.DatasetEncoder import DatasetEncoder
 
 
 class Dataset:
@@ -83,18 +83,6 @@ class FullDataset(Dataset):
         self.num_classes = None
         self.classes = None
 
-        # TODO maybe change parameter to "encode" and use simpler if
-        if self.config.architecture_variant in ['standard_simple', 'standard_ffnn'] or training:
-            pass  # nothing to do if standard variant
-        elif self.config.architecture_variant in ['fast_simple', 'fast_ffnn']:
-            print('Fast SNN variant configured, encoding the dataset with subnet ...')
-            encoder = DatasetEncoder(self.dataset_folder, config)
-            encoder.encode()
-            self.dataset_folder = encoder.target_folder
-            print('Encoding finished. Duration:', encoder.encoding_duration, '\n')
-        else:
-            raise AttributeError('Unknown SNN variant.')
-
     def load(self):
         # dtype conversion necessary because layers use float32 by default
         # .astype('float32') removed because already included in dataset creation
@@ -144,12 +132,13 @@ class FullDataset(Dataset):
         self.classes_Unique_oneHotEnc = self.one_hot_encoder.transform(np.expand_dims(self.classes, axis=1))
         self.num_classes = self.classes.size
 
+        # TODO Should use case specific dataset
         # Create two dictionaries to link/associate each class with all its training examples
         for i in range(self.num_classes):
             self.classIdx_to_trainExamplIdxPos[i] = np.argwhere(self.y_train[:, i] > 0)
             self.classIdx_to_classString[i] = self.classes[i]
 
-        # create/load auxiliary information about the case ( in addition to the sensor data)
+        # create/load auxiliary information about the case (in addition to the sensor data)
         # for test purposes, equal to the one-hot-encoded labels
         self.x_auxCaseVector_train = self.y_train
         self.x_auxCaseVector_test = self.y_test
@@ -165,6 +154,28 @@ class FullDataset(Dataset):
         print('\tClasses used in training:')
         print(self.classes)
         print()
+
+    def encode(self, encoder, encode_test_data=False):
+
+        start_time_encoding = perf_counter()
+        print('Encoding of dataset started')
+
+        # x_test will not be encoded by default because examples should simulate "new data" --> encoded at runtime
+        x_train_unencoded = self.x_train
+        self.x_train = None
+        x_train_encoded = encoder.model(x_train_unencoded, training=False)
+        x_train_encoded = np.asarray(x_train_encoded)  # .astype('float32')
+        self.x_train = x_train_encoded
+
+        if encode_test_data:
+            x_test_unencoded = self.x_test
+            self.x_test = None
+            x_test_encoded = encoder.model(x_test_unencoded, training=False)
+            x_test_encoded = np.asarray(x_test_encoded)  # .astype('float32')
+            self.x_test = x_test_encoded
+
+        encoding_duration = perf_counter() - start_time_encoding
+        print('Encoding of dataset finished. Duration:', encoding_duration)
 
     # draw a random pair of instances
     def draw_pair(self, is_positive, from_test):

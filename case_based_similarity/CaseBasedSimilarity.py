@@ -108,7 +108,7 @@ class CaseHandlerHelper:
 
         self.dataset: CaseSpecificDataset = dataset
         # TODO Find better solution
-        self.need_encoder = [SimpleCaseHandler, CaseHandler, FastCaseHandler]
+        self.need_encoder = [SimpleCaseHandler, CaseHandler, FastSimpleCaseHandler, FastCaseHandler]
         self.need_ffnn = [CaseHandler, FastCaseHandler]
 
         self.print_case_handler_info()

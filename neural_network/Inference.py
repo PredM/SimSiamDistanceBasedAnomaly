@@ -49,7 +49,7 @@ class Inference:
 
             # measure the similarity between the test series and the training batch series
             sims, labels = self.architecture.get_sims(self.dataset.x_test[idx_test])
-            print("sims shape: ", sims.shape, " label shape: ", labels.shape)
+            # print("sims shape: ", sims.shape, " label shape: ", labels.shape)
             # check similarities of all pairs and record the index of the closest training series
             '''
             for i in range(len(sims)):
@@ -58,15 +58,13 @@ class Inference:
                     max_sim_index = i
             '''
             ranking_nearest_neighbors_idx = np.argsort(-sims)
-            k_nn_string = ""
+
+            knn_results = []
             for i in range(self.config.k_of_knn):
-                # print("ranking_nearest_neighbors_idx[i]: ",ranking_nearest_neighbors_idx[i])
-                k_nn_string = k_nn_string + str(i + 1) + ". " + str(
-                    self.dataset.y_train_strings[ranking_nearest_neighbors_idx[i]]) + " Sim: " + str(
-                    np.asanyarray(sims[ranking_nearest_neighbors_idx[i]])) + " Case id: " + str(
-                    ranking_nearest_neighbors_idx[i])
-                if i != self.config.k_of_knn - 1:
-                    k_nn_string = k_nn_string + str("\n")
+                row = [i+1, 'Class: ' + self.dataset.y_train_strings[ranking_nearest_neighbors_idx[i]],
+                       'Sim: ' + str(np.asanyarray(sims[ranking_nearest_neighbors_idx[i]])),
+                       'Case ID: ' + str(ranking_nearest_neighbors_idx[i])]
+                knn_results.append(row)
 
             real = self.dataset.y_test_strings[idx_test]
             # print("max_sim_index: ", max_sim_index, " ranking_nearest_neighbors_idx[0]: ",
@@ -98,8 +96,10 @@ class Inference:
             for row in example_results:
                 print("{: <25} {: <25}".format(*row))
 
-            print("K-nearest Neighbors:\n", k_nn_string)
-            print('')
+            print("K-nearest Neighbors:")
+            for row in knn_results:
+                print("{: <3} {: <40} {: <20} {: <20}".format(*row))
+            print()
 
         elapsed_time = time.perf_counter() - start_time
 
