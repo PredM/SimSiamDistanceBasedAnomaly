@@ -27,7 +27,7 @@ def main():
     cbs = CBS(config, True)
     #cbs.print_info()
 
-    print('Training:\n')
+    print('\nTraining:\n')
     optimizer = CBSOptimizer(cbs, dataset, config)
     optimizer.optimize()
 

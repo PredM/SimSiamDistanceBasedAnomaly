@@ -1,16 +1,16 @@
-from datetime import datetime
-
-import numpy as np
 import sys
 import os
-from sklearn.manifold import TSNE
-import matplotlib.pyplot as plt
-from sklearn import preprocessing
-
-from neural_network.Dataset import FullDataset
-from neural_network.SNN import initialise_snn
 
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
+
+import matplotlib.pyplot as plt
+import numpy as np
+
+from datetime import datetime
+from sklearn import preprocessing
+from sklearn.manifold import TSNE
+from neural_network.Dataset import FullDataset
+from neural_network.SNN import initialise_snn
 
 from configuration.Configuration import Configuration
 

@@ -46,16 +46,15 @@ class NN:
         else:
             raise AttributeError('Can not import models of type', type(self))
 
+        found = False
         for file_name in listdir(model_folder):
 
             if file_name.startswith(prefix):
                 self.model.load_weights(path.join(model_folder, file_name))
+                found = True
 
-            if self.model is not None:
-                break
-
-        if self.model is None:
-            raise FileNotFoundError('Model file for this type could not be found in ', model_folder)
+        if not found:
+            raise FileNotFoundError('Model file for this type could not be found in '+str(model_folder))
         else:
             print('Model has been loaded successfully')
 

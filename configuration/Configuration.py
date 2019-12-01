@@ -20,7 +20,7 @@ class Configuration:
         # ffnn = uses ffnn as distance measure
         # simple = mean absolute difference as distance measure instead of the ffnn
         self.architecture_variants = ['standard_simple', 'standard_ffnn', 'fast_simple', 'fast_ffnn']
-        self.architecture_variant = self.architecture_variants[1]
+        self.architecture_variant = self.architecture_variants[2]
 
         # TODO Needs to be changed to folder if every encoder should use different hyperparameters
         # hyperparameter file to use
@@ -32,6 +32,11 @@ class Configuration:
         self.loss_function_variants = ['binary_cross_entropy', 'constrative_loss']
         self.type_of_loss_function = self.loss_function_variants[0]
         self.margin_of_loss_function = 4  # required for constrative_loss
+
+        # Goal loss for CBS
+        # Choose a loss value at which the snn of a case should not be trained any further
+        # Set to -1 for no restriction
+        self.goal_loss_case = 0.5
 
         # select whether training should be continued from the checkpoint defined below
         self.continue_training = False
@@ -48,7 +53,7 @@ class Configuration:
         all_cases = ['no_failure', 'txt_18_comp_leak', 'txt_17_comp_leak', 'txt15_m1_t1_high_wear',
                      'txt15_m1_t1_low_wear', 'txt15_m1_t2_wear', 'txt16_m3_t1_high_wear', 'txt16_m3_t1_low_wear',
                      'txt16_m3_t2_wear', 'txt16_i4']
-        self.cases_used = None
+        self.cases_used = all_cases
 
         ###
         # kafka / real time classification
@@ -100,7 +105,7 @@ class Configuration:
         self.models_folder = '../data/trained_models/'
 
         # path and file name to the specific model that should be used for testing and live classification
-        self.filename_model_to_use = 'temp_models_11-30_16-05-16_epoch-100'
+        self.filename_model_to_use = 'temp_models_12-01_09-25-12_epoch-1000'
         self.directory_model_to_use = self.models_folder + self.filename_model_to_use + '/'
 
         # folder where the preprocessed training and test data for the neural network should be stored

@@ -247,7 +247,7 @@ class CBSOptimizer(Optimizer):
         super().__init__(architecture, dataset, config)
         self.architecture: CBS = architecture
         self.losses = dict()
-
+        self.handlers_still_training = self.architecture.case_handlers.copy()
         # TODO create same dict for epochs to be able to train each model to different epochs
         self.optimizer = dict()
         for case_handler in self.architecture.case_handlers:
@@ -274,41 +274,44 @@ class CBSOptimizer(Optimizer):
     def single_epoch(self, epoch):
 
         for case_handler in self.architecture.case_handlers:
-            case_handler: SimpleCaseHandler = case_handler
 
-            epoch_loss_avg = tf.keras.metrics.Mean()
+            if case_handler in self.handlers_still_training:
 
-            batch_true_similarities = []
-            batch_pairs_indices = []
+                case_handler: SimpleCaseHandler = case_handler
 
-            # compose batch
-            # // 2 because each iteration one similar and one dissimilar pair is added
-            for i in range(case_handler.hyper.batch_size // 2):
-                pos_pair = self.dataset.draw_pair_cbs(True, case_handler.dataset.indices_cases)
-                batch_pairs_indices.append(pos_pair[0])
-                batch_pairs_indices.append(pos_pair[1])
-                batch_true_similarities.append(1.0)
+                epoch_loss_avg = tf.keras.metrics.Mean()
 
-                neg_pair = self.dataset.draw_pair_cbs(False, case_handler.dataset.indices_cases)
-                batch_pairs_indices.append(neg_pair[0])
-                batch_pairs_indices.append(neg_pair[1])
-                batch_true_similarities.append(0.0)
+                batch_true_similarities = []
+                batch_pairs_indices = []
 
-            # change the list of ground truth similarities to an array
-            true_similarities = np.asarray(batch_true_similarities)
+                # compose batch
+                # // 2 because each iteration one similar and one dissimilar pair is added
+                for i in range(case_handler.hyper.batch_size // 2):
+                    pos_pair = self.dataset.draw_pair_cbs(True, case_handler.dataset.indices_cases)
+                    batch_pairs_indices.append(pos_pair[0])
+                    batch_pairs_indices.append(pos_pair[1])
+                    batch_true_similarities.append(1.0)
 
-            # get the example pairs by the selected indices
-            model_input = np.take(a=self.dataset.x_train, indices=batch_pairs_indices, axis=0)
+                    neg_pair = self.dataset.draw_pair_cbs(False, case_handler.dataset.indices_cases)
+                    batch_pairs_indices.append(neg_pair[0])
+                    batch_pairs_indices.append(neg_pair[1])
+                    batch_true_similarities.append(0.0)
 
-            # reduce to the features used by this case handler
-            model_input = model_input[:, :, case_handler.dataset.indices_features]
+                # change the list of ground truth similarities to an array
+                true_similarities = np.asarray(batch_true_similarities)
 
-            batch_loss = self.update_single_model(model_input, true_similarities, case_handler,
-                                                  self.optimizer[case_handler.dataset.case])
+                # get the example pairs by the selected indices
+                model_input = np.take(a=self.dataset.x_train, indices=batch_pairs_indices, axis=0)
 
-            # track progress
-            epoch_loss_avg.update_state(batch_loss)
-            self.losses.get(case_handler.dataset.case).append(epoch_loss_avg.result())
+                # reduce to the features used by this case handler
+                model_input = model_input[:, :, case_handler.dataset.indices_features]
+
+                batch_loss = self.update_single_model(model_input, true_similarities, case_handler,
+                                                      self.optimizer[case_handler.dataset.case])
+
+                # track progress
+                epoch_loss_avg.update_state(batch_loss)
+                self.losses.get(case_handler.dataset.case).append(epoch_loss_avg.result())
 
         if epoch % self.config.output_interval == 0:
             print("Timestamp: {} ({:.2f} Seconds since last output) - Epoch: {}".format(
@@ -319,7 +322,17 @@ class CBSOptimizer(Optimizer):
             for case_handler in self.architecture.case_handlers:
                 case = case_handler.dataset.case
                 loss_of_case = self.losses.get(case)[-1].numpy()
-                print("   Case: {: <28}  Current loss: {:.5}".format(case, loss_of_case))
+
+                # Dont continue training if goal loss was reached for this case
+                # Value of -1 means no goal defined, always continue
+                if self.config.goal_loss_case != -1 \
+                        and loss_of_case <= self.config.goal_loss_case \
+                        and case_handler in self.handlers_still_training:
+                    self.handlers_still_training.remove(case_handler)
+
+                status = 'Yes' if case_handler in self.handlers_still_training else 'No'
+                print("   Case: {: <28} Still training: {: <15} Loss: {:.5}"
+                      .format(case, status, loss_of_case))
 
             print()
             self.delete_old_checkpoints(epoch)

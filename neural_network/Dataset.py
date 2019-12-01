@@ -94,17 +94,16 @@ class FullDataset(Dataset):
 
         # create a encoder, sparse output must be disabled to get the intended output format
         # added categories='auto' to use future behavior
-        self.one_hot_encoder = preprocessing.OneHotEncoder(sparse=False, categories='auto')
+        one_hot_encoder = preprocessing.OneHotEncoder(sparse=False, categories='auto')
 
         # prepare the encoder with training and test labels to ensure all are present
         # the fit-function 'learns' the encoding but does not jet transform the data
         # the axis argument specifies on which the two arrays are joined
-        self.one_hot_encoder = self.one_hot_encoder.fit(
-            np.concatenate((self.y_train_strings, self.y_test_strings), axis=0))
+        one_hot_encoder = one_hot_encoder.fit(np.concatenate((self.y_train_strings, self.y_test_strings), axis=0))
 
         # transforms the vector of labels into a one hot matrix
-        self.y_train = self.one_hot_encoder.transform(self.y_train_strings)
-        self.y_test = self.one_hot_encoder.transform(self.y_test_strings)
+        self.y_train = one_hot_encoder.transform(self.y_train_strings)
+        self.y_test = one_hot_encoder.transform(self.y_test_strings)
 
         # reduce to 1d array
         self.y_train_strings = np.squeeze(self.y_train_strings)
@@ -129,10 +128,9 @@ class FullDataset(Dataset):
 
         # get the unique classes and the corresponding number
         self.classes = np.unique(np.concatenate((self.y_train_strings, self.y_test_strings), axis=0))
-        self.classes_Unique_oneHotEnc = self.one_hot_encoder.transform(np.expand_dims(self.classes, axis=1))
+        self.classes_Unique_oneHotEnc = one_hot_encoder.transform(np.expand_dims(self.classes, axis=1))
         self.num_classes = self.classes.size
 
-        # TODO Should use case specific dataset
         # Create two dictionaries to link/associate each class with all its training examples
         for i in range(self.num_classes):
             self.classIdx_to_trainExamplIdxPos[i] = np.argwhere(self.y_train[:, i] > 0)
@@ -147,11 +145,12 @@ class FullDataset(Dataset):
         # 1. dimension: example
         # 2. dimension: time index
         # 3. dimension: array of all channels
-        print('Dataset loaded')
-        print('\tShape of training set (example, time, channels):', self.x_train.shape)
-        print('\tShape of test set (example, time, channels):', self.x_test.shape)
-        print('\tNum of classes:', self.num_classes)
-        print('\tClasses used in training:')
+        print()
+        print('Dataset loaded:')
+        print('Shape of training set (example, time, channels):', self.x_train.shape)
+        print('Shape of test set (example, time, channels):', self.x_test.shape)
+        print('Num of classes:', self.num_classes)
+        print('Classes used in training:')
         print(self.classes)
         print()
 
@@ -160,13 +159,14 @@ class FullDataset(Dataset):
         start_time_encoding = perf_counter()
         print('Encoding of dataset started')
 
-        # x_test will not be encoded by default because examples should simulate "new data" --> encoded at runtime
         x_train_unencoded = self.x_train
         self.x_train = None
         x_train_encoded = encoder.model(x_train_unencoded, training=False)
         x_train_encoded = np.asarray(x_train_encoded)  # .astype('float32')
         self.x_train = x_train_encoded
 
+        # x_test will not be encoded by default because examples should simulate "new data" --> encoded at runtime
+        # but can be done for visualisation purposes
         if encode_test_data:
             x_test_unencoded = self.x_test
             self.x_test = None
@@ -236,8 +236,6 @@ class CaseSpecificDataset(Dataset):
         # the indcies of the examples with the case of this dataset in the dataset with all examples
         self.indices_cases = None
 
-        # TODO Encoding for fast version must be included
-
     def load(self):
         self.x_train = np.load(self.dataset_folder + 'train_features.npy')  # data training
         self.y_train_strings = np.load(self.dataset_folder + 'train_labels.npy')  # labels training data
@@ -269,15 +267,15 @@ class CaseSpecificDataset(Dataset):
 
         # create a encoder, sparse output must be disabled to get the intended output format
         # added categories='auto' to use future behavior
-        self.one_hot_encoder = preprocessing.OneHotEncoder(sparse=False, categories='auto')
+        one_hot_encoder = preprocessing.OneHotEncoder(sparse=False, categories='auto')
 
         # prepare the encoder with training and test labels to ensure all are present
         # the fit-function 'learns' the encoding but does not jet transform the data
         # the axis argument specifies on which the two arrays are joined
-        self.one_hot_encoder = self.one_hot_encoder.fit(self.y_train_strings)
+        one_hot_encoder = one_hot_encoder.fit(self.y_train_strings)
 
         # transforms the vector of labels into a one hot matrix
-        self.y_train = self.one_hot_encoder.transform(self.y_train_strings)
+        self.y_train = one_hot_encoder.transform(self.y_train_strings)
 
         # reduce to 1d array
         self.y_train_strings = np.squeeze(self.y_train_strings)
@@ -303,6 +301,19 @@ class CaseSpecificDataset(Dataset):
         # 3. dimension: array of all channels
         print('Casebase for case', self.case, 'loaded')
         print('\tShape:', self.x_train.shape)
+
+    def encode(self, encoder):
+        start_time_encoding = perf_counter()
+
+        x_train_unencoded = np.copy(self.x_train)
+        self.x_train = None
+        x_train_encoded = encoder.model(x_train_unencoded, training=False)
+        x_train_encoded = np.asarray(x_train_encoded)  # .astype('float32')
+        self.x_train = x_train_encoded
+
+        encoding_duration = perf_counter() - start_time_encoding
+
+        return encoding_duration
 
     # draw a random pair of instances
     def draw_pair(self, is_positive):

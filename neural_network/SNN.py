@@ -335,6 +335,8 @@ class FastSimpleSNN(SimpleSNN):
         # Load model only if init was not called by subclass, would otherwise be executed multiple times
         if type(self) is FastSimpleSNN:
             self.load_model()
+
+            # noinspection PyUnresolvedReferences
             self.dataset.encode(self.encoder)
 
     def encode_example(self, example):
@@ -404,6 +406,8 @@ class FastSNN(FastSimpleSNN):
         # load model only if init was not called by subclass, would otherwise be executed multiple times
         if type(self) is FastSNN:
             self.load_model()
+
+            # noinspection PyUnresolvedReferences
             self.dataset.encode(self.encoder)
 
     # noinspection DuplicatedCode

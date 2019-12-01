@@ -8,7 +8,7 @@ sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 from configuration.Configuration import Configuration
 from configuration.Hyperparameter import Hyperparameters
 from neural_network.Dataset import CaseSpecificDataset
-from neural_network.SNN import SimpleSNN, AbstractSimilarityMeasure, SNN
+from neural_network.SNN import SimpleSNN, AbstractSimilarityMeasure, SNN, FastSimpleSNN, FastSNN
 
 
 class CBS(AbstractSimilarityMeasure):
@@ -23,7 +23,11 @@ class CBS(AbstractSimilarityMeasure):
 
         with contextlib.redirect_stdout(None):
             self.initialise_case_handlers()
+
         self.load_model()
+
+        if not self.training and self.config.architecture_variant in ['fast_simple', 'fast_ffnn']:
+            self.encode_datasets()
 
     def initialise_case_handlers(self):
 
@@ -46,7 +50,7 @@ class CBS(AbstractSimilarityMeasure):
             dataset = CaseSpecificDataset(self.config.training_data_folder, self.config, case, relevant_features)
             dataset.load()
 
-            # idd up the total number of examples
+            # add up the total number of examples
             self.num_instances_total += dataset.num_train_instances
 
             ch: SimpleCaseHandler = self.initialise_case_handler(dataset)
@@ -76,6 +80,19 @@ class CBS(AbstractSimilarityMeasure):
             directory = self.config.directory_model_to_use + self.config.subdirectories_by_case.get(
                 case_handler.dataset.case) + '/'
             case_handler.load_model(model_folder=directory)
+            print()
+
+    def encode_datasets(self):
+
+        print('Encoding of datasets started.')
+
+        duration = 0
+
+        for case_handler in self.case_handlers:
+            case_handler: CaseHandler = case_handler
+            duration += case_handler.dataset.encode(case_handler.encoder)
+
+        print('Encoding of datasets finished. Duration:', duration)
 
     def print_info(self):
         print()
@@ -163,12 +180,24 @@ class CaseHandler(CaseHandlerHelper, SNN):
         # No model loading here, will be done by CBS for all case handlers
 
 
-class FastSimpleCaseHandler(SimpleCaseHandler):
-    def __init__(self):
-        raise NotImplementedError()
+class FastSimpleCaseHandler(CaseHandlerHelper, FastSimpleSNN):
+    def __init__(self, config, dataset, training):
+        # Not nice but should work, https://bit.ly/2R7VG3Y
+        # Explicit call of both super class constructors
+        # Order very important, do not change
+        FastSimpleSNN.__init__(self, config, dataset, training)
+        CaseHandlerHelper.__init__(self, dataset)
+
+        # No model loading or encoding here, will be done by CBS for all case handlers
 
 
-class FastCaseHandler(FastSimpleCaseHandler):
+class FastCaseHandler(CaseHandlerHelper, FastSNN):
 
-    def __init__(self):
-        raise NotImplementedError()
+    def __init__(self, config, dataset, training):
+        # Not nice but should work, https://bit.ly/2R7VG3Y
+        # Explicit call of both super class constructors
+        # Order very important, do not change
+        FastSNN.__init__(self, config, dataset, training)
+        CaseHandlerHelper.__init__(self, dataset)
+
+        # No model loading or encoding here, will be done by CBS for all case handlers
