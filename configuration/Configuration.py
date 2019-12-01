@@ -20,7 +20,7 @@ class Configuration:
         # ffnn = uses ffnn as distance measure
         # simple = mean absolute difference as distance measure instead of the ffnn
         self.architecture_variants = ['standard_simple', 'standard_ffnn', 'fast_simple', 'fast_ffnn']
-        self.architecture_variant = self.architecture_variants[2]
+        self.architecture_variant = self.architecture_variants[1]
 
         # TODO Needs to be changed to folder if every encoder should use different hyperparameters
         # hyperparameter file to use
@@ -36,7 +36,7 @@ class Configuration:
         # Goal loss for CBS
         # Choose a loss value at which the snn of a case should not be trained any further
         # Set to -1 for no restriction
-        self.goal_loss_case = 0.5
+        self.goal_loss_case = 0.1
 
         # select whether training should be continued from the checkpoint defined below
         self.continue_training = False
@@ -105,7 +105,7 @@ class Configuration:
         self.models_folder = '../data/trained_models/'
 
         # path and file name to the specific model that should be used for testing and live classification
-        self.filename_model_to_use = 'temp_models_12-01_09-25-12_epoch-1000'
+        self.filename_model_to_use = 'temp_snn_model_12-01_11-13-11_epoch-100'
         self.directory_model_to_use = self.models_folder + self.filename_model_to_use + '/'
 
         # folder where the preprocessed training and test data for the neural network should be stored

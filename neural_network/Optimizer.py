@@ -36,17 +36,21 @@ class Optimizer:
 
         # For each directory in the folder check which epoch was safed
         for dir_name in listdir(self.config.models_folder):
-            try:
-                epoch = int(dir_name.split('-')[-1])
+            if 'temp' in dir_name:
 
-                # Delete the directory if the stored epoch is smaller than the ones should be kept
-                # in with respect to the configured amount of models that should be kept
-                if epoch <= current_epoch - self.config.model_files_stored * self.config.output_interval:
-                    # Maybe needs to be set to true
-                    shutil.rmtree(self.config.models_folder + dir_name, ignore_errors=False)
+                if type(self) == SNNOptimizer and 'snn' in dir_name or type(self) == CBSOptimizer and 'cbs' in dir_name:
 
-            except ValueError:
-                pass
+                    try:
+                        epoch = int(dir_name.split('-')[-1])
+
+                        # Delete the directory if the stored epoch is smaller than the ones should be kept
+                        # in with respect to the configured amount of models that should be kept
+                        if epoch <= current_epoch - self.config.model_files_stored * self.config.output_interval:
+                            # Maybe needs to be set to true
+                            shutil.rmtree(self.config.models_folder + dir_name, ignore_errors=False)
+
+                    except ValueError:
+                        pass
 
     def update_single_model(self, model_input, true_similarities, model, optimizer):
         # print("model_input: ",tf.shape(model_input))
@@ -222,7 +226,7 @@ class SNNOptimizer(Optimizer):
         # generate a name and create the directory, where the model files of this epoch should be stored
         epoch_string = 'epoch-' + str(current_epoch)
         dt_string = datetime.now().strftime("%m-%d_%H-%M-%S")
-        dir_name = self.config.models_folder + '_'.join(['temp', 'models', dt_string, epoch_string]) + '/'
+        dir_name = self.config.models_folder + '_'.join(['temp', 'snn', 'model', dt_string, epoch_string]) + '/'
         os.mkdir(dir_name)
 
         # generate the file names and save the model files in the directory created before
@@ -346,7 +350,7 @@ class CBSOptimizer(Optimizer):
         # generate a name and create the directory, where the model files of this epoch should be stored
         epoch_string = 'epoch-' + str(current_epoch)
         dt_string = datetime.now().strftime("%m-%d_%H-%M-%S")
-        dir_name = self.config.models_folder + '_'.join(['temp', 'models', dt_string, epoch_string]) + '/'
+        dir_name = self.config.models_folder + '_'.join(['temp', 'cbs', 'model', dt_string, epoch_string]) + '/'
         os.mkdir(dir_name)
 
         for case_handler in self.architecture.case_handlers:

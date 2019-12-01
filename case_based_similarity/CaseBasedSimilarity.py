@@ -124,10 +124,6 @@ class CaseHandlerHelper:
         print('helper init called')
 
         self.dataset: CaseSpecificDataset = dataset
-        # TODO Find better solution
-        self.need_encoder = [SimpleCaseHandler, CaseHandler, FastSimpleCaseHandler, FastCaseHandler]
-        self.need_ffnn = [CaseHandler, FastCaseHandler]
-
         self.print_case_handler_info()
 
     # debugging method, can be removed when implementation is finished

@@ -54,9 +54,12 @@ class NN:
                 found = True
 
         if not found:
-            raise FileNotFoundError('Model file for this type could not be found in '+str(model_folder))
+            raise FileNotFoundError('Model file for this type could not be found in ' + str(model_folder))
         else:
             print('Model has been loaded successfully')
+
+    def get_output_shape(self):
+        return self.model.output_shape
 
 
 class FFNN(NN):
@@ -144,12 +147,15 @@ class RNN(NN):
             # first layer must be handled separately because the input shape parameter must be set Usage of default
             # parameters should ensure cuDNN usage (
             # https://www.tensorflow.org/beta/guide/keras/rnn#using_cudnn_kernels_when_available)
-            # but this would be faster:
-            # tf.keras.layers.RNN(tf.keras.layers.LSTMCell(num_units), return_sequences=True)
+            # Even though .LSTM should use cuDnn Kernel the .RNN is faster
+            # Also a not yet fixable error occurs, which is why this could be the case
             if i == 0:
-                layer = tf.keras.layers.LSTM(units=num_units, return_sequences=True, input_shape=self.input_shape)
+                layer = tf.keras.layers.RNN(tf.keras.layers.LSTMCell(num_units), return_sequences=True,
+                                            input_shape=self.input_shape)
+                # layer = tf.keras.layers.LSTM(units=num_units, return_sequences=True, input_shape=self.input_shape)
             else:
-                layer = tf.keras.layers.LSTM(units=num_units, return_sequences=True)
+                layer = tf.keras.layers.RNN(tf.keras.layers.LSTMCell(num_units), return_sequences=True)
+                # layer = tf.keras.layers.LSTM(units=num_units, return_sequences=True)
             model.add(layer)
 
         # add Batch Norm and Dropout Layers
@@ -400,9 +406,8 @@ class TemporalBlock(tf.keras.Model):
 
     # TODO Make this look nice
     def print_layer_info(self):
-        print("dilation_rate: ", self.dilation_rate, "|nb_filters: ", self.nb_filters, "|kernel_size: ",
-              self.kernel_size,
-              "|padding: ", self.padding, "|dropout_rate: ", self.dropout_rate)
+        print("dilation_rate: ", self.dilation_rate, "| nb_filters: ", self.nb_filters, "| kernel_size: ",
+              self.kernel_size, "| padding: ", self.padding, "| dropout_rate: ", self.dropout_rate)
 
     def __init__(self, dilation_rate, nb_filters, kernel_size, padding, dropout_rate=0.0, input_shape=None):
         super(TemporalBlock, self).__init__()
@@ -499,12 +504,17 @@ class TCN(NN):
             model.add(tb)
 
         self.model = model
-        self.model.build(input_shape=(10, self.input_shape[0], self.input_shape[
-            1]))  # Required to load previous model, None verursacht AssertionError
+        # Required to load previous model, None causes AssertionError
+        self.model.build(input_shape=(10, self.input_shape[0], self.input_shape[1]))
         self.output_shape = (None, self.input_shape[0], num_channels[num_levels - 1])
 
-    def print_model_info(self):
+    def get_output_shape(self):
+        return self.output_shape
 
+    def print_model_info(self):
+        print('Model: "TCN"')
+        print('_________________________________________________________________')
         for i in range(len(self.layers)):
             print('Layer', i, self.layers[i].name)
             self.layers[i].print_layer_info()
+        print('_________________________________________________________________')

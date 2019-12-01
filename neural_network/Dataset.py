@@ -20,7 +20,8 @@ class Dataset:
         self.num_instances = None
         # Dictionary with key: class as integer and value: array with index positions
         self.classIdx_to_trainExamplIdxPos = {}
-        # Dictonary with key: integer (0 to numOfClasses-1) which corresponds to one column entry and value string (class name)
+        # Dictonary with key: integer (0 to numOfClasses-1) which corresponds to one column entry
+        # and value string (class name)
         self.classIdx_to_classString = {}
 
         self.classes = None  # Class names as string
@@ -162,7 +163,7 @@ class FullDataset(Dataset):
         x_train_unencoded = self.x_train
         self.x_train = None
         x_train_encoded = encoder.model(x_train_unencoded, training=False)
-        x_train_encoded = np.asarray(x_train_encoded)  # .astype('float32')
+        x_train_encoded = np.asarray(x_train_encoded)
         self.x_train = x_train_encoded
 
         # x_test will not be encoded by default because examples should simulate "new data" --> encoded at runtime
@@ -171,7 +172,7 @@ class FullDataset(Dataset):
             x_test_unencoded = self.x_test
             self.x_test = None
             x_test_encoded = encoder.model(x_test_unencoded, training=False)
-            x_test_encoded = np.asarray(x_test_encoded)  # .astype('float32')
+            x_test_encoded = np.asarray(x_test_encoded)
             self.x_test = x_test_encoded
 
         encoding_duration = perf_counter() - start_time_encoding
@@ -308,7 +309,7 @@ class CaseSpecificDataset(Dataset):
         x_train_unencoded = np.copy(self.x_train)
         self.x_train = None
         x_train_encoded = encoder.model(x_train_unencoded, training=False)
-        x_train_encoded = np.asarray(x_train_encoded)  # .astype('float32')
+        x_train_encoded = np.asarray(x_train_encoded)
         self.x_train = x_train_encoded
 
         encoding_duration = perf_counter() - start_time_encoding

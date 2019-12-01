@@ -1,5 +1,5 @@
 {
-    "encoder_variant": "cnn",
+    "encoder_variant": "tcn",
 
 	"batch_size" : 64,
 

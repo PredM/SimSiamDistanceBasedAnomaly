@@ -65,17 +65,13 @@ class SimpleSNN(AbstractSimilarityMeasure):
         self.hyper = None
         self.encoder = None
 
-        # TODO find better solution
-        self.need_encoder = [SimpleSNN, SNN, FastSimpleSNN, FastSNN]
-        self.need_ffnn = [SNN, FastSNN]
-
         # Load model only if init was not called by subclass, would otherwise be executed multiple times
         if type(self) is SimpleSNN:
             self.load_model()
 
     # get the similarities of the example to each example in the dataset
     def get_sims_in_batches(self, example):
-        print("get_sims_in_batches:")
+
         num_train = len(self.dataset.x_train)
         sims_all_examples = np.zeros(num_train)
         batch_size = self.hyper.batch_size
@@ -117,7 +113,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
             if self.hyper.encoder_variant in ['cnnwithclassattention', 'cnn1dwithclassattention']:
                 auxiliaryInput = np.zeros((2 * batch_size, self.dataset.x_auxCaseVector_test.shape[1]))
 
-            print("input_pairs shape: ", input_pairs.shape)
+            # print("input_pairs shape: ", input_pairs.shape)
 
             for index in range(batch_size):
                 input_pairs[2 * index] = example
@@ -125,7 +121,6 @@ class SimpleSNN(AbstractSimilarityMeasure):
 
                 if self.hyper.encoder_variant in ['cnnwithclassattention', 'cnn1dwithclassattention']:
                     # Adding an additional/auxiliary input
-
                     # noinspection PyUnboundLocalVariable
                     auxiliaryInput[2 * index] = self.dataset.x_auxCaseVector_train[index]
                     # np.zeros(self.dataset.x_auxCaseVector_train.shape[1])
@@ -233,37 +228,32 @@ class SimpleSNN(AbstractSimilarityMeasure):
 
         self.hyper.set_time_series_properties(self.dataset.time_series_length, self.dataset.time_series_depth)
 
-        # TODO Remove FastSNN, when encoding changed for cbs
-        if type(self) in self.need_encoder:
+        # Create encoder, necessary for all types
+        input_shape_encoder = (self.hyper.time_series_length, self.hyper.time_series_depth)
 
-            input_shape_encoder = (self.hyper.time_series_length, self.hyper.time_series_depth)
+        if self.hyper.encoder_variant == 'cnn':
+            self.encoder = CNN(self.hyper, input_shape_encoder)
+        elif self.hyper.encoder_variant == 'cnnwithclassattention':
+            # Consideration of an encoder with multiple inputs
+            self.encoder = CNNWithClassAttention(self.hyper, [input_shape_encoder, self.dataset.y_train.shape[1]])
+        elif self.hyper.encoder_variant == 'cnn1dwithclassattention':
+            # Consideration of an encoder with multiple inputs
+            self.encoder = CNN1DWithClassAttention(self.hyper, [input_shape_encoder, self.dataset.y_train.shape[1]])
+        elif self.hyper.encoder_variant == 'rnn':
+            self.encoder = RNN(self.hyper, input_shape_encoder)
+        elif self.hyper.encoder_variant == 'tcn':
+            self.encoder = TCN(self.hyper, input_shape_encoder)
+        else:
+            raise AttributeError('Unknown encoder variant:', self.hyper.encoder_variant)
 
-            if self.hyper.encoder_variant == 'cnn':
-                self.encoder = CNN(self.hyper, input_shape_encoder)
-            elif self.hyper.encoder_variant == 'cnnwithclassattention':
-                # Consideration of an encoder with multiple inputs
-                self.encoder = CNNWithClassAttention(self.hyper, [input_shape_encoder, self.dataset.y_train.shape[1]])
-            elif self.hyper.encoder_variant == 'cnn1dwithclassattention':
-                # Consideration of an encoder with multiple inputs
-                self.encoder = CNN1DWithClassAttention(self.hyper, [input_shape_encoder, self.dataset.y_train.shape[1]])
-            elif self.hyper.encoder_variant == 'rnn':
-                self.encoder = RNN(self.hyper, input_shape_encoder)
-            elif self.hyper.encoder_variant == 'tcn':
-                self.encoder = TCN(self.hyper, input_shape_encoder)
-            else:
-                raise AttributeError('Unknown encoder variant:',
-                                     self.hyper.encoder_variant)
+        self.encoder.create_model()
 
-            self.encoder.create_model()
+        if not training:
+            self.encoder.load_model_weights(model_folder)
 
-            if not training:
-                self.encoder.load_model_weights(model_folder)
-
-        if type(self) in self.need_ffnn:
-            if self.hyper.encoder_variant == 'tcn':
-                encoder_output_shape = self.encoder.output_shape
-            else:
-                encoder_output_shape = self.encoder.model.output_shape
+        # These variants also need a ffnn
+        if self.config.architecture_variant in ['standard_ffnn', 'fast_ffnn']:
+            encoder_output_shape = self.encoder.get_output_shape()
             input_shape_ffnn = (encoder_output_shape[1] ** 2, encoder_output_shape[2] * 2)
 
             # noinspection PyAttributeOutsideInit

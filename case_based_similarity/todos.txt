@@ -1,17 +1,7 @@
-TODOs as of 11.10
-
-* Remove .astype('float32') wherever possible
-* Fix SNNs
-    * Remove if test from draw pair, because this is never used
-* Fix RNN
-    * Unknown error occurs at initiation - find the problem and resolve it
-    * something related to the fact that the two subnets of the bidirectional structure do not fit together
-* Encoding for fast version of cbs
-    * Way of encoding must be changed in comparison to the one for SNNs
-      because it can't be safed in single file if the same feature is used for multiple cases
-    * Add method to dataset for encoding it after it was loaded, one parameter is the encoder that should be used
-    * Adapt this version for the snn
-* Implement the other case handler classes, which use FFNNs and or encoding at startup (fast...)
+TODOs as of 01.12.19
+* Include multi-gpu-usage for cbs
+    * In a way that each case base handler uses one
+    * Ensure these work parallel
 * Fix real time classification
     * Preprocessing must be changed in the same way like the data generation was
     * Adaptation to new type of return values
@@ -19,16 +9,15 @@ TODOs as of 11.10
 * General optimisation and testing with new datasets
 
 Future features:
-* Change the way how it is checked whether to create encoder and/or ffnn
+* Change the way how it is checked whether an ffnn
 * Add continue training for cbs
-* Include multi-gpu-usage for cbs
-    * In a way that each case base handler uses one
-    * Ensure these work parallel
+    * Stopping at goal loss must be considered
 * Use individual hyper parameters for each case_handler
+    * Maybe add goal loss here?
 * Change loading of CaseSpecificDataset
     * Load a FullDataset in CBS
     * Create CaseSpecificDatasets with that one instead of reloading from files every time
+    * Remember to create copys and dont use references because of possible encoding
 * Use os.path.join for all operation, including config
-* Store configuration when saving models
-    * Those configs that are must match safed model
-        * e.g. used cases
+* Change LSTM back to .LSTM from .RNN
+    * Only faster if error can be fixed
