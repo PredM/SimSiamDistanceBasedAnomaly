@@ -20,7 +20,9 @@ class Configuration:
         # ffnn = uses ffnn as distance measure
         # simple = mean absolute difference as distance measure instead of the ffnn
         self.architecture_variants = ['standard_simple', 'standard_ffnn', 'fast_simple', 'fast_ffnn']
-        self.architecture_variant = self.architecture_variants[1]
+        self.architecture_variant = self.architecture_variants[0]
+        self.simple_Distance_Measures = ['abs_mean', 'euclidean', 'dot_product', 'cosine','jaccard']
+        self.simple_Distance_Measure = self.simple_Distance_Measures[4]
 
         # TODO Needs to be changed to folder if every encoder should use different hyperparameters
         # hyperparameter file to use
