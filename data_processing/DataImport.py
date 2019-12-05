@@ -33,15 +33,53 @@ def import_txt(filename: str, prefix: str):
     df = df.add_prefix(prefix)
     df = df.rename(columns={prefix + 'timestamp': 'timestamp'})
 
+    # Fix wrong data types
+    if '15' in prefix:
+        transformFinishedFromStringToNumeric("txt15_m1.finished", df)
+    elif '16' in prefix:
+        transformFinishedFromStringToNumeric("txt16_m1.finished", df)
+        transformFinishedFromStringToNumeric("txt16_m2.finished", df)
+        transformFinishedFromStringToNumeric("txt16_m3.finished", df)
+    elif '17' in prefix:
+        transformFinishedFromStringToNumeric("txt17_m1.finished", df)
+        transformFinishedFromStringToNumeric("txt17_m2.finished", df)
+    elif '18' in prefix:
+        transformFinishedFromStringToNumeric("txt18_m1.finished", df)
+        transformFinishedFromStringToNumeric("txt18_m2.finished", df)
+        transformFinishedFromStringToNumeric("txt18_m3.finished", df)
+        df["txt18_currentTask"] = (df["txt18_currentTask"]).astype('category').cat.codes
+        df["txt18_currentTask"]= pd.to_numeric(df["txt18_currentTask"])
+        transformFinishedFromStringToNumeric("txt18_isContainerReady", df)
+    elif '19' in prefix:
+        transformFinishedFromStringToNumeric("txt19_m1.finished", df)
+        transformFinishedFromStringToNumeric("txt19_m2.finished", df)
+        transformFinishedFromStringToNumeric("txt19_m3.finished", df)
+        transformFinishedFromStringToNumeric("txt19_m4.finished", df)
+        df["txt19_currentTask"] = (df["txt19_currentTask"]).astype('category').cat.codes
+        df["txt19_currentTask"] = pd.to_numeric(df["txt19_currentTask"])
+        transformFinishedFromStringToNumeric("txt19_getState", df)
+        df["txt19_currentTask"] = (df["txt19_getSupply"]).astype('category').cat.codes
+        df["txt19_getSupply"] = pd.to_numeric(df["txt19_getSupply"])
+        df["txt19_isContainerReady"] = (df["txt19_isContainerReady"]).astype('category').cat.codes
+        df["txt19_isContainerReady"] = pd.to_numeric(df["txt19_isContainerReady"])
     # Remove lines with duplicate timestamps, keep first appearance
     df = df.loc[~df['timestamp'].duplicated(keep='first')]
 
     df['timestamp'] = pd.to_datetime(df['timestamp'])
     df = df.set_index('timestamp')
     df = df.sort_index()
-
+    pd.set_option('display.expand_frame_repr', False)
+    #print(df.describe(include='all'))
+    pd.set_option('display.expand_frame_repr', True)
     return df
 
+def transformFinishedFromStringToNumeric(attributeToTransofrm, df):
+    try:
+        df[attributeToTransofrm] = df[attributeToTransofrm].replace("True", 1)
+        df[attributeToTransofrm] = df[attributeToTransofrm].replace("False", 0)
+        df[attributeToTransofrm] = pd.to_numeric(df[attributeToTransofrm])
+    except:
+        print("could not convert: ", attributeToTransofrm )
 
 def plot_export_txt(df: pd.DataFrame, file_name: str, config: Configuration):
     if not (config.export_plots or config.plot_txts):
@@ -234,15 +272,15 @@ def import_bmx_sensors(config: Configuration):
     # all datasets dont contain the hrs acceleration sensors data, so some lines needed to be changed
 
     # import single components
-    df_hrs_acc = import_bmx_acc(config.bmx055_HRS_acc, 'hrs_acc')
+    #df_hrs_acc = import_bmx_acc(config.bmx055_HRS_acc, 'hrs_acc')
     df_hrs_gyr = import_acc(config.bmx055_HRS_gyr, 'hrs_gyr')
     df_hrs_mag = import_acc(config.bmx055_HRS_mag, 'hrs_mag')
 
     # combine into a single dataframe
-    df_hrs_acc['timestamp'] = pd.to_datetime(df_hrs_acc['timestamp'])
-    df_hrs = df_hrs_acc.set_index('timestamp').join(df_hrs_gyr.set_index('timestamp'), how='outer')
-    # df_hrs_gyr['timestamp'] = pd.to_datetime(df_hrs_gyr['timestamp'])
-    df_hrs = df_hrs.set_index('timestamp').join(df_hrs_mag.set_index('timestamp'), how='outer')
+    df_hrs_gyr['timestamp'] = pd.to_datetime(df_hrs_gyr['timestamp'])
+    df_hrs = df_hrs_gyr.set_index('timestamp').join(df_hrs_mag.set_index('timestamp'), how='outer')
+    #df_hrs_gyr['timestamp'] = pd.to_datetime(df_hrs_gyr['timestamp'])
+    #df_hrs = df_hrs.set_index('timestamp').join(df_hrs_mag.set_index('timestamp'), how='outer')
     df_hrs.query(config.query, inplace=True)
 
     # import single components
@@ -294,7 +332,7 @@ def import_dataset(dataset_to_import=0):
     df_accs_combined = import_acc_sensors(config)
 
     # bmx sensor are not used because of missing data in some datasets
-    # df_hrs_combined, df_vsg_combined = import_bmx_sensors(config)
+    df_hrs_combined, df_vsg_combined = import_bmx_sensors(config)
     gc.collect()
 
     if not (config.save_pkl_file or config.plot_all_sensors or config.print_column_names):
@@ -306,9 +344,9 @@ def import_dataset(dataset_to_import=0):
     print("Step 2/4")
     df_combined = df_combined.join(df_accs_combined, how='outer')
     print("Step 3/4")
-    # df_combined = df_combined.join(df_hrs_combined, how='outer')
+    df_combined = df_combined.join(df_hrs_combined, how='outer')
     print("Step 4/4")
-    # df_combined = df_combined.join(df_vsg_combined, how='outer')
+    df_combined = df_combined.join(df_vsg_combined, how='outer')
 
     # del df_vsg_combined, df_hrs_combined
     del df_press_combined, df_accs_combined
@@ -320,7 +358,9 @@ def import_dataset(dataset_to_import=0):
     print('Number of streams before:', df_combined.shape)
     # df_combined = df_combined.drop(config.unused_attributes, 1, errors='ignore')
     try:
-        df_combined = df_combined[config.all_features_configured]
+        #df_combined = df_combined[config.featuresBA]
+        df_combined = df_combined[config.featuresAll]
+        #df_combined = df_combined[config.all_features_configured]
     except:
         raise AttributeError('Relevant feature not found in current dataset.')
 

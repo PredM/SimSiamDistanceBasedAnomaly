@@ -152,13 +152,13 @@ class Configuration:
         # import and data visualisation
         ###
 
-        self.plot_txts: bool = False
-        self.plot_pressure_sensors: bool = False
-        self.plot_acc_sensors: bool = False
-        self.plot_bmx_sensors: bool = False
+        self.plot_txts: bool = True
+        self.plot_pressure_sensors: bool = True
+        self.plot_acc_sensors: bool = True
+        self.plot_bmx_sensors: bool = True
         self.plot_all_sensors: bool = False
 
-        self.export_plots: bool = False
+        self.export_plots: bool = True
 
         self.print_column_names: bool = True
         self.save_pkl_file: bool = True
@@ -248,6 +248,8 @@ class Configuration:
         self.subdirectories_by_case = data['subdirectories_by_case']
 
         features_all_cases = data['relevant_features']
+        self.featuresBA = data['featuresBA']
+        self.featuresAll = data['featuresAll']
 
         if self.cases_used is None or len(self.cases_used) == 0:
             self.relevant_features = features_all_cases
