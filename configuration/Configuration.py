@@ -160,12 +160,15 @@ class Configuration:
 
         self.export_plots: bool = True
 
-        self.print_column_names: bool = True
+        self.print_column_names: bool = False
         self.save_pkl_file: bool = True
 
         ###
         # preprocessing and example properties
         ###
+
+        # value is used to ensure a constant frequency of the measurement time points
+        self.resampleFrequency = "2ms"
 
         # define the length (= the number of timestamps)
         # of the time series generated for training & live classification

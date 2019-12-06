@@ -58,7 +58,7 @@ def import_txt(filename: str, prefix: str):
         df["txt19_currentTask"] = (df["txt19_currentTask"]).astype('category').cat.codes
         df["txt19_currentTask"] = pd.to_numeric(df["txt19_currentTask"])
         transformFinishedFromStringToNumeric("txt19_getState", df)
-        df["txt19_currentTask"] = (df["txt19_getSupply"]).astype('category').cat.codes
+        df["txt19_getSupply"] = (df["txt19_getSupply"]).astype('category').cat.codes
         df["txt19_getSupply"] = pd.to_numeric(df["txt19_getSupply"])
         df["txt19_isContainerReady"] = (df["txt19_isContainerReady"]).astype('category').cat.codes
         df["txt19_isContainerReady"] = pd.to_numeric(df["txt19_isContainerReady"])
