@@ -1,3 +1,4 @@
+import fnmatch
 import sys
 import os
 import contextlib
@@ -13,6 +14,9 @@ import pandas as pd
 from kafka import KafkaConsumer, TopicPartition, KafkaProducer, errors
 from sklearn.preprocessing import MinMaxScaler
 
+from case_based_similarity.CaseBasedSimilarity import CBS
+from neural_network.SNN import initialise_snn
+
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 
 from configuration.Configuration import Configuration
@@ -20,6 +24,7 @@ from configuration.Hyperparameter import Hyperparameters
 from data_processing.DataframeCleaning import clean_up_dataframe
 from neural_network import SNN
 from neural_network.Dataset import FullDataset
+
 
 # TODO
 # Ensure generated examples equal the structure of the case base
@@ -146,6 +151,7 @@ class Importer(threading.Thread):
         # check if the message exceeds the end_timestamp
         return pd.to_datetime(msg['timestamp']) > end_timestamp
 
+    # TODO NOT TESTED
     @staticmethod
     def extract_txt(msg: dict, extracted_messages, topic, end_timestamp: pd.Timestamp, config: Configuration):
         # get the prefix for this topic
@@ -224,7 +230,10 @@ def list_to_dataframe(results: [[object]], config: Configuration):
 
         # remove unnecessary columns
         # errors for non existing columns are ignored because not all datasets have the same
-        df_temp.drop(config.unused_attributes, 1, inplace=True, errors='ignore')
+        try:
+            df_temp = df_temp[config.feature_variant]
+        except:
+            raise AttributeError('Relevant feature not found in current dataset.')
 
         # remove duplicated timestamps, first will be kept
         df_temp = df_temp.loc[~df_temp['timestamp'].duplicated(keep='first')]
@@ -273,6 +282,10 @@ def reduce_dataframe(df: pd.DataFrame, start_timestamp: pd.Timestamp, end_timest
 def normalise_dataframe(example: np.ndarray, scalers: [MinMaxScaler]):
     length = example.shape[1]
 
+    if len(example[0]) != len(scalers):
+        raise ValueError(
+            'number of scalers =/= number of features in example. check if feature configuration is correct')
+
     for i in range(length):
         # scaler = MinMaxScaler(feature_range=(0, 1))
         scaler = scalers[i]
@@ -283,15 +296,12 @@ def normalise_dataframe(example: np.ndarray, scalers: [MinMaxScaler]):
 
     return example
 
-# FIXME Not working currently because unnecessary_cols doesn't exit anymore
-# Needs to be changed to other way of calculating what to read in
-# using len(config.all_features_used) maybe?
+
 def load_scalers(config):
     scalers = []
 
     # calculate the number of columns
-    all_cols = config.bools + config.intNumbers + config.zeroOne + config.realValues
-    number_of_scalers = len(set(all_cols) - set(config.unnecessary_cols))
+    number_of_scalers = len(fnmatch.filter(os.listdir(config.scaler_folder), '*.save'))
 
     # load scaler for each attribute and store in list
     for i in range(number_of_scalers):
@@ -304,25 +314,34 @@ def load_scalers(config):
 
 class Classifier(threading.Thread):
 
-    def __init__(self, config: Configuration):
+    def __init__(self, config: Configuration, selection):
         super().__init__()
         self.examples_to_classify = multiprocessing.Manager().Queue(10)
         self.config = config
-        self.dataset = FullDataset(config.training_data_folder, config, training=False)
-        hyper = Hyperparameters()
-        hyper.load_from_file(config.hyper_file, config.use_hyper_file)
-        self.snn = SNN.initialise_snn(config, hyper, self.dataset, training=False)
-        self.snn.load_model(config)
         self.stop = False
-
-        if config.export_results_to_kafka:
-            self.result_producer = KafkaProducer(bootstrap_servers=config.get_connection(),
-                                                 value_serializer=lambda m: json.dumps(m).encode('utf-8'))
 
         self.nbr_classified = 0
         self.total_time_classification = 0
         self.total_time_all = 0
         self.total_diff = pd.Timedelta(0)
+
+        if config.export_results_to_kafka:
+            self.result_producer = KafkaProducer(bootstrap_servers=config.get_connection(),
+                                                 value_serializer=lambda m: json.dumps(m).encode('utf-8'))
+
+        self.architecture = None
+        self.init_architecture(selection)
+
+    def init_architecture(self, selection):
+
+        if selection == 'snn':
+            dataset: FullDataset = FullDataset(self.config.training_data_folder, self.config, training=False)
+            dataset.load()
+            self.architecture = initialise_snn(self.config, dataset, False)
+        elif selection == 'cbs':
+            self.architecture = CBS(self.config, False)
+        else:
+            raise ValueError('Unknown architecture variant')
 
     def run(self):
 
@@ -390,15 +409,13 @@ class Classifier(threading.Thread):
     # k nearest neighbor implementation to select the class based on the k most similar training examples
     def knn(self, example: np.ndarray):
 
-        # TODO needs to be changed to returned 2d array
-        # calculate the similarities to all examples of the case base using the nn
+        # calculate the similarities to all examples of the case base using the the similarity measure
         # example will be encoded by snn variant if necessary
-        sims = self.snn.get_sims(example)
+        sims, labels = self.architecture.get_sims(example)
 
-        # get labels without one hot encoding
-        y_train = self.snn.dataset.one_hot_encoder.inverse_transform(self.snn.dataset.y_train)
-
-        # argsort is ascending only, but descending is needed, so 'invert' the array content
+        # argsort is ascending only, but descending is needed
+        # so 'invert' the array content first with - (element wise operation)
+        # argsort returns the indices that would sort an array
         arg_sort = np.argsort(-sims)
 
         # get the indices of the k most similar examples
@@ -406,7 +423,7 @@ class Classifier(threading.Thread):
         arg_sort = arg_sort[0:k]
 
         # get the classes and similarities for those examples
-        classes = y_train[arg_sort]
+        classes = labels[arg_sort]
         sims = sims[arg_sort]
 
         # calculate the mean similarity
@@ -431,6 +448,12 @@ def main():
 
     consumers = []
     limiting_consumer = None
+
+    selection = ''
+    while selection not in ['cbs', 'snn']:
+        print('Please select architecture that should be used. Type "snn" or "cbs"')
+        selection = input()
+    print()
 
     print('Creating consumers ...\n')
 
@@ -465,7 +488,7 @@ def main():
     print('interval and the current time right before the output.')
     print('The total time is the time needed for the completely processing the example,')
     print('including the time in the queue.\n')
-    classifier = Classifier(config)
+    classifier = Classifier(config, selection)
     classifier.start()
 
     print('Waiting for data to classify ...\n')
