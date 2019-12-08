@@ -79,7 +79,7 @@ def downsample_dataframe(df: pd.DataFrame, config):
 
 
 def clean_up_dataframe(df: pd.DataFrame, config: Configuration):
-    print('\nCleaning up dataframe with shape: ',df.shape, '...')
+    print('\nCleaning up dataframe with shape: ', df.shape, '...')
     # get list of attributes by type and remove those that aren't in the dataframe
     used = set(config.features_used)
     bools = list(set(config.bools).intersection(used))
@@ -87,8 +87,8 @@ def clean_up_dataframe(df: pd.DataFrame, config: Configuration):
     real_values = list(set(config.realValues).intersection(used))
 
     print('\tReplace True/False with 1/0 - Already done, now part of DataImport.py with hard coded attribute values')
-    #df[bools] = df[bools].replace({'True': '1', 'False': '0'})
-    #df[bools] = df[bools].apply(pd.to_numeric)
+    # df[bools] = df[bools].replace({'True': '1', 'False': '0'})
+    # df[bools] = df[bools].apply(pd.to_numeric)
 
     print('\tFill NA for boolean and integer columns with values')
     df[combined] = df[combined].fillna(method='ffill')
@@ -103,10 +103,11 @@ def clean_up_dataframe(df: pd.DataFrame, config: Configuration):
     # print('\tDownsample to milliseconds precision to have less but equally distanced timestamps')
     # df = downsample_dataframe(df, config)
 
-    print('\tResampling (depending on freq: Downsampling) the data at a constant frequency using nearst neighbor to backfill NAN values')
-    #print(df.head(10))
+    print(
+        '\tResampling (depending on freq: Downsampling) the data at a constant frequency using nearst neighbor to backfill NAN values')
+    # print(df.head(10))
     df = df.resample(config.resampleFrequency).nearest()
-    #print(df.head(10))
+    # print(df.head(10))
     print('\nShape after cleaning up the dataframe: ', df.shape)
 
     return df

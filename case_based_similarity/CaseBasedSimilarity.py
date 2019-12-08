@@ -2,11 +2,11 @@ import contextlib
 import os
 import sys
 import numpy as np
+import tensorflow as tf
 
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 
 from configuration.Configuration import Configuration
-from configuration.Hyperparameter import Hyperparameters
 from neural_network.Dataset import CaseSpecificDataset
 from neural_network.SNN import SimpleSNN, AbstractSimilarityMeasure, SNN, FastSimpleSNN, FastSNN
 
@@ -23,6 +23,12 @@ class CBS(AbstractSimilarityMeasure):
 
         with contextlib.redirect_stdout(None):
             self.initialise_case_handlers()
+
+        # TODO Test what happens if config value < 0, should be fine though
+        self.available_gpus = tf.config.experimental.list_logical_devices('GPU')
+        self.gpus_used = config.max_gpus_used if config.max_gpus_used < len(self.available_gpus) else len(
+            self.available_gpus)
+        self.available_gpus = self.available_gpus[0:self.gpus_used]
 
         self.load_model()
 
@@ -105,9 +111,25 @@ class CBS(AbstractSimilarityMeasure):
         sims_cases = np.empty(self.number_of_cases, dtype='object_')
         labels_cases = np.empty(self.number_of_cases, dtype='object_')
 
-        for i in range(self.number_of_cases):
-            # TODO Add multi-gpu-support here
-            sims_cases[i], labels_cases[i] = self.case_handlers[i].get_sims(example)
+        if self.gpus_used <= 1:
+            for i in range(self.number_of_cases):
+                sims_cases[i], labels_cases[i] = self.case_handlers[i].get_sims(example)
+        else:
+
+            threads = []
+            ch_index = 0
+
+            while ch_index < self.number_of_cases:
+                gpu_index = 0
+
+                while gpu_index < self.gpus_used and ch_index < self.number_of_cases:
+                    # todo add thread creation and call here
+
+                    gpu_index += 1
+                    ch_index += 1
+
+            for thread in threads:
+                pass
 
         return np.concatenate(sims_cases), np.concatenate(labels_cases)
 

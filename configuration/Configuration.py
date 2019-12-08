@@ -43,6 +43,8 @@ class Configuration:
         # select whether training should be continued from the checkpoint defined below
         self.continue_training = False
 
+        self.max_gpus_used = 3
+
         # defines how often loss is printed and checkpoints are safed during training
         self.output_interval = 100
 
