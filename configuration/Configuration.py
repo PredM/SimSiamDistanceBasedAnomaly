@@ -21,8 +21,9 @@ class Configuration:
         # simple = mean absolute difference as distance measure instead of the ffnn
         self.architecture_variants = ['standard_simple', 'standard_ffnn', 'fast_simple', 'fast_ffnn']
         self.architecture_variant = self.architecture_variants[0]
+        # TODO jaccard not working
         self.simple_Distance_Measures = ['abs_mean', 'euclidean', 'dot_product', 'cosine', 'jaccard']
-        self.simple_Distance_Measure = self.simple_Distance_Measures[4]
+        self.simple_Distance_Measure = self.simple_Distance_Measures[0]
 
         # TODO Needs to be changed to folder if every encoder should use different hyperparameters
         # hyperparameter file to use
@@ -38,10 +39,13 @@ class Configuration:
         # Goal loss for CBS
         # Choose a loss value at which the snn of a case should not be trained any further
         # Set to -1 for no restriction
-        self.goal_loss_case = 0.1
+        self.goal_loss_case = -1
 
         # select whether training should be continued from the checkpoint defined below
+        # currently only working for snns, not cbs
         self.continue_training = False
+
+        self.max_gpus_used = 4
 
         # defines how often loss is printed and checkpoints are safed during training
         self.output_interval = 100
@@ -54,7 +58,7 @@ class Configuration:
         # ALL_CBS will use all feature of self.relevant_features, without consideration of the case structure
         # self.features_used will be assigned at config.json loading
         self.feature_variants = ['featuresBA', 'featuresAll', 'ALL_CBS']
-        self.feature_variant = self.feature_variants[1]
+        self.feature_variant = self.feature_variants[2]
         self.features_used = None
 
         # defines for which failure cases a case handler in the case based similarity measure is created,
@@ -63,7 +67,7 @@ class Configuration:
         all_cases = ['no_failure', 'txt_18_comp_leak', 'txt_17_comp_leak', 'txt15_m1_t1_high_wear',
                      'txt15_m1_t1_low_wear', 'txt15_m1_t2_wear', 'txt16_m3_t1_high_wear', 'txt16_m3_t1_low_wear',
                      'txt16_m3_t2_wear', 'txt16_i4']
-        self.cases_used = all_cases
+        self.cases_used = ['txt16_m3_t2_wear', 'txt16_i4', 'txt15_m1_t1_low_wear', 'txt15_m1_t2_wear']
 
         ###
         # kafka / real time classification
