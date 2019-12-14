@@ -169,7 +169,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
 
         a = context_vectors[2 * pair_index, :, :]
         b = context_vectors[2 * pair_index + 1, :, :]
-        print("a.shape: ", a.shape)
+        # print("a.shape: ", a.shape)
 
         # simple similarity measure:
         if self.config.simple_Distance_Measure == "abs_mean":

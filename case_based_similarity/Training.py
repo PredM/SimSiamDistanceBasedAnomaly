@@ -7,12 +7,12 @@ from case_based_similarity.CaseBasedSimilarity import CBS
 from configuration.Configuration import Configuration
 from neural_network.Dataset import FullDataset
 from configuration.Hyperparameter import Hyperparameters
-from neural_network.Optimizer import CBSOptimizer
+from neural_network.Optimizer import CBSOptimizer, ClassicCBSOptimizer
 
 
 def main():
     # suppress debugging messages of TensorFlow
-    # os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+    os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
     config = Configuration()
 

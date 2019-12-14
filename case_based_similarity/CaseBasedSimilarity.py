@@ -1,6 +1,8 @@
 import contextlib
 import os
 import sys
+import threading
+
 import numpy as np
 import tensorflow as tf
 
@@ -25,10 +27,10 @@ class CBS(AbstractSimilarityMeasure):
             self.initialise_case_handlers()
 
         # TODO Test what happens if config value < 0, should be fine though
-        self.available_gpus = tf.config.experimental.list_logical_devices('GPU')
-        self.gpus_used = config.max_gpus_used if config.max_gpus_used < len(self.available_gpus) else len(
-            self.available_gpus)
-        self.available_gpus = self.available_gpus[0:self.gpus_used]
+        self.gpus = tf.config.experimental.list_logical_devices('GPU')
+        self.nbr_gpus_used = config.max_gpus_used if 1 <= config.max_gpus_used < len(self.gpus) else len(self.gpus)
+        self.gpus = self.gpus[0:self.nbr_gpus_used]
+        self.gpus = [gpu.name for gpu in self.gpus]
 
         self.load_model()
 
@@ -111,7 +113,7 @@ class CBS(AbstractSimilarityMeasure):
         sims_cases = np.empty(self.number_of_cases, dtype='object_')
         labels_cases = np.empty(self.number_of_cases, dtype='object_')
 
-        if self.gpus_used <= 1:
+        if self.nbr_gpus_used <= 1:
             for i in range(self.number_of_cases):
                 sims_cases[i], labels_cases[i] = self.case_handlers[i].get_sims(example)
         else:
@@ -119,17 +121,22 @@ class CBS(AbstractSimilarityMeasure):
             threads = []
             ch_index = 0
 
+            # Distribute the sim calculation of all threads to the available gpus
             while ch_index < self.number_of_cases:
                 gpu_index = 0
 
-                while gpu_index < self.gpus_used and ch_index < self.number_of_cases:
-                    # todo add thread creation and call here
+                while gpu_index < self.nbr_gpus_used and ch_index < self.number_of_cases:
+                    thread = GetSimThread(self.case_handlers[ch_index], gpu_index, example)
+                    thread.start()
+                    threads.append(thread)
 
                     gpu_index += 1
                     ch_index += 1
 
-            for thread in threads:
-                pass
+            # Wait until sim calculation is finished and get the results
+            for i in range(self.number_of_cases):
+                threads[i].join()
+                sims_cases[i], labels_cases[i] = threads[i].sims, threads[i].labels
 
         return np.concatenate(sims_cases), np.concatenate(labels_cases)
 
@@ -137,6 +144,23 @@ class CBS(AbstractSimilarityMeasure):
         raise NotImplementedError(
             'Not implemented for this architecture'
             'The optimizer will use the dedicated function of each case handler')
+
+
+# Helper class to be able to get the results of multiple case handlers in parallel
+# using multiple gpus
+class GetSimThread(threading.Thread):
+
+    def __init__(self, case_handler, gpu, example):
+        super().__init__()
+        self.case_handler: CaseHandler = case_handler
+        self.gpu = gpu
+        self.example = example
+        self.sims = None
+        self.labels = None
+
+    def run(self):
+        with tf.device(self.gpu):
+            self.sims, self.labels = self.case_handler.get_sims(self.example)
 
 
 class CaseHandlerHelper:
