@@ -154,11 +154,11 @@ class Configuration:
 
         self.plot_txts: bool = True
         self.plot_pressure_sensors: bool = True
-        self.plot_acc_sensors: bool = True
-        self.plot_bmx_sensors: bool = True
+        self.plot_acc_sensors: bool = False
+        self.plot_bmx_sensors: bool = False
         self.plot_all_sensors: bool = False
 
-        self.export_plots: bool = True
+        self.export_plots: bool = False
 
         self.print_column_names: bool = False
         self.save_pkl_file: bool = True
@@ -296,11 +296,16 @@ class Configuration:
         datasets = []
         number_to_array = {}
 
-        with open('../configuration/cases.csv', 'r') as file:
+        with open('../configuration/cases_refined_final.csv', 'r') as file:
             for line in file.readlines():
                 parts = line.split(',')
                 parts = [part.strip(' ') for part in parts]
-                dataset, case, start, end = parts
+                #print("parts: ", parts)
+                #dataset, case, start, end = parts
+                dataset = parts[0]
+                case = parts[1]
+                start = parts[2]
+                end = parts[3]
 
                 timestamp = (gen_timestamp(case, start, end))
 

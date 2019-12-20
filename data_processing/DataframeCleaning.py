@@ -105,7 +105,7 @@ def clean_up_dataframe(df: pd.DataFrame, config: Configuration):
 
     print('\tResampling (depending on freq: Downsampling) the data at a constant frequency using nearst neighbor to backfill NAN values')
     #print(df.head(10))
-    df = df.resample(config.resampleFrequency).nearest()
+    df = df.resample(config.resampleFrequency).pad() #.nearest
     #print(df.head(10))
     print('\nShape after cleaning up the dataframe: ', df.shape)
 
