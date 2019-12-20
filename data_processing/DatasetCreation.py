@@ -16,20 +16,29 @@ from configuration.Configuration import Configuration
 
 class DFConverter(threading.Thread):
 
-    def __init__(self, df: pd.DataFrame, time_series_length):
+    def __init__(self, df: pd.DataFrame, time_series_length, use_over_lapping_windows):
         super().__init__()
         self.result = None
         self.df = df
         self.time_series_length = time_series_length
+        self.use_over_lapping_windows = use_over_lapping_windows
+        self.windowTimesAsString = None
 
     def run(self):
         print('\tExample:', self.df.index[0], 'to', self.df.index[-1])
+        self.windowTimesAsString = str(self.df.index[0], 'to', self.df.index[-1])
 
         # get time_series_length many indices with nearly equal distance in the interval
         samples = np.linspace(0, len(self.df) - 1, self.time_series_length, dtype=int).tolist()
-
-        # reduce the dataframe to the calculated indices
-        self.result = self.df.iloc[samples].to_numpy()
+        #print("result shape: ", self.result.shape, " df length: ", len(self.df))
+        if self.use_over_lapping_windows == False:
+            # reduce the dataframe to the calculated indices
+            self.result = self.df.iloc[samples].to_numpy()
+        else:
+            # no reduction is used if overlapping window is applied
+            # because data is downsampled before according parameter sampling frequency
+            self.result = self.df.to_numpy()
+            #print(self.result[:10,:10])
 
 
 class CaseSplitter(threading.Thread):
@@ -39,17 +48,19 @@ class CaseSplitter(threading.Thread):
         self.case_label = case_info[0]
         self.start_timestamp_case = case_info[1]
         self.end_timestamp_case = case_info[2]
+        self.failure_time = case_info[3]
         self.df = df
         self.result = None
 
     def run(self):
         try:
             case_label = self.case_label
+            failure_time = self.failure_time
             start_timestamp_case = self.start_timestamp_case
             end_timestamp_case = self.end_timestamp_case
             df = self.df
 
-            print('\tProcessing', case_label, start_timestamp_case, end_timestamp_case)
+            print('\tProcessing', case_label,": ", start_timestamp_case, end_timestamp_case,"FAILURE: ", failure_time)
 
             # basic checks for correct timestamps
             if end_timestamp_case < start_timestamp_case:
@@ -72,8 +83,10 @@ def split_by_cases(df: pd.DataFrame, data_set_counter, config: Configuration):
 
     # get the cases of the dataset after which it should be split
     cases_info = config.cases_datasets[data_set_counter]
-    cases = []
-    labels = []
+    print(cases_info[1])
+    cases = [] # contains dataframes from sensor data
+    labels = [] # contains the label of the dataframe
+    failures = [] # contains the associated failure time stamp
     threads = []
 
     # prepare case splitting threads
@@ -103,26 +116,42 @@ def split_by_cases(df: pd.DataFrame, data_set_counter, config: Configuration):
             if threads[i].result is not None:
                 cases.append(threads[i].result)
                 labels.append(threads[i].case_label)
+                failures.append(threads[i].failure_time)
 
         threads_finished += thread_limit
 
-    return cases, labels
+    return cases, labels, failures
 
 
 def split_into_examples(df: pd.DataFrame, label: str, examples: [np.ndarray], labels_of_examples: [str],
-                        time_series_length, interval_in_seconds, config):
+                        time_series_length, interval_in_seconds, config, failureTimes_of_examples: [str], failureTime, windowTimes_of_examples: [str]):
     # split case into single intervals with the configured length
     interval_list = [g for c, g in df.groupby(pd.Grouper(level='timestamp', freq=str(interval_in_seconds) + 's'))]
 
     thread_list = []
 
     # sample time_series_length many values form each of the intervals if their length is near the configured value
-    for g in interval_list:
-        g_len = (g.index[-1] - g.index[0]).total_seconds()
+    if config.use_over_lapping_windows == False:
+        for g in interval_list:
+            g_len = (g.index[-1] - g.index[0]).total_seconds()
 
-        if interval_in_seconds - 0.5 <= g_len <= interval_in_seconds + 0.5:
-            t = DFConverter(g, time_series_length)
+            if interval_in_seconds - 0.5 <= g_len <= interval_in_seconds + 0.5:
+                t = DFConverter(g, time_series_length)
+                thread_list.append(t)
+    else:
+        #print("df.index[0]: ", df.index[0], "df.index[-1]: ", df.index[-1])
+        startTime = df.index[0]
+        endTime = df.index[-1]
+        # slide over data frame and extract windows until the window would exceed the last time step
+        while (startTime + pd.to_timedelta(config.over_lapping_window_interval_in_seconds, unit='s') < endTime):
+            #Generate a list with indixes for window
+            index = pd.date_range(startTime, periods=config.time_series_length, freq=config.resampleFrequency)
+            #print("von: ", index[0], "bis: ", index[-1])
+            #Start thread to extract data
+            t = DFConverter(df.asof(index), time_series_length,config.use_over_lapping_windows)
             thread_list.append(t)
+            #Update next start time for next window
+            startTime = startTime + pd.to_timedelta(config.over_lapping_window_interval_in_seconds, unit='s')
 
     # sampling done multi threaded with the amount of cores configured
     thread_limit = config.max_parallel_cores if len(thread_list) > config.max_parallel_cores else len(thread_list)
@@ -142,6 +171,8 @@ def split_into_examples(df: pd.DataFrame, label: str, examples: [np.ndarray], la
         for i in range(threads_finished, r):
             examples.append(thread_list[i].result)
             labels_of_examples.append(label)
+            failureTimes_of_examples.append(failureTime)
+            windowTimes_of_examples.append(thread_list[i].windowTimesAsString)
 
         threads_finished += thread_limit
 
@@ -185,6 +216,8 @@ def main():
     # list of all examples
     examples: [np.ndarray] = []
     labels_of_examples: [str] = []
+    failureTimes_of_examples: [str] = []
+    windowTimes_of_examples: [str] = []
 
     attributes = None
 
@@ -201,7 +234,10 @@ def main():
         # df = clean_up_dataframe(df, config)
 
         # split the dataframe into the configured cases
-        cases_df, labels_df = split_by_cases(df, i, config)
+        cases_df, labels_df, failures_df = split_by_cases(df, i, config)
+        print("cases_df: ", len(cases_df))
+        print("labels_df: ", len(labels_df))
+        print("failures_df: ", len(failures_df),": ",failures_df)
 
         if i == 0:
             attributes = np.stack(df.columns, axis=0)
@@ -221,16 +257,18 @@ def main():
             start = df.index[0]
             end = df.index[-1]
             secs = (end - start).total_seconds()
-            print('\nSplitting case', y, '/', number_cases - 1, 'into examples. Length:', secs, start, end)
+            print('\nSplitting case', y, '/', number_cases - 1, 'into examples. Length:', secs," start: ", start, " end: ", end)
             split_into_examples(df, labels_df[y], examples, labels_of_examples, config.time_series_length,
-                                config.interval_in_seconds, config)
-        del cases_df, labels_df
+                                config.interval_in_seconds, config, failureTimes_of_examples, failures_df[y],windowTimes_of_examples)
+        del cases_df, labels_df, failures_df
         gc.collect()
 
     # convert lists of arrays to numpy array
     examples_array = np.stack(examples, axis=0)
     labels_array = np.stack(labels_of_examples, axis=0)
-    del examples, labels_of_examples
+    failureTimes_array = np.stack(failureTimes_of_examples, axis=0)
+    windowTimes_array  = np.stack(windowTimes_of_examples, axis=0)
+    del examples, labels_of_examples, failureTimes_of_examples, windowTimes_of_examples
     gc.collect()
 
     # split into train and test data set

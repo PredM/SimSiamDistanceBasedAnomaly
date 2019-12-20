@@ -184,10 +184,14 @@ class Configuration:
 
         # define the length (= the number of timestamps)
         # of the time series generated for training & live classification
-        self.time_series_length = 250
+        self.time_series_length = 1500
 
         # define the time window length in seconds the timestamps of a single time series should be distributed on
         self.interval_in_seconds = 5
+
+        # to some extent the time series in each examples overlaps to another one
+        self.use_over_lapping_windows = True , # default: False if true: interval in seconds is not considered, just time series length
+        self.over_lapping_window_interval_in_seconds = 5 #"1s"  # only used if overlapping windows is true
 
         # configure the motor failure parameters used in case extraction
         self.split_t1_high_low = True
@@ -305,7 +309,7 @@ class Configuration:
         datasets = []
         number_to_array = {}
 
-        with open('../configuration/cases_refined_final.csv', 'r') as file:
+        with open('../configuration/cases_refined_final_20-12-19_wFailure.csv', 'r') as file:
             for line in file.readlines():
                 parts = line.split(',')
                 parts = [part.strip(' ') for part in parts]
@@ -315,8 +319,9 @@ class Configuration:
                 case = parts[1]
                 start = parts[2]
                 end = parts[3]
+                failureTime = parts[4].rstrip()
 
-                timestamp = (gen_timestamp(case, start, end))
+                timestamp = (gen_timestamp(case, start, end, failureTime))
 
                 if dataset in number_to_array.keys():
                     number_to_array.get(dataset).append(timestamp)
@@ -330,9 +335,13 @@ class Configuration:
         self.cases_datasets = datasets
 
 
-def gen_timestamp(label: str, start: str, end: str):
+def gen_timestamp(label: str, start: str, end: str, failureTime: str):
     start_as_time = pd.to_datetime(start, format='%Y-%m-%d %H:%M:%S.%f')
     end_as_time = pd.to_datetime(end, format='%Y-%m-%d %H:%M:%S.%f')
+    if failureTime != "no_failure" :
+        failure_as_time = pd.to_datetime(failureTime, format='%Y-%m-%d %H:%M:%S')
+    else:
+        failure_as_time = ""
 
     # return tuple consisting of a label and timestamps in the pandas format
-    return label, start_as_time, end_as_time
+    return label, start_as_time, end_as_time, failure_as_time
