@@ -155,13 +155,13 @@ class SimpleSNN(AbstractSimilarityMeasure):
             sizeOfInput = batch.shape[0] // 2
 
         sims_batch = tf.map_fn(lambda pair_index: self.get_distance_pair(context_vectors, pair_index),
-                                    tf.range(sizeOfInput, dtype=tf.int32), back_prop=True, dtype=tf.float32)
+                               tf.range(sizeOfInput, dtype=tf.int32), back_prop=True, dtype=tf.float32)
         # transform distances into a similarity measure
         # Direkt zur Distanz/Ähnlichkeitsbrechnung hinzugefügt sims_batch = tf.exp(-distances_batch)
 
         return sims_batch
 
-    #todo: rename distance in similarity
+    # todo: rename distance in similarity
     @tf.function
     def get_distance_pair(self, context_vectors, pair_index):
         # if a concat layer is used in the cnn1dclassattention, then context vectors need to be reshaped from 2d to 3d
@@ -169,7 +169,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
 
         a = context_vectors[2 * pair_index, :, :]
         b = context_vectors[2 * pair_index + 1, :, :]
-        print("a.shape: ", a.shape)
+        # print("a.shape: ", a.shape)
 
         # simple similarity measure:
         if self.config.simple_Distance_Measure == "abs_mean":
@@ -179,8 +179,8 @@ class SimpleSNN(AbstractSimilarityMeasure):
             sim_example = tf.exp(-distance_example)
         elif self.config.simple_Distance_Measure == "euclidean":
             # Euclidean distance
-            diff = tf.norm(a - b,ord='euclidean')
-            sim_example = 1/(1+tf.reduce_sum(diff))
+            diff = tf.norm(a - b, ord='euclidean')
+            sim_example = 1 / (1 + tf.reduce_sum(diff))
         elif self.config.simple_Distance_Measure == "dot_product":
             # dot product
             sim = tf.matmul(a, b, transpose_b=True)
@@ -308,7 +308,7 @@ class SNN(SimpleSNN):
             self.load_model()
 
     # noinspection DuplicatedCode
-    #todo: rename distance in similarity
+    # todo: rename distance in similarity
     @tf.function
     def get_distance_pair(self, context_vectors, pair_index):
         a = context_vectors[2 * pair_index, :, :]

@@ -48,7 +48,7 @@ def import_txt(filename: str, prefix: str):
         transformFinishedFromStringToNumeric("txt18_m2.finished", df)
         transformFinishedFromStringToNumeric("txt18_m3.finished", df)
         df["txt18_currentTask"] = (df["txt18_currentTask"]).astype('category').cat.codes
-        df["txt18_currentTask"]= pd.to_numeric(df["txt18_currentTask"])
+        df["txt18_currentTask"] = pd.to_numeric(df["txt18_currentTask"])
         transformFinishedFromStringToNumeric("txt18_isContainerReady", df)
     elif '19' in prefix:
         transformFinishedFromStringToNumeric("txt19_m1.finished", df)
@@ -62,6 +62,7 @@ def import_txt(filename: str, prefix: str):
         df["txt19_getSupply"] = pd.to_numeric(df["txt19_getSupply"])
         df["txt19_isContainerReady"] = (df["txt19_isContainerReady"]).astype('category').cat.codes
         df["txt19_isContainerReady"] = pd.to_numeric(df["txt19_isContainerReady"])
+
     # Remove lines with duplicate timestamps, keep first appearance
     df = df.loc[~df['timestamp'].duplicated(keep='first')]
 
@@ -69,9 +70,10 @@ def import_txt(filename: str, prefix: str):
     df = df.set_index('timestamp')
     df = df.sort_index()
     pd.set_option('display.expand_frame_repr', False)
-    #print(df.describe(include='all'))
+    # print(df.describe(include='all'))
     pd.set_option('display.expand_frame_repr', True)
     return df
+
 
 def transformFinishedFromStringToNumeric(attributeToTransofrm, df):
     try:
@@ -79,7 +81,8 @@ def transformFinishedFromStringToNumeric(attributeToTransofrm, df):
         df[attributeToTransofrm] = df[attributeToTransofrm].replace("False", 0)
         df[attributeToTransofrm] = pd.to_numeric(df[attributeToTransofrm])
     except:
-        print("could not convert: ", attributeToTransofrm )
+        print("could not convert: ", attributeToTransofrm)
+
 
 def plot_export_txt(df: pd.DataFrame, file_name: str, config: Configuration):
     if not (config.export_plots or config.plot_txts):
@@ -272,15 +275,15 @@ def import_bmx_sensors(config: Configuration):
     # all datasets dont contain the hrs acceleration sensors data, so some lines needed to be changed
 
     # import single components
-    #df_hrs_acc = import_bmx_acc(config.bmx055_HRS_acc, 'hrs_acc')
+    # df_hrs_acc = import_bmx_acc(config.bmx055_HRS_acc, 'hrs_acc')
     df_hrs_gyr = import_acc(config.bmx055_HRS_gyr, 'hrs_gyr')
     df_hrs_mag = import_acc(config.bmx055_HRS_mag, 'hrs_mag')
 
     # combine into a single dataframe
     df_hrs_gyr['timestamp'] = pd.to_datetime(df_hrs_gyr['timestamp'])
     df_hrs = df_hrs_gyr.set_index('timestamp').join(df_hrs_mag.set_index('timestamp'), how='outer')
-    #df_hrs_gyr['timestamp'] = pd.to_datetime(df_hrs_gyr['timestamp'])
-    #df_hrs = df_hrs.set_index('timestamp').join(df_hrs_mag.set_index('timestamp'), how='outer')
+    # df_hrs_gyr['timestamp'] = pd.to_datetime(df_hrs_gyr['timestamp'])
+    # df_hrs = df_hrs.set_index('timestamp').join(df_hrs_mag.set_index('timestamp'), how='outer')
     df_hrs.query(config.query, inplace=True)
 
     # import single components
@@ -356,11 +359,9 @@ def import_dataset(dataset_to_import=0):
 
     print('\nDelete unnecessary streams')
     print('Number of streams before:', df_combined.shape)
-    # df_combined = df_combined.drop(config.unused_attributes, 1, errors='ignore')
+
     try:
-        #df_combined = df_combined[config.featuresBA]
-        df_combined = df_combined[config.featuresAll]
-        #df_combined = df_combined[config.all_features_configured]
+        df_combined = df_combined[config.feature_variant]
     except:
         raise AttributeError('Relevant feature not found in current dataset.')
 

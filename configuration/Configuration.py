@@ -21,8 +21,9 @@ class Configuration:
         # simple = mean absolute difference as distance measure instead of the ffnn
         self.architecture_variants = ['standard_simple', 'standard_ffnn', 'fast_simple', 'fast_ffnn']
         self.architecture_variant = self.architecture_variants[0]
-        self.simple_Distance_Measures = ['abs_mean', 'euclidean', 'dot_product', 'cosine','jaccard']
-        self.simple_Distance_Measure = self.simple_Distance_Measures[4]
+        # TODO jaccard not working
+        self.simple_Distance_Measures = ['abs_mean', 'euclidean', 'dot_product', 'cosine', 'jaccard']
+        self.simple_Distance_Measure = self.simple_Distance_Measures[0]
 
         # TODO Needs to be changed to folder if every encoder should use different hyperparameters
         # hyperparameter file to use
@@ -38,10 +39,13 @@ class Configuration:
         # Goal loss for CBS
         # Choose a loss value at which the snn of a case should not be trained any further
         # Set to -1 for no restriction
-        self.goal_loss_case = 0.1
+        self.goal_loss_case = -1
 
         # select whether training should be continued from the checkpoint defined below
+        # currently only working for snns, not cbs
         self.continue_training = False
+
+        self.max_gpus_used = 4
 
         # defines how often loss is printed and checkpoints are safed during training
         self.output_interval = 100
@@ -49,13 +53,21 @@ class Configuration:
         # how many model checkpoints are kept
         self.model_files_stored = 100
 
+        # select which subset of features should be used for creating a dataset
+        # Important: CBS will only function correctly if ALL_CBS or a superset of it is selected
+        # ALL_CBS will use all feature of self.relevant_features, without consideration of the case structure
+        # self.features_used will be assigned at config.json loading
+        self.feature_variants = ['featuresBA', 'featuresAll', 'ALL_CBS']
+        self.feature_variant = self.feature_variants[2]
+        self.features_used = None
+
         # defines for which failure cases a case handler in the case based similarity measure is created,
         # subset of all can be used for debugging purposes
         # if cases_used == [] or == None all in config.json will be used
         all_cases = ['no_failure', 'txt_18_comp_leak', 'txt_17_comp_leak', 'txt15_m1_t1_high_wear',
                      'txt15_m1_t1_low_wear', 'txt15_m1_t2_wear', 'txt16_m3_t1_high_wear', 'txt16_m3_t1_low_wear',
                      'txt16_m3_t2_wear', 'txt16_i4']
-        self.cases_used = all_cases
+        self.cases_used = ['txt16_m3_t2_wear', 'txt16_i4', 'txt15_m1_t1_low_wear', 'txt15_m1_t2_wear']
 
         ###
         # kafka / real time classification
@@ -249,11 +261,14 @@ class Configuration:
         self.prefixes = data['prefixes']
         self.error_descriptions = data['error_descriptions']
         self.subdirectories_by_case = data['subdirectories_by_case']
+        self.zeroOne = data['zeroOne']
+        self.intNumbers = data['intNumbers']
+        self.realValues = data['realValues']
+        self.bools = data['bools']
 
         features_all_cases = data['relevant_features']
-        self.featuresBA = data['featuresBA']
-        self.featuresAll = data['featuresAll']
 
+        # Reduce features of all cases to the subset of cases configured in self.cases_used
         if self.cases_used is None or len(self.cases_used) == 0:
             self.relevant_features = features_all_cases
         else:
@@ -265,24 +280,18 @@ class Configuration:
         for key in self.relevant_features:
             self.relevant_features[key] = sorted(self.relevant_features[key])
 
-        self.zeroOne = data['zeroOne']
-        self.intNumbers = data['intNumbers']
-        self.realValues = data['realValues']
-        self.bools = data['bools']
-
         def flatten(l):
             return [item for sublist in l for item in sublist]
 
-        ##
-        # Changed: Data Import now keeps all features configured in the json
-        # Not only the ones of the cases currently used
-        ##
-
-        # will be used to determine which attributes will be in the generated dataset
-        # when using the dataset for a snn, the full dataset will be used
-        # so these attributes must still be configured in the config.json file in "relevant_features"
-        # it is irrelevant however under which error case these are entered there.
-        self.all_features_configured = sorted(list(set(flatten(features_all_cases.values()))))
+        # Depending on the self.feature_variant the relevant features for creating a dataset are selected
+        if self.feature_variant == 'ALL_CBS':
+            self.features_used = sorted(list(set(flatten(features_all_cases.values()))))
+        elif self.feature_variant == 'featuresBA':
+            self.features_used = data['featuresBA']
+        elif self.feature_variant == 'featuresAll':
+            self.features_used = data['featuresAll']
+        else:
+            raise AttributeError('Unknown feature variant:', self.feature_variant)
 
     # return the error case description for the passed label
     def get_error_description(self, error_label: str):

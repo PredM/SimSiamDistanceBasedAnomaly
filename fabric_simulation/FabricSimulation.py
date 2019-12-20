@@ -1,6 +1,10 @@
 import json
 import threading
 import time
+import sys
+import os
+
+sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 
 from kafka import KafkaProducer
 
@@ -13,7 +17,7 @@ class ProducerSimulator(threading.Thread):
         super().__init__(name=name)
         self.topic_name = topic_name
 
-        file_path = config.pathPrefix +'raw_data/'+ file_name
+        file_path = config.pathPrefix + 'raw_data/' + file_name
         with open(file_path) as f:
             content = json.load(f)
             self.content = content
