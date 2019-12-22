@@ -180,7 +180,7 @@ class Configuration:
         ###
 
         # value is used to ensure a constant frequency of the measurement time points
-        self.resampleFrequency = "2ms"
+        self.resampleFrequency = "2ms" # need to be the same for DataImport as well as DatasetCreation
 
         # define the length (= the number of timestamps)
         # of the time series generated for training & live classification
@@ -191,7 +191,7 @@ class Configuration:
 
         # to some extent the time series in each examples overlaps to another one
         self.use_over_lapping_windows = True , # default: False if true: interval in seconds is not considered, just time series length
-        self.over_lapping_window_interval_in_seconds = 5 #"1s"  # only used if overlapping windows is true
+        self.over_lapping_window_interval_in_seconds = 1 #  # only used if overlapping windows is true
 
         # configure the motor failure parameters used in case extraction
         self.split_t1_high_low = True
@@ -200,13 +200,13 @@ class Configuration:
         self.type2_start_rul = 25
 
         # seed for how the train/test data is split randomly
-        self.random_seed = 42
+        self.random_seed = 41
 
         # share of examples used as test set
-        self.test_split_size = 0.1
+        self.test_split_size = 0.2
 
         # specifies the maximum number of cores to be used in parallel during data processing.
-        self.max_parallel_cores = 40
+        self.max_parallel_cores = 60
 
         # all None Variables are read from the config.json file
         self.cases_datasets = None

@@ -6,8 +6,8 @@ import gc
 import joblib
 import numpy as np
 import pandas as pd
-from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.model_selection import train_test_split, GroupKFold, GroupShuffleSplit
+from sklearn.preprocessing import MinMaxScaler, OrdinalEncoder
 
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 
@@ -26,7 +26,7 @@ class DFConverter(threading.Thread):
 
     def run(self):
         print('\tExample:', self.df.index[0], 'to', self.df.index[-1])
-        self.windowTimesAsString = str(self.df.index[0], 'to', self.df.index[-1])
+        self.windowTimesAsString = self.df.index[0].strftime("YYYYMMDD HH:mm:ss (%Y%m%d %H:%M:%S)"), 'to', self.df.index[-1].strftime("YYYYMMDD HH:mm:ss (%Y%m%d %H:%M:%S)")
 
         # get time_series_length many indices with nearly equal distance in the interval
         samples = np.linspace(0, len(self.df) - 1, self.time_series_length, dtype=int).tolist()
@@ -124,7 +124,7 @@ def split_by_cases(df: pd.DataFrame, data_set_counter, config: Configuration):
 
 
 def split_into_examples(df: pd.DataFrame, label: str, examples: [np.ndarray], labels_of_examples: [str],
-                        time_series_length, interval_in_seconds, config, failureTimes_of_examples: [str], failureTime, windowTimes_of_examples: [str]):
+                        time_series_length, interval_in_seconds, config, failureTimes_of_examples: [str], failureTime, windowTimes_of_examples: [str],y,i_dataset):
     # split case into single intervals with the configured length
     interval_list = [g for c, g in df.groupby(pd.Grouper(level='timestamp', freq=str(interval_in_seconds) + 's'))]
 
@@ -171,7 +171,10 @@ def split_into_examples(df: pd.DataFrame, label: str, examples: [np.ndarray], la
         for i in range(threads_finished, r):
             examples.append(thread_list[i].result)
             labels_of_examples.append(label)
-            failureTimes_of_examples.append(failureTime)
+            if failureTime == "":
+                failureTimes_of_examples.append("noFailure-"+str(i_dataset)+"-"+str(y))
+            else:
+                failureTimes_of_examples.append(str(failureTime))
             windowTimes_of_examples.append(thread_list[i].windowTimesAsString)
 
         threads_finished += thread_limit
@@ -252,6 +255,7 @@ def main():
 
             if len(df) <= 0:
                 print(i, y, 'empty')
+                print("df: ", df, )
                 continue
 
             start = df.index[0]
@@ -259,7 +263,7 @@ def main():
             secs = (end - start).total_seconds()
             print('\nSplitting case', y, '/', number_cases - 1, 'into examples. Length:', secs," start: ", start, " end: ", end)
             split_into_examples(df, labels_df[y], examples, labels_of_examples, config.time_series_length,
-                                config.interval_in_seconds, config, failureTimes_of_examples, failures_df[y],windowTimes_of_examples)
+                                config.interval_in_seconds, config, failureTimes_of_examples, failures_df[y],windowTimes_of_examples,y,i)
         del cases_df, labels_df, failures_df
         gc.collect()
 
@@ -270,19 +274,38 @@ def main():
     windowTimes_array  = np.stack(windowTimes_of_examples, axis=0)
     del examples, labels_of_examples, failureTimes_of_examples, windowTimes_of_examples
     gc.collect()
-
-    # split into train and test data set
-    print('\nExecute train/test split')
-    x_train, x_test, y_train, y_test = train_test_split(examples_array, labels_array, test_size=config.test_split_size,
-                                                        random_state=config.random_seed)
+    #print("config.use_over_lapping_windows: ", config.use_over_lapping_windows)
+    if config.use_over_lapping_windows:
+        print('\nExecute train/test split with failure case consideration')
+        # define groups for GroupShuffleSplit
+        enc = OrdinalEncoder()
+        enc.fit(failureTimes_array.reshape(-1, 1))
+        failureTimes_array_groups = enc.transform(failureTimes_array.reshape(-1, 1))
+        #print("groups: ",failureTimes_array_groups)
+        #group_kfold = GroupKFold(n_splits=2)
+        gss = GroupShuffleSplit(n_splits=1, test_size=config.test_split_size, random_state=config.random_seed)
+        for train_idx, test_idx in gss.split(examples_array, labels_array, failureTimes_array_groups):
+            pass #print("TRAIN:", train_idx, "TEST:", test_idx)
+        x_train, x_test = examples_array[train_idx], examples_array[test_idx]
+        y_train, y_test = labels_array[train_idx], labels_array[test_idx]
+        print("X_train: ",x_train.shape," X_test: ",x_test.shape)
+        print("y_train: ",y_train.shape," y_train: ",y_test.shape)
+        print("Classes in the train set: ", np.unique(y_train))
+        print("Classes in the test set: ", np.unique(y_test))
+    else:
+        # split into train and test data set
+        print('\nExecute train/test split')
+        x_train, x_test, y_train, y_test = train_test_split(examples_array, labels_array, test_size=config.test_split_size,
+                                                            random_state=config.random_seed)
 
     # Sort both datasets by the cases for easier handling
+    '''
     x_train = x_train[y_train.argsort()]
     y_train = np.sort(y_train)
 
     x_test = x_test[y_test.argsort()]
     y_test = np.sort(y_test)
-
+    '''
     print('Training data set shape: ', x_train.shape)
     print('Training label set shape: ', y_train.shape)
     print('Test data set shape: ', x_test.shape)
@@ -296,16 +319,20 @@ def main():
     # save the np arrays
     print('\nSave to np arrays in ' + config.training_data_folder)
 
-    print('Step 1/5')
+    print('Step 1/7')
     np.save(config.training_data_folder + 'train_features.npy', x_train)
-    print('Step 2/5')
+    print('Step 2/7')
     np.save(config.training_data_folder + 'test_features.npy', x_test)
-    print('Step 3/5')
+    print('Step 3/7')
     np.save(config.training_data_folder + 'train_labels.npy', y_train)
-    print('Step 4/5')
+    print('Step 4/7')
     np.save(config.training_data_folder + 'test_labels.npy', y_test)
-    print('Step 5/5')
+    print('Step 5/7')
     np.save(config.training_data_folder + 'feature_names.npy', attributes)
+    print('Step 6/6')
+    np.save(config.training_data_folder + 'failure_times.npy', failureTimes_array) #Contains for each example the associated time of a failure (if not no failure)
+    print('Step 7/7')
+    np.save(config.training_data_folder + 'window_times.npy', windowTimes_array) #Contains start and end time stamp for each training example
 
 
 if __name__ == '__main__':
