@@ -23,6 +23,8 @@ class Dataset:
         # Dictonary with key: integer (0 to numOfClasses-1) which corresponds to one column entry
         # and value string (class name)
         self.classIdx_to_classString = {}
+        self.y_train_classString_numOfInstances = None # np array that contains the numer of instances to each classLabel
+        self.y_test_classString_numOfInstances = None # np array that contains the numer of instances to each classLabel
 
         self.classes = None  # Class names as string
 
@@ -141,6 +143,12 @@ class FullDataset(Dataset):
         # for test purposes, equal to the one-hot-encoded labels
         self.x_auxCaseVector_train = self.y_train
         self.x_auxCaseVector_test = self.y_test
+
+        # collect number of instances for each class in training and test
+        unique, counts = np.unique(self.y_train_strings, return_counts=True)
+        self.y_train_classString_numOfInstances = np.asarray((unique, counts)).T
+        unique, counts = np.unique(self.y_test_strings, return_counts=True)
+        self.y_test_classString_numOfInstances = np.asarray((unique, counts)).T
 
         # data
         # 1. dimension: example
