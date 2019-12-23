@@ -125,6 +125,10 @@ def main():
     config = Configuration()
     dataset: FullDataset = FullDataset(config.training_data_folder, config, training=False)
     dataset.load()
+    #print("Classes in training: ",dataset.y_train_classString_numOfInstances)
+    #print("Classes in testing: ",dataset.y_test_classString_numOfInstances)
+    #classesInBoth = np.intersect1d(dataset.y_test_classString_numOfInstances[:,0], dataset.y_train_classString_numOfInstances[:,0])
+    #print("Classes in both: ",classesInBoth)
 
     architecture = initialise_snn(config, dataset, False)
 

@@ -292,6 +292,7 @@ def main():
         print("y_train: ",y_train.shape," y_train: ",y_test.shape)
         print("Classes in the train set: ", np.unique(y_train))
         print("Classes in the test set: ", np.unique(y_test))
+        print("Classes in train and test set: ", np.unique(y_train,y_test))
     else:
         # split into train and test data set
         print('\nExecute train/test split')

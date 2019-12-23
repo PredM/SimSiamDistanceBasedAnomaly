@@ -96,6 +96,8 @@ class Configuration:
         ###
         # case base
         ###
+        # parameter to control the size of data used by inference
+        self.use_case_base_extraction_for_inference = True # default False
 
         # the random seed the index selection is based on
         self.random_seed_index_selection = 42

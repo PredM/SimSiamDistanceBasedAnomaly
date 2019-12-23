@@ -8,23 +8,6 @@ sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 from configuration.Configuration import Configuration
 
 
-# test method to check whether the operations below are correct
-def test(casebase_labels, casebase_features, index_in_original, x_train, y_train):
-    for i in range(len(casebase_labels)):
-        real_i = index_in_original[i]
-
-        correct_values = np.array_equal(casebase_features[i], x_train[real_i])
-        correct_label = casebase_labels[i] == y_train[real_i]
-
-        if not correct_values:
-            print(i, real_i, 'fail values')
-
-        if not correct_label:
-            print(i, real_i, 'fail label')
-    else:
-        print('Success')
-
-
 def main():
     config = Configuration()
 

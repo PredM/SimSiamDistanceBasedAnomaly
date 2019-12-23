@@ -25,6 +25,7 @@ class Dataset:
         self.classIdx_to_classString = {}
         self.y_train_classString_numOfInstances = None # np array that contains the numer of instances to each classLabel
         self.y_test_classString_numOfInstances = None # np array that contains the numer of instances to each classLabel
+        self.classesInBoth = None # np array that contains a list classes in training and test
 
         self.classes = None  # Class names as string
 
@@ -82,6 +83,7 @@ class FullDataset(Dataset):
         self.y_test = None
         self.y_test_strings = None
         self.num_test_instances = None
+        self.training = training
 
         self.num_classes = None
         self.classes = None
@@ -89,10 +91,18 @@ class FullDataset(Dataset):
     def load(self):
         # dtype conversion necessary because layers use float32 by default
         # .astype('float32') removed because already included in dataset creation
-        self.x_train = np.load(self.dataset_folder + 'train_features.npy')  # data training
+
+        if self.config.use_case_base_extraction_for_inference and self.training != True:
+            print("Attention: only a case base extraction is used for inference!")
+            self.x_train = np.load(self.config.case_base_folder + 'train_features.npy')  # data training
+        else:
+            self.x_train = np.load(self.dataset_folder + 'train_features.npy')  # data training
         self.x_test = np.load(self.dataset_folder + 'test_features.npy')  # data testing
 
-        self.y_train_strings = np.expand_dims(np.load(self.dataset_folder + 'train_labels.npy'), axis=-1)
+        if self.config.use_case_base_extraction_for_inference and self.training != True:
+            self.y_train_strings = np.expand_dims(np.load(self.config.case_base_folder + 'train_labels.npy'), axis=-1)
+        else:
+            self.y_train_strings = np.expand_dims(np.load(self.dataset_folder + 'train_labels.npy'), axis=-1)
         self.y_test_strings = np.expand_dims(np.load(self.dataset_folder + 'test_labels.npy'), axis=-1)
 
         # create a encoder, sparse output must be disabled to get the intended output format
@@ -149,6 +159,11 @@ class FullDataset(Dataset):
         self.y_train_classString_numOfInstances = np.asarray((unique, counts)).T
         unique, counts = np.unique(self.y_test_strings, return_counts=True)
         self.y_test_classString_numOfInstances = np.asarray((unique, counts)).T
+
+        # calculate the number of classes that are the same in test and train
+        self.classesInBoth = np.intersect1d(self.y_test_classString_numOfInstances[:, 0],
+                                       self.y_train_classString_numOfInstances[:, 0])
+
 
         # data
         # 1. dimension: example
