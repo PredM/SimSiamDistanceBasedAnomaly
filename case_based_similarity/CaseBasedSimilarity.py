@@ -23,8 +23,8 @@ class CBS(AbstractSimilarityMeasure):
         self.num_instances_total = 0
         self.number_of_cases = 0
 
-        with contextlib.redirect_stdout(None):
-            self.initialise_case_handlers()
+        # with contextlib.redirect_stdout(None):
+        self.initialise_case_handlers()
 
         self.gpus = tf.config.experimental.list_logical_devices('GPU')
         self.nbr_gpus_used = config.max_gpus_used if 1 <= config.max_gpus_used < len(self.gpus) else len(self.gpus)
@@ -65,8 +65,6 @@ class CBS(AbstractSimilarityMeasure):
     def initialise_case_handler(self, dataset, case):
         var = self.config.architecture_variant
 
-        # hyper_file = self.config.hyper_file + case + '.json' if self.config.use_individual_hyperparameters else None
-
         if self.training and var.endswith('simple') or not self.training and var == 'standard_simple':
             return SimpleCaseHandler(self.config, dataset, self.training)
         elif self.training and var.endswith('ffnn') or not self.training and var == 'standard_ffnn':
@@ -87,9 +85,20 @@ class CBS(AbstractSimilarityMeasure):
             directory = self.config.directory_model_to_use + self.config.subdirectories_by_case.get(
                 case_handler.dataset.case) + '/'
 
-            hyper_file = case_handler.dataset.case + '.json' if self.config.use_individual_hyperparameters else None
+            if training and not self.config.use_individual_hyperparameters:
+                hyper_file = None
+            else:
+                hyper_file = case_handler.dataset.case
 
-            case_handler.load_model(model_folder=directory, training=None, individual_hyper_file=hyper_file)
+            print()
+            print(hyper_file)
+            print()
+
+            case_handler.load_model(model_folder=directory, training=None, hyper_file=hyper_file)
+
+            case_handler.print_detailed_model_info()
+
+
         print()
 
 

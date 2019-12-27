@@ -10,46 +10,48 @@ class Hyperparameters:
         ##
 
         self.encoder_variants = ['cnn', 'rnn', 'tcn', 'cnnwithclassattention', 'cnn1dwithclassattention']
-        self.encoder_variant = self.encoder_variants[0]
+        self.encoder_variant = None
 
         # Need to be changed after dataset was loaded
-        self.time_series_length = 999
-        self.time_series_depth = 999
+        self.time_series_length = None
+        self.time_series_depth = None
 
-        self.batch_size = 23
-        self.epochs = 100000
+        self.batch_size = None
+        self.epochs = None
 
         # will store the current epoch when saving a model to continue at this epoch
-        self.epochs_current = 0
+        self.epochs_current = None
 
-        self.learning_rate = 0.0001
-        self.gradient_cap = 14
-        self.dropout_rate = 0.05
+        self.learning_rate = None
+        self.gradient_cap = None
+        self.dropout_rate = None
 
-        self.ffnn_layers = [64, 16, 1]
+        self.ffnn_layers = None
 
-        self.cnn_layers = [1024, 256, 64]
-        self.cnn_kernel_length = [5, 5, 3]
-        self.cnn_strides = [2, 1, 1]
+        self.cnn_layers = None
+        self.cnn_kernel_length = None
+        self.cnn_strides = None
 
-        self.lstm_layers = [192, 96, 48]
+        self.lstm_layers = None
 
-        self.tcn_layers = [256, 128, 64]
-        self.tcn_kernel_length = [5, 5, 3]
+        self.tcn_layers = None
+        self.tcn_kernel_length = None
 
     def set_time_series_properties(self, time_series_length, time_series_depth):
         self.time_series_length = time_series_length
         self.time_series_depth = time_series_depth
 
     # allows the import of a hyper parameter configuration from a json file
-    def load_from_file(self, file_path, use_file):
-        if not use_file:
-            return
+    def load_from_file(self, file_path):
 
         file_path = file_path + '.json' if not file_path.endswith('.json') else file_path
 
+        print(file_path)
+
         with open(file_path, 'r') as f:
             data = json.load(f)
+
+        print(data)
 
         self.encoder_variant = data['encoder_variant'].lower()
 

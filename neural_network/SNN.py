@@ -234,19 +234,29 @@ class SimpleSNN(AbstractSimilarityMeasure):
                 plt.savefig(i + '_matrix.png')
                 cnt = cnt + 1
 
-    def load_model(self, model_folder=None, training=None, individual_hyper_file=None):
+    def load_model(self, model_folder=None, training=None, hyper_file=None):
 
+        # use configured values if not others are passed
         training = self.training if training is None else training
         model_folder = self.config.directory_model_to_use if model_folder is None else model_folder
 
         self.hyper = Hyperparameters()
 
-        if individual_hyper_file is not None:
-            self.hyper.load_from_file(model_folder + individual_hyper_file, True)
-        elif training:
-            self.hyper.load_from_file(self.config.hyper_file, self.config.use_hyper_file)
+        print(hyper_file)
+
+        if hyper_file is not None:
+            print('is not none called')
+            # cbs will pass hyper file name as parameter when training and testing
+            self.hyper.load_from_file(model_folder + hyper_file)
+        elif training and self.config.use_hyper_file:
+            print('elif training called')
+            # if training a snn use the configured hyper file if loading form file is enabled
+            self.hyper.load_from_file(self.config.hyper_file)
         else:
-            raise AssertionError('invalide state')
+            # if testing a snn use the json file with default name in the model directory
+            self.hyper.load_from_file(model_folder + 'hyperparameters_used.json')
+
+        self.hyper.set_time_series_properties(self.dataset.time_series_length, self.dataset.time_series_depth)
 
         # Create encoder, necessary for all types
         input_shape_encoder = (self.hyper.time_series_length, self.hyper.time_series_depth)

@@ -2,7 +2,8 @@ import json
 
 import pandas as pd
 
-# TODO Rearange based on comonly changed values
+
+# TODO Rearrange based on commonly changed values
 class Configuration:
 
     def __init__(self, dataset_to_import=0):
@@ -31,11 +32,11 @@ class Configuration:
 
         # if enabled each case handler of a cbs will use individual hyperparameters
         # no effect on snn architecture
-        self.use_individual_hyperparameters = True
+        self.use_individual_hyperparameters = False
 
         # if use_individual_hyperparameters = false interpreted as a single json file, else as a folder
         # containing json files named after the cases they should be used for (see all_cases below for correct names)
-        self.hyper_file = self.hyper_file_folder + 'ba_lstm'
+        self.hyper_file = self.hyper_file_folder + 'small_cnn'
 
         # choose a loss function
         # TODO: TripletLoss, Distance-Based Logistic Loss
@@ -74,7 +75,7 @@ class Configuration:
         all_cases = ['no_failure', 'txt_18_comp_leak', 'txt_17_comp_leak', 'txt15_m1_t1_high_wear',
                      'txt15_m1_t1_low_wear', 'txt15_m1_t2_wear', 'txt16_m3_t1_high_wear', 'txt16_m3_t1_low_wear',
                      'txt16_m3_t2_wear', 'txt16_i4']
-        self.cases_used = ['txt16_m3_t2_wear', 'txt16_i4']
+        self.cases_used = ['txt16_i4']
 
         ###
         # kafka / real time classification
@@ -104,7 +105,7 @@ class Configuration:
         # case base
         ###
         # parameter to control the size of data used by inference
-        self.use_case_base_extraction_for_inference = True  # default False
+        self.use_case_base_extraction_for_inference = False  # default False
 
         # the random seed the index selection is based on
         self.random_seed_index_selection = 42
@@ -128,7 +129,7 @@ class Configuration:
         self.models_folder = '../data/trained_models/'
 
         # path and file name to the specific model that should be used for testing and live classification
-        self.filename_model_to_use = 'temp_snn_model_12-27_09-52-23_epoch-100'
+        self.filename_model_to_use = 'temp_cbs_model_12-27_13-15-09_epoch-200'
         self.directory_model_to_use = self.models_folder + self.filename_model_to_use + '/'
 
         # folder where the preprocessed training and test data for the neural network should be stored

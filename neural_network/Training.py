@@ -16,9 +16,6 @@ def main():
 
     config = Configuration()
 
-    hyper = Hyperparameters()
-    hyper.load_from_file(config.hyper_file, config.use_hyper_file)
-
     dataset = FullDataset(config.training_data_folder, config, training=True)
     dataset.load()
 
