@@ -20,16 +20,9 @@ from neural_network.SNN import initialise_snn
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 
 from configuration.Configuration import Configuration
-from configuration.Hyperparameter import Hyperparameters
 from data_processing.DataframeCleaning import clean_up_dataframe
-from neural_network import SNN
 from neural_network.Dataset import FullDataset
 
-
-# TODO
-# Ensure generated examples equal the structure of the case base
-# -> Which columns are deleted
-# -> Loading of scalers
 
 class Importer(threading.Thread):
 
@@ -151,7 +144,6 @@ class Importer(threading.Thread):
         # check if the message exceeds the end_timestamp
         return pd.to_datetime(msg['timestamp']) > end_timestamp
 
-    # TODO NOT TESTED
     @staticmethod
     def extract_txt(msg: dict, extracted_messages, topic, end_timestamp: pd.Timestamp, config: Configuration):
         # get the prefix for this topic

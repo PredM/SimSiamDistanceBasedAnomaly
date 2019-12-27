@@ -1,7 +1,7 @@
 {
   "encoder_variant": "cnn",
   "batch_size": 128,
-  "epochs": 400000,
+  "epochs": 253,
   "epochs_current": 0,
   "learning_rate": 0.0001,
   "gradient_cap": 10,

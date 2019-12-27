@@ -26,7 +26,6 @@ class CBS(AbstractSimilarityMeasure):
         with contextlib.redirect_stdout(None):
             self.initialise_case_handlers()
 
-        # TODO Test what happens if config value < 0, should be fine though
         self.gpus = tf.config.experimental.list_logical_devices('GPU')
         self.nbr_gpus_used = config.max_gpus_used if 1 <= config.max_gpus_used < len(self.gpus) else len(self.gpus)
         self.gpus = self.gpus[0:self.nbr_gpus_used]

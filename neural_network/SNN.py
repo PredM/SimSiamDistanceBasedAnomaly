@@ -161,7 +161,6 @@ class SimpleSNN(AbstractSimilarityMeasure):
 
         return sims_batch
 
-    # todo: rename distance in similarity
     @tf.function
     def get_distance_pair(self, context_vectors, pair_index):
         # if a concat layer is used in the cnn1dclassattention, then context vectors need to be reshaped from 2d to 3d
@@ -176,21 +175,21 @@ class SimpleSNN(AbstractSimilarityMeasure):
             # mean of absolute difference / Manhattan Distance ?
             diff = tf.abs(a - b)
             distance_example = tf.reduce_mean(diff)
-            sim_example = tf.exp(-distance_example)
+            dist_example = tf.exp(-distance_example)
         elif self.config.simple_Distance_Measure == "euclidean":
             # Euclidean distance
             diff = tf.norm(a - b, ord='euclidean')
-            sim_example = 1 / (1 + tf.reduce_sum(diff))
+            dist_example = 1 / (1 + tf.reduce_sum(diff))
         elif self.config.simple_Distance_Measure == "dot_product":
             # dot product
             sim = tf.matmul(a, b, transpose_b=True)
-            sim_example = tf.reduce_mean(sim)
+            dist_example = tf.reduce_mean(sim)
         elif self.config.simple_Distance_Measure == "cosine":
             # cosine, source: https://stackoverflow.com/questions/43357732/how-to-calculate-the-cosine-similarity-between-two-tensors/43358711
             normalize_a = tf.nn.l2_normalize(a, 0)
             normalize_b = tf.nn.l2_normalize(b, 0)
             cos_similarity = tf.reduce_sum(tf.multiply(normalize_a, normalize_b))
-            sim_example = cos_similarity
+            dist_example = cos_similarity
         elif self.config.simple_Distance_Measure == "jaccard":
             # Prüfen, source: https://stackoverflow.com/questions/43261072/jaccards-distance-matrix-with-tensorflow
             tp = tf.reduce_sum(tf.multiply(a, b), 1)
@@ -198,8 +197,8 @@ class SimpleSNN(AbstractSimilarityMeasure):
             fp = tf.reduce_sum(tf.multiply(a, b), 1)
             return 1 - (tp / (tp + fn + fp))
         else:
-            print("Distance Measure is not implemented.")
-        return sim_example
+            raise ValueError('Distance Measure is not implemented.')
+        return dist_example
 
     def print_learned_case_vectors(self, num_of_max_pos=5):
         # this methods prints the learned case embeddings for each class and its values
@@ -236,10 +235,6 @@ class SimpleSNN(AbstractSimilarityMeasure):
 
     def load_model(self, model_folder=None, training=None):
 
-        # TODO cant use == simple case handler because circle decencies
-        # check if working and change to subdirectory
-        # if self.training is False and type(self) == SimpleCaseHandler and model_folder is None:
-        #    raise AttributeError('Model folder must be specified if loading a case handler')
         training = self.training if training is None else training
 
         model_folder = self.config.directory_model_to_use if model_folder is None else model_folder
@@ -308,7 +303,6 @@ class SNN(SimpleSNN):
             self.load_model()
 
     # noinspection DuplicatedCode
-    # todo: rename distance in similarity
     @tf.function
     def get_distance_pair(self, context_vectors, pair_index):
         a = context_vectors[2 * pair_index, :, :]

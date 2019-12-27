@@ -21,11 +21,11 @@ class Configuration:
         # simple = mean absolute difference as distance measure instead of the ffnn
         self.architecture_variants = ['standard_simple', 'standard_ffnn', 'fast_simple', 'fast_ffnn']
         self.architecture_variant = self.architecture_variants[0]
+
         # TODO jaccard not working
         self.simple_Distance_Measures = ['abs_mean', 'euclidean', 'dot_product', 'cosine', 'jaccard']
         self.simple_Distance_Measure = self.simple_Distance_Measures[0]
 
-        # TODO Needs to be changed to folder if every encoder should use different hyperparameters
         # hyperparameter file to use
         self.hyper_file = '../configuration/hyperparameter_combinations/' + 'small_cnn.json'  # 'tcn.json'
         self.use_hyper_file = True
@@ -67,7 +67,7 @@ class Configuration:
         all_cases = ['no_failure', 'txt_18_comp_leak', 'txt_17_comp_leak', 'txt15_m1_t1_high_wear',
                      'txt15_m1_t1_low_wear', 'txt15_m1_t2_wear', 'txt16_m3_t1_high_wear', 'txt16_m3_t1_low_wear',
                      'txt16_m3_t2_wear', 'txt16_i4']
-        self.cases_used = ['txt16_m3_t2_wear', 'txt16_i4', 'txt15_m1_t1_low_wear', 'txt15_m1_t2_wear']
+        self.cases_used = ['txt16_m3_t2_wear',]
 
         ###
         # kafka / real time classification
@@ -121,7 +121,7 @@ class Configuration:
         self.models_folder = '../data/trained_models/'
 
         # path and file name to the specific model that should be used for testing and live classification
-        self.filename_model_to_use = 'temp_snn_model_12-01_11-13-11_epoch-100'
+        self.filename_model_to_use = 'temp_snn_model_12-27_09-52-23_epoch-100'
         self.directory_model_to_use = self.models_folder + self.filename_model_to_use + '/'
 
         # folder where the preprocessed training and test data for the neural network should be stored

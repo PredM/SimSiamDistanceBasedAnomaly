@@ -144,6 +144,7 @@ class SNNOptimizer(Optimizer):
 
         batch_true_similarities = []  # similarity label for each pair
         batch_pairs_indices = []  # index number of each example used in the training
+
         # index numbers where the second is same as first (used for CNN with Att.)
         batch_pairs_indices_firstUsedforSecond = []
 
@@ -292,7 +293,6 @@ class CBSOptimizer(Optimizer, ABC):
                     case = ch.dataset.case
                     training_interval = self.config.output_interval
 
-                    # todo test with low epochs if it works
                     # goal epoch for this case handler will be reached during this training step
                     if self.goal_epochs.get(case) <= current_epoch + training_interval:
                         training_interval = self.goal_epochs.get(case) - current_epoch
@@ -329,7 +329,7 @@ class CBSOptimizer(Optimizer, ABC):
 
             # Dont continue training if goal epoch was reached for this case
             if case_handler in self.handlers_still_training \
-                    and self.goal_epochs.get(case) <= current_epoch:
+                    and self.goal_epochs.get(case) <= current_epoch + self.config.output_interval:
                 self.handlers_still_training.remove(case_handler)
 
             status = 'Yes' if case_handler in self.handlers_still_training else 'No'
@@ -344,6 +344,7 @@ class CBSOptimizer(Optimizer, ABC):
     def save_models(self, current_epoch):
         if current_epoch <= 0:
             return
+
         # generate a name and create the directory, where the model files of this epoch should be stored
         epoch_string = 'epoch-' + str(current_epoch)
         dt_string = datetime.now().strftime("%m-%d_%H-%M-%S")
@@ -424,6 +425,7 @@ class CHOptimizer(threading.Thread):
                 self.cbsOptimizer.losses.get(self.case_handler.dataset.case).append(epoch_loss_avg.result())
 
 
+# noinspection DuplicatedCode
 class ClassicCBSOptimizer(Optimizer):
 
     def __init__(self, architecture, dataset, config):
@@ -431,7 +433,7 @@ class ClassicCBSOptimizer(Optimizer):
         self.architecture: CBS = architecture
         self.losses = dict()
         self.handlers_still_training = self.architecture.case_handlers.copy()
-        # TODO create same dict for epochs to be able to train each model to different epochs
+
         self.optimizer = dict()
         for case_handler in self.architecture.case_handlers:
             self.losses[case_handler.dataset.case] = []
@@ -448,7 +450,6 @@ class ClassicCBSOptimizer(Optimizer):
 
         self.last_output_time = perf_counter()
 
-        # TODO has to be changed when using individual hyper parameters per case handler
         goal = self.architecture.case_handlers[0].hyper.epochs
 
         for epoch in range(current_epoch, goal):

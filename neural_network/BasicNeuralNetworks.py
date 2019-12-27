@@ -390,11 +390,12 @@ class CNN(NN):
 
         model.add(tf.keras.layers.Dropout(rate=self.hyper.dropout_rate))
 
-        #if  config.simple_Distance_Measure == "cosine":
-        #cosine is calculated between two vectors,
-        # todo: reminder: Consider whether to divide the matrix into several vectors (time over feature or feature over time) for the cosine distance calculation
-        #model.add(tf.keras.layers.GlobalAveragePooling1D())
-        #model.add(tf.keras.layers.Reshape((1,model.layers[len(model.layers)-1].output.shape[1])))
+        # if  config.simple_Distance_Measure == "cosine":
+        # cosine is calculated between two vectors,
+        # todo: reminder: Consider whether to divide the matrix into several vectors
+        #  (time over feature or feature over time) for the cosine distance calculation
+        # model.add(tf.keras.layers.GlobalAveragePooling1D())
+        # model.add(tf.keras.layers.Reshape((1,model.layers[len(model.layers)-1].output.shape[1])))
         '''
         model.add(tf.keras.layers.Dense(64, activation=tf.keras.activations.relu))
         model.add(tf.keras.layers.Dropout(rate=self.hyper.dropout_rate))
@@ -410,7 +411,6 @@ class TemporalBlock(tf.keras.Model):
     def compute_output_signature(self, input_signature):
         pass
 
-    # TODO Make this look nice
     def print_layer_info(self):
         print("dilation_rate: ", self.dilation_rate, "| nb_filters: ", self.nb_filters, "| kernel_size: ",
               self.kernel_size, "| padding: ", self.padding, "| dropout_rate: ", self.dropout_rate)
