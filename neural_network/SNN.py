@@ -155,7 +155,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
         else:
             sizeOfInput = batch.shape[0] // 2
 
-        sims_batch = tf.map_fn(lambda pair_index: self.get_distance_pair(context_vectors, pair_index),
+        sims_batch = tf.map_fn(lambda pair_index: self.get_sim_pair(context_vectors, pair_index),
                                tf.range(sizeOfInput, dtype=tf.int32), back_prop=True, dtype=tf.float32)
         # transform distances into a similarity measure
         # Direkt zur Distanz/Ähnlichkeitsbrechnung hinzugefügt sims_batch = tf.exp(-distances_batch)
@@ -163,7 +163,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
         return sims_batch
 
     @tf.function
-    def get_distance_pair(self, context_vectors, pair_index):
+    def get_sim_pair(self, context_vectors, pair_index):
         # if a concat layer is used in the cnn1dclassattention, then context vectors need to be reshaped from 2d to 3d
         # context_vectors = tf.reshape(context_vectors,[context_vectors.shape[0],context_vectors.shape[1],1])
 
@@ -171,26 +171,29 @@ class SimpleSNN(AbstractSimilarityMeasure):
         b = context_vectors[2 * pair_index + 1, :, :]
         # print("a.shape: ", a.shape)
 
+        # TODO Implement as method call and fix in fast version
+        #  tf.exp() was added here directly
+
         # simple similarity measure:
         if self.config.simple_Distance_Measure == "abs_mean":
             # mean of absolute difference / Manhattan Distance ?
             diff = tf.abs(a - b)
             distance_example = tf.reduce_mean(diff)
-            dist_example = tf.exp(-distance_example)
+            sim_example = tf.exp(-distance_example)
         elif self.config.simple_Distance_Measure == "euclidean":
             # Euclidean distance
             diff = tf.norm(a - b, ord='euclidean')
-            dist_example = 1 / (1 + tf.reduce_sum(diff))
+            sim_example = 1 / (1 + tf.reduce_sum(diff))
         elif self.config.simple_Distance_Measure == "dot_product":
             # dot product
             sim = tf.matmul(a, b, transpose_b=True)
-            dist_example = tf.reduce_mean(sim)
+            sim_example = tf.reduce_mean(sim)
         elif self.config.simple_Distance_Measure == "cosine":
             # cosine, source: https://stackoverflow.com/questions/43357732/how-to-calculate-the-cosine-similarity-between-two-tensors/43358711
             normalize_a = tf.nn.l2_normalize(a, 0)
             normalize_b = tf.nn.l2_normalize(b, 0)
             cos_similarity = tf.reduce_sum(tf.multiply(normalize_a, normalize_b))
-            dist_example = cos_similarity
+            sim_example = cos_similarity
         elif self.config.simple_Distance_Measure == "jaccard":
             # Prüfen, source: https://stackoverflow.com/questions/43261072/jaccards-distance-matrix-with-tensorflow
             tp = tf.reduce_sum(tf.multiply(a, b), 1)
@@ -199,7 +202,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
             return 1 - (tp / (tp + fn + fp))
         else:
             raise ValueError('Distance Measure is not implemented.')
-        return dist_example
+        return sim_example
 
     def print_learned_case_vectors(self, num_of_max_pos=5):
         # this methods prints the learned case embeddings for each class and its values
@@ -324,7 +327,7 @@ class SNN(SimpleSNN):
 
     # noinspection DuplicatedCode
     @tf.function
-    def get_distance_pair(self, context_vectors, pair_index):
+    def get_sim_pair(self, context_vectors, pair_index):
         a = context_vectors[2 * pair_index, :, :]
         b = context_vectors[2 * pair_index + 1, :, :]
 
@@ -410,14 +413,14 @@ class FastSimpleSNN(SimpleSNN):
     def get_sims_section(self, section_train, encoded_example):
 
         # get the distances for the hole batch by calculating it for each pair, dtype is necessary
-        distances_batch = tf.map_fn(lambda index: self.get_distance_pair(section_train[index], encoded_example),
+        distances_batch = tf.map_fn(lambda index: self.get_sim_pair(section_train[index], encoded_example),
                                     tf.range(section_train.shape[0], dtype=tf.int32), back_prop=True, dtype='float32')
         sims_batch = tf.exp(-distances_batch)
 
         return sims_batch
 
     @tf.function
-    def get_distance_pair(self, a, b):
+    def get_sim_pair(self, a, b):
 
         # simple similarity measure, mean of absolute difference
         diff = tf.abs(a - b)
@@ -443,7 +446,7 @@ class FastSNN(FastSimpleSNN):
 
     # noinspection DuplicatedCode
     @tf.function
-    def get_distance_pair(self, a, b):
+    def get_sim_pair(self, a, b):
         indices_a = tf.range(a.shape[0])
         indices_a = tf.tile(indices_a, [a.shape[0]])
         a = tf.gather(a, indices_a)
