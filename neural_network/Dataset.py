@@ -25,6 +25,10 @@ class Dataset:
         self.time_series_length = None
         self.time_series_depth = None
 
+        # additional information to the sensor data about the case e.g., relevant sensor streams ...
+        self.x_auxCaseVector_train = None
+        self.x_auxCaseVector_test = None
+
     def load(self):
         raise NotImplemented('Not implemented for abstract class')
 
@@ -96,9 +100,7 @@ class FullDataset(Dataset):
         # np array that contains a list classes that occur in training AND test data set
         self.classes_in_both = None
 
-        # additional information to the sensor data about the case e.g., relevant sensor streams ...
-        self.x_auxCaseVector_train = None
-        self.x_auxCaseVector_test = None
+
 
     def load(self):
         # dtype conversion necessary because layers use float32 by default

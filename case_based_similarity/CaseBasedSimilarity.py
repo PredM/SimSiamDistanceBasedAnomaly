@@ -50,8 +50,6 @@ class CBS(AbstractSimilarityMeasure):
         for case in features_cases.keys():
             print('Creating case handler for case', case)
 
-            # TODO different hyperparameters depending on the case could be implemented here
-            # should be implemented using another dictionary case -> hyper parameter file name
             relevant_features = features_cases.get(case)
 
             dataset = CaseSpecificDataset(self.config.training_data_folder, self.config, case, relevant_features)
@@ -80,17 +78,16 @@ class CBS(AbstractSimilarityMeasure):
 
     def load_model(self, model_folder=None, training=None):
 
-        # suppress output which would contain the same model info for each handler
         for case_handler in self.case_handlers:
             case_handler: CaseHandler = case_handler
             print('Creating case handler for ', case_handler.dataset.case)
-            directory = self.config.directory_model_to_use + self.config.subdirectories_by_case.get(
-                case_handler.dataset.case) + '/'
-            case_handler.load_model(model_folder=directory)
-            print()
+
+            case_handler.load_model(is_cbs=True, case=case_handler.dataset.case)
+            case_handler.print_detailed_model_info()
+
+        print()
 
     def encode_datasets(self):
-
         print('Encoding of datasets started.')
 
         duration = 0
@@ -166,8 +163,6 @@ class CaseHandlerHelper:
 
     # config and training are placeholders for multiple inheritance to work
     def __init__(self, dataset: CaseSpecificDataset):
-        print('helper init called')
-
         self.dataset: CaseSpecificDataset = dataset
         self.print_case_handler_info()
 
