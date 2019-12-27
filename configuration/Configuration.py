@@ -2,17 +2,13 @@ import json
 
 import pandas as pd
 
-
+# TODO Rearange based on comonly changed values
 class Configuration:
 
     def __init__(self, dataset_to_import=0):
         ###
         # neural network
         ###
-
-        # now a hyper parameter
-        # self.encoder_variants = ['cnn', 'rnn', 'tcn']
-        # self.encoder_variant = self.encoder_variants[2]
 
         # architecture independent of whether snn or cbs is used
         # standard = classic snn behaviour, context vectors calculated each time, also multiple times for the example
@@ -26,11 +22,22 @@ class Configuration:
         self.simple_Distance_Measures = ['abs_mean', 'euclidean', 'dot_product', 'cosine', 'jaccard']
         self.simple_Distance_Measure = self.simple_Distance_Measures[0]
 
-        # hyperparameter file to use
-        self.hyper_file = '../configuration/hyperparameter_combinations/' + 'small_cnn.json'  # 'tcn.json'
+        ###
+        # hyperparameters
+        ###
+
+        self.hyper_file_folder = '../configuration/hyperparameter_combinations/'
         self.use_hyper_file = True
 
-        # Choose a loss function
+        # if enabled each case handler of a cbs will use individual hyperparameters
+        # no effect on snn architecture
+        self.use_individual_hyperparameters = True
+
+        # if use_individual_hyperparameters = false interpreted as a single json file, else as a folder
+        # containing json files named after the cases they should be used for (see all_cases below for correct names)
+        self.hyper_file = self.hyper_file_folder + 'ba_lstm'
+
+        # choose a loss function
         # TODO: TripletLoss, Distance-Based Logistic Loss
         self.loss_function_variants = ['binary_cross_entropy', 'constrative_loss']
         self.type_of_loss_function = self.loss_function_variants[0]
@@ -67,7 +74,7 @@ class Configuration:
         all_cases = ['no_failure', 'txt_18_comp_leak', 'txt_17_comp_leak', 'txt15_m1_t1_high_wear',
                      'txt15_m1_t1_low_wear', 'txt15_m1_t2_wear', 'txt16_m3_t1_high_wear', 'txt16_m3_t1_low_wear',
                      'txt16_m3_t2_wear', 'txt16_i4']
-        self.cases_used = ['txt16_m3_t2_wear',]
+        self.cases_used = ['txt16_m3_t2_wear', 'txt16_i4']
 
         ###
         # kafka / real time classification

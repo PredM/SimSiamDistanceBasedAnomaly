@@ -23,7 +23,7 @@ class Hyperparameters:
         self.epochs_current = 0
 
         self.learning_rate = 0.0001
-        self.gradient_cap = 10
+        self.gradient_cap = 14
         self.dropout_rate = 0.05
 
         self.ffnn_layers = [64, 16, 1]
@@ -45,6 +45,8 @@ class Hyperparameters:
     def load_from_file(self, file_path, use_file):
         if not use_file:
             return
+
+        file_path = file_path + '.json' if not file_path.endswith('.json') else file_path
 
         with open(file_path, 'r') as f:
             data = json.load(f)

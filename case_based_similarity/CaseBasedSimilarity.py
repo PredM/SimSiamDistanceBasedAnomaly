@@ -50,8 +50,6 @@ class CBS(AbstractSimilarityMeasure):
         for case in features_cases.keys():
             print('Creating case handler for case', case)
 
-            # TODO different hyperparameters depending on the case could be implemented here
-            # should be implemented using another dictionary case -> hyper parameter file name
             relevant_features = features_cases.get(case)
 
             dataset = CaseSpecificDataset(self.config.training_data_folder, self.config, case, relevant_features)
@@ -60,12 +58,14 @@ class CBS(AbstractSimilarityMeasure):
             # add up the total number of examples
             self.num_instances_total += dataset.num_train_instances
 
-            ch: SimpleCaseHandler = self.initialise_case_handler(dataset)
+            ch: SimpleCaseHandler = self.initialise_case_handler(dataset, case)
             self.case_handlers.append(ch)
 
     # initializes the correct case handler depending on the configured variant
-    def initialise_case_handler(self, dataset):
+    def initialise_case_handler(self, dataset, case):
         var = self.config.architecture_variant
+
+        # hyper_file = self.config.hyper_file + case + '.json' if self.config.use_individual_hyperparameters else None
 
         if self.training and var.endswith('simple') or not self.training and var == 'standard_simple':
             return SimpleCaseHandler(self.config, dataset, self.training)
@@ -86,63 +86,69 @@ class CBS(AbstractSimilarityMeasure):
             print('Creating case handler for ', case_handler.dataset.case)
             directory = self.config.directory_model_to_use + self.config.subdirectories_by_case.get(
                 case_handler.dataset.case) + '/'
-            case_handler.load_model(model_folder=directory)
-            print()
 
-    def encode_datasets(self):
+            hyper_file = case_handler.dataset.case + '.json' if self.config.use_individual_hyperparameters else None
 
-        print('Encoding of datasets started.')
-
-        duration = 0
-
-        for case_handler in self.case_handlers:
-            case_handler: CaseHandler = case_handler
-            duration += case_handler.dataset.encode(case_handler.encoder)
-
-        print('Encoding of datasets finished. Duration:', duration)
-
-    def print_info(self):
+            case_handler.load_model(model_folder=directory, training=None, individual_hyper_file=hyper_file)
         print()
-        for case_handler in self.case_handlers:
-            case_handler.print_case_handler_info()
 
-    def get_sims(self, example):
-        # used to combine the results of all case handlers
-        # using a numpy array instead of a simple list to ensure index_sims == index_labels
-        sims_cases = np.empty(self.number_of_cases, dtype='object_')
-        labels_cases = np.empty(self.number_of_cases, dtype='object_')
 
-        if self.nbr_gpus_used <= 1:
-            for i in range(self.number_of_cases):
-                sims_cases[i], labels_cases[i] = self.case_handlers[i].get_sims(example)
-        else:
+def encode_datasets(self):
+    print('Encoding of datasets started.')
 
-            threads = []
-            ch_index = 0
+    duration = 0
 
-            # Distribute the sim calculation of all threads to the available gpus
-            while ch_index < self.number_of_cases:
-                gpu_index = 0
+    for case_handler in self.case_handlers:
+        case_handler: CaseHandler = case_handler
+        duration += case_handler.dataset.encode(case_handler.encoder)
 
-                while gpu_index < self.nbr_gpus_used and ch_index < self.number_of_cases:
-                    thread = GetSimThread(self.case_handlers[ch_index], gpu_index, example)
-                    thread.start()
-                    threads.append(thread)
+    print('Encoding of datasets finished. Duration:', duration)
 
-                    gpu_index += 1
-                    ch_index += 1
 
-            # Wait until sim calculation is finished and get the results
-            for i in range(self.number_of_cases):
-                threads[i].join()
-                sims_cases[i], labels_cases[i] = threads[i].sims, threads[i].labels
+def print_info(self):
+    print()
+    for case_handler in self.case_handlers:
+        case_handler.print_case_handler_info()
 
-        return np.concatenate(sims_cases), np.concatenate(labels_cases)
 
-    def get_sims_batch(self, batch):
-        raise NotImplementedError(
-            'Not implemented for this architecture'
-            'The optimizer will use the dedicated function of each case handler')
+def get_sims(self, example):
+    # used to combine the results of all case handlers
+    # using a numpy array instead of a simple list to ensure index_sims == index_labels
+    sims_cases = np.empty(self.number_of_cases, dtype='object_')
+    labels_cases = np.empty(self.number_of_cases, dtype='object_')
+
+    if self.nbr_gpus_used <= 1:
+        for i in range(self.number_of_cases):
+            sims_cases[i], labels_cases[i] = self.case_handlers[i].get_sims(example)
+    else:
+
+        threads = []
+        ch_index = 0
+
+        # Distribute the sim calculation of all threads to the available gpus
+        while ch_index < self.number_of_cases:
+            gpu_index = 0
+
+            while gpu_index < self.nbr_gpus_used and ch_index < self.number_of_cases:
+                thread = GetSimThread(self.case_handlers[ch_index], gpu_index, example)
+                thread.start()
+                threads.append(thread)
+
+                gpu_index += 1
+                ch_index += 1
+
+        # Wait until sim calculation is finished and get the results
+        for i in range(self.number_of_cases):
+            threads[i].join()
+            sims_cases[i], labels_cases[i] = threads[i].sims, threads[i].labels
+
+    return np.concatenate(sims_cases), np.concatenate(labels_cases)
+
+
+def get_sims_batch(self, batch):
+    raise NotImplementedError(
+        'Not implemented for this architecture'
+        'The optimizer will use the dedicated function of each case handler')
 
 
 # Helper class to be able to get the results of multiple case handlers in parallel

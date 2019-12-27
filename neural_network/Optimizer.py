@@ -54,7 +54,7 @@ class Optimizer:
                     except ValueError:
                         pass
 
-    def update_single_model(self, model_input, true_similarities, model, optimizer):
+    def update_single_model(self, model_input, true_similarities, model, optimizer, gradient_cap):
         # print("model_input: ",tf.shape(model_input))
         with tf.GradientTape() as tape:
             pred_similarities = model.get_sims_batch(model_input)
@@ -76,9 +76,8 @@ class Optimizer:
 
             grads = tape.gradient(loss, trainable_params)
 
-            # TODO needs to be changed for individual hyper parameters for cbs
             # Maybe change back to clipnorm = self.hyper.gradient_cap in adam initialisation
-            clipped_grads, _ = tf.clip_by_global_norm(grads, model.hyper.gradient_cap)
+            clipped_grads, _ = tf.clip_by_global_norm(grads, gradient_cap)
 
             # Apply the gradients to the trainable parameters
             optimizer.apply_gradients(zip(clipped_grads, trainable_params))
@@ -201,10 +200,10 @@ class SNNOptimizer(Optimizer):
             # print("model_input: ", model_input.shape)
 
             batch_loss = self.update_single_model([model_input, model_input2], true_similarities, self.architecture,
-                                                  self.adam_optimizer)
+                                                  self.adam_optimizer, self.architecture.hyper.gradient_cap)
         else:
             batch_loss = self.update_single_model(model_input, true_similarities, self.architecture,
-                                                  self.adam_optimizer)
+                                                  self.adam_optimizer, self.architecture.hyper.gradient_cap)
 
         # Track progress
         epoch_loss_avg.update_state(batch_loss)  # Add current batch loss
@@ -245,7 +244,7 @@ class SNNOptimizer(Optimizer):
             ffnn_file_name = '_'.join(['ffnn', epoch_string]) + '.h5'
             self.architecture.ffnn.model.save_weights(dir_name + ffnn_file_name)
 
-
+# noinspection DuplicatedCode
 class CBSOptimizer(Optimizer, ABC):
 
     def __init__(self, architecture, dataset, config):
@@ -361,7 +360,7 @@ class CBSOptimizer(Optimizer, ABC):
             # write model configuration to file
             case_handler.hyper.epochs_current = current_epoch if current_epoch <= case_handler.hyper.epochs \
                 else case_handler.hyper.epochs
-            case_handler.hyper.write_to_file(full_path + '/' + 'hyperparameters_used.json')
+            case_handler.hyper.write_to_file(full_path + '/' + case_handler.dataset.case+'.json')
 
             # generate the file names and save the model files in the directory created before
             encoder_file_name = '_'.join(['encoder', case_handler.hyper.encoder_variant, epoch_string]) + '.h5'
@@ -418,7 +417,8 @@ class CHOptimizer(threading.Thread):
 
                 batch_loss = self.cbsOptimizer.update_single_model(model_input, true_similarities, self.case_handler,
                                                                    self.cbsOptimizer.optimizer[
-                                                                       self.case_handler.dataset.case])
+                                                                       self.case_handler.dataset.case],
+                                                                   self.case_handler.hyper.gradient_cap)
 
                 # track progress
                 epoch_loss_avg.update_state(batch_loss)

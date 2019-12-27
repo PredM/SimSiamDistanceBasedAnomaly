@@ -110,6 +110,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
             input_pairs = np.zeros((2 * batch_size, self.hyper.time_series_length,
                                     self.hyper.time_series_depth)).astype('float32')
 
+            # TODO This will break for cbs, x_auxCaseVector_test not set in CaseSpecificDataset
             if self.hyper.encoder_variant in ['cnnwithclassattention', 'cnn1dwithclassattention']:
                 auxiliaryInput = np.zeros((2 * batch_size, self.dataset.x_auxCaseVector_test.shape[1]))
 
@@ -233,21 +234,19 @@ class SimpleSNN(AbstractSimilarityMeasure):
                 plt.savefig(i + '_matrix.png')
                 cnt = cnt + 1
 
-    def load_model(self, model_folder=None, training=None):
+    def load_model(self, model_folder=None, training=None, individual_hyper_file=None):
 
         training = self.training if training is None else training
-
         model_folder = self.config.directory_model_to_use if model_folder is None else model_folder
 
         self.hyper = Hyperparameters()
 
-        if training:
+        if individual_hyper_file is not None:
+            self.hyper.load_from_file(model_folder + individual_hyper_file, True)
+        elif training:
             self.hyper.load_from_file(self.config.hyper_file, self.config.use_hyper_file)
         else:
-            # maybe add filename to config
-            self.hyper.load_from_file(model_folder + 'hyperparameters_used.json', True)
-
-        self.hyper.set_time_series_properties(self.dataset.time_series_length, self.dataset.time_series_depth)
+            raise AssertionError('invalide state')
 
         # Create encoder, necessary for all types
         input_shape_encoder = (self.hyper.time_series_length, self.hyper.time_series_depth)
