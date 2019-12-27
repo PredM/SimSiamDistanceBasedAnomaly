@@ -69,7 +69,7 @@ class FFNN(NN):
 
     def create_model(self):
 
-        print('Creating FFNN with input shape: ', self.input_shape)
+        print('Creating FFNN')
         model = tf.keras.Sequential(name='FFNN')
         # Input shape für 2dConv anpassen
 

@@ -234,27 +234,37 @@ class SimpleSNN(AbstractSimilarityMeasure):
                 plt.savefig(i + '_matrix.png')
                 cnt = cnt + 1
 
-    def load_model(self, model_folder=None, training=None, hyper_file=None):
-
-        # use configured values if not others are passed
-        training = self.training if training is None else training
-        model_folder = self.config.directory_model_to_use if model_folder is None else model_folder
+    def load_model(self, is_cbs=False, case='', cont=False):
 
         self.hyper = Hyperparameters()
 
-        print(hyper_file)
+        model_folder = ''
+        file_name = ''
 
-        if hyper_file is not None:
-            print('is not none called')
-            # cbs will pass hyper file name as parameter when training and testing
-            self.hyper.load_from_file(model_folder + hyper_file)
-        elif training and self.config.use_hyper_file:
-            print('elif training called')
-            # if training a snn use the configured hyper file if loading form file is enabled
-            self.hyper.load_from_file(self.config.hyper_file)
+        if is_cbs:
+            if self.config.use_individual_hyperparameters:
+                if self.training:
+                    model_folder = self.config.hyper_file + '/'
+                    file_name = case
+
+                else:
+                    model_folder = self.config.directory_model_to_use + case + '_model/'
+                    file_name = case
+            else:
+                if self.training:
+                    file_name = self.config.hyper_file
+                else:
+                    model_folder = self.config.directory_model_to_use + case + '_model/'
+                    file_name = case
         else:
-            # if testing a snn use the json file with default name in the model directory
-            self.hyper.load_from_file(model_folder + 'hyperparameters_used.json')
+            if self.training and self.config.use_hyper_file:
+                file_name = self.config.hyper_file
+            else:
+                # if testing a snn use the json file with default name in the model directory
+                model_folder = self.config.directory_model_to_use
+                file_name = 'hyperparameters_used.json'
+
+        self.hyper.load_from_file(model_folder + file_name)
 
         self.hyper.set_time_series_properties(self.dataset.time_series_length, self.dataset.time_series_depth)
 
@@ -278,7 +288,8 @@ class SimpleSNN(AbstractSimilarityMeasure):
 
         self.encoder.create_model()
 
-        if not training:
+        # load weights if snn that isn't training
+        if cont or (not self.training and not is_cbs):
             self.encoder.load_model_weights(model_folder)
 
         # These variants also need a ffnn
@@ -290,7 +301,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
             self.ffnn = FFNN(self.hyper, input_shape_ffnn)
             self.ffnn.create_model()
 
-            if not training:
+            if cont or (not self.training and not is_cbs):
                 self.ffnn.load_model_weights(model_folder)
 
     def print_detailed_model_info(self):
@@ -457,5 +468,6 @@ class FastSNN(FastSimpleSNN):
 
     def print_detailed_model_info(self):
         print('')
+        self.encoder.print_model_info()
         self.ffnn.print_model_info()
         print('')

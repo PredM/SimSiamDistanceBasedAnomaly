@@ -23,8 +23,8 @@ class CBS(AbstractSimilarityMeasure):
         self.num_instances_total = 0
         self.number_of_cases = 0
 
-        # with contextlib.redirect_stdout(None):
-        self.initialise_case_handlers()
+        with contextlib.redirect_stdout(None):
+            self.initialise_case_handlers()
 
         self.gpus = tf.config.experimental.list_logical_devices('GPU')
         self.nbr_gpus_used = config.max_gpus_used if 1 <= config.max_gpus_used < len(self.gpus) else len(self.gpus)
@@ -58,11 +58,11 @@ class CBS(AbstractSimilarityMeasure):
             # add up the total number of examples
             self.num_instances_total += dataset.num_train_instances
 
-            ch: SimpleCaseHandler = self.initialise_case_handler(dataset, case)
+            ch: SimpleCaseHandler = self.initialise_case_handler(dataset)
             self.case_handlers.append(ch)
 
     # initializes the correct case handler depending on the configured variant
-    def initialise_case_handler(self, dataset, case):
+    def initialise_case_handler(self, dataset):
         var = self.config.architecture_variant
 
         if self.training and var.endswith('simple') or not self.training and var == 'standard_simple':
@@ -78,86 +78,68 @@ class CBS(AbstractSimilarityMeasure):
 
     def load_model(self, model_folder=None, training=None):
 
-        # suppress output which would contain the same model info for each handler
         for case_handler in self.case_handlers:
             case_handler: CaseHandler = case_handler
             print('Creating case handler for ', case_handler.dataset.case)
-            directory = self.config.directory_model_to_use + self.config.subdirectories_by_case.get(
-                case_handler.dataset.case) + '/'
 
-            if training and not self.config.use_individual_hyperparameters:
-                hyper_file = None
-            else:
-                hyper_file = case_handler.dataset.case
-
-            print()
-            print(hyper_file)
-            print()
-
-            case_handler.load_model(model_folder=directory, training=None, hyper_file=hyper_file)
-
+            case_handler.load_model(is_cbs=True, case=case_handler.dataset.case)
             case_handler.print_detailed_model_info()
-
 
         print()
 
+    def encode_datasets(self):
+        print('Encoding of datasets started.')
 
-def encode_datasets(self):
-    print('Encoding of datasets started.')
+        duration = 0
 
-    duration = 0
+        for case_handler in self.case_handlers:
+            case_handler: CaseHandler = case_handler
+            duration += case_handler.dataset.encode(case_handler.encoder)
 
-    for case_handler in self.case_handlers:
-        case_handler: CaseHandler = case_handler
-        duration += case_handler.dataset.encode(case_handler.encoder)
+        print('Encoding of datasets finished. Duration:', duration)
 
-    print('Encoding of datasets finished. Duration:', duration)
+    def print_info(self):
+        print()
+        for case_handler in self.case_handlers:
+            case_handler.print_case_handler_info()
 
+    def get_sims(self, example):
+        # used to combine the results of all case handlers
+        # using a numpy array instead of a simple list to ensure index_sims == index_labels
+        sims_cases = np.empty(self.number_of_cases, dtype='object_')
+        labels_cases = np.empty(self.number_of_cases, dtype='object_')
 
-def print_info(self):
-    print()
-    for case_handler in self.case_handlers:
-        case_handler.print_case_handler_info()
+        if self.nbr_gpus_used <= 1:
+            for i in range(self.number_of_cases):
+                sims_cases[i], labels_cases[i] = self.case_handlers[i].get_sims(example)
+        else:
 
+            threads = []
+            ch_index = 0
 
-def get_sims(self, example):
-    # used to combine the results of all case handlers
-    # using a numpy array instead of a simple list to ensure index_sims == index_labels
-    sims_cases = np.empty(self.number_of_cases, dtype='object_')
-    labels_cases = np.empty(self.number_of_cases, dtype='object_')
+            # Distribute the sim calculation of all threads to the available gpus
+            while ch_index < self.number_of_cases:
+                gpu_index = 0
 
-    if self.nbr_gpus_used <= 1:
-        for i in range(self.number_of_cases):
-            sims_cases[i], labels_cases[i] = self.case_handlers[i].get_sims(example)
-    else:
+                while gpu_index < self.nbr_gpus_used and ch_index < self.number_of_cases:
+                    thread = GetSimThread(self.case_handlers[ch_index], self.gpus[gpu_index], example)
+                    thread.start()
+                    threads.append(thread)
 
-        threads = []
-        ch_index = 0
+                    gpu_index += 1
+                    ch_index += 1
 
-        # Distribute the sim calculation of all threads to the available gpus
-        while ch_index < self.number_of_cases:
-            gpu_index = 0
+            # Wait until sim calculation is finished and get the results
+            for i in range(self.number_of_cases):
+                threads[i].join()
+                sims_cases[i], labels_cases[i] = threads[i].sims, threads[i].labels
 
-            while gpu_index < self.nbr_gpus_used and ch_index < self.number_of_cases:
-                thread = GetSimThread(self.case_handlers[ch_index], gpu_index, example)
-                thread.start()
-                threads.append(thread)
+        return np.concatenate(sims_cases), np.concatenate(labels_cases)
 
-                gpu_index += 1
-                ch_index += 1
-
-        # Wait until sim calculation is finished and get the results
-        for i in range(self.number_of_cases):
-            threads[i].join()
-            sims_cases[i], labels_cases[i] = threads[i].sims, threads[i].labels
-
-    return np.concatenate(sims_cases), np.concatenate(labels_cases)
-
-
-def get_sims_batch(self, batch):
-    raise NotImplementedError(
-        'Not implemented for this architecture'
-        'The optimizer will use the dedicated function of each case handler')
+    def get_sims_batch(self, batch):
+        raise NotImplementedError(
+            'Not implemented for this architecture'
+            'The optimizer will use the dedicated function of each case handler')
 
 
 # Helper class to be able to get the results of multiple case handlers in parallel
@@ -181,8 +163,6 @@ class CaseHandlerHelper:
 
     # config and training are placeholders for multiple inheritance to work
     def __init__(self, dataset: CaseSpecificDataset):
-        print('helper init called')
-
         self.dataset: CaseSpecificDataset = dataset
         self.print_case_handler_info()
 

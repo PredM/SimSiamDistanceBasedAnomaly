@@ -17,7 +17,7 @@ class Configuration:
         # ffnn = uses ffnn as distance measure
         # simple = mean absolute difference as distance measure instead of the ffnn
         self.architecture_variants = ['standard_simple', 'standard_ffnn', 'fast_simple', 'fast_ffnn']
-        self.architecture_variant = self.architecture_variants[0]
+        self.architecture_variant = self.architecture_variants[3]
 
         # TODO jaccard not working
         self.simple_Distance_Measures = ['abs_mean', 'euclidean', 'dot_product', 'cosine', 'jaccard']
@@ -32,11 +32,11 @@ class Configuration:
 
         # if enabled each case handler of a cbs will use individual hyperparameters
         # no effect on snn architecture
-        self.use_individual_hyperparameters = False
+        self.use_individual_hyperparameters = True
 
         # if use_individual_hyperparameters = false interpreted as a single json file, else as a folder
         # containing json files named after the cases they should be used for (see all_cases below for correct names)
-        self.hyper_file = self.hyper_file_folder + 'small_cnn'
+        self.hyper_file = self.hyper_file_folder + 'individual_hyperparameters_test'
 
         # choose a loss function
         # TODO: TripletLoss, Distance-Based Logistic Loss
@@ -75,7 +75,7 @@ class Configuration:
         all_cases = ['no_failure', 'txt_18_comp_leak', 'txt_17_comp_leak', 'txt15_m1_t1_high_wear',
                      'txt15_m1_t1_low_wear', 'txt15_m1_t2_wear', 'txt16_m3_t1_high_wear', 'txt16_m3_t1_low_wear',
                      'txt16_m3_t2_wear', 'txt16_i4']
-        self.cases_used = ['txt16_i4']
+        self.cases_used = ['txt16_m3_t2_wear','txt16_i4']
 
         ###
         # kafka / real time classification
@@ -129,7 +129,7 @@ class Configuration:
         self.models_folder = '../data/trained_models/'
 
         # path and file name to the specific model that should be used for testing and live classification
-        self.filename_model_to_use = 'temp_cbs_model_12-27_13-15-09_epoch-200'
+        self.filename_model_to_use = 'temp_cbs_model_12-27_14-55-29_epoch-300'
         self.directory_model_to_use = self.models_folder + self.filename_model_to_use + '/'
 
         # folder where the preprocessed training and test data for the neural network should be stored

@@ -117,7 +117,7 @@ class SNNOptimizer(Optimizer):
         current_epoch = 0
 
         if self.config.continue_training:
-            self.architecture.load_model(training=False)
+            self.architecture.load_model(cont=True)
             current_epoch = self.architecture.hyper.epochs_current
 
             if current_epoch >= self.architecture.hyper.epochs:
@@ -244,6 +244,7 @@ class SNNOptimizer(Optimizer):
             ffnn_file_name = '_'.join(['ffnn', epoch_string]) + '.h5'
             self.architecture.ffnn.model.save_weights(dir_name + ffnn_file_name)
 
+
 # noinspection DuplicatedCode
 class CBSOptimizer(Optimizer, ABC):
 
@@ -328,7 +329,7 @@ class CBSOptimizer(Optimizer, ABC):
 
             # Dont continue training if goal epoch was reached for this case
             if case_handler in self.handlers_still_training \
-                    and self.goal_epochs.get(case) <= current_epoch + self.config.output_interval:
+                    and self.goal_epochs.get(case) < current_epoch + self.config.output_interval:
                 self.handlers_still_training.remove(case_handler)
 
             status = 'Yes' if case_handler in self.handlers_still_training else 'No'
@@ -360,7 +361,7 @@ class CBSOptimizer(Optimizer, ABC):
             # write model configuration to file
             case_handler.hyper.epochs_current = current_epoch if current_epoch <= case_handler.hyper.epochs \
                 else case_handler.hyper.epochs
-            case_handler.hyper.write_to_file(full_path + '/' + case_handler.dataset.case+'.json')
+            case_handler.hyper.write_to_file(full_path + '/' + case_handler.dataset.case + '.json')
 
             # generate the file names and save the model files in the directory created before
             encoder_file_name = '_'.join(['encoder', case_handler.hyper.encoder_variant, epoch_string]) + '.h5'

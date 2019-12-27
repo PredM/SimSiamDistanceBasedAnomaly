@@ -46,12 +46,8 @@ class Hyperparameters:
 
         file_path = file_path + '.json' if not file_path.endswith('.json') else file_path
 
-        print(file_path)
-
         with open(file_path, 'r') as f:
             data = json.load(f)
-
-        print(data)
 
         self.encoder_variant = data['encoder_variant'].lower()
 
