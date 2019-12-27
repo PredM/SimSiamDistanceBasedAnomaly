@@ -22,7 +22,7 @@ class Inference:
 
         # creation of dataframe in which the classification results are stored
         # rows contain the classes including a row for combined accuracy
-        classes = list(self.dataset.classes)
+        classes = list(self.dataset.classes_total)
         index = classes + ['combined']
         cols = ['true_positive', 'total', 'accuracy']
         self.results = pd.DataFrame(0, index=np.arange(1, len(index) + 1), columns=np.arange(len(cols)))

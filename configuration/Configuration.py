@@ -97,7 +97,7 @@ class Configuration:
         # case base
         ###
         # parameter to control the size of data used by inference
-        self.use_case_base_extraction_for_inference = True # default False
+        self.use_case_base_extraction_for_inference = True  # default False
 
         # the random seed the index selection is based on
         self.random_seed_index_selection = 42
@@ -134,11 +134,14 @@ class Configuration:
         self.filename_pkl = 'export_data.pkl'
         self.filename_pkl_cleaned = 'cleaned_data.pkl'
 
-        # folder where the reduced training data set aka. case base is safed to
+        # folder where the reduced training data set aka. case base is saved to
         self.case_base_folder = '../data/case_base/'
 
-        # folder where text files with extracted cases are safed to
+        # folder where text files with extracted cases are saved to, for export
         self.cases_folder = '../data/cases/'
+
+        # file from which the case information should be loaded, used in dataset creation
+        self.case_file = '../configuration/cases_refined_final_20-12-19_wFailure.csv'
 
         ##
         # lists of topics separated by types that need different import variants
@@ -182,7 +185,7 @@ class Configuration:
         ###
 
         # value is used to ensure a constant frequency of the measurement time points
-        self.resampleFrequency = "2ms" # need to be the same for DataImport as well as DatasetCreation
+        self.resample_frequency = "2ms"  # need to be the same for DataImport as well as DatasetCreation
 
         # define the length (= the number of timestamps)
         # of the time series generated for training & live classification
@@ -192,8 +195,9 @@ class Configuration:
         self.interval_in_seconds = 5
 
         # to some extent the time series in each examples overlaps to another one
-        self.use_over_lapping_windows = True , # default: False if true: interval in seconds is not considered, just time series length
-        self.over_lapping_window_interval_in_seconds = 1 #  # only used if overlapping windows is true
+        # default: False if true: interval in seconds is not considered, just time series length
+        self.use_over_lapping_windows = True
+        self.over_lapping_window_interval_in_seconds = 1  # only used if overlapping windows is true
 
         # configure the motor failure parameters used in case extraction
         self.split_t1_high_low = True
@@ -311,19 +315,19 @@ class Configuration:
         datasets = []
         number_to_array = {}
 
-        with open('../configuration/cases_refined_final_20-12-19_wFailure.csv', 'r') as file:
+        with open(self.case_file, 'r') as file:
             for line in file.readlines():
                 parts = line.split(',')
                 parts = [part.strip(' ') for part in parts]
-                #print("parts: ", parts)
-                #dataset, case, start, end = parts
+                # print("parts: ", parts)
+                # dataset, case, start, end = parts
                 dataset = parts[0]
                 case = parts[1]
                 start = parts[2]
                 end = parts[3]
-                failureTime = parts[4].rstrip()
+                failure_time = parts[4].rstrip()
 
-                timestamp = (gen_timestamp(case, start, end, failureTime))
+                timestamp = (gen_timestamp(case, start, end, failure_time))
 
                 if dataset in number_to_array.keys():
                     number_to_array.get(dataset).append(timestamp)
@@ -337,11 +341,11 @@ class Configuration:
         self.cases_datasets = datasets
 
 
-def gen_timestamp(label: str, start: str, end: str, failureTime: str):
+def gen_timestamp(label: str, start: str, end: str, failure_time: str):
     start_as_time = pd.to_datetime(start, format='%Y-%m-%d %H:%M:%S.%f')
     end_as_time = pd.to_datetime(end, format='%Y-%m-%d %H:%M:%S.%f')
-    if failureTime != "no_failure" :
-        failure_as_time = pd.to_datetime(failureTime, format='%Y-%m-%d %H:%M:%S')
+    if failure_time != "no_failure":
+        failure_as_time = pd.to_datetime(failure_time, format='%Y-%m-%d %H:%M:%S')
     else:
         failure_as_time = ""
 

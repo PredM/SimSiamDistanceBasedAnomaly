@@ -209,7 +209,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
         # Get positions with maximum values
         max_pos = np.argsort(-case_embeddings, axis=1)  # [::-1]  # np.argmax(case_embeddings, axis=1)
         min_pos = np.argsort(case_embeddings, axis=1)  # [::-1]  # np.argmax(case_embeddings, axis=1)
-        for i in self.dataset.classes:
+        for i in self.dataset.classes_total:
             with np.printoptions(precision=3, suppress=True):
                 # Get positions with maximum values
                 row = np.array(case_embeddings[cnt, :])
@@ -226,7 +226,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
                                                             training=self.training)
         print(case_matrix)
         # Get positions with maximum values
-        for i in self.dataset.classes:
+        for i in self.dataset.classes_total:
             with np.printoptions(precision=3, suppress=True):
                 # Get positions with maximum values
                 matrix = np.array(case_matrix[cnt, :, :])
