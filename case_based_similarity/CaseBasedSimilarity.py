@@ -125,7 +125,7 @@ class CBS(AbstractSimilarityMeasure):
                 gpu_index = 0
 
                 while gpu_index < self.nbr_gpus_used and ch_index < self.number_of_cases:
-                    thread = GetSimThread(self.case_handlers[ch_index], gpu_index, example)
+                    thread = GetSimThread(self.case_handlers[ch_index], self.gpus[gpu_index], example)
                     thread.start()
                     threads.append(thread)
 
