@@ -23,11 +23,11 @@ class Configuration:
         self.architecture_variant = self.architecture_variants[0]
         # TODO jaccard not working
         self.simple_Distance_Measures = ['abs_mean', 'euclidean', 'dot_product', 'cosine', 'jaccard']
-        self.simple_Distance_Measure = self.simple_Distance_Measures[0]
+        self.simple_Distance_Measure = self.simple_Distance_Measures[3]
 
         # TODO Needs to be changed to folder if every encoder should use different hyperparameters
         # hyperparameter file to use
-        self.hyper_file = '../configuration/hyperparameter_combinations/' + 'small_cnn.json'  # 'tcn.json'
+        self.hyper_file = '../configuration/hyperparameter_combinations/' + 'ba_cnn.json'  # 'tcn.json'
         self.use_hyper_file = True
 
         # Choose a loss function
@@ -99,6 +99,9 @@ class Configuration:
         # parameter to control the size of data used by inference
         self.use_case_base_extraction_for_inference = True # default False
 
+        # parameter to control the size of data / examples used by inference for similiarity calculation
+        self.use_batchsize_for_inference_sim_calculation = True # default False
+
         # the random seed the index selection is based on
         self.random_seed_index_selection = 42
 
@@ -121,7 +124,7 @@ class Configuration:
         self.models_folder = '../data/trained_models/'
 
         # path and file name to the specific model that should be used for testing and live classification
-        self.filename_model_to_use = 'temp_snn_model_12-01_11-13-11_epoch-100'
+        self.filename_model_to_use = 'temp_snn_model_12-26_04-56-11_epoch-399900'
         self.directory_model_to_use = self.models_folder + self.filename_model_to_use + '/'
 
         # folder where the preprocessed training and test data for the neural network should be stored

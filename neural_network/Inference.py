@@ -4,6 +4,7 @@ import time
 import numpy as np
 import pandas as pd
 import tensorflow as tf
+from sklearn import metrics
 
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 
@@ -20,19 +21,27 @@ class Inference:
         self.architecture = architecture
         self.dataset: FullDataset = dataset
 
-        # creation of dataframe in which the classification results are stored
-        # rows contain the classes including a row for combined accuracy
-        classes = list(self.dataset.classes)
+        # creation of dataframe results in which the classification results are stored
+        # rows contain the classes including a column for combined accuracy
+        classes = list(self.dataset.y_test_strings_unique)
         index = classes + ['combined']
-        cols = ['true_positive', 'total', 'accuracy']
+        cols = ['true_positive','false_positive','true_negative','false_negative', 'total', 'accuracy']
         self.results = pd.DataFrame(0, index=np.arange(1, len(index) + 1), columns=np.arange(len(cols)))
         self.results.set_axis(cols, 1, inplace=True)
         self.results['classes'] = index
         self.results.set_index('classes', inplace=True)
         self.results.loc['combined', 'total'] = self.dataset.num_test_instances
+        # Auxiliary dataframe multiclassresults with predicted class (provided by CB) as row
+        # and actucal class (as given by the test set) as column, but for ease of use: all unique classes are used
+        self.multiclassresults = pd.DataFrame(0, index=list(self.dataset.classes), columns=list(self.dataset.classes))
+        # storing predictied and real value for each classification
+        self.y_true = []
+        self.y_pred = []
+        # storing max similiarity of each class for each example for computing roc_auc_score
+        self.y_predSimForEachClass = np.zeros([self.dataset.num_test_instances,len(classes)])
 
     def infer_test_dataset(self):
-        correct, num_infers = 0, 0
+        correct, false_negative, num_infers = 0, 0, 0
         start_time = time.perf_counter()
 
         # print the case embeddings for each class
@@ -51,12 +60,7 @@ class Inference:
             sims, labels = self.architecture.get_sims(self.dataset.x_test[idx_test])
             # print("sims shape: ", sims.shape, " label shape: ", labels.shape)
             # check similarities of all pairs and record the index of the closest training series
-            '''
-            for i in range(len(sims)):
-                if sims[i] >= max_sim:
-                    max_sim = sims[i]
-                    max_sim_index = i
-            '''
+
             ranking_nearest_neighbors_idx = np.argsort(-sims)
 
             knn_results = []
@@ -67,16 +71,16 @@ class Inference:
                 knn_results.append(row)
 
             real = self.dataset.y_test_strings[idx_test]
-            # print("max_sim_index: ", max_sim_index, " ranking_nearest_neighbors_idx[0]: ",
-            # ranking_nearest_neighbors_idx[0])
             max_sim_class = self.dataset.y_train_strings[ranking_nearest_neighbors_idx[0]]  # labels[max_sim_index]
             max_sim = np.asanyarray(sims[ranking_nearest_neighbors_idx[0]])
 
+            # Storing the prediction class wise
+            self.multiclassresults.loc[max_sim_class, real] += 1
+            self.y_pred.append(max_sim_class)
+            self.y_true.append(real)
             # if correctly classified increase the true positive field of the correct class and the of all classes
             if real == max_sim_class:
                 correct += 1
-                self.results.loc[real, 'true_positive'] += 1
-                self.results.loc['combined', 'true_positive'] += 1
 
             # regardless of the result increase the number of examples with this class
             self.results.loc[real, 'total'] += 1
@@ -103,6 +107,33 @@ class Inference:
 
         elapsed_time = time.perf_counter() - start_time
 
+        # A few auxiliary calculations required to calculate true positive (TP),
+        # -negative (TN), false positive (FP) and -negative (FN) values for each class.
+        # 1. Sum of all TruePositives, is equal to the diagonal sum
+        truePosSum = np.diag(self.multiclassresults).sum()
+        # 2. Add a sum column, summed along the columns / rowwise
+        self.multiclassresults['sumRowWiseAxis1'] = self.multiclassresults.sum(axis=1)
+        # 3. Add a sum column, summed along the rows / columnwise
+        self.multiclassresults['sumColumnWiseAxis0'] = self.multiclassresults.sum(axis=0)
+        # Finally, calculate TP, TN, FP and FN for the classes provided in the test set
+        for class_in_test in self.dataset.y_test_strings_unique:
+            # Calculate true_positive for each class:
+            self.results.loc[class_in_test, 'true_positive'] = self.multiclassresults.loc[class_in_test, class_in_test]
+            currClassTP = self.results.loc[class_in_test, 'true_positive']
+            # Calculate false_positive for each class:
+            self.results.loc[class_in_test, 'false_positive'] = self.multiclassresults.loc[
+                                                                    class_in_test, 'sumRowWiseAxis1'] - currClassTP
+            # Calculate false_negative for each class:
+            self.results.loc[class_in_test, 'false_negative'] = self.multiclassresults.loc[
+                                                                   class_in_test, 'sumColumnWiseAxis0'] - currClassTP
+            # Calculate false_negative for each class:
+            self.results.loc[class_in_test, 'true_negative'] = truePosSum - currClassTP
+
+        self.results.loc['combined', 'true_positive'] = self.results['true_positive'].sum()
+        self.results.loc['combined', 'true_negative'] = self.results['true_negative'].sum()
+        self.results.loc['combined', 'false_positive'] = self.results['false_positive'].sum()
+        self.results.loc['combined', 'false_negative'] = self.results['false_negative'].sum()
+
         # calculate the classification accuracy for all classes and save in the intended column
         self.results['accuracy'] = self.results['true_positive'] / self.results['total']
         self.results['accuracy'] = self.results['accuracy'].fillna(0) * 100
@@ -114,8 +145,15 @@ class Inference:
         print('Elapsed time:', round(elapsed_time, 4), 'Seconds')
         print('Average time per example:', round(elapsed_time / self.dataset.num_test_instances, 4), 'Seconds')
         print('Classification accuracy split by classes:\n')
-        print(self.results)
+        print(self.results.to_string())
         print('-------------------------------------------------------------')
+        print("Multiclass Results: ")
+        print(self.multiclassresults.to_string())
+        y_true_array = np.stack(self.y_true, axis=0)
+        y_pred_array = np.stack(self.y_pred, axis=0)
+        #print(metrics.precision_recall_fscore_support(y_true_array, y_pred_array, labels=list(self.dataset.y_test_strings_unique),average='micro'))
+        print(metrics.multilabel_confusion_matrix(y_true_array, y_pred_array,labels=list(self.dataset.y_test_strings_unique)))
+        print(metrics.classification_report(y_true_array, y_pred_array, labels=list(self.dataset.y_test_strings_unique)))
 
 
 def main():

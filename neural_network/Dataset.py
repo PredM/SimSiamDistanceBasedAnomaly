@@ -18,6 +18,8 @@ class Dataset:
         self.classes_Unique_oneHotEnc = None
         self.num_train_instances = None
         self.num_instances = None
+        self.y_train_strings_unique = None
+        self.y_test_strings_unique = None
         # Dictionary with key: class as integer and value: array with index positions
         self.classIdx_to_trainExamplIdxPos = {}
         # Dictonary with key: integer (0 to numOfClasses-1) which corresponds to one column entry
@@ -25,7 +27,7 @@ class Dataset:
         self.classIdx_to_classString = {}
         self.y_train_classString_numOfInstances = None # np array that contains the numer of instances to each classLabel
         self.y_test_classString_numOfInstances = None # np array that contains the numer of instances to each classLabel
-        self.classesInBoth = None # np array that contains a list classes in training and test
+        self.y_strings_classesInBoth = None # np array that contains a list classes in training and test
 
         self.classes = None  # Class names as string
 
@@ -155,13 +157,13 @@ class FullDataset(Dataset):
         self.x_auxCaseVector_test = self.y_test
 
         # collect number of instances for each class in training and test
-        unique, counts = np.unique(self.y_train_strings, return_counts=True)
-        self.y_train_classString_numOfInstances = np.asarray((unique, counts)).T
-        unique, counts = np.unique(self.y_test_strings, return_counts=True)
-        self.y_test_classString_numOfInstances = np.asarray((unique, counts)).T
+        self.y_train_strings_unique, counts = np.unique(self.y_train_strings, return_counts=True)
+        self.y_train_classString_numOfInstances = np.asarray((self.y_train_strings_unique, counts)).T
+        self.y_test_strings_unique, counts = np.unique(self.y_test_strings, return_counts=True)
+        self.y_test_classString_numOfInstances = np.asarray((self.y_test_strings_unique, counts)).T
 
         # calculate the number of classes that are the same in test and train
-        self.classesInBoth = np.intersect1d(self.y_test_classString_numOfInstances[:, 0],
+        self.y_strings_classesInBoth = np.intersect1d(self.y_test_classString_numOfInstances[:, 0],
                                        self.y_train_classString_numOfInstances[:, 0])
 
 
@@ -173,9 +175,11 @@ class FullDataset(Dataset):
         print('Dataset loaded:')
         print('Shape of training set (example, time, channels):', self.x_train.shape)
         print('Shape of test set (example, time, channels):', self.x_test.shape)
-        print('Num of classes:', self.num_classes)
-        print('Classes used in training:')
-        print(self.classes)
+        print('Num of classes in train and test together:', self.num_classes)
+        print('Classes used in training: ', len(self.y_train_strings_unique)," :",self.y_train_strings_unique)
+        print()
+        print('Classes used in test: ', len(self.y_test_strings_unique)," :", self.y_test_strings_unique)
+        #print(self.classes)
         print()
 
     def encode(self, encoder, encode_test_data=False):

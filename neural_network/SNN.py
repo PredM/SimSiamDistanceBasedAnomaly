@@ -103,7 +103,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
     def get_sims(self, example):
 
         # Splitting the batch size for inference in the case of using a TCN with warping FFNN due to GPU memory issues
-        if type(self.encoder) == TCN:
+        if type(self.encoder) == TCN or self.config.use_batchsize_for_inference_sim_calculation:
             return self.get_sims_in_batches(example)
         else:
             batch_size = len(self.dataset.x_train)
