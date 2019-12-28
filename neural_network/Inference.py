@@ -33,7 +33,7 @@ class Inference:
         self.results.loc['combined', 'total'] = self.dataset.num_test_instances
         # Auxiliary dataframe multiclassresults with predicted class (provided by CB) as row
         # and actucal class (as given by the test set) as column, but for ease of use: all unique classes are used
-        self.multiclassresults = pd.DataFrame(0, index=list(self.dataset.classes), columns=list(self.dataset.classes))
+        self.multiclassresults = pd.DataFrame(0, index=list(self.dataset.classes_total), columns=list(self.dataset.classes_total))
         # storing predictied and real value for each classification
         self.y_true = []
         self.y_pred = []
@@ -51,7 +51,7 @@ class Inference:
         # self.architecture.printLearnedCaseVectors()
 
         # infer all examples of the test data set
-        for idx_test in range(self.dataset.num_test_instances):
+        for idx_test in range(10):
 
             max_sim = 0
             max_sim_index = 0
