@@ -29,12 +29,13 @@ class Dataset:
         self.y_test_classString_numOfInstances = None # np array that contains the numer of instances to each classLabel
         self.y_strings_classesInBoth = None # np array that contains a list classes in training and test
 
-        self.classes = None  # Class names as string
+        # Class names as string
+        self.classes_total = None
 
         self.time_series_length = None
         self.time_series_depth = None
 
-        # Additional information to the sensor data about the case e.g., relevant sensor streams ...
+        # additional information to the sensor data about the case e.g., relevant sensor streams ...
         self.x_auxCaseVector_train = None
         self.x_auxCaseVector_test = None
 
@@ -87,24 +88,43 @@ class FullDataset(Dataset):
         self.num_test_instances = None
         self.training = training
 
+        # total number of classes
         self.num_classes = None
-        self.classes = None
+
+        # dictionary with key: class as integer and value: array with index positions
+        self.class_idx_to_ex_idxs_train = {}
+
+        # dictionary with key: integer (0 to numOfClasses-1) which corresponds to one column entry
+        # and value string (class name)
+        self.class_idx_to_class_string = {}
+
+        # np array that contains the number of instances for each classLabel in the training data
+        self.num_instances_by_class_train = None
+
+        # np array that contains the number of instances for each classLabel in the test data
+        self.num_instances_by_class_test = None
+
+        # np array that contains a list classes that occur in training OR test data set
+        self.classes_total = None
+
+        # np array that contains a list classes that occur in training AND test data set
+        self.classes_in_both = None
+
+
 
     def load(self):
         # dtype conversion necessary because layers use float32 by default
         # .astype('float32') removed because already included in dataset creation
 
-        if self.config.use_case_base_extraction_for_inference and self.training != True:
+        if self.config.use_case_base_extraction_for_inference and not self.training:
             print("Attention: only a case base extraction is used for inference!")
             self.x_train = np.load(self.config.case_base_folder + 'train_features.npy')  # data training
-        else:
-            self.x_train = np.load(self.dataset_folder + 'train_features.npy')  # data training
-        self.x_test = np.load(self.dataset_folder + 'test_features.npy')  # data testing
-
-        if self.config.use_case_base_extraction_for_inference and self.training != True:
             self.y_train_strings = np.expand_dims(np.load(self.config.case_base_folder + 'train_labels.npy'), axis=-1)
         else:
+            self.x_train = np.load(self.dataset_folder + 'train_features.npy')  # data training
             self.y_train_strings = np.expand_dims(np.load(self.dataset_folder + 'train_labels.npy'), axis=-1)
+
+        self.x_test = np.load(self.dataset_folder + 'test_features.npy')  # data testing
         self.y_test_strings = np.expand_dims(np.load(self.dataset_folder + 'test_labels.npy'), axis=-1)
 
         # create a encoder, sparse output must be disabled to get the intended output format
@@ -142,14 +162,14 @@ class FullDataset(Dataset):
         self.time_series_depth = self.x_train.shape[2]
 
         # get the unique classes and the corresponding number
-        self.classes = np.unique(np.concatenate((self.y_train_strings, self.y_test_strings), axis=0))
-        self.classes_Unique_oneHotEnc = one_hot_encoder.transform(np.expand_dims(self.classes, axis=1))
-        self.num_classes = self.classes.size
+        self.classes_total = np.unique(np.concatenate((self.y_train_strings, self.y_test_strings), axis=0))
+        self.classes_Unique_oneHotEnc = one_hot_encoder.transform(np.expand_dims(self.classes_total, axis=1))
+        self.num_classes = self.classes_total.size
 
         # Create two dictionaries to link/associate each class with all its training examples
         for i in range(self.num_classes):
-            self.classIdx_to_trainExamplIdxPos[i] = np.argwhere(self.y_train[:, i] > 0)
-            self.classIdx_to_classString[i] = self.classes[i]
+            self.class_idx_to_ex_idxs_train[i] = np.argwhere(self.y_train[:, i] > 0)
+            self.class_idx_to_class_string[i] = self.classes_total[i]
 
         # create/load auxiliary information about the case (in addition to the sensor data)
         # for test purposes, equal to the one-hot-encoded labels
@@ -158,14 +178,13 @@ class FullDataset(Dataset):
 
         # collect number of instances for each class in training and test
         self.y_train_strings_unique, counts = np.unique(self.y_train_strings, return_counts=True)
-        self.y_train_classString_numOfInstances = np.asarray((self.y_train_strings_unique, counts)).T
+        self.num_instances_by_class_train = np.asarray((self.y_train_strings_unique, counts)).T
         self.y_test_strings_unique, counts = np.unique(self.y_test_strings, return_counts=True)
-        self.y_test_classString_numOfInstances = np.asarray((self.y_test_strings_unique, counts)).T
+        self.num_instances_by_class_test = np.asarray((self.y_test_strings_unique, counts)).T
 
         # calculate the number of classes that are the same in test and train
-        self.y_strings_classesInBoth = np.intersect1d(self.y_test_classString_numOfInstances[:, 0],
-                                       self.y_train_classString_numOfInstances[:, 0])
-
+        self.classes_in_both = np.intersect1d(self.num_instances_by_class_test[:, 0],
+                                              self.num_instances_by_class_train[:, 0])
 
         # data
         # 1. dimension: example
@@ -179,7 +198,7 @@ class FullDataset(Dataset):
         print('Classes used in training: ', len(self.y_train_strings_unique)," :",self.y_train_strings_unique)
         print()
         print('Classes used in test: ', len(self.y_test_strings_unique)," :", self.y_test_strings_unique)
-        #print(self.classes)
+        print('Classes in total: ', self.classes_total)
         print()
 
     def encode(self, encoder, encode_test_data=False):
@@ -214,13 +233,13 @@ class FullDataset(Dataset):
 
         return Dataset.draw_from_ds(self, ds_y, num_instances, is_positive)
 
-    def draw_pair_by_ClassIdx(self, is_positive, from_test, classIdx):
+    def draw_pair_by_class_idx(self, is_positive, from_test, class_idx):
 
         # select dataset depending on parameter
         ds_y = self.y_test if from_test else self.y_train
         num_instances = self.num_test_instances if from_test else self.num_train_instances
 
-        return Dataset.draw_from_ds(self, ds_y, num_instances, is_positive, classIdx)
+        return Dataset.draw_from_ds(self, ds_y, num_instances, is_positive, class_idx)
 
     def draw_pair_cbs(self, is_positive, indices_positive):
 

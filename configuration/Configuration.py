@@ -3,6 +3,7 @@ import json
 import pandas as pd
 
 
+# TODO Rearrange based on commonly changed values
 class Configuration:
 
     def __init__(self, dataset_to_import=0):
@@ -10,27 +11,34 @@ class Configuration:
         # neural network
         ###
 
-        # now a hyper parameter
-        # self.encoder_variants = ['cnn', 'rnn', 'tcn']
-        # self.encoder_variant = self.encoder_variants[2]
-
         # architecture independent of whether snn or cbs is used
         # standard = classic snn behaviour, context vectors calculated each time, also multiple times for the example
         # fast = encoding of case base only once, example also only once
         # ffnn = uses ffnn as distance measure
         # simple = mean absolute difference as distance measure instead of the ffnn
         self.architecture_variants = ['standard_simple', 'standard_ffnn', 'fast_simple', 'fast_ffnn']
-        self.architecture_variant = self.architecture_variants[0]
+        self.architecture_variant = self.architecture_variants[3]
+
         # TODO jaccard not working
         self.simple_Distance_Measures = ['abs_mean', 'euclidean', 'dot_product', 'cosine', 'jaccard']
-        self.simple_Distance_Measure = self.simple_Distance_Measures[3]
+        self.simple_Distance_Measure = self.simple_Distance_Measures[0]
 
-        # TODO Needs to be changed to folder if every encoder should use different hyperparameters
-        # hyperparameter file to use
-        self.hyper_file = '../configuration/hyperparameter_combinations/' + 'ba_cnn.json'  # 'tcn.json'
+        ###
+        # hyperparameters
+        ###
+
+        self.hyper_file_folder = '../configuration/hyperparameter_combinations/'
         self.use_hyper_file = True
 
-        # Choose a loss function
+        # if enabled each case handler of a cbs will use individual hyperparameters
+        # no effect on snn architecture
+        self.use_individual_hyperparameters = True
+
+        # if use_individual_hyperparameters = false interpreted as a single json file, else as a folder
+        # containing json files named after the cases they should be used for (see all_cases below for correct names)
+        self.hyper_file = self.hyper_file_folder + 'individual_hyperparameters_test'
+
+        # choose a loss function
         # TODO: TripletLoss, Distance-Based Logistic Loss
         self.loss_function_variants = ['binary_cross_entropy', 'constrative_loss']
         self.type_of_loss_function = self.loss_function_variants[0]
@@ -67,7 +75,7 @@ class Configuration:
         all_cases = ['no_failure', 'txt_18_comp_leak', 'txt_17_comp_leak', 'txt15_m1_t1_high_wear',
                      'txt15_m1_t1_low_wear', 'txt15_m1_t2_wear', 'txt16_m3_t1_high_wear', 'txt16_m3_t1_low_wear',
                      'txt16_m3_t2_wear', 'txt16_i4']
-        self.cases_used = ['txt16_m3_t2_wear', 'txt16_i4', 'txt15_m1_t1_low_wear', 'txt15_m1_t2_wear']
+        self.cases_used = ['txt16_m3_t2_wear','txt16_i4']
 
         ###
         # kafka / real time classification
@@ -97,7 +105,7 @@ class Configuration:
         # case base
         ###
         # parameter to control the size of data used by inference
-        self.use_case_base_extraction_for_inference = True # default False
+        self.use_case_base_extraction_for_inference = False  # default False
 
         # parameter to control the size of data / examples used by inference for similiarity calculation
         self.use_batchsize_for_inference_sim_calculation = True # default False
@@ -124,7 +132,7 @@ class Configuration:
         self.models_folder = '../data/trained_models/'
 
         # path and file name to the specific model that should be used for testing and live classification
-        self.filename_model_to_use = 'temp_snn_model_12-26_04-56-11_epoch-399900'
+        self.filename_model_to_use = 'temp_cbs_model_12-27_14-55-29_epoch-300'
         self.directory_model_to_use = self.models_folder + self.filename_model_to_use + '/'
 
         # folder where the preprocessed training and test data for the neural network should be stored
@@ -137,11 +145,14 @@ class Configuration:
         self.filename_pkl = 'export_data.pkl'
         self.filename_pkl_cleaned = 'cleaned_data.pkl'
 
-        # folder where the reduced training data set aka. case base is safed to
+        # folder where the reduced training data set aka. case base is saved to
         self.case_base_folder = '../data/case_base/'
 
-        # folder where text files with extracted cases are safed to
+        # folder where text files with extracted cases are saved to, for export
         self.cases_folder = '../data/cases/'
+
+        # file from which the case information should be loaded, used in dataset creation
+        self.case_file = '../configuration/cases_refined_final_20-12-19_wFailure.csv'
 
         ##
         # lists of topics separated by types that need different import variants
@@ -185,7 +196,7 @@ class Configuration:
         ###
 
         # value is used to ensure a constant frequency of the measurement time points
-        self.resampleFrequency = "2ms" # need to be the same for DataImport as well as DatasetCreation
+        self.resample_frequency = "2ms"  # need to be the same for DataImport as well as DatasetCreation
 
         # define the length (= the number of timestamps)
         # of the time series generated for training & live classification
@@ -195,8 +206,9 @@ class Configuration:
         self.interval_in_seconds = 5
 
         # to some extent the time series in each examples overlaps to another one
-        self.use_over_lapping_windows = True , # default: False if true: interval in seconds is not considered, just time series length
-        self.over_lapping_window_interval_in_seconds = 1 #  # only used if overlapping windows is true
+        # default: False if true: interval in seconds is not considered, just time series length
+        self.use_over_lapping_windows = True
+        self.over_lapping_window_interval_in_seconds = 1  # only used if overlapping windows is true
 
         # configure the motor failure parameters used in case extraction
         self.split_t1_high_low = True
@@ -314,19 +326,19 @@ class Configuration:
         datasets = []
         number_to_array = {}
 
-        with open('../configuration/cases_refined_final_20-12-19_wFailure.csv', 'r') as file:
+        with open(self.case_file, 'r') as file:
             for line in file.readlines():
                 parts = line.split(',')
                 parts = [part.strip(' ') for part in parts]
-                #print("parts: ", parts)
-                #dataset, case, start, end = parts
+                # print("parts: ", parts)
+                # dataset, case, start, end = parts
                 dataset = parts[0]
                 case = parts[1]
                 start = parts[2]
                 end = parts[3]
-                failureTime = parts[4].rstrip()
+                failure_time = parts[4].rstrip()
 
-                timestamp = (gen_timestamp(case, start, end, failureTime))
+                timestamp = (gen_timestamp(case, start, end, failure_time))
 
                 if dataset in number_to_array.keys():
                     number_to_array.get(dataset).append(timestamp)
@@ -340,11 +352,11 @@ class Configuration:
         self.cases_datasets = datasets
 
 
-def gen_timestamp(label: str, start: str, end: str, failureTime: str):
+def gen_timestamp(label: str, start: str, end: str, failure_time: str):
     start_as_time = pd.to_datetime(start, format='%Y-%m-%d %H:%M:%S.%f')
     end_as_time = pd.to_datetime(end, format='%Y-%m-%d %H:%M:%S.%f')
-    if failureTime != "no_failure" :
-        failure_as_time = pd.to_datetime(failureTime, format='%Y-%m-%d %H:%M:%S')
+    if failure_time != "no_failure":
+        failure_as_time = pd.to_datetime(failure_time, format='%Y-%m-%d %H:%M:%S')
     else:
         failure_as_time = ""
 

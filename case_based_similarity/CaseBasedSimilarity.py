@@ -26,7 +26,6 @@ class CBS(AbstractSimilarityMeasure):
         with contextlib.redirect_stdout(None):
             self.initialise_case_handlers()
 
-        # TODO Test what happens if config value < 0, should be fine though
         self.gpus = tf.config.experimental.list_logical_devices('GPU')
         self.nbr_gpus_used = config.max_gpus_used if 1 <= config.max_gpus_used < len(self.gpus) else len(self.gpus)
         self.gpus = self.gpus[0:self.nbr_gpus_used]
@@ -51,8 +50,6 @@ class CBS(AbstractSimilarityMeasure):
         for case in features_cases.keys():
             print('Creating case handler for case', case)
 
-            # TODO different hyperparameters depending on the case could be implemented here
-            # should be implemented using another dictionary case -> hyper parameter file name
             relevant_features = features_cases.get(case)
 
             dataset = CaseSpecificDataset(self.config.training_data_folder, self.config, case, relevant_features)
@@ -81,17 +78,16 @@ class CBS(AbstractSimilarityMeasure):
 
     def load_model(self, model_folder=None, training=None):
 
-        # suppress output which would contain the same model info for each handler
         for case_handler in self.case_handlers:
             case_handler: CaseHandler = case_handler
             print('Creating case handler for ', case_handler.dataset.case)
-            directory = self.config.directory_model_to_use + self.config.subdirectories_by_case.get(
-                case_handler.dataset.case) + '/'
-            case_handler.load_model(model_folder=directory)
-            print()
+
+            case_handler.load_model(is_cbs=True, case=case_handler.dataset.case)
+            case_handler.print_detailed_model_info()
+
+        print()
 
     def encode_datasets(self):
-
         print('Encoding of datasets started.')
 
         duration = 0
@@ -126,7 +122,7 @@ class CBS(AbstractSimilarityMeasure):
                 gpu_index = 0
 
                 while gpu_index < self.nbr_gpus_used and ch_index < self.number_of_cases:
-                    thread = GetSimThread(self.case_handlers[ch_index], gpu_index, example)
+                    thread = GetSimThread(self.case_handlers[ch_index], self.gpus[gpu_index], example)
                     thread.start()
                     threads.append(thread)
 
@@ -167,8 +163,6 @@ class CaseHandlerHelper:
 
     # config and training are placeholders for multiple inheritance to work
     def __init__(self, dataset: CaseSpecificDataset):
-        print('helper init called')
-
         self.dataset: CaseSpecificDataset = dataset
         self.print_case_handler_info()
 

@@ -110,6 +110,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
             input_pairs = np.zeros((2 * batch_size, self.hyper.time_series_length,
                                     self.hyper.time_series_depth)).astype('float32')
 
+            # TODO This will break for cbs, x_auxCaseVector_test not set in CaseSpecificDataset
             if self.hyper.encoder_variant in ['cnnwithclassattention', 'cnn1dwithclassattention']:
                 auxiliaryInput = np.zeros((2 * batch_size, self.dataset.x_auxCaseVector_test.shape[1]))
 
@@ -154,22 +155,24 @@ class SimpleSNN(AbstractSimilarityMeasure):
         else:
             sizeOfInput = batch.shape[0] // 2
 
-        sims_batch = tf.map_fn(lambda pair_index: self.get_distance_pair(context_vectors, pair_index),
+        sims_batch = tf.map_fn(lambda pair_index: self.get_sim_pair(context_vectors, pair_index),
                                tf.range(sizeOfInput, dtype=tf.int32), back_prop=True, dtype=tf.float32)
         # transform distances into a similarity measure
         # Direkt zur Distanz/Ähnlichkeitsbrechnung hinzugefügt sims_batch = tf.exp(-distances_batch)
 
         return sims_batch
 
-    # todo: rename distance in similarity
     @tf.function
-    def get_distance_pair(self, context_vectors, pair_index):
+    def get_sim_pair(self, context_vectors, pair_index):
         # if a concat layer is used in the cnn1dclassattention, then context vectors need to be reshaped from 2d to 3d
         # context_vectors = tf.reshape(context_vectors,[context_vectors.shape[0],context_vectors.shape[1],1])
 
         a = context_vectors[2 * pair_index, :, :]
         b = context_vectors[2 * pair_index + 1, :, :]
         # print("a.shape: ", a.shape)
+
+        # TODO Implement as method call and fix in fast version
+        #  tf.exp() was added here directly
 
         # simple similarity measure:
         if self.config.simple_Distance_Measure == "abs_mean":
@@ -198,7 +201,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
             fp = tf.reduce_sum(tf.multiply(a, b), 1)
             return 1 - (tp / (tp + fn + fp))
         else:
-            print("Distance Measure is not implemented.")
+            raise ValueError('Distance Measure is not implemented.')
         return sim_example
 
     def print_learned_case_vectors(self, num_of_max_pos=5):
@@ -209,7 +212,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
         # Get positions with maximum values
         max_pos = np.argsort(-case_embeddings, axis=1)  # [::-1]  # np.argmax(case_embeddings, axis=1)
         min_pos = np.argsort(case_embeddings, axis=1)  # [::-1]  # np.argmax(case_embeddings, axis=1)
-        for i in self.dataset.classes:
+        for i in self.dataset.classes_total:
             with np.printoptions(precision=3, suppress=True):
                 # Get positions with maximum values
                 row = np.array(case_embeddings[cnt, :])
@@ -226,7 +229,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
                                                             training=self.training)
         print(case_matrix)
         # Get positions with maximum values
-        for i in self.dataset.classes:
+        for i in self.dataset.classes_total:
             with np.printoptions(precision=3, suppress=True):
                 # Get positions with maximum values
                 matrix = np.array(case_matrix[cnt, :, :])
@@ -234,23 +237,37 @@ class SimpleSNN(AbstractSimilarityMeasure):
                 plt.savefig(i + '_matrix.png')
                 cnt = cnt + 1
 
-    def load_model(self, model_folder=None, training=None):
-
-        # TODO cant use == simple case handler because circle decencies
-        # check if working and change to subdirectory
-        # if self.training is False and type(self) == SimpleCaseHandler and model_folder is None:
-        #    raise AttributeError('Model folder must be specified if loading a case handler')
-        training = self.training if training is None else training
-
-        model_folder = self.config.directory_model_to_use if model_folder is None else model_folder
+    def load_model(self, is_cbs=False, case='', cont=False):
 
         self.hyper = Hyperparameters()
 
-        if training:
-            self.hyper.load_from_file(self.config.hyper_file, self.config.use_hyper_file)
+        model_folder = ''
+        file_name = ''
+
+        if is_cbs:
+            if self.config.use_individual_hyperparameters:
+                if self.training:
+                    model_folder = self.config.hyper_file + '/'
+                    file_name = case
+
+                else:
+                    model_folder = self.config.directory_model_to_use + case + '_model/'
+                    file_name = case
+            else:
+                if self.training:
+                    file_name = self.config.hyper_file
+                else:
+                    model_folder = self.config.directory_model_to_use + case + '_model/'
+                    file_name = case
         else:
-            # maybe add filename to config
-            self.hyper.load_from_file(model_folder + 'hyperparameters_used.json', True)
+            if self.training and self.config.use_hyper_file:
+                file_name = self.config.hyper_file
+            else:
+                # if testing a snn use the json file with default name in the model directory
+                model_folder = self.config.directory_model_to_use
+                file_name = 'hyperparameters_used.json'
+
+        self.hyper.load_from_file(model_folder + file_name)
 
         self.hyper.set_time_series_properties(self.dataset.time_series_length, self.dataset.time_series_depth)
 
@@ -274,7 +291,8 @@ class SimpleSNN(AbstractSimilarityMeasure):
 
         self.encoder.create_model()
 
-        if not training:
+        # load weights if snn that isn't training
+        if cont or (not self.training and not is_cbs):
             self.encoder.load_model_weights(model_folder)
 
         # These variants also need a ffnn
@@ -286,7 +304,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
             self.ffnn = FFNN(self.hyper, input_shape_ffnn)
             self.ffnn.create_model()
 
-            if not training:
+            if cont or (not self.training and not is_cbs):
                 self.ffnn.load_model_weights(model_folder)
 
     def print_detailed_model_info(self):
@@ -308,9 +326,8 @@ class SNN(SimpleSNN):
             self.load_model()
 
     # noinspection DuplicatedCode
-    # todo: rename distance in similarity
     @tf.function
-    def get_distance_pair(self, context_vectors, pair_index):
+    def get_sim_pair(self, context_vectors, pair_index):
         a = context_vectors[2 * pair_index, :, :]
         b = context_vectors[2 * pair_index + 1, :, :]
 
@@ -396,14 +413,14 @@ class FastSimpleSNN(SimpleSNN):
     def get_sims_section(self, section_train, encoded_example):
 
         # get the distances for the hole batch by calculating it for each pair, dtype is necessary
-        distances_batch = tf.map_fn(lambda index: self.get_distance_pair(section_train[index], encoded_example),
+        distances_batch = tf.map_fn(lambda index: self.get_sim_pair(section_train[index], encoded_example),
                                     tf.range(section_train.shape[0], dtype=tf.int32), back_prop=True, dtype='float32')
         sims_batch = tf.exp(-distances_batch)
 
         return sims_batch
 
     @tf.function
-    def get_distance_pair(self, a, b):
+    def get_sim_pair(self, a, b):
 
         # simple similarity measure, mean of absolute difference
         diff = tf.abs(a - b)
@@ -429,7 +446,7 @@ class FastSNN(FastSimpleSNN):
 
     # noinspection DuplicatedCode
     @tf.function
-    def get_distance_pair(self, a, b):
+    def get_sim_pair(self, a, b):
         indices_a = tf.range(a.shape[0])
         indices_a = tf.tile(indices_a, [a.shape[0]])
         a = tf.gather(a, indices_a)
@@ -454,5 +471,6 @@ class FastSNN(FastSimpleSNN):
 
     def print_detailed_model_info(self):
         print('')
+        self.encoder.print_model_info()
         self.ffnn.print_model_info()
         print('')

@@ -16,8 +16,7 @@ from configuration.Configuration import Configuration
 
 # In progress. For visualization of encoded data of an SNN using T-SNE or PCA.
 if __name__ == '__main__':
-
-    # TODO Test if working
+    os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
     config = Configuration()
     config.architecture_variant = config.architecture_variants[0]
@@ -34,17 +33,18 @@ if __name__ == '__main__':
     x_test_encoded = dataset.x_test
     x_train_labels = dataset.y_train_strings
     x_test_labels = dataset.y_test_strings
+
     print("Loaded encoded data: ", x_train_encoded.shape, " ", x_test_encoded.shape)
 
     # Encoding / renaming of labels from string value (e.g. no error, ....) to integer (e.g. 0)
     le = preprocessing.LabelEncoder()
-    x_testTrain_labes = np.concatenate((x_train_labels, x_test_labels),
-                                       axis=0)
-    le.fit(x_testTrain_labes)
+    x_test_train_labels = np.concatenate((x_train_labels, x_test_labels),
+                                         axis=0)
+    le.fit(x_test_train_labels)
     numOfClasses = le.classes_.size
-    print("Number of classes detected: ", numOfClasses, " .All classes: ", le.classes_)
+    print("Number of classes detected: ", numOfClasses, ". \nAll classes: ", le.classes_)
     unique_labels_EncodedAsNumber = le.transform(le.classes_)  # each label encoded as number
-    x_trainTest_labels_EncodedAsNumber = le.transform(x_testTrain_labes)
+    x_trainTest_labels_EncodedAsNumber = le.transform(x_test_train_labels)
 
     # Converting / reshaping 3d encoded features to 2d (required as TSNE/PCA input)
     x_train_encoded_reshapedAs2d = x_train_encoded.reshape(
@@ -53,23 +53,22 @@ if __name__ == '__main__':
         [x_test_encoded.shape[0], x_test_encoded.shape[1] * x_test_encoded.shape[2]])
     print("Reshaped encoded data shape train: ", x_train_encoded_reshapedAs2d.shape, ", test: ",
           x_test_encoded_reshapedAs2d.shape)
+
     # Concatenate train and test data into one matrix
     x_testTrain_encoded_reshapedAs2d = np.concatenate((x_train_encoded_reshapedAs2d, x_test_encoded_reshapedAs2d),
                                                       axis=0)
 
     # Reducing dimensionality with TSNE or PCA
-    # X_embedded = TSNE(n_components=2, perplexity=10.0, learning_rate=10, early_exaggeration=30, n_iter=1000,
-    #                  random_state=123).fit_transform(x_train_encoded_reshapedAs2d)
+    X_embedded = TSNE(n_components=2, perplexity=10.0, learning_rate=10, early_exaggeration=30, n_iter=1000,
+                      random_state=123).fit_transform(x_train_encoded_reshapedAs2d)
     # X_embedded = TSNE(n_components=2, random_state=123).fit_transform(x_testTrain_encoded_reshapedAs2d)
     # X_embedded = PCA(n_components=2, random_state=123).fit_transform(x_train_encoded_reshapedAs2d)
 
-    dt_string = datetime.now().strftime("%m-%d_%H-%M-%S")
-    # np.save(trainingDataEncodedFolder + 'reducedTestFeatures4Viz_'+dt_string+'_'+config.filename_model_to_use+'.npy', X_embedded)
-
-    X_embedded = np.load(
-        '../data/visualizations/' + "reducedTestFeatures4Viz_09-04_13-00-35_ba_cnn_378200_96_percent.npy").astype(
-        'float32')
-    print("X_embedded shape: ", X_embedded.shape)
+    # dt_string = datetime.now().strftime("%m-%d_%H-%M-%S")
+    # file_name = '../data/visualizations/' + "reducedTestFeaturesViz.npy"
+    # np.save(file_name, X_embedded)
+    # X_embedded = np.load(file_name).astype('float32')
+    # print("X_embedded shape: ", X_embedded.shape)
     # print("X_embedded:", X_embedded[0:10,:])
     # Defining the color for each class
 
@@ -89,6 +88,7 @@ if __name__ == '__main__':
     colors[9] = np.array([255 / 256, 99 / 256, 71 / 256, 1])  # txt_18_comp_leak
     # Generating the plot
     rowCounter = 0
+
     for i, u in enumerate(unique_labels_EncodedAsNumber):
         xi = [X_embedded[j, 0] for j in range(x_train_encoded.shape[0]) if x_trainTest_labels_EncodedAsNumber[j] == u]
         yi = [X_embedded[j, 1] for j in range(x_train_encoded.shape[0]) if x_trainTest_labels_EncodedAsNumber[j] == u]
