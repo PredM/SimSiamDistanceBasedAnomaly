@@ -25,7 +25,7 @@ class Inference:
         # rows contain the classes including a column for combined accuracy
         classes = list(self.dataset.y_test_strings_unique)
         index = classes + ['combined']
-        cols = ['TP','FP','TN','FN', 'total','FPR','TPR', 'AUC', 'accuracy']
+        cols = ['TP','FP','TN','FN', 'total','FPR','TPR', 'AUC', 'ACC']
         self.results = pd.DataFrame(0, index=np.arange(1, len(index) + 1), columns=np.arange(len(cols)))
         self.results.set_axis(cols, 1, inplace=True)
         self.results['classes'] = index
@@ -136,13 +136,10 @@ class Inference:
 
             #Calculate false positive rate (FPR) and true positive rate (TPR)
             fpr, tpr, thresholds = metrics.roc_curve(np.stack(self.y_true, axis=0), np.stack(self.y_pred_sim, axis=0), pos_label=class_in_test)
-            #print("ROC:", metrics.roc_curve(np.stack(self.y_true, axis=0), np.stack(self.y_pred_sim, axis=0), pos_label=class_in_test))
-            #print("fpr:",fpr)
-            #print(tpr)
-            #print(thresholds)
-            self.results.loc[class_in_test, 'FPR'] =  true_negatives / negatives
+            self.results.loc[class_in_test, 'FPR'] = true_negatives / negatives
             self.results.loc[class_in_test, 'TPR'] = true_positives / positives
             self.results.loc[class_in_test, 'AUC'] = metrics.auc(fpr, tpr)
+            #self.results.loc[class_in_test, 'ROCAUC'] = metrics.roc_auc_score(np.stack(self.y_true, axis=0), np.stack(self.y_pred_sim, axis=0)) ValueError: multiclass format is not supported
 
         self.results.loc['combined', 'TP'] = self.results['TP'].sum()
         self.results.loc['combined', 'TN'] = self.results['TN'].sum()
@@ -150,8 +147,8 @@ class Inference:
         self.results.loc['combined', 'FN'] = self.results['FN'].sum()
 
         # calculate the classification accuracy for all classes and save in the intended column
-        self.results['accuracy'] = self.results['TP'] / self.results['total']
-        self.results['accuracy'] = self.results['accuracy'].fillna(0) * 100
+        self.results['ACC'] = (self.results['TP']+self.results['TN'])  / self.results['total']
+        self.results['ACC'] = self.results['ACC'].fillna(0) * 100
 
         # print the result of completed inference process
         print('-------------------------------------------------------------')
