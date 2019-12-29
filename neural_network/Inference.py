@@ -25,12 +25,12 @@ class Inference:
         # rows contain the classes including a column for combined accuracy
         classes = list(self.dataset.y_test_strings_unique)
         index = classes + ['combined']
-        cols = ['TP','FP','TN','FN', 'total','FPR','TPR', 'AUC', 'ACC']
+        cols = ['TP','FP','TN','FN', '#Examples','FPR','TPR', 'AUC', 'ACC']
         self.results = pd.DataFrame(0, index=np.arange(1, len(index) + 1), columns=np.arange(len(cols)))
         self.results.set_axis(cols, 1, inplace=True)
         self.results['classes'] = index
         self.results.set_index('classes', inplace=True)
-        self.results.loc['combined', 'total'] = self.dataset.num_test_instances
+        self.results.loc['combined', '#Examples'] = self.dataset.num_test_instances
         # Auxiliary dataframe multiclassresults with predicted class (provided by CB) as row
         # and actucal class (as given by the test set) as column, but for ease of use: all unique classes are used
         self.multiclassresults = pd.DataFrame(0, index=list(self.dataset.classes_total), columns=list(self.dataset.classes_total))
@@ -85,7 +85,7 @@ class Inference:
                 correct += 1
 
             # regardless of the result increase the number of examples with this class
-            self.results.loc[real, 'total'] += 1
+            self.results.loc[real, '#Examples'] += 1
             num_infers += 1
 
             # print result for this example
@@ -123,12 +123,12 @@ class Inference:
             true_positives = self.multiclassresults.loc[class_in_test, class_in_test]
             self.results.loc[class_in_test, 'TP'] = true_positives
             # Calculate false_positive for each class:
-            positives = self.multiclassresults.loc[class_in_test, 'sumRowWiseAxis1']
-            false_positives = positives - true_positives
+            rowSum = self.multiclassresults.loc[class_in_test, 'sumRowWiseAxis1']
+            false_positives = rowSum - true_positives
             self.results.loc[class_in_test, 'FP'] = false_positives
             # Calculate false_negative for each class:
-            negatives = self.multiclassresults.loc[class_in_test, 'sumColumnWiseAxis0']
-            false_negatives =  negatives - true_positives
+            columnSum = self.multiclassresults.loc[class_in_test, 'sumColumnWiseAxis0']
+            false_negatives =  columnSum - true_positives
             self.results.loc[class_in_test, 'FN'] = false_negatives
             # Calculate false_negative for each class:
             true_negatives = self.dataset.num_test_instances - true_positives - false_positives - false_negatives
@@ -136,8 +136,10 @@ class Inference:
 
             #Calculate false positive rate (FPR) and true positive rate (TPR)
             fpr, tpr, thresholds = metrics.roc_curve(np.stack(self.y_true, axis=0), np.stack(self.y_pred_sim, axis=0), pos_label=class_in_test)
-            self.results.loc[class_in_test, 'FPR'] = true_negatives / negatives
-            self.results.loc[class_in_test, 'TPR'] = true_positives / positives
+            self.results.loc[class_in_test, 'TPR'] = true_positives / (true_positives+false_negatives)
+            self.results.loc[class_in_test, 'FPR'] = false_positives / (false_positives+true_negatives)
+            self.results.loc[class_in_test, 'FNR'] = false_negatives / (true_positives + false_negatives)
+            self.results.loc[class_in_test, 'FDR'] = false_positives / (true_positives + false_positives)
             self.results.loc[class_in_test, 'AUC'] = metrics.auc(fpr, tpr)
             #self.results.loc[class_in_test, 'ROCAUC'] = metrics.roc_auc_score(np.stack(self.y_true, axis=0), np.stack(self.y_pred_sim, axis=0)) ValueError: multiclass format is not supported
 
@@ -147,7 +149,7 @@ class Inference:
         self.results.loc['combined', 'FN'] = self.results['FN'].sum()
 
         # calculate the classification accuracy for all classes and save in the intended column
-        self.results['ACC'] = (self.results['TP']+self.results['TN'])  / self.results['total']
+        self.results['ACC'] = (self.results['TP']+self.results['TN'])  / self.dataset.num_test_instances
         self.results['ACC'] = self.results['ACC'].fillna(0) * 100
 
         # print the result of completed inference process
