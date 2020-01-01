@@ -21,10 +21,10 @@ class Dataset:
         self.y_train_strings_unique = None
         self.y_test_strings_unique = None
         # Dictionary with key: class as integer and value: array with index positions
-        self.classIdx_to_trainExamplIdxPos = {}
+        self.class_idx_to_ex_idxs_train = {}
         # Dictonary with key: integer (0 to numOfClasses-1) which corresponds to one column entry
         # and value string (class name)
-        self.classIdx_to_classString = {}
+        self.class_idx_to_class_string = {}
         self.y_train_classString_numOfInstances = None # np array that contains the numer of instances to each classLabel
         self.y_test_classString_numOfInstances = None # np array that contains the numer of instances to each classLabel
         self.y_strings_classesInBoth = None # np array that contains a list classes in training and test
@@ -61,7 +61,7 @@ class Dataset:
                         return first_idx, second_idx
         else:
             # examples are drawn by a given class index
-            classIdxArr = self.classIdx_to_trainExamplIdxPos[classIdx]
+            classIdxArr = self.class_idx_to_ex_idxs_train[classIdx]
             first_rand_idx = np.random.randint(0, len(classIdxArr) - 1, size=1)[0]
             first_idx = classIdxArr[first_rand_idx]
             if is_positive:
