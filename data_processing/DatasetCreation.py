@@ -302,14 +302,23 @@ def main():
         gss = GroupShuffleSplit(n_splits=1, test_size=config.test_split_size, random_state=config.random_seed)
 
         # TODO Is this working correctly ? train_idx and test_idx only asigned in for loop
-        for train_idx, test_idx in gss.split(examples_array, labels_array, failure_times_array_groups):
-            pass  # print("TRAIN:", train_idx, "TEST:", test_idx)
+        #for train_idx, test_idx in gss.split(examples_array, labels_array, failure_times_array_groups):
+        #    pass  # print("TRAIN:", train_idx, "TEST:", test_idx)
+        split_idx = gss.split(examples_array, labels_array, failure_times_array_groups)
+        train_idx = split_idx[0]
+        test_idx = split_idx[0]
+
+        # TODO split test into validation and test set
 
         x_train, x_test = examples_array[train_idx], examples_array[test_idx]
         y_train, y_test = labels_array[train_idx], labels_array[test_idx]
+        failure_times_train, failure_times_test = failure_times_array[train_idx], failure_times_array[test_idx]
+        window_times_train, window_times_test = failure_times_array[train_idx], failure_times_array[test_idx]
 
         print("X_train: ", x_train.shape, " X_test: ", x_test.shape)
         print("Y_train: ", y_train.shape, " Y_train: ", y_test.shape)
+        print("Failure_times_train: ", failure_times_train.shape, " Failure_times_test: ", failure_times_test.shape)
+        print("Window_times_train: ", window_times_train.shape, " Window_times_test: ", window_times_test.shape)
         print("Classes in the train set: ", np.unique(y_train))
         print("Classes in the test set: ", np.unique(y_test))
         print("Classes in train and test set: ", np.unique(y_train, y_test))

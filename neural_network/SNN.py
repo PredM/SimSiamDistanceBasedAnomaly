@@ -6,7 +6,8 @@ import numpy as np
 from configuration.Configuration import Configuration
 from configuration.Hyperparameter import Hyperparameters
 from neural_network.Dataset import Dataset
-from neural_network.BasicNeuralNetworks import CNN, RNN, FFNN, TCN, CNNWithClassAttention, CNN1DWithClassAttention
+from neural_network.BasicNeuralNetworks import CNN, RNN, FFNN, TCN, CNNWithClassAttention, CNN1DWithClassAttention, \
+    CNN2D
 import matplotlib.pyplot as plt
 
 
@@ -21,7 +22,7 @@ def initialise_snn(config: Configuration, dataset, training):
     var = config.architecture_variant
 
     if training and var.endswith('simple') or not training and var == 'standard_simple':
-        print('Creating standard SNN with simple similarity measure')
+        print('Creating standard SNN with simple similarity measure: ', config.simple_Distance_Measure)
         return SimpleSNN(config, dataset, training)
 
     elif training and var.endswith('ffnn') or not training and var == 'standard_ffnn':
@@ -89,7 +90,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
             for i in range(batch_size):
                 input_pairs[2 * i] = example
                 input_pairs[2 * i + 1] = self.dataset.x_train[index + i]
-
+            input_pairs = input_pairs.reshape((input_pairs.shape[0],input_pairs.shape[1],input_pairs.shape[2],1))
             sims_batch = self.get_sims_batch(input_pairs)
 
             # collect similarities of all badges
@@ -137,6 +138,11 @@ class SimpleSNN(AbstractSimilarityMeasure):
                 # input_pairs = np.reshape(input_pairs,
                 # (input_pairs.shape[0], input_pairs.shape[1], input_pairs.shape[2], 1))
                 sims = self.get_sims_batch([input_pairs, auxiliaryInput])
+            elif self.hyper.encoder_variant == 'cnn2d':
+                print("here!")
+                input_pairs = np.reshape(input_pairs,
+                                         (input_pairs.shape[0], input_pairs.shape[1], input_pairs.shape[2], 1))
+                sims = self.get_sims_batch(input_pairs)
             else:
                 sims = self.get_sims_batch(input_pairs)
 
@@ -154,7 +160,6 @@ class SimpleSNN(AbstractSimilarityMeasure):
             sizeOfInput = batch[0].shape[0] // 2
         else:
             sizeOfInput = batch.shape[0] // 2
-
         sims_batch = tf.map_fn(lambda pair_index: self.get_sim_pair(context_vectors, pair_index),
                                tf.range(sizeOfInput, dtype=tf.int32), back_prop=True, dtype=tf.float32)
         # transform distances into a similarity measure
@@ -276,6 +281,8 @@ class SimpleSNN(AbstractSimilarityMeasure):
 
         if self.hyper.encoder_variant == 'cnn':
             self.encoder = CNN(self.hyper, input_shape_encoder)
+        elif self.hyper.encoder_variant == 'cnn2d':
+            self.encoder = CNN2D(self.hyper, input_shape_encoder)
         elif self.hyper.encoder_variant == 'cnnwithclassattention':
             # Consideration of an encoder with multiple inputs
             self.encoder = CNNWithClassAttention(self.hyper, [input_shape_encoder, self.dataset.y_train.shape[1]])
@@ -328,28 +335,52 @@ class SNN(SimpleSNN):
     # noinspection DuplicatedCode
     @tf.function
     def get_sim_pair(self, context_vectors, pair_index):
+        """Compute the warped distance between encoded time series a and b
+        with a neural network with each pair_index value
+
+        Args:
+          context_vectors: [2*B, T, C] float tensor, representations for B training pairs resulting in 2*B 
+          with length T and channel size C which both are resulting from the previous embedding / encoding. 
+          pair_index: [B] contains index integer values from 0 to B
+
+        Returns:
+          similarity: float scalar.  Similarity between context vector a and b
+        """
         a = context_vectors[2 * pair_index, :, :]
         b = context_vectors[2 * pair_index + 1, :, :]
+        # a and b shape: [T, C]
 
         indices_a = tf.range(a.shape[0])
         indices_a = tf.tile(indices_a, [a.shape[0]])
         a = tf.gather(a, indices_a)
+        # a shape: [T*T, C]
 
         indices_b = tf.range(b.shape[0])
         indices_b = tf.reshape(indices_b, [-1, 1])
         indices_b = tf.tile(indices_b, [1, b.shape[0]])
         indices_b = tf.reshape(indices_b, [-1])
         b = tf.gather(b, indices_b)
+        # b shape: [T*T, C]
 
         # input of FFNN are all time stamp combinations of a and b
         ffnn_input = tf.concat([a, b], axis=1)
+        # b shape: [T*T, 2*C] OR [T*T, 4*C]
 
+        # Predict the "relevance" of similarity between each time step
         ffnn = self.ffnn.model(ffnn_input, training=self.training)
+        # ffnn shape: [T*T, 1]
 
+        # Calculate absolute distances between each time step
         abs_distance = tf.abs(tf.subtract(a, b))
-        smallest_abs_difference = tf.expand_dims(tf.reduce_mean(abs_distance, axis=1), axis=-1)
+        # abs_distance shape: [T*T, C]
 
-        warped_dists = tf.multiply(smallest_abs_difference, ffnn)
+        # Compute the mean of absolute distances across each time step
+        timestepwise_mean_abs_difference = tf.expand_dims(tf.reduce_mean(abs_distance, axis=1), axis=-1)
+        # abs_distance shape: [T*T, 1]
+
+        # Scale / Weight (due to multiplication) the absolute distance of each time step combinations
+        # with the predicted "weight" for each time step
+        warped_dists = tf.multiply(timestepwise_mean_abs_difference, ffnn)
 
         return tf.exp(-tf.reduce_mean(warped_dists))
 

@@ -39,7 +39,7 @@ class NN:
             raise AttributeError('Model not initialised. Can not load weights.')
 
         if type(self) == CNN or type(self) == RNN or type(self) == TCN or type(self) == CNNWithClassAttention or type(
-                self) == CNN1DWithClassAttention:
+                self) == CNN1DWithClassAttention or type(self) == CNN2D:
             prefix = 'encoder'
         elif type(self) == FFNN:
             prefix = 'ffnn'
@@ -68,10 +68,7 @@ class FFNN(NN):
         super().__init__(hyperparameters, input_shape)
 
     def create_model(self):
-
-        print('Creating FFNN')
-        model = tf.keras.Sequential(name='FFNN')
-        # Input shape für 2dConv anpassen
+        print('Creating FFNN for input shape: ', self.input_shape)
 
         layers = self.hyper.ffnn_layers.copy()
 
@@ -81,18 +78,68 @@ class FFNN(NN):
 
         # first layer must be handled separately because the input shape parameter must be set
         num_units_first = layers.pop(0)
-        model.add(tf.keras.layers.Dense(units=num_units_first, activation=tf.keras.activations.relu,
-                                        input_shape=self.input_shape))
+        input = tf.keras.Input(shape=self.input_shape, name="Input")
+        #input1, input2 = tf.split(input,num_or_size_splits=2,axis=2)
+
+        x1 = tf.keras.layers.Dense(units=32, activation=tf.keras.activations.relu)(input)
+        #print(tf.shape(input1))
+        #inputAtt = tf.keras.Input(shape=self.input_shape[1], name="Input2")
+        x = tf.keras.layers.Dense(units=num_units_first, activation=tf.keras.activations.relu,
+                                        input_shape=self.input_shape)(input)
 
         for num_units in layers:
-            model.add(tf.keras.layers.Dense(units=num_units, activation=tf.keras.activations.relu))
+            x = tf.keras.layers.Dense(units=num_units, activation=tf.keras.activations.relu)(x)
 
         # regardless of the configured number of layers, add a layer with
         # a single neuron that provides the indicator function output.
-        model.add(tf.keras.layers.Dense(units=1, activation=tf.keras.activations.sigmoid))
+        output = tf.keras.layers.Dense(units=1, activation=tf.keras.activations.sigmoid)(x)
 
-        self.model = model
+        self.model = tf.keras.Model(inputs=input, outputs=output)
+class FFNN2(NN):
 
+    def __init__(self, hyperparameters, input_shape):
+        super().__init__(hyperparameters, input_shape)
+
+    def create_model(self):
+
+        print('Creating FFNN for input shape: ', self.input_shape)
+
+        layers = self.hyper.ffnn_layers.copy()
+
+        if len(layers) < 1:
+            print('FFNN with less than one layer is not possible')
+            sys.exit(1)
+
+        # first layer must be handled separately because the input shape parameter must be set
+        num_units_first = layers.pop(0)
+        input = tf.keras.Input(shape=self.input_shape, name="Input")
+        input1, input2 = tf.split(input,2,1)
+        print(tf.shape(input1))
+        #inputAtt = tf.keras.Input(shape=self.input_shape[1], name="Input2")
+        x = tf.keras.layers.Dense(units=num_units_first, activation=tf.keras.activations.relu,
+                                        input_shape=self.input_shape)(input)
+
+        for num_units in layers:
+            x = tf.keras.layers.Dense(units=num_units, activation=tf.keras.activations.relu)(x)
+
+        # regardless of the configured number of layers, add a layer with
+        # a single neuron that provides the indicator function output.
+        output = tf.keras.layers.Dense(units=1, activation=tf.keras.activations.sigmoid)(x)
+
+        self.model = tf.keras.Model(inputs=input, outputs=output)
+        '''
+        encodedTimeSeriesInputA = tf.keras.Input(shape=self.input_shape, name="InputTS")
+        attentionInputA = tf.keras.Input(shape=self.input_shape, name="InputAtt")
+        # encodedTimeSeriesInputB = tf.keras.Input(shape=(b.shape[0], b.shape[1]), name="InputTS")
+        # attentionInputB = tf.keras.Input(shape=(attentionB.shape[0], attentionB.shape[1]), name="InputAtt")
+        concatA = tf.keras.layers.concatenate([encodedTimeSeriesInputA, attentionInputA],1)
+        # concatB = tf.concat([encodedTimeSeriesInputB, attentionInputB], 1)
+        l1 = tf.keras.layers.Dense(64, activation='relu')(concatA)
+        l2 = tf.keras.layers.Dense(64, activation='relu')(l1)
+        l3 = tf.keras.layers.Dense(16, activation='relu')(l2)
+        self.modelAttEncoding = tf.keras.Model(inputs=[encodedTimeSeriesInputA, attentionInputA], outputs=l3)
+        print(self.modelAttEncoding.summary())
+        '''
 
 class RNN(NN):
 
@@ -404,6 +451,75 @@ class CNN(NN):
         model.add(tf.keras.layers.Dense(1, activation=tf.keras.activations.sigmoid))
         '''
         self.model = model
+
+class CNN2D(NN):
+
+    def __init__(self, hyperparameters, input_shape):
+        super().__init__(hyperparameters, input_shape)
+
+    def create_model(self):
+        '''
+        Based on https://www.ijcai.org/proceedings/2019/0932.pdf
+        '''
+        print('Creating CNN with 2d kernel encoder with an input shape: ', self.input_shape)
+        sensorDataInput = tf.keras.Input(shape=(self.input_shape[0], self.input_shape[1], 1), name="Input0")
+
+        layers = self.hyper.cnn2d_layers
+
+        if len(layers) < 1:
+            print('CNN encoder with less than one layer for 2d kernels is not possible')
+            sys.exit(1)
+
+        layer_properties = list(zip(self.hyper.cnn2d_layers, self.hyper.cnn2d_kernel_length, self.hyper.cnn2d_strides))
+
+        # creating CNN encoder for sensor data
+        for i in range(len(layer_properties)):
+            num_filter, filter_size, stride = layer_properties[i][0], layer_properties[i][1], layer_properties[i][2]
+
+            # first layer must be handled separately because the input shape parameter must be set
+            if i == 0:
+                conv_layer1 = tf.keras.layers.Conv2D(filters=num_filter, padding='VALID',
+                                                     kernel_size=(filter_size),
+                                                     strides=stride, input_shape=sensorDataInput.shape)
+                x = conv_layer1(sensorDataInput)
+            else:
+                conv_layer = tf.keras.layers.Conv2D(filters=num_filter, padding='VALID',
+                                                     kernel_size=(filter_size),
+                                                     strides=stride)
+                x = conv_layer(x)
+            x = tf.keras.layers.BatchNormalization()(x)
+            x = tf.keras.layers.ReLU()(x)
+
+        #x = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(x)
+
+        #conv1x1_layer = tf.keras.layers.Conv2D(filters=1, padding='VALID',
+        #                                     kernel_size=(1, 1),
+        #                                     strides=stride)
+        # x = conv1x1_layer(x)
+        # x = tf.keras.layers.ReLU()(x)
+        # reshape necessary to provide a 3d instead of 4 dim for the FFNN or 1D Conv operations on top
+        reshape = tf.keras.layers.Reshape((x.shape[1], x.shape[2]))
+        x = reshape(x)
+
+        if len(layers) < 1:
+            print('Attention: no one 1d conv on top of 2d conv is used!')
+            sys.exit(1)
+
+        layer_properties = list(zip(self.hyper.cnn_layers, self.hyper.cnn_kernel_length, self.hyper.cnn_strides))
+
+        # creating CNN encoder for sensor data
+        for i in range(len(layer_properties)):
+            num_filter, filter_size, stride = layer_properties[i][0], layer_properties[i][1], layer_properties[i][2]
+
+            conv_layer = tf.keras.layers.Conv1D(filters=num_filter, padding='VALID', kernel_size=filter_size,
+                                                    strides=stride)
+            x = conv_layer(x)
+            x = tf.keras.layers.BatchNormalization()(x)
+            x = tf.keras.layers.ReLU()(x)
+
+        x = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(x)
+
+        self.model = tf.keras.Model(inputs=sensorDataInput, outputs=x)
 
 
 class TemporalBlock(tf.keras.Model):

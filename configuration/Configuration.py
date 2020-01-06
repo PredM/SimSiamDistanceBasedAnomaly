@@ -36,7 +36,8 @@ class Configuration:
 
         # if use_individual_hyperparameters = false interpreted as a single json file, else as a folder
         # containing json files named after the cases they should be used for (see all_cases below for correct names)
-        self.hyper_file = self.hyper_file_folder + 'individual_hyperparameters_test'
+        # self.hyper_file = self.hyper_file_folder + 'individual_hyperparameters_test'
+        self.hyper_file = self.hyper_file_folder + 'ba_cnn.json'
 
         # choose a loss function
         # TODO: TripletLoss, Distance-Based Logistic Loss
@@ -106,6 +107,13 @@ class Configuration:
         ###
         # parameter to control the size of data used by inference
         self.use_case_base_extraction_for_inference = False  # default False
+
+        # parameter to control the size / number of the queries used for evaluation
+        self.use_only_failures_as_queries_for_inference = True  # default False
+
+        # parameter to control if and when a test is conducted through training
+        self.use_inference_test_during_training = True  # default False
+        self.test_during_training_every_x_epochs = 30000  # default False
 
         # parameter to control the size of data / examples used by inference for similiarity calculation
         self.use_batchsize_for_inference_sim_calculation = True # default False

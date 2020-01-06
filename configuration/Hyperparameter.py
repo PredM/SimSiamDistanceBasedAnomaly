@@ -9,7 +9,7 @@ class Hyperparameters:
         # Important: Variable names must match json file entries
         ##
 
-        self.encoder_variants = ['cnn', 'rnn', 'tcn', 'cnnwithclassattention', 'cnn1dwithclassattention']
+        self.encoder_variants = ['cnn', 'rnn', 'tcn', 'cnnwithclassattention', 'cnn1dwithclassattention', 'cnn2d']
         self.encoder_variant = None
 
         # Need to be changed after dataset was loaded
@@ -31,6 +31,10 @@ class Hyperparameters:
         self.cnn_layers = None
         self.cnn_kernel_length = None
         self.cnn_strides = None
+
+        self.cnn2d_layers = None
+        self.cnn2d_kernel_length = None
+        self.cnn2d_strides = None
 
         self.lstm_layers = None
 
@@ -67,6 +71,11 @@ class Hyperparameters:
         self.cnn_layers = data['cnn_layers']
         self.cnn_kernel_length = data['cnn_kernel_length']
         self.cnn_strides = data['cnn_strides']
+
+        if self.encoder_variant == "cnn2d":
+            self.cnn2d_layers = data['cnn2d_layers']
+            self.cnn2d_kernel_length = data['cnn2d_kernel_length']
+            self.cnn2d_strides = data['cnn2d_strides']
 
         self.lstm_layers = data['lstm_layers']
 

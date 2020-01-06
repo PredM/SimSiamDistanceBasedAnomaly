@@ -93,6 +93,7 @@ class FullDataset(Dataset):
 
         # dictionary with key: class as integer and value: array with index positions
         self.class_idx_to_ex_idxs_train = {}
+        self.class_idx_to_ex_idxs_test = {}
 
         # dictionary with key: integer (0 to numOfClasses-1) which corresponds to one column entry
         # and value string (class name)
@@ -169,6 +170,7 @@ class FullDataset(Dataset):
         # Create two dictionaries to link/associate each class with all its training examples
         for i in range(self.num_classes):
             self.class_idx_to_ex_idxs_train[i] = np.argwhere(self.y_train[:, i] > 0)
+            self.class_idx_to_ex_idxs_test[i] = np.argwhere(self.y_test[:, i] > 0)
             self.class_idx_to_class_string[i] = self.classes_total[i]
 
         # create/load auxiliary information about the case (in addition to the sensor data)

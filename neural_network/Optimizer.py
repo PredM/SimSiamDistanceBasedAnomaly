@@ -16,6 +16,7 @@ from configuration.Hyperparameter import Hyperparameters
 from neural_network.BasicNeuralNetworks import TCN
 
 from neural_network.Dataset import FullDataset
+from neural_network.Inference import Inference
 
 
 class Optimizer:
@@ -55,13 +56,12 @@ class Optimizer:
                         pass
 
     def update_single_model(self, model_input, true_similarities, model, optimizer, gradient_cap):
-        # print("model_input: ",tf.shape(model_input))
         with tf.GradientTape() as tape:
             pred_similarities = model.get_sims_batch(model_input)
 
             # Get parameters of subnet and ffnn (if complex sim measure)
             if self.config.architecture_variant in ['standard_ffnn', 'fast_ffnn']:
-                trainable_params = model.ffnn.model.trainable_variables + model.encoder.model.trainable_variables
+                trainable_params = model.ffnn.model.trainable_variables + model.encoder.model.trainable_variables #+ model.ffnn.modelAttEncoding.trainable_variables
             else:
                 trainable_params = model.encoder.model.trainable_variables
 
@@ -131,6 +131,12 @@ class SNNOptimizer(Optimizer):
 
         for epoch in range(current_epoch, self.architecture.hyper.epochs):
             self.single_epoch(epoch)
+            if self.config.use_inference_test_during_training and epoch != 0:
+                if epoch % self.config.test_during_training_every_x_epochs == 0:
+                    print("Inference at epoch: ", epoch)
+                    self.architecture
+                    inference = Inference(self.config, self.architecture, self.dataset)
+                    inference.infer_test_dataset()
 
     def single_epoch(self, epoch):
         """
@@ -200,6 +206,11 @@ class SNNOptimizer(Optimizer):
             # print("model_input: ", model_input.shape)
 
             batch_loss = self.update_single_model([model_input, model_input2], true_similarities, self.architecture,
+                                                  self.adam_optimizer, self.architecture.hyper.gradient_cap)
+        elif self.architecture.hyper.encoder_variant == 'cnn2d':
+            model_input = np.reshape(model_input,
+                                     (model_input.shape[0], model_input.shape[1], model_input.shape[2], 1))
+            batch_loss = self.update_single_model(model_input, true_similarities, self.architecture,
                                                   self.adam_optimizer, self.architecture.hyper.gradient_cap)
         else:
             batch_loss = self.update_single_model(model_input, true_similarities, self.architecture,

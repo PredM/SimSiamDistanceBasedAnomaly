@@ -38,8 +38,9 @@ class Inference:
         self.y_true = []
         self.y_pred = []
         self.y_pred_sim = []
-        # storing max similiarity of each class for each example for computing roc_auc_score
+        # storing max similarity of each class for each example for computing roc_auc_score
         self.y_predSimForEachClass = np.zeros([self.dataset.num_test_instances,len(classes)])
+        self.num_test_examples = 0 #num of examples used for testing
 
     def infer_test_dataset(self):
         correct, num_infers = 0, 0
@@ -51,8 +52,24 @@ class Inference:
         # self.architecture.printLearnedCaseMatrix()
         # self.architecture.printLearnedCaseVectors()
 
+        # Get all ids of failure cases
+        idx_examples = np.zeros((1), int)
+        idx_test_examples_query_pool = None
+        if self.config.use_only_failures_as_queries_for_inference:
+            idx_cnt = 0
+            for x in self.dataset.y_test_strings_unique:
+                if not x == 'no_failure':
+                    self.num_test_examples = self.num_test_examples + int(self.dataset.num_instances_by_class_test[idx_cnt][1])
+                    idx_examples = np.append(idx_examples, self.dataset.class_idx_to_ex_idxs_test[idx_cnt])
+                idx_cnt = idx_cnt + 1
+            idx_test_examples_query_pool = np.nditer(idx_examples)
+        else:
+            num_test_examples = self.dataset.num_test_instances
+            idx_test_examples_query_pool = range(self.dataset.num_test_instances)
+
         # infer all examples of the test data set
-        for idx_test in range(self.dataset.num_test_instances):
+        example_cnt=0
+        for idx_test in idx_test_examples_query_pool:
 
             max_sim = 0
             max_sim_index = 0
@@ -90,8 +107,8 @@ class Inference:
 
             # print result for this example
             example_results = [
-                ['Example:', str(idx_test + 1) + '/' + str(self.dataset.num_test_instances)],
-                ['Correctly classified:', str(correct) + '/' + str(idx_test + 1)],
+                ['Example:', str(example_cnt + 1) + '/' + str(self.num_test_examples)],
+                ['Correctly classified:', str(correct) + '/' + str(example_cnt + 1)],
                 ['Classified as:', max_sim_class],
                 ['Correct class:', real],
                 ['Similarity:', max_sim],
@@ -106,6 +123,7 @@ class Inference:
             for row in knn_results:
                 print("{: <3} {: <40} {: <20} {: <20}".format(*row))
             print()
+            example_cnt = example_cnt+1
 
         elapsed_time = time.perf_counter() - start_time
 
@@ -131,7 +149,7 @@ class Inference:
             false_negatives =  columnSum - true_positives
             self.results.loc[class_in_test, 'FN'] = false_negatives
             # Calculate false_negative for each class:
-            true_negatives = self.dataset.num_test_instances - true_positives - false_positives - false_negatives
+            true_negatives = self.num_test_examples - true_positives - false_positives - false_negatives
             self.results.loc[class_in_test, 'TN'] = true_negatives
 
             #Calculate false positive rate (FPR) and true positive rate (TPR)
@@ -149,7 +167,7 @@ class Inference:
         self.results.loc['combined', 'FN'] = self.results['FN'].sum()
 
         # calculate the classification accuracy for all classes and save in the intended column
-        self.results['ACC'] = (self.results['TP']+self.results['TN'])  / self.dataset.num_test_instances
+        self.results['ACC'] = (self.results['TP']+self.results['TN']) / self.num_test_examples
         self.results['ACC'] = self.results['ACC'].fillna(0) * 100
 
         # print the result of completed inference process
@@ -157,7 +175,7 @@ class Inference:
         print('Final Result:')
         print('-------------------------------------------------------------')
         print('Elapsed time:', round(elapsed_time, 4), 'Seconds')
-        print('Average time per example:', round(elapsed_time / self.dataset.num_test_instances, 4), 'Seconds')
+        print('Average time per example:', round(elapsed_time / self.num_test_examples, 4), 'Seconds')
         print('Classification accuracy split by classes:\n')
         print(self.results.to_string())
         print('-------------------------------------------------------------')
