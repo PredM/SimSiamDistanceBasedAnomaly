@@ -17,6 +17,7 @@ from neural_network.BasicNeuralNetworks import TCN
 
 from neural_network.Dataset import FullDataset
 from neural_network.Inference import Inference
+from neural_network.SNN import initialise_snn
 
 
 class Optimizer:
@@ -77,7 +78,7 @@ class Optimizer:
             grads = tape.gradient(loss, trainable_params)
 
             # Maybe change back to clipnorm = self.hyper.gradient_cap in adam initialisation
-            clipped_grads, _ = tf.clip_by_global_norm(grads, gradient_cap)
+            clipped_grads = grads #tf.clip_by_global_norm(grads, gradient_cap)
 
             # Apply the gradients to the trainable parameters
             optimizer.apply_gradients(zip(clipped_grads, trainable_params))
@@ -112,6 +113,9 @@ class SNNOptimizer(Optimizer):
         super().__init__(architecture, dataset, config)
         self.adam_optimizer = tf.keras.optimizers.Adam(learning_rate=self.architecture.hyper.learning_rate)
         self.train_loss_results = []
+        self.best_loss = 1000 #
+        self.stopping_step_counter = 0
+        self.dir_name_last_model_saved = None
 
     def optimize(self):
         current_epoch = 0
@@ -131,12 +135,29 @@ class SNNOptimizer(Optimizer):
 
         for epoch in range(current_epoch, self.architecture.hyper.epochs):
             self.single_epoch(epoch)
+
+            # Early stopping based on training loss decrease
+            if self.config.use_early_stopping:
+                if(self.train_loss_results[len(self.train_loss_results)-1] < self.best_loss):
+                    self.stopping_step_counter = 0
+                    self.best_loss = self.train_loss_results[len(self.train_loss_results)-1]
+                else:
+                    self.stopping_step_counter += 1
+                if self.stopping_step_counter >= self.config.early_stopping_if_no_loss_decrease_after_num_of_epochs:
+                    print("Training stopped at epoch ", epoch, " because loss did not decrease since ", self.stopping_step_counter, "epochs.")
+                    break
             if self.config.use_inference_test_during_training and epoch != 0:
                 if epoch % self.config.test_during_training_every_x_epochs == 0:
                     print("Inference at epoch: ", epoch)
-                    self.architecture
-                    inference = Inference(self.config, self.architecture, self.dataset)
+                    dataset2: FullDataset = FullDataset(self.config.training_data_folder, self.config, training=False)
+                    dataset2.load()
+                    self.config.directory_model_to_use = self.dir_name_last_model_saved
+                    print("self.dir_name_last_model_saved: ",self.dir_name_last_model_saved)
+                    print("self.config.filename_model_to_use: ", self.config.directory_model_to_use)
+                    architecture2 = initialise_snn(self.config, dataset2, False)
+                    inference = Inference(self.config, architecture2, dataset2)
                     inference.infer_test_dataset()
+
 
     def single_epoch(self, epoch):
         """
@@ -150,30 +171,46 @@ class SNNOptimizer(Optimizer):
         batch_true_similarities = []  # similarity label for each pair
         batch_pairs_indices = []  # index number of each example used in the training
 
-        # index numbers where the second is same as first (used for CNN with Att.)
+        # index numbers are the same for the first and the second (first is considered as known query, second unknown,
+        # used for CNN with Att.)
         batch_pairs_indices_firstUsedforSecond = []
 
+        # Generate a random vector that contains the number of classes that should be considered in the current batach
+        equal_class_part = 4 # 4 means approx. half of the batch contains no-failure, 1 and 2 uniform,
+        failureClassesToConsider = np.random.randint(low=0, high=len(self.dataset.y_train_strings_unique),
+                                                     size=self.architecture.hyper.batch_size // equal_class_part)
+        #print("failureClassesToConsider: ", failureClassesToConsider)
         # Compose batch
         # // 2 because each iteration one similar and one dissimilar pair is added
         for i in range(self.architecture.hyper.batch_size // 2):
             if self.config.equalClassConsideration:
-                pos_pair = self.dataset.draw_pair_by_class_idx(True, from_test=False,
-                                                               class_idx=(i % self.dataset.num_classes))
+                if(i < self.architecture.hyper.batch_size // equal_class_part):
+                    #print(i,": ", failureClassesToConsider[i-self.architecture.hyper.batch_size // 4])
+                    pos_pair = self.dataset.draw_pair_by_class_idx(True, from_test=False,
+                                                                class_idx=(failureClassesToConsider[i-self.architecture.hyper.batch_size // equal_class_part]))
+                                                               #class_idx=(i % self.dataset.num_classes))
+                else:
+                    pos_pair = self.dataset.draw_pair(True, from_test=False)
             else:
                 pos_pair = self.dataset.draw_pair(True, from_test=False)
             batch_pairs_indices.append(pos_pair[0])
             batch_pairs_indices.append(pos_pair[1])
+            #print("Pospair idx: ", self.dataset.y_train_strings[pos_pair[0]], " - ",self.dataset.y_train_strings[pos_pair[1]])
             batch_true_similarities.append(1.0)
             batch_pairs_indices_firstUsedforSecond.append(pos_pair[0])
             batch_pairs_indices_firstUsedforSecond.append(pos_pair[0])
 
             if self.config.equalClassConsideration:
-                neg_pair = self.dataset.draw_pair_by_class_idx(False, from_test=False,
-                                                               class_idx=(i % self.dataset.num_classes))
+                if(i < self.architecture.hyper.batch_size // equal_class_part):
+                    neg_pair = self.dataset.draw_pair_by_class_idx(False, from_test=False,
+                                                               class_idx=(failureClassesToConsider[i-self.architecture.hyper.batch_size // equal_class_part]))
+                else:
+                    neg_pair = self.dataset.draw_pair(False, from_test=False)
             else:
                 neg_pair = self.dataset.draw_pair(False, from_test=False)
             batch_pairs_indices.append(neg_pair[0])
             batch_pairs_indices.append(neg_pair[1])
+            #print("Negpair idx: ", self.dataset.y_train_strings[neg_pair[0]], " - ",self.dataset.y_train_strings[neg_pair[1]])
             batch_true_similarities.append(0.0)
             batch_pairs_indices_firstUsedforSecond.append(neg_pair[0])
             batch_pairs_indices_firstUsedforSecond.append(neg_pair[0])
@@ -241,6 +278,7 @@ class SNNOptimizer(Optimizer):
         dt_string = datetime.now().strftime("%m-%d_%H-%M-%S")
         dir_name = self.config.models_folder + '_'.join(['temp', 'snn', 'model', dt_string, epoch_string]) + '/'
         os.mkdir(dir_name)
+        self.dir_name_last_model_saved = dir_name
 
         # generate the file names and save the model files in the directory created before
         subnet_file_name = '_'.join(['encoder', self.architecture.hyper.encoder_variant, epoch_string]) + '.h5'

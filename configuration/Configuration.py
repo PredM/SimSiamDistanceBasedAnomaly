@@ -17,7 +17,11 @@ class Configuration:
         # ffnn = uses ffnn as distance measure
         # simple = mean absolute difference as distance measure instead of the ffnn
         self.architecture_variants = ['standard_simple', 'standard_ffnn', 'fast_simple', 'fast_ffnn']
-        self.architecture_variant = self.architecture_variants[3]
+        self.architecture_variant = self.architecture_variants[1]
+        # Most related work on time series with SNN use a fc layer at the end of a cnn to merge 1d-conv
+        # features of time steps. Seems to be useful for standard_simple architecture, integration as
+        # archticture variant will follow
+        self.add_fc_layer_cnn = False #Default: False
 
         # TODO jaccard not working
         self.simple_Distance_Measures = ['abs_mean', 'euclidean', 'dot_product', 'cosine', 'jaccard']
@@ -60,14 +64,14 @@ class Configuration:
         self.output_interval = 100
 
         # how many model checkpoints are kept
-        self.model_files_stored = 100
+        self.model_files_stored = 10
 
         # select which subset of features should be used for creating a dataset
         # Important: CBS will only function correctly if ALL_CBS or a superset of it is selected
         # ALL_CBS will use all feature of self.relevant_features, without consideration of the case structure
         # self.features_used will be assigned at config.json loading
         self.feature_variants = ['featuresBA', 'featuresAll', 'ALL_CBS']
-        self.feature_variant = self.feature_variants[2]
+        self.feature_variant = self.feature_variants[1]
         self.features_used = None
 
         # defines for which failure cases a case handler in the case based similarity measure is created,
@@ -106,14 +110,14 @@ class Configuration:
         # case base
         ###
         # parameter to control the size of data used by inference
-        self.use_case_base_extraction_for_inference = False  # default False
+        self.use_case_base_extraction_for_inference = True  # default False
 
         # parameter to control the size / number of the queries used for evaluation
-        self.use_only_failures_as_queries_for_inference = True  # default False
+        self.use_only_failures_as_queries_for_inference = False  # default False
 
         # parameter to control if and when a test is conducted through training
-        self.use_inference_test_during_training = True  # default False
-        self.test_during_training_every_x_epochs = 30000  # default False
+        self.use_inference_test_during_training = False  # default False
+        self.test_during_training_every_x_epochs = 10000  # default False
 
         # parameter to control the size of data / examples used by inference for similiarity calculation
         self.use_batchsize_for_inference_sim_calculation = True # default False
@@ -122,15 +126,25 @@ class Configuration:
         self.random_seed_index_selection = 42
 
         # the number of examples per class the training data set should be reduced to for the live classification
-        self.examples_per_class = 20
+        self.examples_per_class = 150
 
         # the k of the knn classifier used for live classification
-        self.k_of_knn = 5
+        self.k_of_knn = 10
 
-        # the batch for training is constructed based on the number of classes and
-        # not on the number of training examples contained in the training data set.
-        # the batch size must be at least twice as large as the number of training classes.
-        self.equalClassConsideration = False  # default: False
+        # The examples of a batch for training are selected based on the number of classes (=True)
+        # and not on the number of training examples contained in the training data set (=False).
+        # This means that each training batch contains almost examples from each class (practically
+        # upsampling of minority classes). Based on recommendation of lessons learned from successful siamese models:
+        # http://openaccess.thecvf.com/content_ICCV_2019/papers/Roy_Siamese_Networks_The_Tale_of_Two_Manifolds_ICCV_2019_paper.pdf
+        self.equalClassConsideration = True  # default: False
+        # If equalClassConsideration is true, then this parameter defines the proportion of examples
+        # based on class distribution and example distribution.
+        # Proportion = Batchjobsize/2/ThisFactor. E.g., 2 = class distribution only, 4 = half, 6 = 1/3, 8 = 1/4
+        self.upsampling_factor = 4 # Default: 4, means half / half
+
+        # Stops the training when a specific criterion no longer improves
+        self.use_early_stopping = False # default: False
+        self.early_stopping_if_no_loss_decrease_after_num_of_epochs = 1000
 
         ###
         # folders and file names

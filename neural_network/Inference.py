@@ -21,7 +21,7 @@ class Inference:
         self.architecture = architecture
         self.dataset: FullDataset = dataset
 
-        # creation of dataframe results in which the classification results are stored
+        # creation of dataframe in which the classification results are stored
         # rows contain the classes including a column for combined accuracy
         classes = list(self.dataset.y_test_strings_unique)
         index = classes + ['combined']
@@ -31,9 +31,9 @@ class Inference:
         self.results['classes'] = index
         self.results.set_index('classes', inplace=True)
         self.results.loc['combined', '#Examples'] = self.dataset.num_test_instances
-        # Auxiliary dataframe multiclassresults with predicted class (provided by CB) as row
+        # Auxiliary dataframe multi_class_results with predicted class (provided by CB) as row
         # and actucal class (as given by the test set) as column, but for ease of use: all unique classes are used
-        self.multiclassresults = pd.DataFrame(0, index=list(self.dataset.classes_total), columns=list(self.dataset.classes_total))
+        self.multi_class_results = pd.DataFrame(0, index=list(self.dataset.classes_total), columns=list(self.dataset.classes_total))
         # storing real, predicted label and similarity for each classification
         self.y_true = []
         self.y_pred = []
@@ -41,30 +41,42 @@ class Inference:
         # storing max similarity of each class for each example for computing roc_auc_score
         self.y_predSimForEachClass = np.zeros([self.dataset.num_test_instances,len(classes)])
         self.num_test_examples = 0 #num of examples used for testing
+        self.unique_test_failures = np.unique(self.dataset.failureTimes_test)
+        idx = np.where(np.char.find(self.unique_test_failures, 'noFailure') >= 0)
+        self.unique_test_failures = np.delete(self.unique_test_failures, idx, 0)
+        self.num_test_failures = self.unique_test_failures.shape[0]
+
+        # Auxiliary dataframe failure_results contains results with respect to failure occurrences
+        self.failure_results = pd.DataFrame({'Label': self.dataset.testArr_label_failureTime_uniq[:, 0],
+                                        'FailureTime': self.dataset.testArr_label_failureTime_uniq[:, 1],
+                                        'Correct': np.zeros(self.dataset.testArr_label_failureTime_uniq.shape[0]),
+                                        'Chances': self.dataset.testArr_label_failureTime_counts,
+                                        'AsHealth': np.zeros(self.dataset.testArr_label_failureTime_uniq.shape[0]),
+                                        'AsOtherFailure': np.zeros(self.dataset.testArr_label_failureTime_uniq.shape[0])})
 
     def infer_test_dataset(self):
         correct, num_infers = 0, 0
         start_time = time.perf_counter()
 
         # print the case embeddings for each class
-        # if self.architecture.encoder.hyper.encoder_variant == 'cnnwithclassattention':
-        # print()
+        if self.architecture.encoder.hyper.encoder_variant == 'cnn1dwithclassattention':
+            print()
+            #self.architecture.print_learned_case_vectors()
         # self.architecture.printLearnedCaseMatrix()
-        # self.architecture.printLearnedCaseVectors()
 
-        # Get all ids of failure cases
+        # Preparation for querring only failures
         idx_examples = np.zeros((1), int)
         idx_test_examples_query_pool = None
         if self.config.use_only_failures_as_queries_for_inference:
             idx_cnt = 0
             for x in self.dataset.y_test_strings_unique:
-                if not x == 'no_failure':
-                    self.num_test_examples = self.num_test_examples + int(self.dataset.num_instances_by_class_test[idx_cnt][1])
-                    idx_examples = np.append(idx_examples, self.dataset.class_idx_to_ex_idxs_test[idx_cnt])
+                #if not x == 'no_failure':
+                self.num_test_examples = self.num_test_examples + int(self.dataset.num_instances_by_class_test[idx_cnt][1])
+                idx_examples = np.append(idx_examples, self.dataset.class_idx_to_ex_idxs_test[idx_cnt][:2]) #np.append(idx_examples, self.dataset.class_idx_to_ex_idxs_test[idx_cnt][:5])
                 idx_cnt = idx_cnt + 1
             idx_test_examples_query_pool = np.nditer(idx_examples)
         else:
-            num_test_examples = self.dataset.num_test_instances
+            self.num_test_examples = self.dataset.num_test_instances
             idx_test_examples_query_pool = range(self.dataset.num_test_instances)
 
         # infer all examples of the test data set
@@ -85,7 +97,9 @@ class Inference:
             for i in range(self.config.k_of_knn):
                 row = [i+1, 'Class: ' + self.dataset.y_train_strings[ranking_nearest_neighbors_idx[i]],
                        'Sim: ' + str(np.asanyarray(sims[ranking_nearest_neighbors_idx[i]])),
-                       'Case ID: ' + str(ranking_nearest_neighbors_idx[i])]
+                       'Case ID: ' + str(ranking_nearest_neighbors_idx[i]),
+                       'Failure: ' + str(self.dataset.failureTimes_train[ranking_nearest_neighbors_idx[i]]),
+                       'Window: ' + str(self.dataset.windowTimes_train[ranking_nearest_neighbors_idx[i]][0]).replace("['YYYYMMDD HH:mm:ss (","").replace(")']","") + " - " + str(self.dataset.windowTimes_train[ranking_nearest_neighbors_idx[i]][2]).replace("['YYYYMMDD HH:mm:ss (","").replace(")']","")]
                 knn_results.append(row)
 
             real = self.dataset.y_test_strings[idx_test]
@@ -93,7 +107,7 @@ class Inference:
             max_sim = np.asanyarray(sims[ranking_nearest_neighbors_idx[0]])
 
             # Storing the prediction class wise
-            self.multiclassresults.loc[max_sim_class, real] += 1
+            self.multi_class_results.loc[max_sim_class, real] += 1
             self.y_pred.append(max_sim_class)
             self.y_pred_sim.append(max_sim)
             self.y_true.append(real)
@@ -101,8 +115,20 @@ class Inference:
             if real == max_sim_class:
                 correct += 1
 
+            # Storing the prediction result in respect to a failure occurrence
+            if not real == 'no_failure':
+                if real == max_sim_class:
+                    self.failure_results.loc[(self.failure_results['Label'].isin([real])) & (
+                        self.failure_results['FailureTime'].isin(self.dataset.failureTimes_test[idx_test])),'Correct'] += 1
+                elif max_sim_class == 'no_failure':
+                    self.failure_results.loc[(self.failure_results['Label'].isin([real])) & (
+                        self.failure_results['FailureTime'].isin(self.dataset.failureTimes_test[idx_test])),'AsHealth'] += 1
+                else:
+                    self.failure_results.loc[(self.failure_results['Label'].isin([real])) & (
+                        self.failure_results['FailureTime'].isin(self.dataset.failureTimes_test[idx_test])), 'AsOtherFailure'] += 1
+
             # regardless of the result increase the number of examples with this class
-            self.results.loc[real, '#Examples'] += 1
+            self.results.loc[real, '#Examples'] =+ 1
             num_infers += 1
 
             # print result for this example
@@ -113,7 +139,9 @@ class Inference:
                 ['Correct class:', real],
                 ['Similarity:', max_sim],
                 # ['K-nearest Neighbors: ', k_nn_string],
-                ['Current accuracy:', correct / num_infers]
+                ['Current accuracy:', correct / num_infers],
+                ['Query Window:', str(str(self.dataset.windowTimes_test[idx_test][0]).replace("['YYYYMMDD HH:mm:ss (","").replace(")']","") + " - " + str(self.dataset.windowTimes_test[idx_test][2]).replace("['YYYYMMDD HH:mm:ss (","").replace(")']",""))],
+                ['Query Failure:', str(self.dataset.failureTimes_test[idx_test])]
             ]
 
             for row in example_results:
@@ -121,7 +149,7 @@ class Inference:
 
             print("K-nearest Neighbors:")
             for row in knn_results:
-                print("{: <3} {: <40} {: <20} {: <20}".format(*row))
+                print("{: <3} {: <40} {: <20} {: <20} {: <20} {: <20}".format(*row))
             print()
             example_cnt = example_cnt+1
 
@@ -130,22 +158,22 @@ class Inference:
         # A few auxiliary calculations required to calculate true positive (TP),
         # -negative (TN), false positive (FP) and -negative (FN) values for each class.
         # 1. Sum of all TruePositives, is equal to the diagonal sum
-        truePosSum = np.diag(self.multiclassresults).sum()
+        truePosSum = np.diag(self.multi_class_results).sum()
         # 2. Add a sum column, summed along the columns / rowwise
-        self.multiclassresults['sumRowWiseAxis1'] = self.multiclassresults.sum(axis=1)
+        self.multi_class_results['sumRowWiseAxis1'] = self.multi_class_results.sum(axis=1)
         # 3. Add a sum column, summed along the rows / columnwise
-        self.multiclassresults['sumColumnWiseAxis0'] = self.multiclassresults.sum(axis=0)
+        self.multi_class_results['sumColumnWiseAxis0'] = self.multi_class_results.sum(axis=0)
         # Finally, calculate TP, TN, FP and FN for the classes provided in the test set
         for class_in_test in self.dataset.y_test_strings_unique:
             # Calculate true_positive for each class:
-            true_positives = self.multiclassresults.loc[class_in_test, class_in_test]
+            true_positives = self.multi_class_results.loc[class_in_test, class_in_test]
             self.results.loc[class_in_test, 'TP'] = true_positives
             # Calculate false_positive for each class:
-            rowSum = self.multiclassresults.loc[class_in_test, 'sumRowWiseAxis1']
+            rowSum = self.multi_class_results.loc[class_in_test, 'sumRowWiseAxis1']
             false_positives = rowSum - true_positives
             self.results.loc[class_in_test, 'FP'] = false_positives
             # Calculate false_negative for each class:
-            columnSum = self.multiclassresults.loc[class_in_test, 'sumColumnWiseAxis0']
+            columnSum = self.multi_class_results.loc[class_in_test, 'sumColumnWiseAxis0']
             false_negatives =  columnSum - true_positives
             self.results.loc[class_in_test, 'FN'] = false_negatives
             # Calculate false_negative for each class:
@@ -186,6 +214,18 @@ class Inference:
         #print(metrics.precision_recall_fscore_support(y_true_array, y_pred_array, labels=list(self.dataset.y_test_strings_unique),average='micro'))
         #print(metrics.multilabel_confusion_matrix(y_true_array, y_pred_array,labels=list(self.dataset.y_test_strings_unique)))
         print(metrics.classification_report(y_true_array, y_pred_array, labels=list(self.dataset.y_test_strings_unique)))
+        print("Classification Result Report based on occurrence: ")
+        #add row for sum
+        failure_detected_correct_sum = self.failure_results['Correct'].sum()
+        failure_detected_chances_sum = self.failure_results['Chances'].sum()
+        failure_detected_asHealth_sum = self.failure_results['AsHealth'].sum()
+        failure_detected_AsOtherFailure_sum = self.failure_results['AsOtherFailure'].sum()
+
+        self.failure_results.loc[-1] = ["Combined","Sum: ",failure_detected_correct_sum,
+                                        failure_detected_chances_sum,failure_detected_asHealth_sum,
+                                        failure_detected_AsOtherFailure_sum]
+
+        print(self.failure_results.to_string())
 
 
 def main():

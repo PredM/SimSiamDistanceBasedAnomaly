@@ -39,11 +39,22 @@ class Dataset:
         self.x_auxCaseVector_train = None
         self.x_auxCaseVector_test = None
 
+        # additional information for each example about their window timeframe and failure occurence time
+        self.windowTimes_train = None
+        self.windowTimes_test = None
+        self.failureTimes_train = None
+        self.failureTimes_test = None
+
+        # numpy array (x,2) that contains each unique permutation between failure occurence time and assigned label
+        self.testArr_label_failureTime_uniq = None
+        self.testArr_label_failureTime_counts = None
+
     def load(self):
         raise NotImplemented('Not implemented for abstract class')
 
     @staticmethod
     def draw_from_ds(self, dataset, num_instances, is_positive, classIdx=None):
+        # dataset: vector with one-hot encoded label of the data set
 
         # draw as long as is_positive criterion is not satisfied
 
@@ -61,20 +72,30 @@ class Dataset:
                         return first_idx, second_idx
         else:
             # examples are drawn by a given class index
-            classIdxArr = self.class_idx_to_ex_idxs_train[classIdx]
-            first_rand_idx = np.random.randint(0, len(classIdxArr) - 1, size=1)[0]
+            classIdxArr = self.class_idx_to_ex_idxs_train[classIdx] # contains idx values of examples from the given class
+            #print("classIdx:", classIdx," classIdxArr: ",classIdxArr, "self.class_idx_to_class_string: ", self.class_idx_to_class_string[classIdx])
+            # Get a random idx of an example that is part of this class
+            first_rand_idx = np.random.randint(0, len(classIdxArr), size=1)[0]
             first_idx = classIdxArr[first_rand_idx]
             if is_positive:
                 while True:
-                    second_rand_idx = np.random.randint(0, len(classIdxArr) - 1, size=1)[0]
+                    second_rand_idx = np.random.randint(0, len(classIdxArr), size=1)[0]
                     second_idx = classIdxArr[second_rand_idx]
                     if first_idx != second_idx:
-                        return first_idx, second_idx
+                        return first_idx[0], second_idx[0]
             else:
                 while True:
-                    second_idx = np.random.randint(0, num_instances, size=1)[0]
+                    uniform_sampled_class = np.random.randint(low=0,
+                                                                 high=len(self.y_train_strings_unique) ,
+                                                                 size=1)
+                    classIdxArr_neg = self.class_idx_to_ex_idxs_train[uniform_sampled_class[0]]
+                    second_rand_idx_neg = np.random.randint(0, len(classIdxArr_neg), size=1)[0]
+                    #print("uniform_sampled_class: ", uniform_sampled_class, "classIdxArr_neg: ", classIdxArr_neg, "second_rand_idx_neg: ", second_rand_idx_neg)
+                    second_idx = classIdxArr_neg[second_rand_idx_neg]
+                    #second_idx = np.random.randint(0, num_instances, size=1)[0]
                     if second_idx not in classIdxArr[:, 0]:
-                        return first_idx, second_idx
+                        #print("classIdxArr: ", classIdxArr, " - uniform_sampled_class: ", uniform_sampled_class[0])
+                        return first_idx[0], second_idx[0]
 
 
 class FullDataset(Dataset):
@@ -121,12 +142,18 @@ class FullDataset(Dataset):
             print("Attention: only a case base extraction is used for inference!")
             self.x_train = np.load(self.config.case_base_folder + 'train_features.npy')  # data training
             self.y_train_strings = np.expand_dims(np.load(self.config.case_base_folder + 'train_labels.npy'), axis=-1)
+            self.windowTimes_train = np.expand_dims(np.load(self.config.case_base_folder + 'train_window_times.npy'), axis=-1)
+            self.failureTimes_train = np.expand_dims(np.load(self.config.case_base_folder + 'train_failure_times.npy'), axis=-1)
         else:
             self.x_train = np.load(self.dataset_folder + 'train_features.npy')  # data training
             self.y_train_strings = np.expand_dims(np.load(self.dataset_folder + 'train_labels.npy'), axis=-1)
+            self.windowTimes_train = np.expand_dims(np.load(self.dataset_folder + 'train_window_times.npy'), axis=-1)
+            self.failureTimes_train = np.expand_dims(np.load(self.dataset_folder + 'train_failure_times.npy'), axis=-1)
 
         self.x_test = np.load(self.dataset_folder + 'test_features.npy')  # data testing
         self.y_test_strings = np.expand_dims(np.load(self.dataset_folder + 'test_labels.npy'), axis=-1)
+        self.windowTimes_test = np.expand_dims(np.load(self.dataset_folder + 'test_window_times.npy'), axis=-1)
+        self.failureTimes_test = np.expand_dims(np.load(self.dataset_folder + 'test_failure_times.npy'), axis=-1)
 
         # create a encoder, sparse output must be disabled to get the intended output format
         # added categories='auto' to use future behavior
@@ -188,6 +215,16 @@ class FullDataset(Dataset):
         self.classes_in_both = np.intersect1d(self.num_instances_by_class_test[:, 0],
                                               self.num_instances_by_class_train[:, 0])
 
+        # required for inference metric calculation
+        # get all failures and labels as unique entry
+        testArr_label_failureTime = np.stack((self.y_test_strings, np.squeeze(self.failureTimes_test))).T
+        # extract unique permutations between failure occurence time and labeled entry
+        testArr_label_failureTime_uniq, testArr_label_failureTime_counts = np.unique(testArr_label_failureTime , axis=0, return_counts=True)
+        # remove noFailure entries
+        idx = np.where(np.char.find(testArr_label_failureTime_uniq, 'noFailure') >= 0)
+        self.testArr_label_failureTime_uniq = np.delete(testArr_label_failureTime_uniq, idx, 0)
+        self.testArr_label_failureTime_counts = np.delete(testArr_label_failureTime_counts, idx, 0)
+
         # data
         # 1. dimension: example
         # 2. dimension: time index
@@ -197,10 +234,12 @@ class FullDataset(Dataset):
         print('Shape of training set (example, time, channels):', self.x_train.shape)
         print('Shape of test set (example, time, channels):', self.x_test.shape)
         print('Num of classes in train and test together:', self.num_classes)
+        '''
         print('Classes used in training: ', len(self.y_train_strings_unique)," :",self.y_train_strings_unique)
         print()
         print('Classes used in test: ', len(self.y_test_strings_unique)," :", self.y_test_strings_unique)
         print('Classes in total: ', self.classes_total)
+        '''
         print()
 
     def encode(self, encoder, encode_test_data=False):

@@ -7,7 +7,7 @@ import joblib
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split, GroupKFold, GroupShuffleSplit
-from sklearn.preprocessing import MinMaxScaler, OrdinalEncoder
+from sklearn.preprocessing import MinMaxScaler, OrdinalEncoder, StandardScaler
 
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 
@@ -151,7 +151,7 @@ def split_into_examples(df: pd.DataFrame, label: str, examples: [np.ndarray], la
         # slide over data frame and extract windows until the window would exceed the last time step
         while start_time + pd.to_timedelta(config.over_lapping_window_interval_in_seconds, unit='s') < end_time:
             # generate a list with indexes for window
-            index = pd.date_range(start_time, periods=config.time_series_length, freq=config.resampleFrequency)
+            index = pd.date_range(start_time, periods=config.time_series_length, freq=config.resample_frequency)
             # print("from: ", index[0], "to: ", index[-1])
 
             # for use_over_lapping_windows doesn't do more than converting the part of the df into a numpy array
@@ -302,18 +302,19 @@ def main():
         gss = GroupShuffleSplit(n_splits=1, test_size=config.test_split_size, random_state=config.random_seed)
 
         # TODO Is this working correctly ? train_idx and test_idx only asigned in for loop
-        #for train_idx, test_idx in gss.split(examples_array, labels_array, failure_times_array_groups):
-        #    pass  # print("TRAIN:", train_idx, "TEST:", test_idx)
-        split_idx = gss.split(examples_array, labels_array, failure_times_array_groups)
-        train_idx = split_idx[0]
-        test_idx = split_idx[0]
+        for train_idx, test_idx in gss.split(examples_array, labels_array, failure_times_array_groups):
+           print("TRAIN:", train_idx, "TEST:", test_idx)
+        #split_idx in gss.split(examples_array, labels_array, failure_times_array_groups)
+        #train_idx = split_idx[0]
+        #test_idx = split_idx[1]
+        #print("train_idx:",train_idx)
 
         # TODO split test into validation and test set
 
         x_train, x_test = examples_array[train_idx], examples_array[test_idx]
         y_train, y_test = labels_array[train_idx], labels_array[test_idx]
         failure_times_train, failure_times_test = failure_times_array[train_idx], failure_times_array[test_idx]
-        window_times_train, window_times_test = failure_times_array[train_idx], failure_times_array[test_idx]
+        window_times_train, window_times_test = window_times_array[train_idx], window_times_array[test_idx]
 
         print("X_train: ", x_train.shape, " X_test: ", x_test.shape)
         print("Y_train: ", y_train.shape, " Y_train: ", y_test.shape)
@@ -321,7 +322,7 @@ def main():
         print("Window_times_train: ", window_times_train.shape, " Window_times_test: ", window_times_test.shape)
         print("Classes in the train set: ", np.unique(y_train))
         print("Classes in the test set: ", np.unique(y_test))
-        print("Classes in train and test set: ", np.unique(y_train, y_test))
+        #print("Classes in train and test set: ", np.unique(np.concatenate(y_train, y_test)))
 
     else:
         # split into train and test data set
@@ -352,21 +353,27 @@ def main():
     print('\nSave to np arrays in ' + config.training_data_folder)
 
     print('Step 1/7')
-    np.save(config.training_data_folder + 'train_features.npy', x_train)
+    np.save(config.training_data_folder + 'train_features_2_.npy', x_train)
     print('Step 2/7')
-    np.save(config.training_data_folder + 'test_features.npy', x_test)
+    np.save(config.training_data_folder + 'test_features_2_.npy', x_test)
     print('Step 3/7')
-    np.save(config.training_data_folder + 'train_labels.npy', y_train)
+    np.save(config.training_data_folder + 'train_labels_2_.npy', y_train)
     print('Step 4/7')
-    np.save(config.training_data_folder + 'test_labels.npy', y_test)
+    np.save(config.training_data_folder + 'test_labels_2_.npy', y_test)
     print('Step 5/7')
-    np.save(config.training_data_folder + 'feature_names.npy', attributes)
+    np.save(config.training_data_folder + 'feature_names_2_.npy', attributes)
     print('Step 6/6')
-    np.save(config.training_data_folder + 'failure_times.npy',
-            failure_times_array)  # Contains the associated time of a failure (if not no failure) for each example
+    np.save(config.training_data_folder + 'train_failure_times_2_.npy',
+            failure_times_train)  # Contains the associated time of a failure (if not no failure) for each example
     print('Step 7/7')
-    np.save(config.training_data_folder + 'window_times.npy',
-            window_times_array)  # Contains the start and end time stamp for each training example
+    np.save(config.training_data_folder + 'test_failure_times_2_.npy',
+            failure_times_test)
+    print('Step 7/7')
+    np.save(config.training_data_folder + 'train_window_times_3.npy',
+            window_times_train)  # Contains the start and end time stamp for each training example
+    print('Step 7/7')
+    np.save(config.training_data_folder + 'test_window_times_3.npy',
+            window_times_test)
 
 
 if __name__ == '__main__':

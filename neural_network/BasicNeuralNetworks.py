@@ -79,11 +79,7 @@ class FFNN(NN):
         # first layer must be handled separately because the input shape parameter must be set
         num_units_first = layers.pop(0)
         input = tf.keras.Input(shape=self.input_shape, name="Input")
-        #input1, input2 = tf.split(input,num_or_size_splits=2,axis=2)
 
-        x1 = tf.keras.layers.Dense(units=32, activation=tf.keras.activations.relu)(input)
-        #print(tf.shape(input1))
-        #inputAtt = tf.keras.Input(shape=self.input_shape[1], name="Input2")
         x = tf.keras.layers.Dense(units=num_units_first, activation=tf.keras.activations.relu,
                                         input_shape=self.input_shape)(input)
 
@@ -95,13 +91,14 @@ class FFNN(NN):
         output = tf.keras.layers.Dense(units=1, activation=tf.keras.activations.sigmoid)(x)
 
         self.model = tf.keras.Model(inputs=input, outputs=output)
+
+# NOT WORKING
 class FFNN2(NN):
 
     def __init__(self, hyperparameters, input_shape):
         super().__init__(hyperparameters, input_shape)
 
     def create_model(self):
-
         print('Creating FFNN for input shape: ', self.input_shape)
 
         layers = self.hyper.ffnn_layers.copy()
@@ -109,13 +106,13 @@ class FFNN2(NN):
         if len(layers) < 1:
             print('FFNN with less than one layer is not possible')
             sys.exit(1)
+        # Gated:
+        #gates = tf.nn.sigmoid(query_class_gate_FFNN[:, :self._graph_state_dim])
 
         # first layer must be handled separately because the input shape parameter must be set
         num_units_first = layers.pop(0)
         input = tf.keras.Input(shape=self.input_shape, name="Input")
-        input1, input2 = tf.split(input,2,1)
-        print(tf.shape(input1))
-        #inputAtt = tf.keras.Input(shape=self.input_shape[1], name="Input2")
+
         x = tf.keras.layers.Dense(units=num_units_first, activation=tf.keras.activations.relu,
                                         input_shape=self.input_shape)(input)
 
@@ -127,19 +124,6 @@ class FFNN2(NN):
         output = tf.keras.layers.Dense(units=1, activation=tf.keras.activations.sigmoid)(x)
 
         self.model = tf.keras.Model(inputs=input, outputs=output)
-        '''
-        encodedTimeSeriesInputA = tf.keras.Input(shape=self.input_shape, name="InputTS")
-        attentionInputA = tf.keras.Input(shape=self.input_shape, name="InputAtt")
-        # encodedTimeSeriesInputB = tf.keras.Input(shape=(b.shape[0], b.shape[1]), name="InputTS")
-        # attentionInputB = tf.keras.Input(shape=(attentionB.shape[0], attentionB.shape[1]), name="InputAtt")
-        concatA = tf.keras.layers.concatenate([encodedTimeSeriesInputA, attentionInputA],1)
-        # concatB = tf.concat([encodedTimeSeriesInputB, attentionInputB], 1)
-        l1 = tf.keras.layers.Dense(64, activation='relu')(concatA)
-        l2 = tf.keras.layers.Dense(64, activation='relu')(l1)
-        l3 = tf.keras.layers.Dense(16, activation='relu')(l2)
-        self.modelAttEncoding = tf.keras.Model(inputs=[encodedTimeSeriesInputA, attentionInputA], outputs=l3)
-        print(self.modelAttEncoding.summary())
-        '''
 
 class RNN(NN):
 
@@ -332,7 +316,7 @@ class CNN1DWithClassAttention(NN):
         super().__init__(hyperparameters, input_shape)
 
     def create_model(self):
-        print('Creating CNN encoder with an input shape: ', self.input_shape)
+        print('Creating CNN encoder with 1DConv and Modulation/Conditioning  with an input shape: ', self.input_shape)
         sensorDataInput = tf.keras.Input(self.input_shape[0], name="Input0")
         caseDependentVectorInput = tf.keras.Input(self.input_shape[1], name="Input1")
 
@@ -364,21 +348,20 @@ class CNN1DWithClassAttention(NN):
         x = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(x)
 
         # creating a case vector encoder
-
-        caseDepVectEmbedding = tf.keras.layers.Dense(32, activation='sigmoid')(caseDependentVectorInput)
         num_filterLastLayer = layer_properties[len(layer_properties) - 1][0]
-        caseDepVectEmbedding = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(caseDepVectEmbedding)
-        caseDepVectEmbedding = tf.keras.layers.Dense(num_filterLastLayer, activation='sigmoid')(caseDepVectEmbedding)
+        #caseDepVectEmbedding = tf.keras.layers.Dense((int(num_filterLastLayer/2)), activation='relu')(caseDependentVectorInput)
+        #caseDepVectEmbedding = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(caseDepVectEmbedding)
+        gates = tf.keras.layers.Dense(num_filterLastLayer, activation='sigmoid')(caseDependentVectorInput)
 
         # merging case vector and sensor encoding
         # a) ADD
         # caseDepVectEmbedding = tf.keras.layers.Softmax()(caseDepVectEmbedding)
         # embedding = tf.keras.layers.Add()([x, caseDepVectEmbedding])
         # b) MULTIPLY
-        # caseDepVectEmbedding = tf.keras.layers.Softmax()(caseDepVectEmbedding)
-        # embedding = tf.keras.layers.Multiply()([x, caseDepVectEmbedding])
+        #gates = tf.nn.sigmoid(caseDepVectEmbedding)
+        embedding = tf.keras.layers.Multiply()([x, gates])
         # c) CONCATENATE
-        # '''
+        '''
         flat = tf.keras.layers.Flatten()(x)
         concat = tf.concat([flat, caseDepVectEmbedding], 1)
         # concat = tf.keras.layers.Concatenate()([flat, caseDepVectEmbedding])
@@ -390,16 +373,21 @@ class CNN1DWithClassAttention(NN):
         print("sensorDataInput.shape[0]: ", sensorDataInput.shape[0])
         dim0 = self.hyper.batch_size * 2  # for Inference: 16450  #in Training: self.hyper.batch_size*2
         embedding = tf.reshape(embedding, [dim0, embedding.shape[1], 1])
-        # '''
+        '''
         self.model = tf.keras.Model(inputs=[sensorDataInput, caseDependentVectorInput], outputs=embedding)
         # Add: softmax
         # Multiply: dense_1
+        '''
         self.intermediate_layer_model = tf.keras.Model(inputs=caseDependentVectorInput,
-                                                       outputs=self.model.get_layer("dense_1").output)
-
+                                                       outputs=self.model.get_layer("dense").output)
+        self.intermediate_layer_model1 = tf.keras.Model(inputs=[sensorDataInput, caseDependentVectorInput],
+                                                       outputs=self.model.get_layer("re_lu_1").output)
+        self.intermediate_layer_model2 = tf.keras.Model(inputs=[sensorDataInput, caseDependentVectorInput],
+                                                       outputs=self.model.get_layer("multiply").output)
+        '''
         # Query-value attention of shape [batch_size, Tq, filters].
         # print("inputs", inputs)
-        print("x: ", x)
+        #print("x: ", x)
         # input_lastConvLayer_attention_seq = tf.keras.layers.Attention()([x, caseDepVectEmbedding])
 
 
@@ -443,13 +431,13 @@ class CNN(NN):
         #  (time over feature or feature over time) for the cosine distance calculation
         # model.add(tf.keras.layers.GlobalAveragePooling1D())
         # model.add(tf.keras.layers.Reshape((1,model.layers[len(model.layers)-1].output.shape[1])))
-        '''
-        model.add(tf.keras.layers.Dense(64, activation=tf.keras.activations.relu))
-        model.add(tf.keras.layers.Dropout(rate=self.hyper.dropout_rate))
-        model.add(tf.keras.layers.Dense(32, activation=tf.keras.activations.relu))
-        model.add(tf.keras.layers.Dropout(rate=self.hyper.dropout_rate))
-        model.add(tf.keras.layers.Dense(1, activation=tf.keras.activations.sigmoid))
-        '''
+        if self.add_fc_layer_cnn:
+            model.add(tf.keras.layers.Dense(1024, activation=tf.keras.activations.relu))
+            #model.add(tf.keras.layers.Dropout(rate=self.hyper.dropout_rate))
+            model.add(tf.keras.layers.Dense(512, activation=tf.keras.activations.relu))
+            #model.add(tf.keras.layers.Dropout(rate=self.hyper.dropout_rate))
+            model.add(tf.keras.layers.Dense(358, activation=tf.keras.activations.sigmoid))
+
         self.model = model
 
 class CNN2D(NN):
@@ -481,7 +469,17 @@ class CNN2D(NN):
                 conv_layer1 = tf.keras.layers.Conv2D(filters=num_filter, padding='VALID',
                                                      kernel_size=(filter_size),
                                                      strides=stride, input_shape=sensorDataInput.shape)
-                x = conv_layer1(sensorDataInput)
+                # Added 1D-Conv Layer to provide information across time steps in the first layer
+                conv_layer1d = tf.keras.layers.Conv1D(filters=61, padding='VALID', kernel_size=1,
+                                                    strides=1)
+                #inp = tf.squeeze(sensorDataInput)
+                reshape = tf.keras.layers.Reshape((self.input_shape[0], self.input_shape[1]))
+                inp = reshape(sensorDataInput)
+                temp = conv_layer1d(inp)
+                temp = tf.expand_dims(temp,-1)
+                sensorDataInput2 = tf.concat([sensorDataInput, temp], axis=3)
+
+                x = conv_layer1(sensorDataInput2)
             else:
                 conv_layer = tf.keras.layers.Conv2D(filters=num_filter, padding='VALID',
                                                      kernel_size=(filter_size),

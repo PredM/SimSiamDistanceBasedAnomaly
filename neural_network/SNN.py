@@ -85,13 +85,29 @@ class SimpleSNN(AbstractSimilarityMeasure):
 
             input_pairs = np.zeros((2 * batch_size, self.hyper.time_series_length,
                                     self.hyper.time_series_depth)).astype('float32')
-
+            auxiliaryInput = np.zeros((2 * batch_size, self.dataset.x_auxCaseVector_test.shape[1]))
             # create a batch of pairs between the example to test and the examples in the dataset
             for i in range(batch_size):
                 input_pairs[2 * i] = example
                 input_pairs[2 * i + 1] = self.dataset.x_train[index + i]
-            input_pairs = input_pairs.reshape((input_pairs.shape[0],input_pairs.shape[1],input_pairs.shape[2],1))
-            sims_batch = self.get_sims_batch(input_pairs)
+                if self.hyper.encoder_variant in ['cnnwithclassattention', 'cnn1dwithclassattention']:
+                    print("index: ", index)
+                    # Adding an additional/auxiliary input
+                    # noinspection PyUnboundLocalVariable
+                    auxiliaryInput[2 * i] = self.dataset.x_auxCaseVector_train[index]
+                    # np.zeros(self.dataset.x_auxCaseVector_train.shape[1])
+                    # self.dataset.x_auxCaseVector_train[index]
+                    auxiliaryInput[2 * i + 1] = self.dataset.x_auxCaseVector_train[index]
+
+            if self.hyper.encoder_variant == 'cnn1dwithclassattention':
+                input_pairs = input_pairs.reshape((input_pairs.shape[0],input_pairs.shape[1],input_pairs.shape[2]))
+            elif self.hyper.encoder_variant == 'cnn2d':
+                input_pairs = input_pairs.reshape((input_pairs.shape[0], input_pairs.shape[1], input_pairs.shape[2], 1))
+
+            if self.hyper.encoder_variant == 'cnn1dwithclassattention':
+                sims_batch = self.get_sims_batch([input_pairs, auxiliaryInput])
+            else:
+                sims_batch = self.get_sims_batch(input_pairs)
 
             # collect similarities of all badges
             sims_all_examples[index:index + batch_size] = sims_batch
@@ -139,7 +155,6 @@ class SimpleSNN(AbstractSimilarityMeasure):
                 # (input_pairs.shape[0], input_pairs.shape[1], input_pairs.shape[2], 1))
                 sims = self.get_sims_batch([input_pairs, auxiliaryInput])
             elif self.hyper.encoder_variant == 'cnn2d':
-                print("here!")
                 input_pairs = np.reshape(input_pairs,
                                          (input_pairs.shape[0], input_pairs.shape[1], input_pairs.shape[2], 1))
                 sims = self.get_sims_batch(input_pairs)
@@ -160,6 +175,14 @@ class SimpleSNN(AbstractSimilarityMeasure):
             sizeOfInput = batch[0].shape[0] // 2
         else:
             sizeOfInput = batch.shape[0] // 2
+        '''
+        case_embeddings = self.encoder.intermediate_layer_model1(batch, training=self.training)
+        tf.print("Int Mod 1: ",case_embeddings, output_stream=sys.stderr,summarize = -1)
+        gate = self.encoder.intermediate_layer_model(batch[1], training=self.training)
+        tf.print("Gate: ",gate, output_stream=sys.stderr,summarize = -1)
+        case_embeddings2 = self.encoder.intermediate_layer_model2(batch, training=self.training)
+        tf.print("Int Mod 2: ",case_embeddings2, output_stream=sys.stderr,summarize = -1)
+        '''
         sims_batch = tf.map_fn(lambda pair_index: self.get_sim_pair(context_vectors, pair_index),
                                tf.range(sizeOfInput, dtype=tf.int32), back_prop=True, dtype=tf.float32)
         # transform distances into a similarity measure
