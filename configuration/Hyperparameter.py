@@ -36,6 +36,8 @@ class Hyperparameters:
         self.cnn2d_kernel_length = None
         self.cnn2d_strides = None
 
+        self.fc_after_cnn1d_layers = None
+
         self.lstm_layers = None
 
         self.tcn_layers = None
@@ -71,6 +73,9 @@ class Hyperparameters:
         self.cnn_layers = data['cnn_layers']
         self.cnn_kernel_length = data['cnn_kernel_length']
         self.cnn_strides = data['cnn_strides']
+        if not data.get('fc_after_cnn1d_layers') is None:
+            self.fc_after_cnn1d_layers = data['fc_after_cnn1d_layers']
+        self.ffnn_layers = data['ffnn_layers']
 
         if self.encoder_variant == "cnn2d":
             self.cnn2d_layers = data['cnn2d_layers']

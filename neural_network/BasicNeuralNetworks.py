@@ -431,13 +431,29 @@ class CNN(NN):
         #  (time over feature or feature over time) for the cosine distance calculation
         # model.add(tf.keras.layers.GlobalAveragePooling1D())
         # model.add(tf.keras.layers.Reshape((1,model.layers[len(model.layers)-1].output.shape[1])))
-        if self.add_fc_layer_cnn:
-            model.add(tf.keras.layers.Dense(1024, activation=tf.keras.activations.relu))
-            #model.add(tf.keras.layers.Dropout(rate=self.hyper.dropout_rate))
-            model.add(tf.keras.layers.Dense(512, activation=tf.keras.activations.relu))
-            #model.add(tf.keras.layers.Dropout(rate=self.hyper.dropout_rate))
-            model.add(tf.keras.layers.Dense(358, activation=tf.keras.activations.sigmoid))
+        if not self.hyper.fc_after_cnn1d_layers is None:
+            print('Adding FC layers')
+            layers_fc = self.hyper.fc_after_cnn1d_layers.copy()
+            '''
+            model.add(tf.keras.layers.Dense(units=32, activation=tf.keras.activations.relu))
+            model.add(tf.keras.layers.BatchNormalization())
+            model.add(tf.keras.layers.Dense(units=16, activation=tf.keras.activations.relu))
+            model.add(tf.keras.layers.BatchNormalization())
+            model.add(tf.keras.layers.Dense(units=5, activation=tf.keras.activations.relu))
+            model.add(tf.keras.layers.Dropout(rate=self.hyper.dropout_rate))
+            '''
+            if len(layers) < 1:
+                print('Adding FC with less than one layer is not possible')
+                sys.exit(1)
+            model.add(tf.keras.layers.Flatten())
+            for num_units in layers_fc:
+                model.add(tf.keras.layers.BatchNormalization())
+                model.add(tf.keras.layers.Dense(units=num_units, activation=tf.keras.activations.relu))
 
+            # Normalize final output as recommended in Roy et al (2019) Siamese Networks: The Tale of Two Manifolds
+            # model.add(tf.keras.layers.BatchNormalization())
+            # model.add(tf.keras.layers.Softmax()) # Martin et al. (2017) ICCBR
+            model.add(tf.keras.layers.Reshape((model.layers[len(model.layers)-1].output.shape[1],1)))
         self.model = model
 
 class CNN2D(NN):

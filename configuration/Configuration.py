@@ -19,12 +19,10 @@ class Configuration:
         self.architecture_variants = ['standard_simple', 'standard_ffnn', 'fast_simple', 'fast_ffnn']
         self.architecture_variant = self.architecture_variants[1]
         # Most related work on time series with SNN use a fc layer at the end of a cnn to merge 1d-conv
-        # features of time steps. Seems to be useful for standard_simple architecture, integration as
-        # archticture variant will follow
-        self.add_fc_layer_cnn = False #Default: False
+        # features of time steps. Seems to be useful for standard_simple architecture, can be used via
+        # adding "fc_after_cnn1d_layers" in the hyperparameter configs file
 
-        # TODO jaccard not working
-        self.simple_Distance_Measures = ['abs_mean', 'euclidean', 'dot_product', 'cosine', 'jaccard']
+        self.simple_Distance_Measures = ['abs_mean', 'euclidean', 'dot_product', 'cosine']
         self.simple_Distance_Measure = self.simple_Distance_Measures[0]
 
         ###
@@ -41,7 +39,7 @@ class Configuration:
         # if use_individual_hyperparameters = false interpreted as a single json file, else as a folder
         # containing json files named after the cases they should be used for (see all_cases below for correct names)
         # self.hyper_file = self.hyper_file_folder + 'individual_hyperparameters_test'
-        self.hyper_file = self.hyper_file_folder + 'ba_cnn.json'
+        self.hyper_file = self.hyper_file_folder + 'cnn1d.json'
 
         # choose a loss function
         # TODO: TripletLoss, Distance-Based Logistic Loss
@@ -61,7 +59,7 @@ class Configuration:
         self.max_gpus_used = 4
 
         # defines how often loss is printed and checkpoints are safed during training
-        self.output_interval = 100
+        self.output_interval = 10
 
         # how many model checkpoints are kept
         self.model_files_stored = 10
@@ -143,7 +141,7 @@ class Configuration:
         self.upsampling_factor = 4 # Default: 4, means half / half
 
         # Stops the training when a specific criterion no longer improves
-        self.use_early_stopping = False # default: False
+        self.use_early_stopping = True # default: False
         self.early_stopping_if_no_loss_decrease_after_num_of_epochs = 1000
 
         ###
@@ -151,10 +149,10 @@ class Configuration:
         ###
 
         # folder where the trained models are saved to during learning process
-        self.models_folder = '../data/trained_models/'
+        self.models_folder = '../data/trained_models9/'
 
         # path and file name to the specific model that should be used for testing and live classification
-        self.filename_model_to_use = 'temp_cbs_model_12-27_14-55-29_epoch-300'
+        self.filename_model_to_use = 'temp_snn_model_01-26_17-05-24_epoch-12340'
         self.directory_model_to_use = self.models_folder + self.filename_model_to_use + '/'
 
         # folder where the preprocessed training and test data for the neural network should be stored

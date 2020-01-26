@@ -78,7 +78,10 @@ class Optimizer:
             grads = tape.gradient(loss, trainable_params)
 
             # Maybe change back to clipnorm = self.hyper.gradient_cap in adam initialisation
-            clipped_grads = grads #tf.clip_by_global_norm(grads, gradient_cap)
+            if gradient_cap == 0:
+                clipped_grads = grads
+            else:
+                clipped_grads = tf.clip_by_global_norm(grads, gradient_cap)
 
             # Apply the gradients to the trainable parameters
             optimizer.apply_gradients(zip(clipped_grads, trainable_params))
@@ -176,7 +179,7 @@ class SNNOptimizer(Optimizer):
         batch_pairs_indices_firstUsedforSecond = []
 
         # Generate a random vector that contains the number of classes that should be considered in the current batach
-        equal_class_part = 4 # 4 means approx. half of the batch contains no-failure, 1 and 2 uniform,
+        equal_class_part = self.config.upsampling_factor # 4 means approx. half of the batch contains no-failure, 1 and 2 uniform,
         failureClassesToConsider = np.random.randint(low=0, high=len(self.dataset.y_train_strings_unique),
                                                      size=self.architecture.hyper.batch_size // equal_class_part)
         #print("failureClassesToConsider: ", failureClassesToConsider)
