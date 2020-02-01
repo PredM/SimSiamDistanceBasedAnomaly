@@ -1,6 +1,7 @@
 import numpy as np
 from sklearn import preprocessing
 from time import perf_counter
+import pandas as pd
 
 from configuration.Configuration import Configuration
 
@@ -48,6 +49,11 @@ class Dataset:
         # numpy array (x,2) that contains each unique permutation between failure occurence time and assigned label
         self.testArr_label_failureTime_uniq = None
         self.testArr_label_failureTime_counts = None
+
+        # pandas df (matrix) with pair-wise similarities between labels in respect to a metric (localization, failuremode ...)
+        self.df_label_sim_localization = None
+        self.df_label_sim_failuremode = None
+        self.df_label_sim_condition = None
 
     def load(self):
         raise NotImplemented('Not implemented for abstract class')
@@ -154,6 +160,14 @@ class FullDataset(Dataset):
         self.y_test_strings = np.expand_dims(np.load(self.dataset_folder + 'test_labels.npy'), axis=-1)
         self.windowTimes_test = np.expand_dims(np.load(self.dataset_folder + 'test_window_times.npy'), axis=-1)
         self.failureTimes_test = np.expand_dims(np.load(self.dataset_folder + 'test_failure_times.npy'), axis=-1)
+
+        # load a matrix with pair-wise similarities between labels in respect to a metric (localization, failuremode ...)
+        self.df_label_sim_failuremode = pd.read_csv(self.dataset_folder +'FailureMode_Sim_Matrix.csv', sep=';',index_col=0)
+        self.df_label_sim_failuremode.index = self.df_label_sim_failuremode.index.str.replace('\'', '')
+        self.df_label_sim_localization = pd.read_csv(self.dataset_folder +'Lokalization_Sim_Matrix.csv', sep=';',index_col=0)
+        self.df_label_sim_localization.index = self.df_label_sim_localization.index.str.replace('\'', '')
+        self.df_label_sim_condition = pd.read_csv(self.dataset_folder +'Condition_Sim_Matrix.csv', sep=';',index_col=0)
+        self.df_label_sim_condition.index = self.df_label_sim_condition.index.str.replace('\'', '')
 
         # create a encoder, sparse output must be disabled to get the intended output format
         # added categories='auto' to use future behavior
@@ -301,7 +315,20 @@ class FullDataset(Dataset):
 
             return first_idx, second_idx
 
-
+    def getSimBetweenPairLabels(self, label_1, label_2, notion_of_sim):
+        #Input label1, label2, notion_of_sim as string
+        #Output similiarity value under consideration of the metric
+        #print("label_1: ", label_1, " label_2: ", label_2, " notion_of_sim: ", notion_of_sim)
+        if(notion_of_sim == 'failuremode'):
+            pair_label_sim = self.df_label_sim_failuremode.loc[label_1,label_2]
+        elif(notion_of_sim == 'localization'):
+            pair_label_sim = self.df_label_sim_failuremode.loc[label_1,label_2]
+        elif (notion_of_sim == 'condition'):
+            pair_label_sim = self.df_label_sim_condition.loc[label_1, label_2]
+        else:
+            #print("Similarity notion: ", notion_of_sim, " unknown! Results in sim 0")
+            pair_label_sim = 0
+        return float(pair_label_sim)
 # variation of the dataset class that consists only of examples of the same case
 # does not contain test data because this isn't needed on the level of each case
 class CaseSpecificDataset(Dataset):

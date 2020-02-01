@@ -208,10 +208,23 @@ class SimpleSNN(AbstractSimilarityMeasure):
             diff = tf.abs(a - b)
             distance_example = tf.reduce_mean(diff)
             sim_example = tf.exp(-distance_example)
-        elif self.config.simple_Distance_Measure == "euclidean":
-            # Euclidean distance
+        elif self.config.simple_Distance_Measure == "euclidean_sim":
+            # Euclidean distance converted as similarity
             diff = tf.norm(a - b, ord='euclidean')
             sim_example = 1 / (1 + tf.reduce_sum(diff))
+        elif self.config.simple_Distance_Measure == "euclidean_dis":
+            # Euclidean distance
+            # flatten in case of a matrix (e.g., 1d cnn output)
+            #print(a.shape[0])
+            #a = tf.reshape(a.shape[0]*a.shape[1])
+            #print(a.shape)
+            #a = tf.squeeze(a)
+            #b = tf.squeeze(b)
+            #diff = tf.linalg.norm(a - b, axis=1)
+            diff = tf.norm(a - b, ord='euclidean')
+            print(diff.shape)
+            print("current diff: ",diff)
+            sim_example = diff
         elif self.config.simple_Distance_Measure == "dot_product":
             # dot product
             sim = tf.matmul(a, b, transpose_b=True)
@@ -229,7 +242,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
             fp = tf.reduce_sum(tf.multiply(a, b), 1)
             return 1 - (tp / (tp + fn + fp))
         else:
-            raise ValueError('Distance Measure is not implemented.')
+            raise ValueError('Distance Measure: ',self.config.simple_Distance_Measure,' is not implemented.')
         return sim_example
 
     def print_learned_case_vectors(self, num_of_max_pos=5):

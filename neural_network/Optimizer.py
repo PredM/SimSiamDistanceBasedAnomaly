@@ -56,7 +56,7 @@ class Optimizer:
                     except ValueError:
                         pass
 
-    def update_single_model(self, model_input, true_similarities, model, optimizer, gradient_cap):
+    def update_single_model(self, model_input, true_similarities, model, optimizer, gradient_cap, query_classes=None):
         with tf.GradientTape() as tape:
             pred_similarities = model.get_sims_batch(model_input)
 
@@ -70,7 +70,9 @@ class Optimizer:
             if self.config.type_of_loss_function == "binary_cross_entropy":
                 loss = tf.keras.losses.binary_crossentropy(y_true=true_similarities, y_pred=pred_similarities)
             elif self.config.type_of_loss_function == "constrative_loss":
-                loss = self.contrastive_loss(y_true=true_similarities, y_pred=pred_similarities)
+                if self.config.use_margin_reduction_based_on_label_sim:
+                    pairwiseLabelSimiliarity = self.getSimiliarityBetweenTwoLabelString(query_classes)
+                loss = self.contrastive_loss(y_true=true_similarities, y_pred=pred_similarities, classes=pairwiseLabelSimiliarity)
             else:
                 raise AttributeError('Unknown loss function name. Use: "binary_cross_entropy" or "constrative_loss": ',
                                      self.config.type_of_loss_function)
@@ -88,12 +90,16 @@ class Optimizer:
 
             return loss
 
-    def contrastive_loss(self, y_true, y_pred):
+    def contrastive_loss(self, y_true, y_pred,classes=None):
         """
         Contrastive loss from Hadsell-et-al.'06
         http://yann.lecun.com/exdb/publis/pdf/hadsell-chopra-lecun-06.pdf
         """
         margin = self.config.margin_of_loss_function
+        if self.config.use_margin_reduction_based_on_label_sim:
+            # label adapted margin, classes contains the
+            margin = (1-classes)* margin
+        #print("margin: ", margin)
         square_pred = tf.square(y_pred)
         margin_square = tf.square(tf.maximum(margin - y_pred, 0))
         return tf.keras.backend.mean(y_true * square_pred + (1 - y_true) * margin_square)
@@ -108,6 +114,23 @@ class Optimizer:
         margin_square = tf.maximum(tf.square(margin) - tf.square(y_pred), 0)
         return tf.keras.backend.mean((1 - y_true) * square_pred + y_true * margin_square)
 
+    def getSimiliarityBetweenTwoLabelString(self, classes):
+        # Returns the similarity between 2 failures (labels) in respect to the location of occurrence,
+        # type of failure (failure mode) and the condition of the data sample.
+        # Input: 1d npy array with pairwise class labels as strings [2*batchsize]
+        # Output: 1d npy [batchsize]
+        pairwise_class_label_sim = np.zeros([len(classes)//2])
+        for pair_index in range(len(classes)//2):
+            a = classes[2 * pair_index]
+            b = classes[2 * pair_index + 1]
+            #print("pair_index: ", pair_index, "a: ", a ," b: ",b)
+            sim = (self.dataset.getSimBetweenPairLabels(a,b,"condition")
+                   + self.dataset.getSimBetweenPairLabels(a,b,"localization")
+                   + self.dataset.getSimBetweenPairLabels(a,b,"failuremode"))/3
+            pairwise_class_label_sim[pair_index] = sim
+            #print("pairwise_class_label_sim: ", sim)
+
+        return pairwise_class_label_sim
 
 class SNNOptimizer(Optimizer):
 
@@ -228,6 +251,7 @@ class SNNOptimizer(Optimizer):
 
         # TODO Maybe relocate to corresponding class
         # Add the auxiliary input if required
+        model_input_class_strings = np.take(a=self.dataset.y_train_strings, indices=batch_pairs_indices, axis=0)
         if self.architecture.hyper.encoder_variant in ['cnnwithclassattention', 'cnn1dwithclassattention']:
             model_input2 = np.take(a=self.dataset.x_auxCaseVector_train, indices=batch_pairs_indices, axis=0)
             # remove one class/case vector of each pair to get a similar input as in test/life without knowing the label
@@ -251,10 +275,10 @@ class SNNOptimizer(Optimizer):
             model_input = np.reshape(model_input,
                                      (model_input.shape[0], model_input.shape[1], model_input.shape[2], 1))
             batch_loss = self.update_single_model(model_input, true_similarities, self.architecture,
-                                                  self.adam_optimizer, self.architecture.hyper.gradient_cap)
+                                                  self.adam_optimizer, self.architecture.hyper.gradient_cap, query_classes=model_input_class_strings)
         else:
             batch_loss = self.update_single_model(model_input, true_similarities, self.architecture,
-                                                  self.adam_optimizer, self.architecture.hyper.gradient_cap)
+                                                  self.adam_optimizer, self.architecture.hyper.gradient_cap, query_classes=model_input_class_strings)
 
         # Track progress
         epoch_loss_avg.update_state(batch_loss)  # Add current batch loss

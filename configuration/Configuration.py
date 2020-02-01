@@ -17,13 +17,13 @@ class Configuration:
         # ffnn = uses ffnn as distance measure
         # simple = mean absolute difference as distance measure instead of the ffnn
         self.architecture_variants = ['standard_simple', 'standard_ffnn', 'fast_simple', 'fast_ffnn']
-        self.architecture_variant = self.architecture_variants[1]
+        self.architecture_variant = self.architecture_variants[0]
         # Most related work on time series with SNN use a fc layer at the end of a cnn to merge 1d-conv
         # features of time steps. Seems to be useful for standard_simple architecture, can be used via
         # adding "fc_after_cnn1d_layers" in the hyperparameter configs file
 
-        self.simple_Distance_Measures = ['abs_mean', 'euclidean', 'dot_product', 'cosine']
-        self.simple_Distance_Measure = self.simple_Distance_Measures[0]
+        self.simple_Distance_Measures = ['abs_mean', 'euclidean_sim', 'euclidean_dis', 'dot_product', 'cosine']
+        self.simple_Distance_Measure = self.simple_Distance_Measures[1]
 
         ###
         # hyperparameters
@@ -39,13 +39,14 @@ class Configuration:
         # if use_individual_hyperparameters = false interpreted as a single json file, else as a folder
         # containing json files named after the cases they should be used for (see all_cases below for correct names)
         # self.hyper_file = self.hyper_file_folder + 'individual_hyperparameters_test'
-        self.hyper_file = self.hyper_file_folder + 'cnn1d.json'
+        self.hyper_file = self.hyper_file_folder + 'cnn2d.json'
 
         # choose a loss function
         # TODO: TripletLoss, Distance-Based Logistic Loss
         self.loss_function_variants = ['binary_cross_entropy', 'constrative_loss']
-        self.type_of_loss_function = self.loss_function_variants[0]
-        self.margin_of_loss_function = 4  # required for constrative_loss
+        self.type_of_loss_function = self.loss_function_variants[1]
+        self.margin_of_loss_function = 8  # required for constrative_loss
+        self.use_margin_reduction_based_on_label_sim = True # default: False
 
         # Goal loss for CBS
         # Choose a loss value at which the snn of a case should not be trained any further
@@ -149,10 +150,10 @@ class Configuration:
         ###
 
         # folder where the trained models are saved to during learning process
-        self.models_folder = '../data/trained_models9/'
+        self.models_folder = '../data/trained_models11/'
 
         # path and file name to the specific model that should be used for testing and live classification
-        self.filename_model_to_use = 'temp_snn_model_01-26_17-05-24_epoch-12340'
+        self.filename_model_to_use = 'temp_snn_model_01-31_22-22-16_epoch-3940'
         self.directory_model_to_use = self.models_folder + self.filename_model_to_use + '/'
 
         # folder where the preprocessed training and test data for the neural network should be stored
