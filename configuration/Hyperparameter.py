@@ -82,6 +82,11 @@ class Hyperparameters:
             self.cnn2d_kernel_length = data['cnn2d_kernel_length']
             self.cnn2d_strides = data['cnn2d_strides']
 
+        if self.encoder_variant == "cnnwithclassattention":
+            self.cnn2d_layers = data['cnn2d_layers']
+            self.cnn2d_kernel_length = data['cnn2d_kernel_length']
+            self.cnn2d_strides = data['cnn2d_strides']
+
         self.lstm_layers = data['lstm_layers']
 
         self.tcn_layers = data['tcn_layers']

@@ -39,6 +39,8 @@ class Dataset:
         # additional information to the sensor data about the case e.g., relevant sensor streams ...
         self.x_auxCaseVector_train = None
         self.x_auxCaseVector_test = None
+        self.x_class_label_to_attribute_masking_arr = {}
+        self.x_train_masking = None # npy 2d arr with shape (examples,#attributes)
 
         # additional information for each example about their window timeframe and failure occurence time
         self.windowTimes_train = None
@@ -54,6 +56,9 @@ class Dataset:
         self.df_label_sim_localization = None
         self.df_label_sim_failuremode = None
         self.df_label_sim_condition = None
+
+        # the names of all features of the dataset loaded from files
+        self.feature_names_all = None
 
     def load(self):
         raise NotImplemented('Not implemented for abstract class')
@@ -160,6 +165,7 @@ class FullDataset(Dataset):
         self.y_test_strings = np.expand_dims(np.load(self.dataset_folder + 'test_labels.npy'), axis=-1)
         self.windowTimes_test = np.expand_dims(np.load(self.dataset_folder + 'test_window_times.npy'), axis=-1)
         self.failureTimes_test = np.expand_dims(np.load(self.dataset_folder + 'test_failure_times.npy'), axis=-1)
+        self.feature_names_all = np.load(self.dataset_folder + 'feature_names.npy')  # names of the features (3. dim)
 
         # load a matrix with pair-wise similarities between labels in respect to a metric (localization, failuremode ...)
         self.df_label_sim_failuremode = pd.read_csv(self.dataset_folder +'FailureMode_Sim_Matrix.csv', sep=';',index_col=0)
@@ -238,6 +244,31 @@ class FullDataset(Dataset):
         idx = np.where(np.char.find(testArr_label_failureTime_uniq, 'noFailure') >= 0)
         self.testArr_label_failureTime_uniq = np.delete(testArr_label_failureTime_uniq, idx, 0)
         self.testArr_label_failureTime_counts = np.delete(testArr_label_failureTime_counts, idx, 0)
+
+        # Generate for each label a masking array
+        #print("Config relevant features: ", self.config.relevant_features)
+        num_of_attributes = self.x_train.shape[2]
+        for label in self.config.relevant_features:
+            #print(self.config.relevant_features[label])
+            curr_masking_arr = np.zeros([num_of_attributes])
+            for attribute in self.config.relevant_features[label]:
+                idx_set_to_one = np.where(self.feature_names_all == attribute)
+                curr_masking_arr[idx_set_to_one] =1
+                #print(attribute ,": ", np.where(self.feature_names_all == attribute))
+            #print(label, ": ", curr_masking_arr)
+            self.x_class_label_to_attribute_masking_arr[label] = curr_masking_arr
+            #self.x_class_label_to_attribute_masking[label]
+        #print("test: ", self.x_class_label_to_attribute_masking_arr['txt18_transport_failure_mode_wout_workpiece'])
+
+        # Add the masking array to each corresponding example
+        self.x_train_masking = np.zeros([self.x_train.shape[0], num_of_attributes])
+        for i in range(self.x_train.shape[0]):
+            #print(i, ": ", self.x_class_label_to_attribute_masking_arr[self.y_train_strings[i]])
+            self.x_train_masking[i,:] = self.x_class_label_to_attribute_masking_arr[self.y_train_strings[i]]
+
+
+
+
 
         # data
         # 1. dimension: example
@@ -338,9 +369,6 @@ class CaseSpecificDataset(Dataset):
         # the case all the examples of x_train have
         super().__init__(dataset_folder, config)
         self.case = case
-
-        # the names of all features of the dataset loaded from files
-        self.feature_names_all = None
 
         # the features that are relevant for the case of this dataset
         self.features_used = features_used

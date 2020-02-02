@@ -46,7 +46,7 @@ class Configuration:
         self.loss_function_variants = ['binary_cross_entropy', 'constrative_loss']
         self.type_of_loss_function = self.loss_function_variants[1]
         self.margin_of_loss_function = 8  # required for constrative_loss
-        self.use_margin_reduction_based_on_label_sim = True # default: False
+        self.use_margin_reduction_based_on_label_sim = False # default: False
 
         # Goal loss for CBS
         # Choose a loss value at which the snn of a case should not be trained any further
@@ -76,10 +76,25 @@ class Configuration:
         # defines for which failure cases a case handler in the case based similarity measure is created,
         # subset of all can be used for debugging purposes
         # if cases_used == [] or == None all in config.json will be used
-        all_cases = ['no_failure', 'txt_18_comp_leak', 'txt_17_comp_leak', 'txt15_m1_t1_high_wear',
+        all_cases_BA = ['no_failure', 'txt_18_comp_leak', 'txt_17_comp_leak', 'txt15_m1_t1_high_wear',
                      'txt15_m1_t1_low_wear', 'txt15_m1_t2_wear', 'txt16_m3_t1_high_wear', 'txt16_m3_t1_low_wear',
                      'txt16_m3_t2_wear', 'txt16_i4']
-        self.cases_used = ['txt16_m3_t2_wear','txt16_i4']
+        all_cases = ['no_failure', 'txt15_conveyor_failure_mode_driveshaft_slippage_failure',
+                        'txt15_i1_lightbarrier_failure_mode_1', 'txt15_i1_lightbarrier_failure_mode_2',
+                        'txt15_i3_lightbarrier_failure_mode_1', 'txt15_i3_lightbarrier_failure_mode_2',
+                        'txt15_m1_t1_high_wear', 'txt15_m1_t1_low_wear', 'txt15_m1_t2_wear',
+                        'txt15_pneumatic_leakage_failure_mode_1', 'txt15_pneumatic_leakage_failure_mode_2',
+                        'txt15_pneumatic_leakage_failure_mode_3', 'txt16_conveyor_failure_mode_driveshaft_slippage_failure',
+                        'txt16_conveyorbelt_big_gear_tooth_broken_failure', 'txt16_conveyorbelt_small_gear_tooth_broken_failure',
+                        'txt16_i3_switch_failure_mode_2', 'txt16_i4_lightbarrier_failure_mode_1',
+                        'txt16_m3_t1_high_wear', 'txt16_m3_t1_low_wear', 'txt16_m3_t2_wear',
+                        'txt16_pneumatic_leakage_failure_mode_1', 'txt17_i1_switch_failure_mode_1', 'txt17_i1_switch_failure_mode_2',
+                        'txt17_pneumatic_leakage_failure_mode_1', 'txt17_workingstation_transport_failure_mode_wout_workpiece',
+                        'txt18_pneumatic_leakage_failure_mode_1', 'txt18_pneumatic_leakage_failure_mode_2',
+                        'txt18_pneumatic_leakage_failure_mode_2_faulty', 'txt18_pneumatic_leakage_failure_mode_3_faulty',
+                        'txt18_transport_failure_mode_wout_workpiece', 'txt19_i4_lightbarrier_failure_mode_1',
+                        'txt19_i4_lightbarrier_failure_mode_2']
+        self.cases_used = all_cases #['txt16_m3_t2_wear','txt16_i4']
 
         ###
         # kafka / real time classification
@@ -153,7 +168,7 @@ class Configuration:
         self.models_folder = '../data/trained_models11/'
 
         # path and file name to the specific model that should be used for testing and live classification
-        self.filename_model_to_use = 'temp_snn_model_01-31_22-22-16_epoch-3940'
+        self.filename_model_to_use = 'temp_snn_model_02-02_18-17-50_epoch-680'
         self.directory_model_to_use = self.models_folder + self.filename_model_to_use + '/'
 
         # folder where the preprocessed training and test data for the neural network should be stored

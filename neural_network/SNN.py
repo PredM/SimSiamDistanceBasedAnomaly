@@ -85,26 +85,26 @@ class SimpleSNN(AbstractSimilarityMeasure):
 
             input_pairs = np.zeros((2 * batch_size, self.hyper.time_series_length,
                                     self.hyper.time_series_depth)).astype('float32')
-            auxiliaryInput = np.zeros((2 * batch_size, self.dataset.x_auxCaseVector_test.shape[1]))
+            auxiliaryInput = np.zeros((2 * batch_size, self.hyper.time_series_depth))
             # create a batch of pairs between the example to test and the examples in the dataset
             for i in range(batch_size):
                 input_pairs[2 * i] = example
                 input_pairs[2 * i + 1] = self.dataset.x_train[index + i]
                 if self.hyper.encoder_variant in ['cnnwithclassattention', 'cnn1dwithclassattention']:
-                    print("index: ", index)
+
                     # Adding an additional/auxiliary input
                     # noinspection PyUnboundLocalVariable
-                    auxiliaryInput[2 * i] = self.dataset.x_auxCaseVector_train[index]
+                    auxiliaryInput[2 * i] = self.dataset.x_class_label_to_attribute_masking_arr[self.dataset.y_train_strings[index + i]]
                     # np.zeros(self.dataset.x_auxCaseVector_train.shape[1])
                     # self.dataset.x_auxCaseVector_train[index]
-                    auxiliaryInput[2 * i + 1] = self.dataset.x_auxCaseVector_train[index]
+                    auxiliaryInput[2 * i + 1] = self.dataset.x_class_label_to_attribute_masking_arr[self.dataset.y_train_strings[index + i]]
 
             if self.hyper.encoder_variant == 'cnn1dwithclassattention':
                 input_pairs = input_pairs.reshape((input_pairs.shape[0],input_pairs.shape[1],input_pairs.shape[2]))
-            elif self.hyper.encoder_variant == 'cnn2d':
+            elif self.hyper.encoder_variant in ['cnn2d', 'cnnwithclassattention']:
                 input_pairs = input_pairs.reshape((input_pairs.shape[0], input_pairs.shape[1], input_pairs.shape[2], 1))
 
-            if self.hyper.encoder_variant == 'cnn1dwithclassattention':
+            if self.hyper.encoder_variant in ['cnn1dwithclassattention', 'cnnwithclassattention']:
                 sims_batch = self.get_sims_batch([input_pairs, auxiliaryInput])
             else:
                 sims_batch = self.get_sims_batch(input_pairs)
@@ -129,7 +129,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
 
             # TODO This will break for cbs, x_auxCaseVector_test not set in CaseSpecificDataset
             if self.hyper.encoder_variant in ['cnnwithclassattention', 'cnn1dwithclassattention']:
-                auxiliaryInput = np.zeros((2 * batch_size, self.dataset.x_auxCaseVector_test.shape[1]))
+                auxiliaryInput = np.zeros((2 * batch_size, self.hyper.time_series_depth))
 
             # print("input_pairs shape: ", input_pairs.shape)
 
@@ -140,10 +140,10 @@ class SimpleSNN(AbstractSimilarityMeasure):
                 if self.hyper.encoder_variant in ['cnnwithclassattention', 'cnn1dwithclassattention']:
                     # Adding an additional/auxiliary input
                     # noinspection PyUnboundLocalVariable
-                    auxiliaryInput[2 * index] = self.dataset.x_auxCaseVector_train[index]
+                    auxiliaryInput[2 * index] = self.dataset.x_class_label_to_attribute_masking_arr[self.dataset.y_train_strings[index]]
                     # np.zeros(self.dataset.x_auxCaseVector_train.shape[1])
                     # self.dataset.x_auxCaseVector_train[index]
-                    auxiliaryInput[2 * index + 1] = self.dataset.x_auxCaseVector_train[index]
+                    auxiliaryInput[2 * index + 1] = self.dataset.x_class_label_to_attribute_masking_arr[self.dataset.y_train_strings[index]]
 
             # Compute similarities
             if self.hyper.encoder_variant == 'cnnwithclassattention':
@@ -321,7 +321,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
             self.encoder = CNN2D(self.hyper, input_shape_encoder)
         elif self.hyper.encoder_variant == 'cnnwithclassattention':
             # Consideration of an encoder with multiple inputs
-            self.encoder = CNNWithClassAttention(self.hyper, [input_shape_encoder, self.dataset.y_train.shape[1]])
+            self.encoder = CNNWithClassAttention(self.hyper, [input_shape_encoder, self.hyper.time_series_depth])
         elif self.hyper.encoder_variant == 'cnn1dwithclassattention':
             # Consideration of an encoder with multiple inputs
             self.encoder = CNN1DWithClassAttention(self.hyper, [input_shape_encoder, self.dataset.y_train.shape[1]])
