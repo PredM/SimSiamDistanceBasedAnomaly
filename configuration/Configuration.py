@@ -42,7 +42,7 @@ class Configuration:
         # if use_individual_hyperparameters = false interpreted as a single json file, else as a folder
         # containing json files named after the cases they should be used for (see all_cases below for correct names)
         # self.hyper_file = self.hyper_file_folder + 'individual_hyperparameters_test'
-        self.hyper_file = self.hyper_file_folder + 'cnn1d.json'#'cnn2d_withAddInput.json'
+        self.hyper_file = self.hyper_file_folder + 'cnn2d.json'
 
         # choose a loss function
         # TODO: TripletLoss, Distance-Based Logistic Loss
@@ -50,7 +50,7 @@ class Configuration:
         self.type_of_loss_function = self.loss_function_variants[0]
         self.margin_of_loss_function = 4  # required for constrative_loss
         # Reduce margin of constrative_loss or in case of BCE: smooth negative examples by half of the sim between different labels
-        self.use_margin_reduction_based_on_label_sim = True # default: False
+        self.use_margin_reduction_based_on_label_sim = False # default: False
         # Use a similarity value instead of 0 for unequal / neg pairs during batch job creation
         self.use_sim_value_for_neg_pair = False # default: False
 
@@ -145,7 +145,7 @@ class Configuration:
 
         # parameter to control if and when a test is conducted through training
         self.use_inference_test_during_training = False  # default False
-        self.test_during_training_every_x_epochs = 100  # default False
+        self.test_during_training_every_x_epochs = 10000  # default False
 
         # parameter to control the size of data / examples used by inference for similiarity calculation
         self.use_batchsize_for_inference_sim_calculation = True # default False
@@ -179,10 +179,10 @@ class Configuration:
         ###
 
         # folder where the trained models are saved to during learning process
-        self.models_folder = '../data/cnn1d_BCE_Fac4_Early1000_Smoothening/'
+        self.models_folder = '../data/trained_models11/'
 
         # path and file name to the specific model that should be used for testing and live classification
-        self.filename_model_to_use = 'temp_snn_model_02-18_12-07-42_epoch-5530'
+        self.filename_model_to_use = 'temp_snn_model_02-02_18-17-50_epoch-680'
         self.directory_model_to_use = self.models_folder + self.filename_model_to_use + '/'
 
         # folder where the preprocessed training and test data for the neural network should be stored
