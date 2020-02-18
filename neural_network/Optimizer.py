@@ -14,6 +14,7 @@ from case_based_similarity.CaseBasedSimilarity import CBS, SimpleCaseHandler
 from configuration.Configuration import Configuration
 from configuration.Hyperparameter import Hyperparameters
 from neural_network.BasicNeuralNetworks import TCN
+import tensorflow.keras.backend as K
 
 from neural_network.Dataset import FullDataset
 from neural_network.Inference import Inference
@@ -68,7 +69,15 @@ class Optimizer:
 
             # Calculate the loss and the gradients
             if self.config.type_of_loss_function == "binary_cross_entropy":
-                loss = tf.keras.losses.binary_crossentropy(y_true=true_similarities, y_pred=pred_similarities)
+                if self.config.use_margin_reduction_based_on_label_sim:
+                    sim = self.getSimiliarityBetweenTwoLabelStringForNegPairSampleWeightInBCE(query_classes)
+                    #print('query_classes', query_classes)
+                    #print('sim', sim)
+                    #bce = tf.keras.losses.BinaryCrossentropy()
+                    #loss = bce(y_true=true_similarities, y_pred=pred_similarities, sample_weight=sim[0])
+                    loss = self.weighted_binary_crossentropy(y_true=true_similarities, y_pred=pred_similarities, weight=sim)
+                else:
+                    loss = tf.keras.losses.binary_crossentropy(y_true=true_similarities, y_pred=pred_similarities)
             elif self.config.type_of_loss_function == "constrative_loss":
                 if self.config.use_margin_reduction_based_on_label_sim:
                     pairwiseLabelSimiliarity = self.getSimiliarityBetweenTwoLabelString(query_classes)
@@ -106,15 +115,15 @@ class Optimizer:
         margin_square = tf.square(tf.maximum(margin - y_pred, 0))
         return tf.keras.backend.mean(y_true * square_pred + (1 - y_true) * margin_square)
 
-    def contrastive_loss_mod(self, y_true, y_pred):
-        """
-        Contrastive loss from Hadsell-et-al.'06
-        http://yann.lecun.com/exdb/publis/pdf/hadsell-chopra-lecun-06.pdf
-        """
-        margin = self.config.margin_of_loss_function
-        square_pred = tf.square(y_pred)
-        margin_square = tf.maximum(tf.square(margin) - tf.square(y_pred), 0)
-        return tf.keras.backend.mean((1 - y_true) * square_pred + y_true * margin_square)
+    def weighted_binary_crossentropy(self, y_true, y_pred, weight=1.):
+        '''
+        Weighted BCE that smoothes only the wrong example according to interclass similarities
+        '''
+        y_true = K.clip(tf.convert_to_tensor(y_true,dtype=tf.float32), K.epsilon(), 1 - K.epsilon())
+        y_pred = K.clip(y_pred, K.epsilon(), 1 - K.epsilon())
+        #org: logloss = -(y_true * K.log(y_pred) * weight + (1 - y_true) * K.log(1 - y_pred))
+        logloss = -(y_true * K.log(y_pred) + (1 - y_true + (weight/2)) * K.log(1 - y_pred))
+        return K.mean(logloss, axis=-1)
 
     def getSimiliarityBetweenTwoLabelString(self, classes):
         # Returns the similarity between 2 failures (labels) in respect to the location of occurrence,
@@ -129,6 +138,34 @@ class Optimizer:
             sim = (self.dataset.getSimBetweenPairLabels(a,b,"condition")
                    + self.dataset.getSimBetweenPairLabels(a,b,"localization")
                    + self.dataset.getSimBetweenPairLabels(a,b,"failuremode"))/3
+            pairwise_class_label_sim[pair_index] = sim
+            #print("pairwise_class_label_sim: ", sim)
+
+        return pairwise_class_label_sim
+
+    def getSimiliarityBetweenTwoLabelStringForNegPairSampleWeightInBCE(self, classes):
+        # Returns the similarity between 2 failures (labels) in respect to the location of occurrence,
+        # type of failure (failure mode) and the condition of the data sample.
+        # Implemented for use as label smoother of neg pair in BCE
+        # Input: 1d npy array with pairwise class labels as strings [2*batchsize]
+        # Output: 1d npy [batchsize]
+        pairwise_class_label_sim = np.zeros([len(classes)//2])
+        for pair_index in range(len(classes)//2):
+            a = classes[2 * pair_index]
+            b = classes[2 * pair_index + 1]
+            #print("pair_index: ", pair_index, "a: ", a ," b: ",b)
+
+            sim = (self.dataset.getSimBetweenPairLabels(a,b,"condition")
+                   + self.dataset.getSimBetweenPairLabels(a,b,"localization")
+                   + self.dataset.getSimBetweenPairLabels(a,b,"failuremode"))/3
+
+            #sim = self.dataset.getSimBetweenPairLabels(a, b, "failuremode")
+
+            # Transform similarity to a appropriate weight
+            #print("Sim before: ", sim)
+            if sim < 1 : sim =1-sim
+            #print("Sim after: ", sim)
+
             pairwise_class_label_sim[pair_index] = sim
             #print("pairwise_class_label_sim: ", sim)
 
@@ -239,7 +276,16 @@ class SNNOptimizer(Optimizer):
             batch_pairs_indices.append(neg_pair[0])
             batch_pairs_indices.append(neg_pair[1])
             #print("Negpair idx: ", self.dataset.y_train_strings[neg_pair[0]], " - ",self.dataset.y_train_strings[neg_pair[1]])
-            batch_true_similarities.append(0.0)
+            if self.config.use_sim_value_for_neg_pair:
+                class_string_a = self.dataset.y_train_strings[neg_pair[0]]
+                class_string_b = self.dataset.y_train_strings[neg_pair[1]]
+                sim = (self.dataset.getSimBetweenPairLabels(class_string_a, class_string_b, "condition")
+                       + self.dataset.getSimBetweenPairLabels(class_string_a, class_string_b, "localization")
+                       + self.dataset.getSimBetweenPairLabels(class_string_a, class_string_b, "failuremode")) / 3
+                batch_true_similarities.append(sim)
+            else:
+                batch_true_similarities.append(0.0)
+
             batch_pairs_indices_firstUsedforSecond.append(neg_pair[0])
             batch_pairs_indices_firstUsedforSecond.append(neg_pair[0])
 
@@ -272,7 +318,7 @@ class SNNOptimizer(Optimizer):
             #print("model_input: ", model_input.shape)
 
             batch_loss = self.update_single_model([model_input, model_input2], true_similarities, self.architecture,
-                                                  self.adam_optimizer, self.architecture.hyper.gradient_cap)
+                                                  self.adam_optimizer, self.architecture.hyper.gradient_cap, query_classes=model_input_class_strings)
         elif self.architecture.hyper.encoder_variant == 'cnn2d':
             model_input = np.reshape(model_input,
                                      (model_input.shape[0], model_input.shape[1], model_input.shape[2], 1))

@@ -53,13 +53,19 @@ class Inference:
                                         'Chances': self.dataset.testArr_label_failureTime_counts,
                                         'AsHealth': np.zeros(self.dataset.testArr_label_failureTime_uniq.shape[0]),
                                         'AsOtherFailure': np.zeros(self.dataset.testArr_label_failureTime_uniq.shape[0])})
+        self.quality_all_failure_localization = 0
+        self.quality_all_failure_mode_diagnosis = 0
+        self.quality_all_condition_quality = 0
+        self.quality_failure_localization = 0
+        self.quality_failure_mode_diagnosis = 0
+        self.quality_condition_quality = 0
 
     def infer_test_dataset(self):
         correct, num_infers = 0, 0
         start_time = time.perf_counter()
 
         # print the case embeddings for each class
-        if self.architecture.encoder.hyper.encoder_variant == 'cnn1dwithclassattention':
+        if self.architecture.encoder.hyper.encoder_variant == 'cnnwithclassattention':
             print()
             #self.architecture.print_learned_case_vectors()
         # self.architecture.printLearnedCaseMatrix()
@@ -81,6 +87,7 @@ class Inference:
 
         # infer all examples of the test data set
         example_cnt=0
+        example_cnt_failure = 0
         for idx_test in idx_test_examples_query_pool:
 
             max_sim = 0
@@ -114,9 +121,13 @@ class Inference:
             # if correctly classified increase the true positive field of the correct class and the of all classes
             if real == max_sim_class:
                 correct += 1
+            self.quality_all_condition_quality += self.dataset.getSimBetweenPairLabels(real,max_sim_class,"condition")
+            self.quality_all_failure_mode_diagnosis += self.dataset.getSimBetweenPairLabels(real, max_sim_class, "failuremode")
+            self.quality_all_failure_localization += self.dataset.getSimBetweenPairLabels(real, max_sim_class, "localization")
 
             # Storing the prediction result in respect to a failure occurrence
             if not real == 'no_failure':
+                example_cnt_failure +=1
                 if real == max_sim_class:
                     self.failure_results.loc[(self.failure_results['Label'].isin([real])) & (
                         self.failure_results['FailureTime'].isin(self.dataset.failureTimes_test[idx_test])),'Correct'] += 1
@@ -126,10 +137,18 @@ class Inference:
                 else:
                     self.failure_results.loc[(self.failure_results['Label'].isin([real])) & (
                         self.failure_results['FailureTime'].isin(self.dataset.failureTimes_test[idx_test])), 'AsOtherFailure'] += 1
+                self.quality_condition_quality += self.dataset.getSimBetweenPairLabels(real, max_sim_class,
+                                                                                           "condition")
+                self.quality_failure_mode_diagnosis += self.dataset.getSimBetweenPairLabels(real, max_sim_class,
+                                                                                                "failuremode")
+                self.quality_failure_localization += self.dataset.getSimBetweenPairLabels(real, max_sim_class,
+                                                                                           "localization")
 
             # regardless of the result increase the number of examples with this class
             self.results.loc[real, '#Examples'] =+ 1
             num_infers += 1
+            #catch division by zero:
+            if example_cnt_failure == 0: example_cnt_failure=1
 
             # print result for this example
             example_results = [
@@ -140,6 +159,9 @@ class Inference:
                 ['Similarity:', max_sim],
                 # ['K-nearest Neighbors: ', k_nn_string],
                 ['Current accuracy:', correct / num_infers],
+                ['Diagnosis quality:', self.quality_failure_mode_diagnosis / example_cnt_failure],
+                ['Localization quality:', self.quality_failure_localization / example_cnt_failure],
+                ['Condition quality:', self.quality_condition_quality / example_cnt_failure],
                 ['Query Window:', str(str(self.dataset.windowTimes_test[idx_test][0]).replace("['YYYYMMDD HH:mm:ss (","").replace(")']","") + " - " + str(self.dataset.windowTimes_test[idx_test][2]).replace("['YYYYMMDD HH:mm:ss (","").replace(")']",""))],
                 ['Query Failure:', str(self.dataset.failureTimes_test[idx_test])]
             ]
@@ -226,6 +248,11 @@ class Inference:
                                         failure_detected_AsOtherFailure_sum]
 
         print(self.failure_results.to_string())
+        print('Self-defined quality measures: ')
+        print(""+"\t")
+        print('Diagnosis quality all:',"\t\t", self.quality_all_failure_mode_diagnosis / num_infers,"\t\t Failure only: \t", self.quality_failure_mode_diagnosis / example_cnt_failure)
+        print('Localization quality:',"\t\t", self.quality_all_failure_localization / num_infers,"\t\t Failure only: \t", self.quality_failure_localization / example_cnt_failure)
+        print('Condition quality:',"\t\t", self.quality_all_condition_quality / num_infers,"\t\t Failure only: \t", self.quality_condition_quality / example_cnt_failure)
 
 
 def main():

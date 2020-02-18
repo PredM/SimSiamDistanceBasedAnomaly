@@ -25,6 +25,9 @@ class Configuration:
         self.simple_Distance_Measures = ['abs_mean', 'euclidean_sim', 'euclidean_dis', 'dot_product', 'cosine']
         self.simple_Distance_Measure = self.simple_Distance_Measures[1]
 
+        # in case of cnn2d_withAddInput, additional option:
+        self.useFeatureWeightedSimilarity = False # default: False
+
         ###
         # hyperparameters
         ###
@@ -39,14 +42,17 @@ class Configuration:
         # if use_individual_hyperparameters = false interpreted as a single json file, else as a folder
         # containing json files named after the cases they should be used for (see all_cases below for correct names)
         # self.hyper_file = self.hyper_file_folder + 'individual_hyperparameters_test'
-        self.hyper_file = self.hyper_file_folder + 'cnn2d.json'
+        self.hyper_file = self.hyper_file_folder + 'cnn1d.json'#'cnn2d_withAddInput.json'
 
         # choose a loss function
         # TODO: TripletLoss, Distance-Based Logistic Loss
         self.loss_function_variants = ['binary_cross_entropy', 'constrative_loss']
-        self.type_of_loss_function = self.loss_function_variants[1]
-        self.margin_of_loss_function = 8  # required for constrative_loss
-        self.use_margin_reduction_based_on_label_sim = False # default: False
+        self.type_of_loss_function = self.loss_function_variants[0]
+        self.margin_of_loss_function = 4  # required for constrative_loss
+        # Reduce margin of constrative_loss or in case of BCE: smooth negative examples by half of the sim between different labels
+        self.use_margin_reduction_based_on_label_sim = True # default: False
+        # Use a similarity value instead of 0 for unequal / neg pairs during batch job creation
+        self.use_sim_value_for_neg_pair = False # default: False
 
         # Goal loss for CBS
         # Choose a loss value at which the snn of a case should not be trained any further
@@ -94,7 +100,15 @@ class Configuration:
                         'txt18_pneumatic_leakage_failure_mode_2_faulty', 'txt18_pneumatic_leakage_failure_mode_3_faulty',
                         'txt18_transport_failure_mode_wout_workpiece', 'txt19_i4_lightbarrier_failure_mode_1',
                         'txt19_i4_lightbarrier_failure_mode_2']
-        self.cases_used = all_cases #['txt16_m3_t2_wear','txt16_i4']
+        self.cases_used = all_cases
+        ''' ['no_failure',
+                        'txt15_i1_lightbarrier_failure_mode_1', 'txt15_i1_lightbarrier_failure_mode_2',
+                        'txt15_i3_lightbarrier_failure_mode_1', 'txt15_i3_lightbarrier_failure_mode_2',
+                        'txt15_m1_t1_high_wear', 'txt15_m1_t1_low_wear', 'txt15_m1_t2_wear',
+                        'txt15_pneumatic_leakage_failure_mode_1', 'txt15_pneumatic_leakage_failure_mode_2',
+                        'txt15_pneumatic_leakage_failure_mode_3', 'txt16_i3_switch_failure_mode_2',
+                        'txt16_i4_lightbarrier_failure_mode_1', 'txt16_m3_t1_high_wear', 'txt16_m3_t1_low_wear',
+                        'txt16_m3_t2_wear']'''
 
         ###
         # kafka / real time classification
@@ -131,7 +145,7 @@ class Configuration:
 
         # parameter to control if and when a test is conducted through training
         self.use_inference_test_during_training = False  # default False
-        self.test_during_training_every_x_epochs = 10000  # default False
+        self.test_during_training_every_x_epochs = 100  # default False
 
         # parameter to control the size of data / examples used by inference for similiarity calculation
         self.use_batchsize_for_inference_sim_calculation = True # default False
@@ -165,10 +179,10 @@ class Configuration:
         ###
 
         # folder where the trained models are saved to during learning process
-        self.models_folder = '../data/trained_models11/'
+        self.models_folder = '../data/cnn1d_BCE_Fac4_Early1000_Smoothening/'
 
         # path and file name to the specific model that should be used for testing and live classification
-        self.filename_model_to_use = 'temp_snn_model_02-02_18-17-50_epoch-680'
+        self.filename_model_to_use = 'temp_snn_model_02-18_12-07-42_epoch-5530'
         self.directory_model_to_use = self.models_folder + self.filename_model_to_use + '/'
 
         # folder where the preprocessed training and test data for the neural network should be stored
@@ -232,14 +246,14 @@ class Configuration:
         ###
 
         # value is used to ensure a constant frequency of the measurement time points
-        self.resample_frequency = "2ms"  # need to be the same for DataImport as well as DatasetCreation
+        self.resample_frequency = "4ms"  # need to be the same for DataImport as well as DatasetCreation
 
         # define the length (= the number of timestamps)
         # of the time series generated for training & live classification
-        self.time_series_length = 1500
+        self.time_series_length = 1000
 
         # define the time window length in seconds the timestamps of a single time series should be distributed on
-        self.interval_in_seconds = 5
+        self.interval_in_seconds = 4
 
         # to some extent the time series in each examples overlaps to another one
         # default: False if true: interval in seconds is not considered, just time series length

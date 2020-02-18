@@ -41,6 +41,7 @@ class Dataset:
         self.x_auxCaseVector_test = None
         self.x_class_label_to_attribute_masking_arr = {}
         self.x_train_masking = None # npy 2d arr with shape (examples,#attributes)
+        self.masking_unique = None
 
         # additional information for each example about their window timeframe and failure occurence time
         self.windowTimes_train = None
@@ -245,30 +246,36 @@ class FullDataset(Dataset):
         self.testArr_label_failureTime_uniq = np.delete(testArr_label_failureTime_uniq, idx, 0)
         self.testArr_label_failureTime_counts = np.delete(testArr_label_failureTime_counts, idx, 0)
 
+        # TODO für CBS auslassen
         # Generate for each label a masking array
         #print("Config relevant features: ", self.config.relevant_features)
         num_of_attributes = self.x_train.shape[2]
-        for label in self.config.relevant_features:
+        self.masking_unique = np.zeros([len(self.config.relevant_features),num_of_attributes ])
+        i=0
+        for class_label in self.classes_total: #[i]self.config.relevant_features
+            #print("Label: ", class_label)
             #print(self.config.relevant_features[label])
             curr_masking_arr = np.zeros([num_of_attributes])
-            for attribute in self.config.relevant_features[label]:
+            #if self.config.relevant_features[class_label] is None:
+            #    print("Relevant attributes for: ", class_label, " missing")
+            for attribute in self.config.relevant_features[class_label]:
                 idx_set_to_one = np.where(self.feature_names_all == attribute)
-                curr_masking_arr[idx_set_to_one] =1
+                curr_masking_arr[idx_set_to_one] =1.0
                 #print(attribute ,": ", np.where(self.feature_names_all == attribute))
             #print(label, ": ", curr_masking_arr)
-            self.x_class_label_to_attribute_masking_arr[label] = curr_masking_arr
+            curr_masking_arr = np.where(curr_masking_arr == 0, 0.0,curr_masking_arr)
+            self.x_class_label_to_attribute_masking_arr[class_label] = curr_masking_arr
+            self.masking_unique[i,:] = curr_masking_arr
+            i = i+1
+            #print(label, ": ", curr_masking_arr)
             #self.x_class_label_to_attribute_masking[label]
         #print("test: ", self.x_class_label_to_attribute_masking_arr['txt18_transport_failure_mode_wout_workpiece'])
 
         # Add the masking array to each corresponding example
         self.x_train_masking = np.zeros([self.x_train.shape[0], num_of_attributes])
         for i in range(self.x_train.shape[0]):
-            #print(i, ": ", self.x_class_label_to_attribute_masking_arr[self.y_train_strings[i]])
+            #print(i, " - ", self.y_train_strings[i],":",self.x_class_label_to_attribute_masking_arr[self.y_train_strings[i]])
             self.x_train_masking[i,:] = self.x_class_label_to_attribute_masking_arr[self.y_train_strings[i]]
-
-
-
-
 
         # data
         # 1. dimension: example
@@ -353,13 +360,15 @@ class FullDataset(Dataset):
         if(notion_of_sim == 'failuremode'):
             pair_label_sim = self.df_label_sim_failuremode.loc[label_1,label_2]
         elif(notion_of_sim == 'localization'):
-            pair_label_sim = self.df_label_sim_failuremode.loc[label_1,label_2]
+            pair_label_sim = self.df_label_sim_localization.loc[label_1,label_2]
         elif (notion_of_sim == 'condition'):
             pair_label_sim = self.df_label_sim_condition.loc[label_1, label_2]
         else:
-            #print("Similarity notion: ", notion_of_sim, " unknown! Results in sim 0")
+            print("Similarity notion: ", notion_of_sim, " unknown! Results in sim 0")
             pair_label_sim = 0
+        #print(label_1, " - ", label_2, ":", str(pair_label_sim))
         return float(pair_label_sim)
+
 # variation of the dataset class that consists only of examples of the same case
 # does not contain test data because this isn't needed on the level of each case
 class CaseSpecificDataset(Dataset):

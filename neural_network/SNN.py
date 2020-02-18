@@ -97,7 +97,8 @@ class SimpleSNN(AbstractSimilarityMeasure):
                     auxiliaryInput[2 * i] = self.dataset.x_class_label_to_attribute_masking_arr[self.dataset.y_train_strings[index + i]]
                     # np.zeros(self.dataset.x_auxCaseVector_train.shape[1])
                     # self.dataset.x_auxCaseVector_train[index]
-                    auxiliaryInput[2 * i + 1] = self.dataset.x_class_label_to_attribute_masking_arr[self.dataset.y_train_strings[index + i]]
+                    #np.zeros(self.dataset.x_class_label_to_attribute_masking_arr[self.dataset.y_train_strings[index + i]].shape[0])
+                    auxiliaryInput[2 * i + 1] =  self.dataset.x_class_label_to_attribute_masking_arr[self.dataset.y_train_strings[index + i]]
 
             if self.hyper.encoder_variant == 'cnn1dwithclassattention':
                 input_pairs = input_pairs.reshape((input_pairs.shape[0],input_pairs.shape[1],input_pairs.shape[2]))
@@ -118,7 +119,6 @@ class SimpleSNN(AbstractSimilarityMeasure):
     # get the similarities of the example to each example in the dataset
     # used for inference
     def get_sims(self, example):
-
         # Splitting the batch size for inference in the case of using a TCN with warping FFNN due to GPU memory issues
         if type(self.encoder) == TCN or self.config.use_batchsize_for_inference_sim_calculation:
             return self.get_sims_in_batches(example)
@@ -165,7 +165,6 @@ class SimpleSNN(AbstractSimilarityMeasure):
 
     @tf.function
     def get_sims_batch(self, batch):
-        # print("get_sims_batch: batch shape: ", batch, "self.hyper.encoder_variant: ", self.hyper.encoder_variant)
 
         # calculate the output of the subnet for the examples in the batch
         context_vectors = self.encoder.model(batch, training=self.training)
@@ -192,49 +191,72 @@ class SimpleSNN(AbstractSimilarityMeasure):
 
     @tf.function
     def get_sim_pair(self, context_vectors, pair_index):
-        # if a concat layer is used in the cnn1dclassattention, then context vectors need to be reshaped from 2d to 3d
+        # TODO: Reminder if a concat layer is used in the cnn1dclassattention,
+        #  then context vectors need to be reshaped from 2d to 3d (implement directly in BasicNeuralNetorks)
         # context_vectors = tf.reshape(context_vectors,[context_vectors.shape[0],context_vectors.shape[1],1])
 
-        a = context_vectors[2 * pair_index, :, :]
-        b = context_vectors[2 * pair_index + 1, :, :]
-        # print("a.shape: ", a.shape)
+        # Parsing the input (e.g., two 1d or 2d vectors depending on which encoder is used) to calculate distance / sim
+        if self.encoder.hyper.encoder_variant == 'cnnwithclassattention':
+            # Output of encoder are encoded time series and additional things e.g., weights vectors
+            a = context_vectors[0][2 * pair_index, :, :]
+            b = context_vectors[0][2 * pair_index + 1, :, :]
+            a_weights = context_vectors[1][2 * pair_index, :]
+            b_weights = context_vectors[1][2 * pair_index+1, :]
+        else:
+            a = context_vectors[2 * pair_index, :, :]
+            b = context_vectors[2 * pair_index + 1, :, :]
+
 
         # TODO Implement as method call and fix in fast version
         #  tf.exp() was added here directly
 
-        # simple similarity measure:
+        # simple similarity measures:
         if self.config.simple_Distance_Measure == "abs_mean":
             # mean of absolute difference / Manhattan Distance ?
             diff = tf.abs(a - b)
             distance_example = tf.reduce_mean(diff)
             sim_example = tf.exp(-distance_example)
+
         elif self.config.simple_Distance_Measure == "euclidean_sim":
             # Euclidean distance converted as similarity
-            diff = tf.norm(a - b, ord='euclidean')
+            if self.config.useFeatureWeightedSimilarity:
+                diff = tf.norm(a - b, ord='euclidean', axis=0, keepdims=True)
+                # include the weights to influence overall distance
+                a_weights = tf.dtypes.cast(a_weights, tf.float32)
+                a_weights = tf.dtypes.cast(a_weights, tf.float32)
+                a_weights_sum = tf.reduce_sum(a_weights)
+                a_weights = a_weights / a_weights_sum
+                diff = tf.reduce_sum(tf.abs(diff * a_weights))
+            else:
+                diff = tf.norm(a - b, ord='euclidean')
             sim_example = 1 / (1 + tf.reduce_sum(diff))
+
         elif self.config.simple_Distance_Measure == "euclidean_dis":
-            # Euclidean distance
-            # flatten in case of a matrix (e.g., 1d cnn output)
-            #print(a.shape[0])
-            #a = tf.reshape(a.shape[0]*a.shape[1])
-            #print(a.shape)
-            #a = tf.squeeze(a)
-            #b = tf.squeeze(b)
-            #diff = tf.linalg.norm(a - b, axis=1)
-            diff = tf.norm(a - b, ord='euclidean')
-            print(diff.shape)
-            print("current diff: ",diff)
+            # Euclidean distance (required in constrative loss function)
+            if self.config.useFeatureWeightedSimilarity:
+                diff = tf.norm(a - b, ord='euclidean', axis=0, keepdims=True)
+                # include the weights to influence overall distance
+                a_weights = tf.dtypes.cast(a_weights, tf.float32)
+                a_weights_sum = tf.reduce_sum(a_weights)
+                a_weights = a_weights / a_weights_sum
+                diff = tf.reduce_sum(tf.abs(diff * a_weights))
+                diff = tf.reduce_sum(diff)
+            else:
+                diff = tf.norm(a - b, ord='euclidean')
             sim_example = diff
+
         elif self.config.simple_Distance_Measure == "dot_product":
             # dot product
             sim = tf.matmul(a, b, transpose_b=True)
             sim_example = tf.reduce_mean(sim)
+
         elif self.config.simple_Distance_Measure == "cosine":
             # cosine, source: https://stackoverflow.com/questions/43357732/how-to-calculate-the-cosine-similarity-between-two-tensors/43358711
             normalize_a = tf.nn.l2_normalize(a, 0)
             normalize_b = tf.nn.l2_normalize(b, 0)
             cos_similarity = tf.reduce_sum(tf.multiply(normalize_a, normalize_b))
             sim_example = cos_similarity
+
         elif self.config.simple_Distance_Measure == "jaccard":
             # Prüfen, source: https://stackoverflow.com/questions/43261072/jaccards-distance-matrix-with-tensorflow
             tp = tf.reduce_sum(tf.multiply(a, b), 1)
@@ -248,7 +270,11 @@ class SimpleSNN(AbstractSimilarityMeasure):
     def print_learned_case_vectors(self, num_of_max_pos=5):
         # this methods prints the learned case embeddings for each class and its values
         cnt = 0
-        case_embeddings = self.encoder.intermediate_layer_model(self.dataset.classes_Unique_oneHotEnc,
+        #print(self.dataset.masking_unique.shape)
+        for i in range(len(self.dataset.feature_names_all)):
+            print(i,": ", self.dataset.feature_names_all[i])
+        input= self.dataset.masking_unique
+        case_embeddings = self.encoder.intermediate_layer_model(input,
                                                                 training=self.training)
         # Get positions with maximum values
         max_pos = np.argsort(-case_embeddings, axis=1)  # [::-1]  # np.argmax(case_embeddings, axis=1)
@@ -259,8 +285,8 @@ class SimpleSNN(AbstractSimilarityMeasure):
                 row = np.array(case_embeddings[cnt, :])
                 maxNPos = max_pos[cnt, :num_of_max_pos]
                 minNPos = min_pos[cnt, :num_of_max_pos]
-                print(i, " ", self.dataset.classes_Unique_oneHotEnc[cnt], "Max Filter:", max_pos[cnt, :5],
-                      "Max Values: ", row[maxNPos], "Min Values: ", row[minNPos])
+                print(i, " ", input[cnt], " | Max Filter: ", max_pos[cnt, :5], " | Min Filter: ", min_pos[cnt, :5],
+                      " | Max Values: ", row[maxNPos], " | Min Values: ", row[minNPos])
                 cnt = cnt + 1
 
     def print_learned_case_matrix(self):

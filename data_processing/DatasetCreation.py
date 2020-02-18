@@ -353,26 +353,26 @@ def main():
     print('\nSave to np arrays in ' + config.training_data_folder)
 
     print('Step 1/7')
-    np.save(config.training_data_folder + 'train_features_2_.npy', x_train)
+    np.save(config.training_data_folder + 'train_features_4_.npy', x_train)
     print('Step 2/7')
-    np.save(config.training_data_folder + 'test_features_2_.npy', x_test)
+    np.save(config.training_data_folder + 'test_features_4_.npy', x_test)
     print('Step 3/7')
-    np.save(config.training_data_folder + 'train_labels_2_.npy', y_train)
+    np.save(config.training_data_folder + 'train_labels_4_.npy', y_train)
     print('Step 4/7')
-    np.save(config.training_data_folder + 'test_labels_2_.npy', y_test)
+    np.save(config.training_data_folder + 'test_labels_4_.npy', y_test)
     print('Step 5/7')
-    np.save(config.training_data_folder + 'feature_names_2_.npy', attributes)
+    np.save(config.training_data_folder + 'feature_names_4_.npy', attributes)
     print('Step 6/6')
-    np.save(config.training_data_folder + 'train_failure_times_2_.npy',
+    np.save(config.training_data_folder + 'train_failure_times_4_.npy',
             failure_times_train)  # Contains the associated time of a failure (if not no failure) for each example
     print('Step 7/7')
-    np.save(config.training_data_folder + 'test_failure_times_2_.npy',
+    np.save(config.training_data_folder + 'test_failure_times_4_.npy',
             failure_times_test)
     print('Step 7/7')
-    np.save(config.training_data_folder + 'train_window_times_3.npy',
+    np.save(config.training_data_folder + 'train_window_times_4_.npy',
             window_times_train)  # Contains the start and end time stamp for each training example
     print('Step 7/7')
-    np.save(config.training_data_folder + 'test_window_times_3.npy',
+    np.save(config.training_data_folder + 'test_window_times_4_.npy',
             window_times_test)
 
 
