@@ -56,11 +56,6 @@ class Hyperparameters:
         with open(file_path, 'r') as f:
             data = json.load(f)
 
-        self.encoder_variant = data['encoder_variant'].lower()
-
-        if self.encoder_variant not in self.encoder_variants:
-            raise ValueError('Unknown encoder variant:', self.encoder_variants)
-
         self.batch_size = data['batch_size']
         self.epochs = data['epochs']
         self.epochs_current = data['epochs_current']
@@ -69,29 +64,35 @@ class Hyperparameters:
         self.gradient_cap = data['gradient_cap']
         self.dropout_rate = data['dropout_rate']
 
-        self.ffnn_layers = data['ffnn_layers']
+        # Load assign layers for ffnn as similarity measure if declared
+        if data.get('ffnn_layers') is not None:
+            self.ffnn_layers = data['ffnn_layers']
 
-        self.cnn_layers = data['cnn_layers']
-        self.cnn_kernel_length = data['cnn_kernel_length']
-        self.cnn_strides = data['cnn_strides']
-        if data.get('fc_after_cnn1d_layers') is not None:
-            self.fc_after_cnn1d_layers = data['fc_after_cnn1d_layers']
-        self.ffnn_layers = data['ffnn_layers']
+        self.encoder_variant = data['encoder_variant'].lower()
 
-        if self.encoder_variant == "cnn2d":
+        if self.encoder_variant not in self.encoder_variants:
+            raise ValueError('Unknown encoder variant:', self.encoder_variants)
+
+        # Load encoder details depending on which encoder variant is specified
+        if self.encoder_variant == 'rnn':
+            self.lstm_layers = data['lstm_layers']
+
+        elif self.encoder_variant == 'tcn':
+            self.tcn_layers = data['tcn_layers']
+            self.tcn_kernel_length = data['tcn_kernel_length']
+
+        elif self.encoder_variant in ['cnn', 'cnn1dwithclassattention']:
+            self.cnn_layers = data['cnn_layers']
+            self.cnn_kernel_length = data['cnn_kernel_length']
+            self.cnn_strides = data['cnn_strides']
+
+            if data.get('fc_after_cnn1d_layers') is not None:
+                self.fc_after_cnn1d_layers = data['fc_after_cnn1d_layers']
+
+        elif self.encoder_variant == ["cnn2d", "cnnwithclassattention"]:
             self.cnn2d_layers = data['cnn2d_layers']
             self.cnn2d_kernel_length = data['cnn2d_kernel_length']
             self.cnn2d_strides = data['cnn2d_strides']
-
-        if self.encoder_variant == "cnnwithclassattention":
-            self.cnn2d_layers = data['cnn2d_layers']
-            self.cnn2d_kernel_length = data['cnn2d_kernel_length']
-            self.cnn2d_strides = data['cnn2d_strides']
-
-        self.lstm_layers = data['lstm_layers']
-
-        self.tcn_layers = data['tcn_layers']
-        self.tcn_kernel_length = data['tcn_kernel_length']
 
     def write_to_file(self, path_to_file):
 

@@ -18,7 +18,7 @@ class Configuration:
         # ffnn = uses ffnn as distance measure
         # simple = mean absolute difference as distance measure instead of the ffnn
         self.architecture_variants = ['standard_simple', 'standard_ffnn', 'fast_simple', 'fast_ffnn']
-        self.architecture_variant = self.architecture_variants[0]
+        self.architecture_variant = self.architecture_variants[1]
         # Most related work on time series with SNN use a fc layer at the end of a cnn to merge 1d-conv
         # features of time steps. Seems to be useful for standard_simple architecture, can be used via
         # adding "fc_after_cnn1d_layers" in the hyperparameter configs file
@@ -47,12 +47,12 @@ class Configuration:
         # if use_individual_hyperparameters = false interpreted as a single json file, else as a folder
         # containing json files named after the cases they should be used for (see all_cases below for correct names)
         # self.hyper_file = self.hyper_file_folder + 'individual_hyperparameters_test'
-        self.hyper_file = self.hyper_file_folder + 'cnn1d.json'
+        self.hyper_file = self.hyper_file_folder + 'ba_cnn.json'
 
         # choose a loss function
         # TODO: TripletLoss, Distance-Based Logistic Loss
         self.loss_function_variants = ['binary_cross_entropy', 'constrative_loss', 'mean_squared_error']
-        self.type_of_loss_function = self.loss_function_variants[2]
+        self.type_of_loss_function = self.loss_function_variants[0]
         self.margin_of_loss_function = 4  # required for constrative_loss
         # Reduce margin of constrative_loss or in case of BCE: smooth negative examples by half of the sim between different labels
         self.use_margin_reduction_based_on_label_sim = False  # default: False
@@ -109,7 +109,7 @@ class Configuration:
                      'txt18_pneumatic_leakage_failure_mode_2_faulty', 'txt18_pneumatic_leakage_failure_mode_3_faulty',
                      'txt18_transport_failure_mode_wout_workpiece', 'txt19_i4_lightbarrier_failure_mode_1',
                      'txt19_i4_lightbarrier_failure_mode_2']
-        self.cases_used = ['txt16_m3_t1_low_wear']
+        self.cases_used = all_cases
 
         # TODO @klein is this still needed?
         ''' ['no_failure',

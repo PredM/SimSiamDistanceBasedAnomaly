@@ -13,8 +13,8 @@ class Dataset:
         self.config: Configuration = config
 
         self.x_train = None  # training data (examples,time,channels)
-        self.y_train = None  # One hot encoded class labels (numExampl,numClasses)
-        self.y_train_strings = None  # # class labels as strings (numExampl,1)
+        self.y_train = None  # One hot encoded class labels (numExamples,numClasses)
+        self.y_train_strings = None  # class labels as strings (numExamples,1)
         self.one_hot_encoder_labels = None  # one hot label encoder
         self.classes_Unique_oneHotEnc = None
         self.num_train_instances = None
@@ -107,7 +107,6 @@ class FullDataset(Dataset):
         # TODO Unused, only assigned, delete maybe
         self.class_idx_to_class_string = {}
 
-
         # np array that contains the number of instances for each classLabel in the training data
         self.num_instances_by_class_train = None
 
@@ -154,21 +153,10 @@ class FullDataset(Dataset):
         # dtype conversion necessary because layers use float32 by default
         # .astype('float32') removed because already included in dataset creation
 
-        # TODO Remove, Dataset Object should be created with path to case base folder
-        #  Check if training should be done there
-        if self.config.use_case_base_extraction_for_inference and not self.training:
-            print("Attention: only a case base extraction is used for inference!")
-            self.x_train = np.load(self.config.case_base_folder + 'train_features.npy')  # data training
-            self.y_train_strings = np.expand_dims(np.load(self.config.case_base_folder + 'train_labels.npy'), axis=-1)
-            self.windowTimes_train = np.expand_dims(np.load(self.config.case_base_folder + 'train_window_times.npy'),
-                                                    axis=-1)
-            self.failureTimes_train = np.expand_dims(np.load(self.config.case_base_folder + 'train_failure_times.npy'),
-                                                     axis=-1)
-        else:
-            self.x_train = np.load(self.dataset_folder + 'train_features.npy')  # data training
-            self.y_train_strings = np.expand_dims(np.load(self.dataset_folder + 'train_labels.npy'), axis=-1)
-            self.windowTimes_train = np.expand_dims(np.load(self.dataset_folder + 'train_window_times.npy'), axis=-1)
-            self.failureTimes_train = np.expand_dims(np.load(self.dataset_folder + 'train_failure_times.npy'), axis=-1)
+        self.x_train = np.load(self.dataset_folder + 'train_features.npy')  # data training
+        self.y_train_strings = np.expand_dims(np.load(self.dataset_folder + 'train_labels.npy'), axis=-1)
+        self.windowTimes_train = np.expand_dims(np.load(self.dataset_folder + 'train_window_times.npy'), axis=-1)
+        self.failureTimes_train = np.expand_dims(np.load(self.dataset_folder + 'train_failure_times.npy'), axis=-1)
 
         self.x_test = np.load(self.dataset_folder + 'test_features.npy')  # data testing
         self.y_test_strings = np.expand_dims(np.load(self.dataset_folder + 'test_labels.npy'), axis=-1)

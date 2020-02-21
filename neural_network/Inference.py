@@ -289,9 +289,13 @@ def main():
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
     config = Configuration()
-    dataset: FullDataset = FullDataset(config.training_data_folder, config, training=False)
-    dataset.load()
 
+    if config.use_case_base_extraction_for_inference:
+        dataset: FullDataset = FullDataset(config.case_base_folder, config, training=False)
+    else:
+        dataset: FullDataset = FullDataset(config.training_data_folder, config, training=False)
+
+    dataset.load()
 
     # print("Classes in training: ", dataset.y_train_classString_numOfInstances)
     # print("Classes in testing: ", dataset.y_test_classString_numOfInstances)
