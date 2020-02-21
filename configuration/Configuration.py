@@ -29,6 +29,10 @@ class Configuration:
         # in case of cnn2d_withAddInput, additional option:
         self.useFeatureWeightedSimilarity = False # default: False
 
+        # Compares each time step of the encoded representation with each other time step
+        # Impl. is based on NeuralWarp FFNN just without NN; (but in simple similarity measure)
+        self.use_timestep_wise_simple_similarity = False  # default: False
+
         ###
         # hyperparameters
         ###
@@ -43,12 +47,12 @@ class Configuration:
         # if use_individual_hyperparameters = false interpreted as a single json file, else as a folder
         # containing json files named after the cases they should be used for (see all_cases below for correct names)
         # self.hyper_file = self.hyper_file_folder + 'individual_hyperparameters_test'
-        self.hyper_file = self.hyper_file_folder + 'cnn2d.json'
+        self.hyper_file = self.hyper_file_folder + 'cnn1d.json'
 
         # choose a loss function
         # TODO: TripletLoss, Distance-Based Logistic Loss
-        self.loss_function_variants = ['binary_cross_entropy', 'constrative_loss']
-        self.type_of_loss_function = self.loss_function_variants[0]
+        self.loss_function_variants = ['binary_cross_entropy', 'constrative_loss','mean_squared_error']
+        self.type_of_loss_function = self.loss_function_variants[2]
         self.margin_of_loss_function = 4  # required for constrative_loss
         # Reduce margin of constrative_loss or in case of BCE: smooth negative examples by half of the sim between different labels
         self.use_margin_reduction_based_on_label_sim = False # default: False

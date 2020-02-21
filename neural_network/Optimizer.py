@@ -89,6 +89,8 @@ class Optimizer:
                                                  classes=pairwise_label_similarity)
                 else:
                     loss = self.contrastive_loss(y_true=true_similarities, y_pred=pred_similarities)
+            elif self.config.type_of_loss_function == "mean_squared_error":
+                loss = tf.keras.losses.MSE(true_similarities, pred_similarities)
             else:
                 raise AttributeError('Unknown loss function name. Use: "binary_cross_entropy" or "constrative_loss": ',
                                      self.config.type_of_loss_function)
