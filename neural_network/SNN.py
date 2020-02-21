@@ -206,6 +206,18 @@ class SimpleSNN(AbstractSimilarityMeasure):
             a = context_vectors[2 * pair_index, :, :]
             b = context_vectors[2 * pair_index + 1, :, :]
 
+        # Time-step wise (each time-step of a is compared with each time-step of b) (from NeuralWarp FFNN)
+        if self.config.use_timestep_wise_simple_similarity:
+            indices_a = tf.range(a.shape[0])
+            indices_a = tf.tile(indices_a, [a.shape[0]])
+            a = tf.gather(a, indices_a)
+            # a shape: [T*T, C]
+
+            indices_b = tf.range(b.shape[0])
+            indices_b = tf.reshape(indices_b, [-1, 1])
+            indices_b = tf.tile(indices_b, [1, b.shape[0]])
+            indices_b = tf.reshape(indices_b, [-1])
+            b = tf.gather(b, indices_b)
 
         # TODO Implement as method call and fix in fast version
         #  tf.exp() was added here directly
