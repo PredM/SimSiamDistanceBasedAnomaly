@@ -27,7 +27,7 @@ class Configuration:
         self.simple_Distance_Measure = self.simple_Distance_Measures[1]
 
         # in case of cnn2d_withAddInput, additional option:
-        self.useFeatureWeightedSimilarity = False # default: False
+        self.useFeatureWeightedSimilarity = False  # default: False
 
         # Compares each time step of the encoded representation with each other time step
         # Impl. is based on NeuralWarp FFNN just without NN; (but in simple similarity measure)
@@ -51,13 +51,13 @@ class Configuration:
 
         # choose a loss function
         # TODO: TripletLoss, Distance-Based Logistic Loss
-        self.loss_function_variants = ['binary_cross_entropy', 'constrative_loss','mean_squared_error']
+        self.loss_function_variants = ['binary_cross_entropy', 'constrative_loss', 'mean_squared_error']
         self.type_of_loss_function = self.loss_function_variants[2]
         self.margin_of_loss_function = 4  # required for constrative_loss
         # Reduce margin of constrative_loss or in case of BCE: smooth negative examples by half of the sim between different labels
-        self.use_margin_reduction_based_on_label_sim = False # default: False
+        self.use_margin_reduction_based_on_label_sim = False  # default: False
         # Use a similarity value instead of 0 for unequal / neg pairs during batch job creation
-        self.use_sim_value_for_neg_pair = False # default: False
+        self.use_sim_value_for_neg_pair = False  # default: False
 
         # Goal loss for CBS
         # Choose a loss value at which the snn of a case should not be trained any further
@@ -88,24 +88,30 @@ class Configuration:
         # subset of all can be used for debugging purposes
         # if cases_used == [] or == None all in config.json will be used
         all_cases_BA = ['no_failure', 'txt_18_comp_leak', 'txt_17_comp_leak', 'txt15_m1_t1_high_wear',
-                     'txt15_m1_t1_low_wear', 'txt15_m1_t2_wear', 'txt16_m3_t1_high_wear', 'txt16_m3_t1_low_wear',
-                     'txt16_m3_t2_wear', 'txt16_i4']
+                        'txt15_m1_t1_low_wear', 'txt15_m1_t2_wear', 'txt16_m3_t1_high_wear', 'txt16_m3_t1_low_wear',
+                        'txt16_m3_t2_wear', 'txt16_i4']
         all_cases = ['no_failure', 'txt15_conveyor_failure_mode_driveshaft_slippage_failure',
-                        'txt15_i1_lightbarrier_failure_mode_1', 'txt15_i1_lightbarrier_failure_mode_2',
-                        'txt15_i3_lightbarrier_failure_mode_1', 'txt15_i3_lightbarrier_failure_mode_2',
-                        'txt15_m1_t1_high_wear', 'txt15_m1_t1_low_wear', 'txt15_m1_t2_wear',
-                        'txt15_pneumatic_leakage_failure_mode_1', 'txt15_pneumatic_leakage_failure_mode_2',
-                        'txt15_pneumatic_leakage_failure_mode_3', 'txt16_conveyor_failure_mode_driveshaft_slippage_failure',
-                        'txt16_conveyorbelt_big_gear_tooth_broken_failure', 'txt16_conveyorbelt_small_gear_tooth_broken_failure',
-                        'txt16_i3_switch_failure_mode_2', 'txt16_i4_lightbarrier_failure_mode_1',
-                        'txt16_m3_t1_high_wear', 'txt16_m3_t1_low_wear', 'txt16_m3_t2_wear',
-                        'txt16_pneumatic_leakage_failure_mode_1', 'txt17_i1_switch_failure_mode_1', 'txt17_i1_switch_failure_mode_2',
-                        'txt17_pneumatic_leakage_failure_mode_1', 'txt17_workingstation_transport_failure_mode_wout_workpiece',
-                        'txt18_pneumatic_leakage_failure_mode_1', 'txt18_pneumatic_leakage_failure_mode_2',
-                        'txt18_pneumatic_leakage_failure_mode_2_faulty', 'txt18_pneumatic_leakage_failure_mode_3_faulty',
-                        'txt18_transport_failure_mode_wout_workpiece', 'txt19_i4_lightbarrier_failure_mode_1',
-                        'txt19_i4_lightbarrier_failure_mode_2']
-        self.cases_used = all_cases
+                     'txt15_i1_lightbarrier_failure_mode_1', 'txt15_i1_lightbarrier_failure_mode_2',
+                     'txt15_i3_lightbarrier_failure_mode_1', 'txt15_i3_lightbarrier_failure_mode_2',
+                     'txt15_m1_t1_high_wear', 'txt15_m1_t1_low_wear', 'txt15_m1_t2_wear',
+                     'txt15_pneumatic_leakage_failure_mode_1', 'txt15_pneumatic_leakage_failure_mode_2',
+                     'txt15_pneumatic_leakage_failure_mode_3',
+                     'txt16_conveyor_failure_mode_driveshaft_slippage_failure',
+                     'txt16_conveyorbelt_big_gear_tooth_broken_failure',
+                     'txt16_conveyorbelt_small_gear_tooth_broken_failure',
+                     'txt16_i3_switch_failure_mode_2', 'txt16_i4_lightbarrier_failure_mode_1',
+                     'txt16_m3_t1_high_wear', 'txt16_m3_t1_low_wear', 'txt16_m3_t2_wear',
+                     'txt16_pneumatic_leakage_failure_mode_1', 'txt17_i1_switch_failure_mode_1',
+                     'txt17_i1_switch_failure_mode_2',
+                     'txt17_pneumatic_leakage_failure_mode_1',
+                     'txt17_workingstation_transport_failure_mode_wout_workpiece',
+                     'txt18_pneumatic_leakage_failure_mode_1', 'txt18_pneumatic_leakage_failure_mode_2',
+                     'txt18_pneumatic_leakage_failure_mode_2_faulty', 'txt18_pneumatic_leakage_failure_mode_3_faulty',
+                     'txt18_transport_failure_mode_wout_workpiece', 'txt19_i4_lightbarrier_failure_mode_1',
+                     'txt19_i4_lightbarrier_failure_mode_2']
+        self.cases_used = ['txt16_m3_t1_low_wear']
+
+        # TODO @klein is this still needed?
         ''' ['no_failure',
                         'txt15_i1_lightbarrier_failure_mode_1', 'txt15_i1_lightbarrier_failure_mode_2',
                         'txt15_i3_lightbarrier_failure_mode_1', 'txt15_i3_lightbarrier_failure_mode_2',
@@ -153,7 +159,7 @@ class Configuration:
         self.test_during_training_every_x_epochs = 10000  # default False
 
         # parameter to control the size of data / examples used by inference for similiarity calculation
-        self.use_batchsize_for_inference_sim_calculation = True # default False
+        self.use_batchsize_for_inference_sim_calculation = True  # default False
 
         # the random seed the index selection is based on
         self.random_seed_index_selection = 42
@@ -170,13 +176,14 @@ class Configuration:
         # upsampling of minority classes). Based on recommendation of lessons learned from successful siamese models:
         # http://openaccess.thecvf.com/content_ICCV_2019/papers/Roy_Siamese_Networks_The_Tale_of_Two_Manifolds_ICCV_2019_paper.pdf
         self.equalClassConsideration = True  # default: False
+
         # If equalClassConsideration is true, then this parameter defines the proportion of examples
         # based on class distribution and example distribution.
         # Proportion = Batchjobsize/2/ThisFactor. E.g., 2 = class distribution only, 4 = half, 6 = 1/3, 8 = 1/4
-        self.upsampling_factor = 4 # Default: 4, means half / half
+        self.upsampling_factor = 4  # Default: 4, means half / half
 
         # Stops the training when a specific criterion no longer improves
-        self.use_early_stopping = True # default: False
+        self.use_early_stopping = True  # default: False
         self.early_stopping_if_no_loss_decrease_after_num_of_epochs = 1000
 
         ###
