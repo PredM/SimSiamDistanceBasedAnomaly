@@ -104,9 +104,12 @@ class FullDataset(Dataset):
         self.class_idx_to_ex_idxs_train = {}
         self.class_idx_to_ex_idxs_test = {}
 
+<<<<<<< HEAD
         # TODO Unused, only assigned, delete maybe
         self.class_idx_to_class_string = {}
 
+=======
+>>>>>>> master
         # np array that contains the number of instances for each classLabel in the training data
         self.num_instances_by_class_train = None
 
@@ -126,8 +129,11 @@ class FullDataset(Dataset):
         #
         # new
         #
+<<<<<<< HEAD
         self.y_train_strings_unique = None
         self.y_test_strings_unique = None
+=======
+>>>>>>> master
 
         # additional information to the sensor data about the case e.g., relevant sensor streams ...
         self.x_auxCaseVector_train = None
