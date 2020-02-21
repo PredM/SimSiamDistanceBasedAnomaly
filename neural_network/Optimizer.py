@@ -331,7 +331,8 @@ class SNNOptimizer(Optimizer):
         # Add the auxiliary input if required
         model_input_class_strings = np.take(a=self.dataset.y_train_strings, indices=batch_pairs_indices, axis=0)
         if self.architecture.hyper.encoder_variant in ['cnnwithclassattention', 'cnn1dwithclassattention']:
-            model_input2 = np.take(a=self.dataset.x_train_masking, indices=batch_pairs_indices, axis=0)
+
+            model_input2 = [self.dataset.get_masking_float(label) for label in model_input_class_strings]
             # remove one class/case vector of each pair to get a similar input as in test/life without knowing the label
             # model_input2[range(0, self.architecture.hyper.batch_size - 1, 2), :] = np.zeros(
             #    self.dataset.x_auxCaseVector_train.shape[1])

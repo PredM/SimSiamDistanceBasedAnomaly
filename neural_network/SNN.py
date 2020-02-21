@@ -1,5 +1,3 @@
-import sys
-
 import tensorflow as tf
 import numpy as np
 
@@ -92,14 +90,13 @@ class SimpleSNN(AbstractSimilarityMeasure):
                 input_pairs[2 * i + 1] = self.dataset.x_train[index + i]
                 if self.hyper.encoder_variant in ['cnnwithclassattention', 'cnn1dwithclassattention']:
                     # Adding an additional/auxiliary input
-                    # noinspection PyUnboundLocalVariable
-                    auxiliaryInput[2 * i] = self.dataset.x_class_label_to_attribute_masking_arr[
-                        self.dataset.y_train_strings[index + i]]
+                    # noinspection PyUnboundLocalVariable, PyUnresolvedReferences
+                    auxiliaryInput[2 * i] = self.dataset.get_masking_float(self.dataset.y_train_strings[index + i])
                     # np.zeros(self.dataset.x_auxCaseVector_train.shape[1])
                     # self.dataset.x_auxCaseVector_train[index]
                     # np.zeros(self.dataset.x_class_label_to_attribute_masking_arr[self.dataset.y_train_strings[index + i]].shape[0])
-                    auxiliaryInput[2 * i + 1] = self.dataset.x_class_label_to_attribute_masking_arr[
-                        self.dataset.y_train_strings[index + i]]
+                    # noinspection PyUnboundLocalVariable, PyUnresolvedReferences
+                    auxiliaryInput[2 * i + 1] = self.dataset.get_masking_float(self.dataset.y_train_strings[index + i])
 
             if self.hyper.encoder_variant == 'cnn1dwithclassattention':
                 input_pairs = input_pairs.reshape((input_pairs.shape[0], input_pairs.shape[1], input_pairs.shape[2]))
@@ -140,13 +137,12 @@ class SimpleSNN(AbstractSimilarityMeasure):
 
                 if self.hyper.encoder_variant in ['cnnwithclassattention', 'cnn1dwithclassattention']:
                     # Adding an additional/auxiliary input
-                    # noinspection PyUnboundLocalVariable
-                    auxiliaryInput[2 * index] = self.dataset.x_class_label_to_attribute_masking_arr[
-                        self.dataset.y_train_strings[index]]
+                    # noinspection PyUnboundLocalVariable, PyUnresolvedReferences
+                    auxiliaryInput[2 * index] = self.dataset.get_masking_float(self.dataset.y_train_strings[index])
                     # np.zeros(self.dataset.x_auxCaseVector_train.shape[1])
                     # self.dataset.x_auxCaseVector_train[index]
-                    auxiliaryInput[2 * index + 1] = self.dataset.x_class_label_to_attribute_masking_arr[
-                        self.dataset.y_train_strings[index]]
+                    # noinspection PyUnboundLocalVariable, PyUnresolvedReferences
+                    auxiliaryInput[2 * index + 1] = self.dataset.get_masking_float(self.dataset.y_train_strings[index])
 
             # Compute similarities
             if self.hyper.encoder_variant == 'cnnwithclassattention':
@@ -288,7 +284,9 @@ class SimpleSNN(AbstractSimilarityMeasure):
         # print(self.dataset.masking_unique.shape)
         for i in range(len(self.dataset.feature_names_all)):
             print(i, ": ", self.dataset.feature_names_all[i])
-        input = self.dataset.masking_unique
+
+        # TODO not tested
+        input = np.array([self.dataset.get_masking_float(case_label) for case_label in self.config.cases_used])
         case_embeddings = self.encoder.intermediate_layer_model(input, training=self.training)
         # Get positions with maximum values
         max_pos = np.argsort(-case_embeddings, axis=1)  # [::-1]  # np.argmax(case_embeddings, axis=1)

@@ -8,7 +8,6 @@ from configuration.Configuration import Configuration
 
 class Dataset:
 
-    # TODO Check if all this is needed for all dataset, including case specific ones
     def __init__(self, dataset_folder, config: Configuration):
         self.dataset_folder = dataset_folder
         self.config: Configuration = config
@@ -20,50 +19,12 @@ class Dataset:
         self.classes_Unique_oneHotEnc = None
         self.num_train_instances = None
         self.num_instances = None
-        self.y_train_strings_unique = None
-        self.y_test_strings_unique = None
-
-        # Dictionary with key: class as integer and value: array with index positions
-        self.class_idx_to_ex_idxs_train = {}
-
-        # Dictionary with key: integer (0 to numOfClasses-1) which corresponds to one column entry
-        # and value string (class name)
-        self.class_idx_to_class_string = {}
-
-        # np array that contains the number of instances to each classLabel
-        self.y_train_classString_numOfInstances = None
-        # np array that contains the number of instances to each classLabel
-        self.y_test_classString_numOfInstances = None
-        # np array that contains a list classes in training and test
-        self.y_strings_classesInBoth = None
 
         # Class names as string
         self.classes_total = None
 
         self.time_series_length = None
         self.time_series_depth = None
-
-        # additional information to the sensor data about the case e.g., relevant sensor streams ...
-        self.x_auxCaseVector_train = None
-        self.x_auxCaseVector_test = None
-        self.x_class_label_to_attribute_masking_arr = {}
-        self.x_train_masking = None  # npy 2d arr with shape (examples,#attributes)
-        self.masking_unique = None
-
-        # additional information for each example about their window time frame and failure occurrence time
-        self.windowTimes_train = None
-        self.windowTimes_test = None
-        self.failureTimes_train = None
-        self.failureTimes_test = None
-
-        # numpy array (x,2) that contains each unique permutation between failure occurrence time and assigned label
-        self.testArr_label_failureTime_uniq = None
-        self.testArr_label_failureTime_counts = None
-
-        # pandas df ( = matrix) with pair-wise similarities between labels in respect to a metric
-        self.df_label_sim_localization = None
-        self.df_label_sim_failuremode = None
-        self.df_label_sim_condition = None
 
         # the names of all features of the dataset loaded from files
         self.feature_names_all = None
@@ -143,8 +104,7 @@ class FullDataset(Dataset):
         self.class_idx_to_ex_idxs_train = {}
         self.class_idx_to_ex_idxs_test = {}
 
-        # dictionary with key: integer (0 to numOfClasses-1) which corresponds to one column entry
-        # and value string (class name)
+        # TODO Unused, only assigned, delete maybe
         self.class_idx_to_class_string = {}
 
         # np array that contains the number of instances for each classLabel in the training data
@@ -158,6 +118,35 @@ class FullDataset(Dataset):
 
         # np array that contains a list classes that occur in training AND test data set
         self.classes_in_both = None
+
+        # dictionary, key: class label, value: np array which contains 0s or 1s depending on whether the attribute
+        # at this index is relevant for the class described with the label key
+        self.class_label_to_masking_vector = {}
+
+        #
+        # new
+        #
+        self.y_train_strings_unique = None
+        self.y_test_strings_unique = None
+
+        # additional information to the sensor data about the case e.g., relevant sensor streams ...
+        self.x_auxCaseVector_train = None
+        self.x_auxCaseVector_test = None
+
+        # additional information for each example about their window time frame and failure occurrence time
+        self.windowTimes_train = None
+        self.windowTimes_test = None
+        self.failureTimes_train = None
+        self.failureTimes_test = None
+
+        # numpy array (x,2) that contains each unique permutation between failure occurrence time and assigned label
+        self.testArr_label_failureTime_uniq = None
+        self.testArr_label_failureTime_counts = None
+
+        # pandas df ( = matrix) with pair-wise similarities between labels in respect to a metric
+        self.df_label_sim_localization = None
+        self.df_label_sim_failuremode = None
+        self.df_label_sim_condition = None
 
     def load(self):
         # dtype conversion necessary because layers use float32 by default
@@ -257,48 +246,21 @@ class FullDataset(Dataset):
         self.classes_in_both = np.intersect1d(self.num_instances_by_class_test[:, 0],
                                               self.num_instances_by_class_train[:, 0])
 
-        # required for inference metric calculation
-        # get all failures and labels as unique entry
-        testArr_label_failureTime = np.stack((self.y_test_strings, np.squeeze(self.failureTimes_test))).T
-        # extract unique permutations between failure occurence time and labeled entry
-        testArr_label_failureTime_uniq, testArr_label_failureTime_counts = np.unique(testArr_label_failureTime, axis=0,
-                                                                                     return_counts=True)
-        # remove noFailure entries
-        idx = np.where(np.char.find(testArr_label_failureTime_uniq, 'noFailure') >= 0)
-        self.testArr_label_failureTime_uniq = np.delete(testArr_label_failureTime_uniq, idx, 0)
-        self.testArr_label_failureTime_counts = np.delete(testArr_label_failureTime_counts, idx, 0)
+        # TODO Add back when file available
+        if True:
+            # required for inference metric calculation
+            # get all failures and labels as unique entry
+            testArr_label_failureTime = np.stack((self.y_test_strings, np.squeeze(self.failureTimes_test))).T
+            # extract unique permutations between failure occurence time and labeled entry
+            testArr_label_failureTime_uniq, testArr_label_failureTime_counts = np.unique(testArr_label_failureTime,
+                                                                                         axis=0,
+                                                                                         return_counts=True)
+            # remove noFailure entries
+            idx = np.where(np.char.find(testArr_label_failureTime_uniq, 'noFailure') >= 0)
+            self.testArr_label_failureTime_uniq = np.delete(testArr_label_failureTime_uniq, idx, 0)
+            self.testArr_label_failureTime_counts = np.delete(testArr_label_failureTime_counts, idx, 0)
 
-        # TODO für CBS auslassen -> Hier komplett raus, als Methode implementieren
-        #  überarbeiten, besser dokumentieren
-        # Generate for each label a masking array
-        # print("Config relevant features: ", self.config.relevant_features)
-        num_of_attributes = self.x_train.shape[2]
-        self.masking_unique = np.zeros([len(self.config.relevant_features), num_of_attributes])
-        i = 0
-        for class_label in self.classes_total:  # [i]self.config.relevant_features
-            # print("Label: ", class_label)
-            # print(self.config.relevant_features[label])
-            curr_masking_arr = np.zeros([num_of_attributes])
-            # if self.config.relevant_features[class_label] is None:
-            #    print("Relevant attributes for: ", class_label, " missing")
-            for attribute in self.config.relevant_features[class_label]:
-                idx_set_to_one = np.where(self.feature_names_all == attribute)
-                curr_masking_arr[idx_set_to_one] = 1.0
-                # print(attribute ,": ", np.where(self.feature_names_all == attribute))
-            # print(label, ": ", curr_masking_arr)
-            curr_masking_arr = np.where(curr_masking_arr == 0, 0.0, curr_masking_arr)
-            self.x_class_label_to_attribute_masking_arr[class_label] = curr_masking_arr
-            self.masking_unique[i, :] = curr_masking_arr
-            i = i + 1
-            # print(label, ": ", curr_masking_arr)
-            # self.x_class_label_to_attribute_masking[label]
-        # print("test: ", self.x_class_label_to_attribute_masking_arr['txt18_transport_failure_mode_wout_workpiece'])
-
-        # Add the masking array to each corresponding example
-        self.x_train_masking = np.zeros([self.x_train.shape[0], num_of_attributes])
-        for i in range(self.x_train.shape[0]):
-            # print(i, " - ", self.y_train_strings[i],":",self.x_class_label_to_attribute_masking_arr[self.y_train_strings[i]])
-            self.x_train_masking[i, :] = self.x_class_label_to_attribute_masking_arr[self.y_train_strings[i]]
+        self.calculate_maskings()
 
         # data
         # 1. dimension: example
@@ -315,6 +277,34 @@ class FullDataset(Dataset):
         # print('Classes in total: ', self.classes_total)
 
         print()
+
+    def calculate_maskings(self):
+        map_case_to_relevant_features: dict = self.config.relevant_features
+        print(self.feature_names_all)
+
+        for case in self.config.cases_used:
+            relevant_features_for_case = map_case_to_relevant_features.get(case)
+            masking = np.isin(self.feature_names_all, relevant_features_for_case)
+
+            self.class_label_to_masking_vector[case] = masking
+
+    # returns a boolean array with values depending on whether the attribute at this index is relevant
+    # for the class of the passed label
+    def get_masking(self, class_label):
+        if class_label not in self.class_label_to_masking_vector:
+            raise ValueError('Passed class label', class_label, 'was not found in masking dictionary')
+        else:
+            return self.class_label_to_masking_vector.get(class_label)
+
+    def get_masking_float(self, class_label):
+        return self.get_masking(class_label).astype(float)
+
+    # will return the test example and the train_example (of the passed index) reduced to the
+    # relevant attributes of the case of the train_example
+    def reduce_to_relevant(self, test_example, train_example_index):
+        class_label_train_example = self.y_train_strings[train_example_index]
+        mask = self.get_masking(class_label_train_example)
+        return test_example[mask], self.x_train[mask]
 
     def encode(self, encoder, encode_test_data=False):
 

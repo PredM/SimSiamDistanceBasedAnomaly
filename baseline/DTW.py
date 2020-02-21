@@ -1,5 +1,5 @@
+import threading
 import time
-import math
 import sys
 import os
 import numpy as np
@@ -12,74 +12,79 @@ from neural_network.Dataset import FullDataset
 from configuration.Configuration import Configuration
 
 
-# TODO
-#  Cleanup
-#  Add multi core support
-#  Add true positive etc
-#  Find better way of reducing to relevant attributes, corresponding to cbs
+class DTWThread(threading.Thread):
 
-def execute_dtw(dataset: FullDataset, start_index, end_index):
+    def __init__(self, indices_train_examples, full_dataset, test_example, use_relevant_only):
+        super().__init__()
+
+        self.indices_train_examples = indices_train_examples
+        self.full_dataset = full_dataset
+        self.test_example = test_example
+        self.use_relevant_only = use_relevant_only
+        self.results = np.zeros(len(indices_train_examples))
+
+    def run(self):
+        for array_index, example_index in enumerate(self.indices_train_examples):
+
+            if self.use_relevant_only:
+
+                # Another approach: Instead of splitting the examples into relevant attributes and calculating
+                # them separately, we reduce the examples to the relevant attributes and
+                # input them together into the DTW algorithm
+                test_example_reduced, train_example_reduced = self.full_dataset.reduce_to_relevant(self.test_example,
+                                                                                                   example_index)
+                distance, _ = fastdtw(test_example_reduced, train_example_reduced, dist=euclidean)
+
+            else:
+                train_example = self.full_dataset[example_index]
+                distance, _ = fastdtw(self.test_example, train_example, dist=euclidean)
+
+            self.results[array_index] = distance
+
+
+# TODO Add true positive etc
+def execute_dtw_version(dataset: FullDataset, start_index, end_index, parallel_threads, use_relevant_only=False):
+    print("Consider only relevant attributes defined in config.json for the class of the training example: ",
+          use_relevant_only)
+
     score = 0.0
     start_time = time.clock()
-    useOnlyRelevantAttributes = True
-    print("Consider only relevant attributes defined in config.json for each class: ", useOnlyRelevantAttributes)
 
-    for i in range(start_index, end_index):
-
+    for test_index in range(start_index, end_index):
         # currently classified example
-        current_test_example = dataset.x_test[i]
+        current_test_example = dataset.x_test[test_index]
 
-        distance_min, index_min = math.inf, -1
+        results = np.zeros(dataset.num_train_instances)
+        chunks = np.array_split(range(dataset.num_train_instances), parallel_threads)
+        print(chunks)
 
-        # get the example of the training set that is the most similar to the current test example
-        for current_train_index in range(dataset.num_train_instances):
+        threads = []
 
-            current_train_example = dataset.x_train[current_train_index]
+        for chunk in chunks:
+            t = DTWThread(chunk, dataset, current_test_example, use_relevant_only)
+            t.start()
+            t.join()
+            threads.append(t)
 
-            # calculate the dtw-distance between two examples
-            if useOnlyRelevantAttributes:
-                # current_test_example_masked = np.multiply(current_test_example, dataset.x_train_masking[current_train_index])
-                # current_train_example_masked = np.multiply(current_train_example, dataset.x_train_masking[current_train_index])
+        for t in threads:
+            t.join()
+            results[t.indices_train_examples] = t.results
 
-                # For each example
-                current_example_distance = 0
-                num_of_features = 0
-                current_example_masking = dataset.x_train_masking[
-                    current_train_index]  # masking, weights for current class of example
-                # For each attribute, compare local distance
-                for cnt, entry in enumerate(current_example_masking):
-                    # print("entry: ", entry, "current_test_example shape: ", current_test_example.shape)
-                    # If attribute is relevant then compute the local similarity between both
-                    if entry == 1:
-                        # Local distance: between relevant features
-                        curr_attribute_distance, _ = fastdtw(current_test_example[:, cnt],
-                                                             current_train_example[:, cnt],
-                                                             dist=euclidean)
-                        # print("Feature: ", dataset.feature_names_all[i], " Dist: ", curr_attribute_distance)
-                        current_example_distance = current_example_distance + curr_attribute_distance
-                        num_of_features = num_of_features + 1
-                # Global distance: weight distance based on number of features:
-                current_example_distance = current_example_distance / num_of_features
-                print(dataset.y_train_strings[current_train_index], ": ", current_example_distance)
-                # current_example_distance, _ = fastdtw(current_test_example_masked, current_train_example_masked,
-                #                                      dist=euclidean)
-            else:
-                current_example_distance, _ = fastdtw(current_test_example, current_train_example, dist=euclidean)
-
-            # save the current example if it's distance is the smaller than the current best
-            if current_example_distance < distance_min:
-                distance_min = current_example_distance
-                index_min = current_train_index
+        index_min_distance = np.argmin(results)
 
         # check if the selected training example has the same label as the current test example
-        score += 1.0 if (np.array_equal(dataset.y_test[i], dataset.y_train[index_min])) else 0.0
+        score += 1.0 if (np.array_equal(dataset.y_test[test_index], dataset.y_train[index_min_distance])) else 0.0
 
         # print results over all processed test examples
-        current_example = i - start_index + 1
-        print('Current example:', current_example, 'Class:', dataset.y_test_strings[i], 'Predicted:',
-              dataset.y_train_strings[index_min], 'Min distance: ', distance_min, 'Current score:', score,
-              'Current accuarcy:',
-              score / current_example)
+        current_example = test_index - start_index + 1
+
+        # TODO Add metrics like in inference
+        print('Current example:', current_example,
+              'Class:', dataset.y_test_strings[test_index],
+              'Predicted:', dataset.y_train_strings[index_min_distance],
+              'Min distance: ', results[index_min_distance],
+              'Current score:', score,
+              'Current accuracy:', score / current_example)
 
     elapsed_time = time.clock() - start_time
 
@@ -101,15 +106,17 @@ def main():
     dataset = FullDataset(config.training_data_folder, config, False)
     dataset.load()
 
-    # execute for all the total test data set
+    # select which part of the test dataset to test
     start_index = 3000
     end_index = dataset.num_test_instances
-    print(dataset.y_test_strings[3300])
+
+    # select the number of threads that the should be used
+    parallel_threads = 2
 
     print('Executing DTW for example ', start_index, ' to ', end_index, 'of the test data set in\n',
           config.training_data_folder, '\n')
 
-    execute_dtw(dataset, start_index, end_index)
+    execute_dtw_version(dataset, start_index, end_index, parallel_threads)
 
 
 # this script is used to execute the dtw test for comparision with the neural network
