@@ -7,6 +7,7 @@ import pandas as pd
 class Configuration:
 
     def __init__(self, dataset_to_import=0):
+
         ###
         # neural network
         ###

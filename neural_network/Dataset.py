@@ -8,6 +8,7 @@ from configuration.Configuration import Configuration
 
 class Dataset:
 
+    # TODO Check if all this is needed for all dataset, including case specific ones
     def __init__(self, dataset_folder, config: Configuration):
         self.dataset_folder = dataset_folder
         self.config: Configuration = config
@@ -21,14 +22,20 @@ class Dataset:
         self.num_instances = None
         self.y_train_strings_unique = None
         self.y_test_strings_unique = None
+
         # Dictionary with key: class as integer and value: array with index positions
         self.class_idx_to_ex_idxs_train = {}
-        # Dictonary with key: integer (0 to numOfClasses-1) which corresponds to one column entry
+
+        # Dictionary with key: integer (0 to numOfClasses-1) which corresponds to one column entry
         # and value string (class name)
         self.class_idx_to_class_string = {}
-        self.y_train_classString_numOfInstances = None # np array that contains the numer of instances to each classLabel
-        self.y_test_classString_numOfInstances = None # np array that contains the numer of instances to each classLabel
-        self.y_strings_classesInBoth = None # np array that contains a list classes in training and test
+
+        # np array that contains the number of instances to each classLabel
+        self.y_train_classString_numOfInstances = None
+        # np array that contains the number of instances to each classLabel
+        self.y_test_classString_numOfInstances = None
+        # np array that contains a list classes in training and test
+        self.y_strings_classesInBoth = None
 
         # Class names as string
         self.classes_total = None
@@ -40,20 +47,20 @@ class Dataset:
         self.x_auxCaseVector_train = None
         self.x_auxCaseVector_test = None
         self.x_class_label_to_attribute_masking_arr = {}
-        self.x_train_masking = None # npy 2d arr with shape (examples,#attributes)
+        self.x_train_masking = None  # npy 2d arr with shape (examples,#attributes)
         self.masking_unique = None
 
-        # additional information for each example about their window timeframe and failure occurence time
+        # additional information for each example about their window time frame and failure occurrence time
         self.windowTimes_train = None
         self.windowTimes_test = None
         self.failureTimes_train = None
         self.failureTimes_test = None
 
-        # numpy array (x,2) that contains each unique permutation between failure occurence time and assigned label
+        # numpy array (x,2) that contains each unique permutation between failure occurrence time and assigned label
         self.testArr_label_failureTime_uniq = None
         self.testArr_label_failureTime_counts = None
 
-        # pandas df (matrix) with pair-wise similarities between labels in respect to a metric (localization, failuremode ...)
+        # pandas df ( = matrix) with pair-wise similarities between labels in respect to a metric
         self.df_label_sim_localization = None
         self.df_label_sim_failuremode = None
         self.df_label_sim_condition = None
@@ -65,13 +72,13 @@ class Dataset:
         raise NotImplemented('Not implemented for abstract class')
 
     @staticmethod
-    def draw_from_ds(self, dataset, num_instances, is_positive, classIdx=None):
+    def draw_from_ds(self, dataset, num_instances, is_positive, class_idx=None):
         # dataset: vector with one-hot encoded label of the data set
 
         # draw as long as is_positive criterion is not satisfied
 
         # draw two random examples index
-        if classIdx is None:
+        if class_idx is None:
             while True:
                 first_idx = np.random.randint(0, num_instances, size=1)[0]
                 second_idx = np.random.randint(0, num_instances, size=1)[0]
@@ -84,11 +91,16 @@ class Dataset:
                         return first_idx, second_idx
         else:
             # examples are drawn by a given class index
-            classIdxArr = self.class_idx_to_ex_idxs_train[classIdx] # contains idx values of examples from the given class
-            #print("classIdx:", classIdx," classIdxArr: ",classIdxArr, "self.class_idx_to_class_string: ", self.class_idx_to_class_string[classIdx])
+            # contains idx values of examples from the given class
+            classIdxArr = self.class_idx_to_ex_idxs_train[class_idx]
+
+            # print("class_idx:", class_idx, " classIdxArr: ", classIdxArr, "self.class_idx_to_class_string: ",
+            #      self.class_idx_to_class_string[class_idx])
+
             # Get a random idx of an example that is part of this class
             first_rand_idx = np.random.randint(0, len(classIdxArr), size=1)[0]
             first_idx = classIdxArr[first_rand_idx]
+
             if is_positive:
                 while True:
                     second_rand_idx = np.random.randint(0, len(classIdxArr), size=1)[0]
@@ -98,15 +110,18 @@ class Dataset:
             else:
                 while True:
                     uniform_sampled_class = np.random.randint(low=0,
-                                                                 high=len(self.y_train_strings_unique) ,
-                                                                 size=1)
+                                                              high=len(self.y_train_strings_unique),
+                                                              size=1)
                     classIdxArr_neg = self.class_idx_to_ex_idxs_train[uniform_sampled_class[0]]
                     second_rand_idx_neg = np.random.randint(0, len(classIdxArr_neg), size=1)[0]
-                    #print("uniform_sampled_class: ", uniform_sampled_class, "classIdxArr_neg: ", classIdxArr_neg, "second_rand_idx_neg: ", second_rand_idx_neg)
+                    # print("uniform_sampled_class: ", uniform_sampled_class, "classIdxArr_neg: ", classIdxArr_neg,
+                    #       "second_rand_idx_neg: ", second_rand_idx_neg)
+
                     second_idx = classIdxArr_neg[second_rand_idx_neg]
-                    #second_idx = np.random.randint(0, num_instances, size=1)[0]
+                    # second_idx = np.random.randint(0, num_instances, size=1)[0]
+
                     if second_idx not in classIdxArr[:, 0]:
-                        #print("classIdxArr: ", classIdxArr, " - uniform_sampled_class: ", uniform_sampled_class[0])
+                        # print("classIdxArr: ", classIdxArr, " - uniform_sampled_class: ", uniform_sampled_class[0])
                         return first_idx[0], second_idx[0]
 
 
@@ -144,18 +159,20 @@ class FullDataset(Dataset):
         # np array that contains a list classes that occur in training AND test data set
         self.classes_in_both = None
 
-
-
     def load(self):
         # dtype conversion necessary because layers use float32 by default
         # .astype('float32') removed because already included in dataset creation
 
+        # TODO Remove, Dataset Object should be created with path to case base folder
+        #  Check if training should be done there
         if self.config.use_case_base_extraction_for_inference and not self.training:
             print("Attention: only a case base extraction is used for inference!")
             self.x_train = np.load(self.config.case_base_folder + 'train_features.npy')  # data training
             self.y_train_strings = np.expand_dims(np.load(self.config.case_base_folder + 'train_labels.npy'), axis=-1)
-            self.windowTimes_train = np.expand_dims(np.load(self.config.case_base_folder + 'train_window_times.npy'), axis=-1)
-            self.failureTimes_train = np.expand_dims(np.load(self.config.case_base_folder + 'train_failure_times.npy'), axis=-1)
+            self.windowTimes_train = np.expand_dims(np.load(self.config.case_base_folder + 'train_window_times.npy'),
+                                                    axis=-1)
+            self.failureTimes_train = np.expand_dims(np.load(self.config.case_base_folder + 'train_failure_times.npy'),
+                                                     axis=-1)
         else:
             self.x_train = np.load(self.dataset_folder + 'train_features.npy')  # data training
             self.y_train_strings = np.expand_dims(np.load(self.dataset_folder + 'train_labels.npy'), axis=-1)
@@ -168,12 +185,16 @@ class FullDataset(Dataset):
         self.failureTimes_test = np.expand_dims(np.load(self.dataset_folder + 'test_failure_times.npy'), axis=-1)
         self.feature_names_all = np.load(self.dataset_folder + 'feature_names.npy')  # names of the features (3. dim)
 
-        # load a matrix with pair-wise similarities between labels in respect to a metric (localization, failuremode ...)
-        self.df_label_sim_failuremode = pd.read_csv(self.dataset_folder +'FailureMode_Sim_Matrix.csv', sep=';',index_col=0)
+        # load a matrix with pair-wise similarities between labels in respect
+        # to different metrics
+        self.df_label_sim_failuremode = pd.read_csv(self.dataset_folder + 'FailureMode_Sim_Matrix.csv', sep=';',
+                                                    index_col=0)
         self.df_label_sim_failuremode.index = self.df_label_sim_failuremode.index.str.replace('\'', '')
-        self.df_label_sim_localization = pd.read_csv(self.dataset_folder +'Lokalization_Sim_Matrix.csv', sep=';',index_col=0)
+        self.df_label_sim_localization = pd.read_csv(self.dataset_folder + 'Lokalization_Sim_Matrix.csv', sep=';',
+                                                     index_col=0)
         self.df_label_sim_localization.index = self.df_label_sim_localization.index.str.replace('\'', '')
-        self.df_label_sim_condition = pd.read_csv(self.dataset_folder +'Condition_Sim_Matrix.csv', sep=';',index_col=0)
+        self.df_label_sim_condition = pd.read_csv(self.dataset_folder + 'Condition_Sim_Matrix.csv', sep=';',
+                                                  index_col=0)
         self.df_label_sim_condition.index = self.df_label_sim_condition.index.str.replace('\'', '')
 
         # create a encoder, sparse output must be disabled to get the intended output format
@@ -240,42 +261,44 @@ class FullDataset(Dataset):
         # get all failures and labels as unique entry
         testArr_label_failureTime = np.stack((self.y_test_strings, np.squeeze(self.failureTimes_test))).T
         # extract unique permutations between failure occurence time and labeled entry
-        testArr_label_failureTime_uniq, testArr_label_failureTime_counts = np.unique(testArr_label_failureTime , axis=0, return_counts=True)
+        testArr_label_failureTime_uniq, testArr_label_failureTime_counts = np.unique(testArr_label_failureTime, axis=0,
+                                                                                     return_counts=True)
         # remove noFailure entries
         idx = np.where(np.char.find(testArr_label_failureTime_uniq, 'noFailure') >= 0)
         self.testArr_label_failureTime_uniq = np.delete(testArr_label_failureTime_uniq, idx, 0)
         self.testArr_label_failureTime_counts = np.delete(testArr_label_failureTime_counts, idx, 0)
 
-        # TODO für CBS auslassen
+        # TODO für CBS auslassen -> Hier komplett raus, als Methode implementieren
+        #  überarbeiten, besser dokumentieren
         # Generate for each label a masking array
-        #print("Config relevant features: ", self.config.relevant_features)
+        # print("Config relevant features: ", self.config.relevant_features)
         num_of_attributes = self.x_train.shape[2]
-        self.masking_unique = np.zeros([len(self.config.relevant_features),num_of_attributes ])
-        i=0
-        for class_label in self.classes_total: #[i]self.config.relevant_features
-            #print("Label: ", class_label)
-            #print(self.config.relevant_features[label])
+        self.masking_unique = np.zeros([len(self.config.relevant_features), num_of_attributes])
+        i = 0
+        for class_label in self.classes_total:  # [i]self.config.relevant_features
+            # print("Label: ", class_label)
+            # print(self.config.relevant_features[label])
             curr_masking_arr = np.zeros([num_of_attributes])
-            #if self.config.relevant_features[class_label] is None:
+            # if self.config.relevant_features[class_label] is None:
             #    print("Relevant attributes for: ", class_label, " missing")
             for attribute in self.config.relevant_features[class_label]:
                 idx_set_to_one = np.where(self.feature_names_all == attribute)
-                curr_masking_arr[idx_set_to_one] =1.0
-                #print(attribute ,": ", np.where(self.feature_names_all == attribute))
-            #print(label, ": ", curr_masking_arr)
-            curr_masking_arr = np.where(curr_masking_arr == 0, 0.0,curr_masking_arr)
+                curr_masking_arr[idx_set_to_one] = 1.0
+                # print(attribute ,": ", np.where(self.feature_names_all == attribute))
+            # print(label, ": ", curr_masking_arr)
+            curr_masking_arr = np.where(curr_masking_arr == 0, 0.0, curr_masking_arr)
             self.x_class_label_to_attribute_masking_arr[class_label] = curr_masking_arr
-            self.masking_unique[i,:] = curr_masking_arr
-            i = i+1
-            #print(label, ": ", curr_masking_arr)
-            #self.x_class_label_to_attribute_masking[label]
-        #print("test: ", self.x_class_label_to_attribute_masking_arr['txt18_transport_failure_mode_wout_workpiece'])
+            self.masking_unique[i, :] = curr_masking_arr
+            i = i + 1
+            # print(label, ": ", curr_masking_arr)
+            # self.x_class_label_to_attribute_masking[label]
+        # print("test: ", self.x_class_label_to_attribute_masking_arr['txt18_transport_failure_mode_wout_workpiece'])
 
         # Add the masking array to each corresponding example
         self.x_train_masking = np.zeros([self.x_train.shape[0], num_of_attributes])
         for i in range(self.x_train.shape[0]):
-            #print(i, " - ", self.y_train_strings[i],":",self.x_class_label_to_attribute_masking_arr[self.y_train_strings[i]])
-            self.x_train_masking[i,:] = self.x_class_label_to_attribute_masking_arr[self.y_train_strings[i]]
+            # print(i, " - ", self.y_train_strings[i],":",self.x_class_label_to_attribute_masking_arr[self.y_train_strings[i]])
+            self.x_train_masking[i, :] = self.x_class_label_to_attribute_masking_arr[self.y_train_strings[i]]
 
         # data
         # 1. dimension: example
@@ -286,12 +309,11 @@ class FullDataset(Dataset):
         print('Shape of training set (example, time, channels):', self.x_train.shape)
         print('Shape of test set (example, time, channels):', self.x_test.shape)
         print('Num of classes in train and test together:', self.num_classes)
-        '''
-        print('Classes used in training: ', len(self.y_train_strings_unique)," :",self.y_train_strings_unique)
-        print()
-        print('Classes used in test: ', len(self.y_test_strings_unique)," :", self.y_test_strings_unique)
-        print('Classes in total: ', self.classes_total)
-        '''
+
+        # print('Classes used in training: ', len(self.y_train_strings_unique)," :",self.y_train_strings_unique)
+        # print('Classes used in test: ', len(self.y_test_strings_unique)," :", self.y_test_strings_unique)
+        # print('Classes in total: ', self.classes_total)
+
         print()
 
     def encode(self, encoder, encode_test_data=False):
@@ -353,21 +375,23 @@ class FullDataset(Dataset):
 
             return first_idx, second_idx
 
-    def getSimBetweenPairLabels(self, label_1, label_2, notion_of_sim):
-        #Input label1, label2, notion_of_sim as string
-        #Output similiarity value under consideration of the metric
-        #print("label_1: ", label_1, " label_2: ", label_2, " notion_of_sim: ", notion_of_sim)
-        if(notion_of_sim == 'failuremode'):
-            pair_label_sim = self.df_label_sim_failuremode.loc[label_1,label_2]
-        elif(notion_of_sim == 'localization'):
-            pair_label_sim = self.df_label_sim_localization.loc[label_1,label_2]
-        elif (notion_of_sim == 'condition'):
+    def get_sim_between_label_pair(self, label_1, label_2, notion_of_sim):
+        # Input label1, label2, notion_of_sim as string
+        # Output similarity value under consideration of the metric
+        # print("label_1: ", label_1, " label_2: ", label_2, " notion_of_sim: ", notion_of_sim)
+
+        if notion_of_sim == 'failuremode':
+            pair_label_sim = self.df_label_sim_failuremode.loc[label_1, label_2]
+        elif notion_of_sim == 'localization':
+            pair_label_sim = self.df_label_sim_localization.loc[label_1, label_2]
+        elif notion_of_sim == 'condition':
             pair_label_sim = self.df_label_sim_condition.loc[label_1, label_2]
         else:
             print("Similarity notion: ", notion_of_sim, " unknown! Results in sim 0")
             pair_label_sim = 0
-        #print(label_1, " - ", label_2, ":", str(pair_label_sim))
+
         return float(pair_label_sim)
+
 
 # variation of the dataset class that consists only of examples of the same case
 # does not contain test data because this isn't needed on the level of each case
@@ -385,7 +409,7 @@ class CaseSpecificDataset(Dataset):
         # the indices of the used features in the array of all features
         self.indices_features = None
 
-        # the indcies of the examples with the case of this dataset in the dataset with all examples
+        # the indices of the examples with the case of this dataset in the dataset with all examples
         self.indices_cases = None
 
     def load(self):

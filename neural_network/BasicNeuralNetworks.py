@@ -2,7 +2,6 @@ import sys
 from os import listdir, path
 
 import tensorflow as tf
-import numpy as np
 
 from configuration.Hyperparameter import Hyperparameters
 
@@ -81,7 +80,7 @@ class FFNN(NN):
         input = tf.keras.Input(shape=self.input_shape, name="Input")
 
         x = tf.keras.layers.Dense(units=num_units_first, activation=tf.keras.activations.relu,
-                                        input_shape=self.input_shape)(input)
+                                  input_shape=self.input_shape)(input)
 
         for num_units in layers:
             x = tf.keras.layers.Dense(units=num_units, activation=tf.keras.activations.relu)(x)
@@ -92,7 +91,9 @@ class FFNN(NN):
 
         self.model = tf.keras.Model(inputs=input, outputs=output)
 
-# NOT WORKING
+
+# TODO @klein Remove if not used
+# Not working
 class FFNN2(NN):
 
     def __init__(self, hyperparameters, input_shape):
@@ -107,14 +108,14 @@ class FFNN2(NN):
             print('FFNN with less than one layer is not possible')
             sys.exit(1)
         # Gated:
-        #gates = tf.nn.sigmoid(query_class_gate_FFNN[:, :self._graph_state_dim])
+        # gates = tf.nn.sigmoid(query_class_gate_FFNN[:, :self._graph_state_dim])
 
         # first layer must be handled separately because the input shape parameter must be set
         num_units_first = layers.pop(0)
         input = tf.keras.Input(shape=self.input_shape, name="Input")
 
         x = tf.keras.layers.Dense(units=num_units_first, activation=tf.keras.activations.relu,
-                                        input_shape=self.input_shape)(input)
+                                  input_shape=self.input_shape)(input)
 
         for num_units in layers:
             x = tf.keras.layers.Dense(units=num_units, activation=tf.keras.activations.relu)(x)
@@ -124,6 +125,7 @@ class FFNN2(NN):
         output = tf.keras.layers.Dense(units=1, activation=tf.keras.activations.sigmoid)(x)
 
         self.model = tf.keras.Model(inputs=input, outputs=output)
+
 
 class RNN(NN):
 
@@ -196,23 +198,25 @@ class RNN(NN):
         self.model = model
 
 
+# TODO @klein Remove old code that is / will not be used
 class CNNWithClassAttention(NN):
 
     def __init__(self, hyperparameters, input_shape):
         super().__init__(hyperparameters, input_shape)
 
     def create_model(self):
-        print('Creating CNN with 2d kernel encoder with a sensor data input shape: ', self.input_shape[0]," and additional input shape: ", self.input_shape[1])
+
+        print('Creating CNN with 2d kernel encoder with a sensor data input shape: ', self.input_shape[0],
+              " and additional input shape: ", self.input_shape[1])
         sensorDataInput = tf.keras.Input(shape=(self.input_shape[0][0], self.input_shape[0][1], 1), name="Input0")
         caseDependentVectorInput = tf.keras.Input(self.input_shape[1], name="Input1")
         layers = self.hyper.cnn2d_layers
 
         # Create a matrix based on masking vectors for using it as "attention"-like in ABCNN
         caseDependentVectorInput_softmax = tf.keras.layers.Softmax()(caseDependentVectorInput)
-        caseDependentMatrixInput = tf.tile(caseDependentVectorInput_softmax,[1,self.input_shape[0][0]])
+        caseDependentMatrixInput = tf.tile(caseDependentVectorInput_softmax, [1, self.input_shape[0][0]])
         reshape = tf.keras.layers.Reshape((self.input_shape[0][0], self.input_shape[0][1]))
         caseDependentMatrixInput = reshape(caseDependentMatrixInput)
-
 
         if len(layers) < 1:
             print('CNN encoder with less than one layer for 2d kernels is not possible')
@@ -232,31 +236,31 @@ class CNNWithClassAttention(NN):
                 # Added 1D-Conv Layer to provide information across time steps in the first layer
 
                 conv_layer1d = tf.keras.layers.Conv1D(filters=61, padding='VALID', kernel_size=1,
-                                                    strides=1)
-                #inp = tf.squeeze(sensorDataInput)
+                                                      strides=1)
+                # inp = tf.squeeze(sensorDataInput)
                 reshape = tf.keras.layers.Reshape((self.input_shape[0][0], self.input_shape[0][1]))
                 inp = reshape(sensorDataInput)
                 temp = conv_layer1d(inp)
-                temp = tf.expand_dims(temp,-1)
+                temp = tf.expand_dims(temp, -1)
                 sensorDataInput2 = tf.concat([sensorDataInput, temp], axis=3)
 
                 # Add ABCNN matrix from beginning
 
-                caseDependentMatrixInput = tf.expand_dims(caseDependentMatrixInput,-1)
+                caseDependentMatrixInput = tf.expand_dims(caseDependentMatrixInput, -1)
                 sensorDataInput2 = tf.concat([sensorDataInput2, caseDependentMatrixInput], axis=3)
 
                 x = conv_layer1(sensorDataInput2)
             else:
                 conv_layer = tf.keras.layers.Conv2D(filters=num_filter, padding='VALID',
-                                                     kernel_size=(filter_size),
-                                                     strides=stride)
+                                                    kernel_size=(filter_size),
+                                                    strides=stride)
                 x = conv_layer(x)
             x = tf.keras.layers.BatchNormalization()(x)
             x = tf.keras.layers.ReLU()(x)
 
-        #x = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(x)
+        # x = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(x)
 
-        #conv1x1_layer = tf.keras.layers.Conv2D(filters=1, padding='VALID',
+        # conv1x1_layer = tf.keras.layers.Conv2D(filters=1, padding='VALID',
         #                                     kernel_size=(1, 1),
         #                                     strides=stride)
         # x = conv1x1_layer(x)
@@ -293,12 +297,12 @@ class CNNWithClassAttention(NN):
             num_filter, filter_size, stride = layer_properties[i][0], layer_properties[i][1], layer_properties[i][2]
 
             conv_layer = tf.keras.layers.Conv1D(filters=num_filter, padding='VALID', kernel_size=filter_size,
-                                                    strides=stride)
+                                                strides=stride)
             x = conv_layer(x)
             x = tf.keras.layers.BatchNormalization()(x)
             x = tf.keras.layers.ReLU()(x)
 
-        #x = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(x)
+        # x = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(x)
 
         # Implementation of a Feature-wise Modulation
         # FILM conditioning layer of E. Perez, F. Strub, H. De Vries, V. Dumoulin, and A. Courville.
@@ -318,13 +322,13 @@ class CNNWithClassAttention(NN):
         x = tf.keras.layers.Multiply()([x, gamma])
         x = tf.keras.layers.Add()([x, beta])
         '''
-        #gates = tf.keras.layers.Dense(61, activation='relu')(caseDependentVectorInput)
-        #gates = tf.keras.layers.Dense(61, activation='relu')(gates)
-        #gates = tf.keras.layers.Softmax()(gates)
-        #gates = tf.math.add(gates,1)
-        #gates = tf.identity(gates)
+        # gates = tf.keras.layers.Dense(61, activation='relu')(caseDependentVectorInput)
+        # gates = tf.keras.layers.Dense(61, activation='relu')(gates)
+        # gates = tf.keras.layers.Softmax()(gates)
+        # gates = tf.math.add(gates,1)
+        # gates = tf.identity(gates)
 
-        #x = tf.keras.layers.Multiply()([x, gates])
+        # x = tf.keras.layers.Multiply()([x, gates])
         '''
         x = tf.keras.layers.Flatten()(x)
         x = tf.keras.layers.BatchNormalization()(x)
@@ -337,7 +341,8 @@ class CNNWithClassAttention(NN):
         #reshape = tf.keras.layers.Reshape((x.shape[1], x.shape[2]))
         x = tf.keras.layers.Reshape((512, 1))(x)
         '''
-        self.model = tf.keras.Model(inputs=[sensorDataInput, caseDependentVectorInput], outputs=[x,caseDependentVectorInput])
+        self.model = tf.keras.Model(inputs=[sensorDataInput, caseDependentVectorInput],
+                                    outputs=[x, caseDependentVectorInput])
         '''
         self.intermediate_layer_model = tf.keras.Model(inputs=caseDependentVectorInput,
                                                       outputs=self.model.get_layer("softmax").output)
@@ -347,6 +352,8 @@ class CNNWithClassAttention(NN):
         # print("x: ", x)
         # input_lastConvLayer_attention_seq = tf.keras.layers.Attention()([x, caseDepVectEmbedding])
 
+
+# TODO @klein Remove old code that is / will not be used
 class CNN1DWithClassAttention(NN):
 
     def __init__(self, hyperparameters, input_shape):
@@ -386,8 +393,8 @@ class CNN1DWithClassAttention(NN):
 
         # creating a case vector encoder
         num_filterLastLayer = layer_properties[len(layer_properties) - 1][0]
-        #caseDepVectEmbedding = tf.keras.layers.Dense((int(num_filterLastLayer/2)), activation='relu')(caseDependentVectorInput)
-        #caseDepVectEmbedding = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(caseDepVectEmbedding)
+        # caseDepVectEmbedding = tf.keras.layers.Dense((int(num_filterLastLayer/2)), activation='relu')(caseDependentVectorInput)
+        # caseDepVectEmbedding = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(caseDepVectEmbedding)
         gates = tf.keras.layers.Dense(num_filterLastLayer, activation='sigmoid')(caseDependentVectorInput)
 
         # merging case vector and sensor encoding
@@ -395,7 +402,7 @@ class CNN1DWithClassAttention(NN):
         # caseDepVectEmbedding = tf.keras.layers.Softmax()(caseDepVectEmbedding)
         # embedding = tf.keras.layers.Add()([x, caseDepVectEmbedding])
         # b) MULTIPLY
-        #gates = tf.nn.sigmoid(caseDepVectEmbedding)
+        # gates = tf.nn.sigmoid(caseDepVectEmbedding)
         embedding = tf.keras.layers.Multiply()([x, gates])
         # c) CONCATENATE
         '''
@@ -424,10 +431,11 @@ class CNN1DWithClassAttention(NN):
         '''
         # Query-value attention of shape [batch_size, Tq, filters].
         # print("inputs", inputs)
-        #print("x: ", x)
+        # print("x: ", x)
         # input_lastConvLayer_attention_seq = tf.keras.layers.Attention()([x, caseDepVectEmbedding])
 
 
+# TODO @klein Remove old code that is / will not be used or create another CNN Variant
 class CNN(NN):
 
     def __init__(self, hyperparameters, input_shape):
@@ -468,9 +476,11 @@ class CNN(NN):
         #  (time over feature or feature over time) for the cosine distance calculation
         # model.add(tf.keras.layers.GlobalAveragePooling1D())
         # model.add(tf.keras.layers.Reshape((1,model.layers[len(model.layers)-1].output.shape[1])))
-        if not self.hyper.fc_after_cnn1d_layers is None:
+
+        if self.hyper.fc_after_cnn1d_layers is not None:
             print('Adding FC layers')
             layers_fc = self.hyper.fc_after_cnn1d_layers.copy()
+
             '''
             model.add(tf.keras.layers.Dense(units=32, activation=tf.keras.activations.relu))
             model.add(tf.keras.layers.BatchNormalization())
@@ -479,6 +489,7 @@ class CNN(NN):
             model.add(tf.keras.layers.Dense(units=5, activation=tf.keras.activations.relu))
             model.add(tf.keras.layers.Dropout(rate=self.hyper.dropout_rate))
             '''
+
             if len(layers) < 1:
                 print('Adding FC with less than one layer is not possible')
                 sys.exit(1)
@@ -490,9 +501,10 @@ class CNN(NN):
             # Normalize final output as recommended in Roy et al (2019) Siamese Networks: The Tale of Two Manifolds
             # model.add(tf.keras.layers.BatchNormalization())
             # model.add(tf.keras.layers.Softmax()) # Martin et al. (2017) ICCBR
-            model.add(tf.keras.layers.Reshape((model.layers[len(model.layers)-1].output.shape[1],1)))
+            model.add(tf.keras.layers.Reshape((model.layers[len(model.layers) - 1].output.shape[1], 1)))
         self.model = model
 
+# TODO @klein Remove old code that is / will not be used
 class CNN2D(NN):
 
     def __init__(self, hyperparameters, input_shape):
@@ -524,26 +536,26 @@ class CNN2D(NN):
                                                      strides=stride, input_shape=sensorDataInput.shape)
                 # Added 1D-Conv Layer to provide information across time steps in the first layer
                 conv_layer1d = tf.keras.layers.Conv1D(filters=61, padding='VALID', kernel_size=1,
-                                                    strides=1)
-                #inp = tf.squeeze(sensorDataInput)
+                                                      strides=1)
+                # inp = tf.squeeze(sensorDataInput)
                 reshape = tf.keras.layers.Reshape((self.input_shape[0], self.input_shape[1]))
                 inp = reshape(sensorDataInput)
                 temp = conv_layer1d(inp)
-                temp = tf.expand_dims(temp,-1)
+                temp = tf.expand_dims(temp, -1)
                 sensorDataInput2 = tf.concat([sensorDataInput, temp], axis=3)
 
                 x = conv_layer1(sensorDataInput2)
             else:
                 conv_layer = tf.keras.layers.Conv2D(filters=num_filter, padding='VALID',
-                                                     kernel_size=(filter_size),
-                                                     strides=stride)
+                                                    kernel_size=(filter_size),
+                                                    strides=stride)
                 x = conv_layer(x)
             x = tf.keras.layers.BatchNormalization()(x)
             x = tf.keras.layers.ReLU()(x)
 
-        #x = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(x)
+        # x = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(x)
 
-        #conv1x1_layer = tf.keras.layers.Conv2D(filters=1, padding='VALID',
+        # conv1x1_layer = tf.keras.layers.Conv2D(filters=1, padding='VALID',
         #                                     kernel_size=(1, 1),
         #                                     strides=stride)
         # x = conv1x1_layer(x)
@@ -563,7 +575,7 @@ class CNN2D(NN):
             num_filter, filter_size, stride = layer_properties[i][0], layer_properties[i][1], layer_properties[i][2]
 
             conv_layer = tf.keras.layers.Conv1D(filters=num_filter, padding='VALID', kernel_size=filter_size,
-                                                    strides=stride)
+                                                strides=stride)
             x = conv_layer(x)
             x = tf.keras.layers.BatchNormalization()(x)
             x = tf.keras.layers.ReLU()(x)
@@ -621,31 +633,24 @@ class TemporalBlock(tf.keras.Model):
 
     # noinspection PyMethodOverriding
     def call(self, x, training=False):
-        # print("x: ",x.shape," training:", training)
+
         prev_x = x
         x = self.conv1(x)
-        # print("self.conv1.get_config(): ", self.conv1.get_config())
-        # print("conv1 x: ", x.shape)
         x = self.batch1(x)
-        # print("batch1 x: ", x.shape)
         x = self.ac1(x)
-        # print("ac1 x: ", x.shape)
         x = self.drop1(x) if training else x
-        # print("drop1 x: ", x.shape)
         x = self.conv2(x)
-        # print("conv2 x: ", x.shape)
         x = self.batch2(x)
-        # print("batch2 x: ", x.shape)
         x = self.ac2(x)
-        # print("ac2 x: ", x.shape)
         x = self.drop2(x) if training else x
-        # print("drop2 x: ",x.shape)
 
         # print("prev_x.shape[-1]: ", prev_x.shape[-1], "x.shape[-1]: ", x.shape[-1])
-        if prev_x.shape[-1] != x.shape[-1]:  # match the dimention
+        if prev_x.shape[-1] != x.shape[-1]:  # match the dimension
             prev_x = self.downsample(prev_x)
         # print("prev_x.shape: ", prev_x.shape, "x.shape: ", x.shape)
+
         assert prev_x.shape == x.shape
+
         return self.ac3(prev_x + x)  # skip connection
 
 

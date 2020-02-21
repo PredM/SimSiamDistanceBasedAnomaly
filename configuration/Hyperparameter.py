@@ -47,6 +47,7 @@ class Hyperparameters:
         self.time_series_length = time_series_length
         self.time_series_depth = time_series_depth
 
+    # TODO Clean up, change order to match files and vars above add ifs for all kinds of subnets
     # allows the import of a hyper parameter configuration from a json file
     def load_from_file(self, file_path):
 
@@ -73,7 +74,7 @@ class Hyperparameters:
         self.cnn_layers = data['cnn_layers']
         self.cnn_kernel_length = data['cnn_kernel_length']
         self.cnn_strides = data['cnn_strides']
-        if not data.get('fc_after_cnn1d_layers') is None:
+        if data.get('fc_after_cnn1d_layers') is not None:
             self.fc_after_cnn1d_layers = data['fc_after_cnn1d_layers']
         self.ffnn_layers = data['ffnn_layers']
 

@@ -63,7 +63,7 @@ class Optimizer:
 
             # Get parameters of subnet and ffnn (if complex sim measure)
             if self.config.architecture_variant in ['standard_ffnn', 'fast_ffnn']:
-                trainable_params = model.ffnn.model.trainable_variables + model.encoder.model.trainable_variables #+ model.ffnn.modelAttEncoding.trainable_variables
+                trainable_params = model.ffnn.model.trainable_variables + model.encoder.model.trainable_variables
             else:
                 trainable_params = model.encoder.model.trainable_variables
 
@@ -71,17 +71,22 @@ class Optimizer:
             if self.config.type_of_loss_function == "binary_cross_entropy":
                 if self.config.use_margin_reduction_based_on_label_sim:
                     sim = self.getSimiliarityBetweenTwoLabelStringForNegPairSampleWeightInBCE(query_classes)
-                    #print('query_classes', query_classes)
-                    #print('sim', sim)
-                    #bce = tf.keras.losses.BinaryCrossentropy()
-                    #loss = bce(y_true=true_similarities, y_pred=pred_similarities, sample_weight=sim[0])
-                    loss = self.weighted_binary_crossentropy(y_true=true_similarities, y_pred=pred_similarities, weight=sim)
+                    # print('query_classes', query_classes)
+                    # print('sim', sim)
+                    # bce = tf.keras.losses.BinaryCrossentropy()
+                    # loss = bce(y_true=true_similarities, y_pred=pred_similarities, sample_weight=sim[0])
+
+                    # TODO @klein sim = array, weight expects float, is this correct?
+                    loss = self.weighted_binary_crossentropy(y_true=true_similarities, y_pred=pred_similarities,
+                                                             weight=sim)
                 else:
                     loss = tf.keras.losses.binary_crossentropy(y_true=true_similarities, y_pred=pred_similarities)
+
             elif self.config.type_of_loss_function == "constrative_loss":
                 if self.config.use_margin_reduction_based_on_label_sim:
-                    pairwiseLabelSimiliarity = self.getSimiliarityBetweenTwoLabelString(query_classes)
-                    loss = self.contrastive_loss(y_true=true_similarities, y_pred=pred_similarities, classes=pairwiseLabelSimiliarity)
+                    pairwise_label_similarity = self.get_similiarity_between_two_label_string(query_classes)
+                    loss = self.contrastive_loss(y_true=true_similarities, y_pred=pred_similarities,
+                                                 classes=pairwise_label_similarity)
                 else:
                     loss = self.contrastive_loss(y_true=true_similarities, y_pred=pred_similarities)
             else:
@@ -101,7 +106,7 @@ class Optimizer:
 
             return loss
 
-    def contrastive_loss(self, y_true, y_pred,classes=None):
+    def contrastive_loss(self, y_true, y_pred, classes=None):
         """
         Contrastive loss from Hadsell-et-al.'06
         http://yann.lecun.com/exdb/publis/pdf/hadsell-chopra-lecun-06.pdf
@@ -109,67 +114,71 @@ class Optimizer:
         margin = self.config.margin_of_loss_function
         if self.config.use_margin_reduction_based_on_label_sim:
             # label adapted margin, classes contains the
-            margin = (1-classes)* margin
-        #print("margin: ", margin)
+            margin = (1 - classes) * margin
+        # print("margin: ", margin)
         square_pred = tf.square(y_pred)
         margin_square = tf.square(tf.maximum(margin - y_pred, 0))
         return tf.keras.backend.mean(y_true * square_pred + (1 - y_true) * margin_square)
 
     def weighted_binary_crossentropy(self, y_true, y_pred, weight=1.):
-        '''
+        """
         Weighted BCE that smoothes only the wrong example according to interclass similarities
-        '''
-        y_true = K.clip(tf.convert_to_tensor(y_true,dtype=tf.float32), K.epsilon(), 1 - K.epsilon())
+        """
+        y_true = K.clip(tf.convert_to_tensor(y_true, dtype=tf.float32), K.epsilon(), 1 - K.epsilon())
         y_pred = K.clip(y_pred, K.epsilon(), 1 - K.epsilon())
-        #org: logloss = -(y_true * K.log(y_pred) * weight + (1 - y_true) * K.log(1 - y_pred))
-        logloss = -(y_true * K.log(y_pred) + (1 - y_true + (weight/2)) * K.log(1 - y_pred))
+        # org: logloss = -(y_true * K.log(y_pred) * weight + (1 - y_true) * K.log(1 - y_pred))
+        logloss = -(y_true * K.log(y_pred) + (1 - y_true + (weight / 2)) * K.log(1 - y_pred))
         return K.mean(logloss, axis=-1)
 
-    def getSimiliarityBetweenTwoLabelString(self, classes):
+    # TODO @klein name and description doesn't match what the method seems to do
+    def get_similiarity_between_two_label_string(self, classes):
         # Returns the similarity between 2 failures (labels) in respect to the location of occurrence,
-        # type of failure (failure mode) and the condition of the data sample.
+        # the type of failure (failure mode) and the condition of the data sample.
         # Input: 1d npy array with pairwise class labels as strings [2*batchsize]
         # Output: 1d npy [batchsize]
-        pairwise_class_label_sim = np.zeros([len(classes)//2])
-        for pair_index in range(len(classes)//2):
+        pairwise_class_label_sim = np.zeros([len(classes) // 2])
+        for pair_index in range(len(classes) // 2):
             a = classes[2 * pair_index]
             b = classes[2 * pair_index + 1]
-            #print("pair_index: ", pair_index, "a: ", a ," b: ",b)
-            sim = (self.dataset.getSimBetweenPairLabels(a,b,"condition")
-                   + self.dataset.getSimBetweenPairLabels(a,b,"localization")
-                   + self.dataset.getSimBetweenPairLabels(a,b,"failuremode"))/3
+            # print("pair_index: ", pair_index, "a: ", a ," b: ",b)
+            sim = (self.dataset.get_sim_between_label_pair(a, b, "condition")
+                   + self.dataset.get_sim_between_label_pair(a, b, "localization")
+                   + self.dataset.get_sim_between_label_pair(a, b, "failuremode")) / 3
             pairwise_class_label_sim[pair_index] = sim
-            #print("pairwise_class_label_sim: ", sim)
+            # print("pairwise_class_label_sim: ", sim)
 
         return pairwise_class_label_sim
 
+    # TODO include this in the method above with boolean parameter NegPairSampleWeightInBCE
     def getSimiliarityBetweenTwoLabelStringForNegPairSampleWeightInBCE(self, classes):
         # Returns the similarity between 2 failures (labels) in respect to the location of occurrence,
         # type of failure (failure mode) and the condition of the data sample.
         # Implemented for use as label smoother of neg pair in BCE
         # Input: 1d npy array with pairwise class labels as strings [2*batchsize]
         # Output: 1d npy [batchsize]
-        pairwise_class_label_sim = np.zeros([len(classes)//2])
-        for pair_index in range(len(classes)//2):
+        pairwise_class_label_sim = np.zeros([len(classes) // 2])
+        for pair_index in range(len(classes) // 2):
             a = classes[2 * pair_index]
             b = classes[2 * pair_index + 1]
-            #print("pair_index: ", pair_index, "a: ", a ," b: ",b)
+            # print("pair_index: ", pair_index, "a: ", a ," b: ",b)
 
-            sim = (self.dataset.getSimBetweenPairLabels(a,b,"condition")
-                   + self.dataset.getSimBetweenPairLabels(a,b,"localization")
-                   + self.dataset.getSimBetweenPairLabels(a,b,"failuremode"))/3
+            sim = (self.dataset.get_sim_between_label_pair(a, b, "condition")
+                   + self.dataset.get_sim_between_label_pair(a, b, "localization")
+                   + self.dataset.get_sim_between_label_pair(a, b, "failuremode")) / 3
 
-            #sim = self.dataset.getSimBetweenPairLabels(a, b, "failuremode")
+            # sim = self.dataset.get_sim_between_label_pair(a, b, "failuremode")
 
             # Transform similarity to a appropriate weight
-            #print("Sim before: ", sim)
-            if sim < 1 : sim =1-sim
-            #print("Sim after: ", sim)
+            # print("Sim before: ", sim)
+            if sim < 1:
+                sim = 1 - sim
+            # print("Sim after: ", sim)
 
             pairwise_class_label_sim[pair_index] = sim
-            #print("pairwise_class_label_sim: ", sim)
+            # print("pairwise_class_label_sim: ", sim)
 
         return pairwise_class_label_sim
+
 
 class SNNOptimizer(Optimizer):
 
@@ -178,7 +187,7 @@ class SNNOptimizer(Optimizer):
         super().__init__(architecture, dataset, config)
         self.adam_optimizer = tf.keras.optimizers.Adam(learning_rate=self.architecture.hyper.learning_rate)
         self.train_loss_results = []
-        self.best_loss = 1000 #
+        self.best_loss = 1000  #
         self.stopping_step_counter = 0
         self.dir_name_last_model_saved = None
 
@@ -201,36 +210,40 @@ class SNNOptimizer(Optimizer):
         for epoch in range(current_epoch, self.architecture.hyper.epochs):
             self.single_epoch(epoch)
 
+            # TODO Maybe extract to method/class and apply changes to be able to reuse it for cbs
             # Early stopping based on training loss decrease
             if self.config.use_early_stopping:
-                if(self.train_loss_results[len(self.train_loss_results)-1] < self.best_loss):
+                if self.train_loss_results[len(self.train_loss_results) - 1] < self.best_loss:
                     self.stopping_step_counter = 0
-                    self.best_loss = self.train_loss_results[len(self.train_loss_results)-1]
+                    self.best_loss = self.train_loss_results[len(self.train_loss_results) - 1]
                 else:
                     self.stopping_step_counter += 1
                 if self.stopping_step_counter >= self.config.early_stopping_if_no_loss_decrease_after_num_of_epochs:
-                    print("Training stopped at epoch ", epoch, " because loss did not decrease since ", self.stopping_step_counter, "epochs.")
+                    print("Training stopped at epoch ", epoch, " because loss did not decrease since ",
+                          self.stopping_step_counter, "epochs.")
                     break
+
             if self.config.use_inference_test_during_training and epoch != 0:
                 if epoch % self.config.test_during_training_every_x_epochs == 0:
                     print("Inference at epoch: ", epoch)
                     dataset2: FullDataset = FullDataset(self.config.training_data_folder, self.config, training=False)
                     dataset2.load()
                     self.config.directory_model_to_use = self.dir_name_last_model_saved
-                    print("self.dir_name_last_model_saved: ",self.dir_name_last_model_saved)
+                    print("self.dir_name_last_model_saved: ", self.dir_name_last_model_saved)
                     print("self.config.filename_model_to_use: ", self.config.directory_model_to_use)
                     architecture2 = initialise_snn(self.config, dataset2, False)
                     inference = Inference(self.config, architecture2, dataset2)
                     inference.infer_test_dataset()
 
-
+    # TODO Change compose batch to method
+    #  make difference between equals class and standard clearer
     def single_epoch(self, epoch):
         """
         Compute the loss of one epoch based on a batch that is generated randomly from the training data
         Generation of batch in a separate method
           Args:
             epoch: int. current epoch
-          """
+        """
         epoch_loss_avg = tf.keras.metrics.Mean()
 
         batch_true_similarities = []  # similarity label for each pair
@@ -241,47 +254,60 @@ class SNNOptimizer(Optimizer):
         batch_pairs_indices_firstUsedforSecond = []
 
         # Generate a random vector that contains the number of classes that should be considered in the current batach
-        equal_class_part = self.config.upsampling_factor # 4 means approx. half of the batch contains no-failure, 1 and 2 uniform,
+        # 4 means approx. half of the batch contains no-failure, 1 and 2 uniform
+        equal_class_part = self.config.upsampling_factor
         failureClassesToConsider = np.random.randint(low=0, high=len(self.dataset.y_train_strings_unique),
                                                      size=self.architecture.hyper.batch_size // equal_class_part)
-        #print("failureClassesToConsider: ", failureClassesToConsider)
+        # print("failureClassesToConsider: ", failureClassesToConsider)
+
         # Compose batch
         # // 2 because each iteration one similar and one dissimilar pair is added
         for i in range(self.architecture.hyper.batch_size // 2):
+
+            #
+            # pos pair here
+            #
+
             if self.config.equalClassConsideration:
-                if(i < self.architecture.hyper.batch_size // equal_class_part):
-                    #print(i,": ", failureClassesToConsider[i-self.architecture.hyper.batch_size // 4])
+                if i < self.architecture.hyper.batch_size // equal_class_part:
+                    # print(i,": ", failureClassesToConsider[i-self.architecture.hyper.batch_size // 4])
                     pos_pair = self.dataset.draw_pair_by_class_idx(True, from_test=False,
-                                                                class_idx=(failureClassesToConsider[i-self.architecture.hyper.batch_size // equal_class_part]))
-                                                               #class_idx=(i % self.dataset.num_classes))
+                                                                   class_idx=(failureClassesToConsider[
+                                                                       i - self.architecture.hyper.batch_size // equal_class_part]))
+                    # class_idx=(i % self.dataset.num_classes))
                 else:
                     pos_pair = self.dataset.draw_pair(True, from_test=False)
             else:
                 pos_pair = self.dataset.draw_pair(True, from_test=False)
             batch_pairs_indices.append(pos_pair[0])
             batch_pairs_indices.append(pos_pair[1])
-            #print("Pospair idx: ", self.dataset.y_train_strings[pos_pair[0]], " - ",self.dataset.y_train_strings[pos_pair[1]])
+            # print("Pospair idx: ", self.dataset.y_train_strings[pos_pair[0]], " - ",self.dataset.y_train_strings[pos_pair[1]])
             batch_true_similarities.append(1.0)
             batch_pairs_indices_firstUsedforSecond.append(pos_pair[0])
             batch_pairs_indices_firstUsedforSecond.append(pos_pair[0])
 
+            #
+            # neg pair here
+            #
+
             if self.config.equalClassConsideration:
-                if(i < self.architecture.hyper.batch_size // equal_class_part):
+                if i < self.architecture.hyper.batch_size // equal_class_part:
                     neg_pair = self.dataset.draw_pair_by_class_idx(False, from_test=False,
-                                                               class_idx=(failureClassesToConsider[i-self.architecture.hyper.batch_size // equal_class_part]))
+                                                                   class_idx=(failureClassesToConsider[
+                                                                       i - self.architecture.hyper.batch_size // equal_class_part]))
                 else:
                     neg_pair = self.dataset.draw_pair(False, from_test=False)
             else:
                 neg_pair = self.dataset.draw_pair(False, from_test=False)
             batch_pairs_indices.append(neg_pair[0])
             batch_pairs_indices.append(neg_pair[1])
-            #print("Negpair idx: ", self.dataset.y_train_strings[neg_pair[0]], " - ",self.dataset.y_train_strings[neg_pair[1]])
+            # print("Negpair idx: ", self.dataset.y_train_strings[neg_pair[0]], " - ",self.dataset.y_train_strings[neg_pair[1]])
             if self.config.use_sim_value_for_neg_pair:
                 class_string_a = self.dataset.y_train_strings[neg_pair[0]]
                 class_string_b = self.dataset.y_train_strings[neg_pair[1]]
-                sim = (self.dataset.getSimBetweenPairLabels(class_string_a, class_string_b, "condition")
-                       + self.dataset.getSimBetweenPairLabels(class_string_a, class_string_b, "localization")
-                       + self.dataset.getSimBetweenPairLabels(class_string_a, class_string_b, "failuremode")) / 3
+                sim = (self.dataset.get_sim_between_label_pair(class_string_a, class_string_b, "condition")
+                       + self.dataset.get_sim_between_label_pair(class_string_a, class_string_b, "localization")
+                       + self.dataset.get_sim_between_label_pair(class_string_a, class_string_b, "failuremode")) / 3
                 batch_true_similarities.append(sim)
             else:
                 batch_true_similarities.append(0.0)
@@ -298,6 +324,8 @@ class SNNOptimizer(Optimizer):
         model_input = np.take(a=self.dataset.x_train, indices=batch_pairs_indices, axis=0)
 
         # TODO Maybe relocate to corresponding class
+        # TODO use model_input == xxx in each and call batchloss only once
+        # TODO @klein can the comments/old code be deleted?
         # Add the auxiliary input if required
         model_input_class_strings = np.take(a=self.dataset.y_train_strings, indices=batch_pairs_indices, axis=0)
         if self.architecture.hyper.encoder_variant in ['cnnwithclassattention', 'cnn1dwithclassattention']:
@@ -315,18 +343,21 @@ class SNNOptimizer(Optimizer):
             if self.architecture.hyper.encoder_variant == 'cnnwithclassattention':
                 model_input = np.reshape(model_input,
                                          (model_input.shape[0], model_input.shape[1], model_input.shape[2], 1))
-            #print("model_input: ", model_input.shape)
+            # print("model_input: ", model_input.shape)
 
             batch_loss = self.update_single_model([model_input, model_input2], true_similarities, self.architecture,
-                                                  self.adam_optimizer, self.architecture.hyper.gradient_cap, query_classes=model_input_class_strings)
+                                                  self.adam_optimizer, self.architecture.hyper.gradient_cap,
+                                                  query_classes=model_input_class_strings)
         elif self.architecture.hyper.encoder_variant == 'cnn2d':
             model_input = np.reshape(model_input,
                                      (model_input.shape[0], model_input.shape[1], model_input.shape[2], 1))
             batch_loss = self.update_single_model(model_input, true_similarities, self.architecture,
-                                                  self.adam_optimizer, self.architecture.hyper.gradient_cap, query_classes=model_input_class_strings)
+                                                  self.adam_optimizer, self.architecture.hyper.gradient_cap,
+                                                  query_classes=model_input_class_strings)
         else:
             batch_loss = self.update_single_model(model_input, true_similarities, self.architecture,
-                                                  self.adam_optimizer, self.architecture.hyper.gradient_cap, query_classes=model_input_class_strings)
+                                                  self.adam_optimizer, self.architecture.hyper.gradient_cap,
+                                                  query_classes=model_input_class_strings)
 
         # Track progress
         epoch_loss_avg.update_state(batch_loss)  # Add current batch loss

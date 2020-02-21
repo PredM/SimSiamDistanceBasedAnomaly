@@ -91,17 +91,18 @@ class SimpleSNN(AbstractSimilarityMeasure):
                 input_pairs[2 * i] = example
                 input_pairs[2 * i + 1] = self.dataset.x_train[index + i]
                 if self.hyper.encoder_variant in ['cnnwithclassattention', 'cnn1dwithclassattention']:
-
                     # Adding an additional/auxiliary input
                     # noinspection PyUnboundLocalVariable
-                    auxiliaryInput[2 * i] = self.dataset.x_class_label_to_attribute_masking_arr[self.dataset.y_train_strings[index + i]]
+                    auxiliaryInput[2 * i] = self.dataset.x_class_label_to_attribute_masking_arr[
+                        self.dataset.y_train_strings[index + i]]
                     # np.zeros(self.dataset.x_auxCaseVector_train.shape[1])
                     # self.dataset.x_auxCaseVector_train[index]
-                    #np.zeros(self.dataset.x_class_label_to_attribute_masking_arr[self.dataset.y_train_strings[index + i]].shape[0])
-                    auxiliaryInput[2 * i + 1] =  self.dataset.x_class_label_to_attribute_masking_arr[self.dataset.y_train_strings[index + i]]
+                    # np.zeros(self.dataset.x_class_label_to_attribute_masking_arr[self.dataset.y_train_strings[index + i]].shape[0])
+                    auxiliaryInput[2 * i + 1] = self.dataset.x_class_label_to_attribute_masking_arr[
+                        self.dataset.y_train_strings[index + i]]
 
             if self.hyper.encoder_variant == 'cnn1dwithclassattention':
-                input_pairs = input_pairs.reshape((input_pairs.shape[0],input_pairs.shape[1],input_pairs.shape[2]))
+                input_pairs = input_pairs.reshape((input_pairs.shape[0], input_pairs.shape[1], input_pairs.shape[2]))
             elif self.hyper.encoder_variant in ['cnn2d', 'cnnwithclassattention']:
                 input_pairs = input_pairs.reshape((input_pairs.shape[0], input_pairs.shape[1], input_pairs.shape[2], 1))
 
@@ -140,10 +141,12 @@ class SimpleSNN(AbstractSimilarityMeasure):
                 if self.hyper.encoder_variant in ['cnnwithclassattention', 'cnn1dwithclassattention']:
                     # Adding an additional/auxiliary input
                     # noinspection PyUnboundLocalVariable
-                    auxiliaryInput[2 * index] = self.dataset.x_class_label_to_attribute_masking_arr[self.dataset.y_train_strings[index]]
+                    auxiliaryInput[2 * index] = self.dataset.x_class_label_to_attribute_masking_arr[
+                        self.dataset.y_train_strings[index]]
                     # np.zeros(self.dataset.x_auxCaseVector_train.shape[1])
                     # self.dataset.x_auxCaseVector_train[index]
-                    auxiliaryInput[2 * index + 1] = self.dataset.x_class_label_to_attribute_masking_arr[self.dataset.y_train_strings[index]]
+                    auxiliaryInput[2 * index + 1] = self.dataset.x_class_label_to_attribute_masking_arr[
+                        self.dataset.y_train_strings[index]]
 
             # Compute similarities
             if self.hyper.encoder_variant == 'cnnwithclassattention':
@@ -201,11 +204,10 @@ class SimpleSNN(AbstractSimilarityMeasure):
             a = context_vectors[0][2 * pair_index, :, :]
             b = context_vectors[0][2 * pair_index + 1, :, :]
             a_weights = context_vectors[1][2 * pair_index, :]
-            b_weights = context_vectors[1][2 * pair_index+1, :]
+            b_weights = context_vectors[1][2 * pair_index + 1, :]
         else:
             a = context_vectors[2 * pair_index, :, :]
             b = context_vectors[2 * pair_index + 1, :, :]
-
 
         # TODO Implement as method call and fix in fast version
         #  tf.exp() was added here directly
@@ -264,18 +266,17 @@ class SimpleSNN(AbstractSimilarityMeasure):
             fp = tf.reduce_sum(tf.multiply(a, b), 1)
             return 1 - (tp / (tp + fn + fp))
         else:
-            raise ValueError('Distance Measure: ',self.config.simple_Distance_Measure,' is not implemented.')
+            raise ValueError('Distance Measure: ', self.config.simple_Distance_Measure, ' is not implemented.')
         return sim_example
 
     def print_learned_case_vectors(self, num_of_max_pos=5):
         # this methods prints the learned case embeddings for each class and its values
         cnt = 0
-        #print(self.dataset.masking_unique.shape)
+        # print(self.dataset.masking_unique.shape)
         for i in range(len(self.dataset.feature_names_all)):
-            print(i,": ", self.dataset.feature_names_all[i])
-        input= self.dataset.masking_unique
-        case_embeddings = self.encoder.intermediate_layer_model(input,
-                                                                training=self.training)
+            print(i, ": ", self.dataset.feature_names_all[i])
+        input = self.dataset.masking_unique
+        case_embeddings = self.encoder.intermediate_layer_model(input, training=self.training)
         # Get positions with maximum values
         max_pos = np.argsort(-case_embeddings, axis=1)  # [::-1]  # np.argmax(case_embeddings, axis=1)
         min_pos = np.argsort(case_embeddings, axis=1)  # [::-1]  # np.argmax(case_embeddings, axis=1)
@@ -512,6 +513,7 @@ class FastSimpleSNN(SimpleSNN):
 
         return sims_batch
 
+    # TODO Change to match the one standard version
     @tf.function
     def get_sim_pair(self, a, b):
 
@@ -537,6 +539,7 @@ class FastSNN(FastSimpleSNN):
             # noinspection PyUnresolvedReferences
             self.dataset.encode(self.encoder)
 
+    # TODO Change to match the standard version
     # noinspection DuplicatedCode
     @tf.function
     def get_sim_pair(self, a, b):
