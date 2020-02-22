@@ -36,16 +36,15 @@ class DTWThread(threading.Thread):
                 distance, _ = fastdtw(test_example_reduced, train_example_reduced, dist=euclidean)
 
             else:
-                train_example = self.full_dataset[example_index]
+                train_example = self.full_dataset.x_train[example_index]
                 distance, _ = fastdtw(self.test_example, train_example, dist=euclidean)
 
             self.results[array_index] = distance
 
-
 # TODO Add true positive etc
 def execute_dtw_version(dataset: FullDataset, start_index, end_index, parallel_threads, use_relevant_only=False):
     print("Consider only relevant attributes defined in config.json for the class of the training example: ",
-          use_relevant_only)
+          use_relevant_only, '\n')
 
     score = 0.0
     start_time = time.clock()
@@ -56,15 +55,14 @@ def execute_dtw_version(dataset: FullDataset, start_index, end_index, parallel_t
 
         results = np.zeros(dataset.num_train_instances)
         chunks = np.array_split(range(dataset.num_train_instances), parallel_threads)
-        print(chunks)
 
         threads = []
 
         for chunk in chunks:
-            t = DTWThread(chunk, dataset, current_test_example, use_relevant_only)
-            t.start()
-            t.join()
-            threads.append(t)
+            if len(chunk) > 0:
+                t = DTWThread(chunk, dataset, current_test_example, use_relevant_only)
+                t.start()
+                threads.append(t)
 
         for t in threads:
             t.join()
@@ -107,16 +105,17 @@ def main():
     dataset.load()
 
     # select which part of the test dataset to test
-    start_index = 3000
+    start_index = dataset.num_test_instances - 30
     end_index = dataset.num_test_instances
 
     # select the number of threads that the should be used
-    parallel_threads = 2
+    parallel_threads = 20
+    use_relevant_only = False
 
     print('Executing DTW for example ', start_index, ' to ', end_index, 'of the test data set in\n',
           config.training_data_folder, '\n')
 
-    execute_dtw_version(dataset, start_index, end_index, parallel_threads)
+    execute_dtw_version(dataset, start_index, end_index, parallel_threads, use_relevant_only)
 
 
 # this script is used to execute the dtw test for comparision with the neural network

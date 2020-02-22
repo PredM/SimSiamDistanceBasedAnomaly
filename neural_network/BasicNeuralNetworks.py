@@ -502,6 +502,7 @@ class CNN(NN):
             # model.add(tf.keras.layers.BatchNormalization())
             # model.add(tf.keras.layers.Softmax()) # Martin et al. (2017) ICCBR
             model.add(tf.keras.layers.Reshape((model.layers[len(model.layers) - 1].output.shape[1], 1)))
+
         self.model = model
 
 # TODO @klein Remove old code that is / will not be used

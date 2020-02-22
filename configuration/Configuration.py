@@ -18,7 +18,7 @@ class Configuration:
         # ffnn = uses ffnn as distance measure
         # simple = mean absolute difference as distance measure instead of the ffnn
         self.architecture_variants = ['standard_simple', 'standard_ffnn', 'fast_simple', 'fast_ffnn']
-        self.architecture_variant = self.architecture_variants[1]
+        self.architecture_variant = self.architecture_variants[0]
         # Most related work on time series with SNN use a fc layer at the end of a cnn to merge 1d-conv
         # features of time steps. Seems to be useful for standard_simple architecture, can be used via
         # adding "fc_after_cnn1d_layers" in the hyperparameter configs file
@@ -47,7 +47,7 @@ class Configuration:
         # if use_individual_hyperparameters = false interpreted as a single json file, else as a folder
         # containing json files named after the cases they should be used for (see all_cases below for correct names)
         # self.hyper_file = self.hyper_file_folder + 'individual_hyperparameters_test'
-        self.hyper_file = self.hyper_file_folder + 'ba_cnn.json'
+        self.hyper_file = self.hyper_file_folder + 'ba_cnn_modified.json'
 
         # choose a loss function
         # TODO: TripletLoss, Distance-Based Logistic Loss

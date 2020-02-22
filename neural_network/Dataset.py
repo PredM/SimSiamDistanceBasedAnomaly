@@ -294,7 +294,7 @@ class FullDataset(Dataset):
     def reduce_to_relevant(self, test_example, train_example_index):
         class_label_train_example = self.y_train_strings[train_example_index]
         mask = self.get_masking(class_label_train_example)
-        return test_example[mask], self.x_train[mask]
+        return test_example[:, mask], self.x_train[train_example_index][:, mask]
 
     def encode(self, encoder, encode_test_data=False):
 
