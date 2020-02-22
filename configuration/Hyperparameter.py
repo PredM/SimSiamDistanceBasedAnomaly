@@ -86,8 +86,9 @@ class Hyperparameters:
             self.cnn_kernel_length = data['cnn_kernel_length']
             self.cnn_strides = data['cnn_strides']
 
-            if data.get('fc_after_cnn1d_layers') is not None:
-                self.fc_after_cnn1d_layers = data['fc_after_cnn1d_layers']
+            fc_layer = data.get('fc_after_cnn1d_layers')
+            if fc_layer is not None and len(fc_layer) > 0:
+                self.fc_after_cnn1d_layers = fc_layer
 
         elif self.encoder_variant == ["cnn2d", "cnnwithclassattention"]:
             self.cnn2d_layers = data['cnn2d_layers']

@@ -110,7 +110,7 @@ def main():
 
     # select the number of threads that the should be used
     parallel_threads = 20
-    use_relevant_only = False
+    use_relevant_only = True
 
     print('Executing DTW for example ', start_index, ' to ', end_index, 'of the test data set in\n',
           config.training_data_folder, '\n')
