@@ -23,7 +23,10 @@ class Hyperparameters:
         self.epochs_current = None
 
         self.learning_rate = None
+
+        # if gradient capping shouldn't be used this variable must be < 0
         self.gradient_cap = None
+
         self.dropout_rate = None
 
         self.ffnn_layers = None
@@ -60,9 +63,12 @@ class Hyperparameters:
         self.epochs = data['epochs']
         self.epochs_current = data['epochs_current']
 
-        self.learning_rate = data['learning_rate']
-        self.gradient_cap = data['gradient_cap']
         self.dropout_rate = data['dropout_rate']
+        self.learning_rate = data['learning_rate']
+
+        self.gradient_cap = data['gradient_cap']
+        if self.gradient_cap is None:
+            self.gradient_cap = -1
 
         # Load assign layers for ffnn as similarity measure if declared
         if data.get('ffnn_layers') is not None:

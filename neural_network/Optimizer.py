@@ -70,7 +70,7 @@ class Optimizer:
             # Calculate the loss and the gradients
             if self.config.type_of_loss_function == "binary_cross_entropy":
                 if self.config.use_margin_reduction_based_on_label_sim:
-                    sim = self.getSimiliarityBetweenTwoLabelStringForNegPairSampleWeightInBCE(query_classes)
+                    sim = self.get_similiarity_between_two_label_string(query_classes, neg_pair_wbce=True)
                     # print('query_classes', query_classes)
                     # print('sim', sim)
                     # bce = tf.keras.losses.BinaryCrossentropy()
@@ -127,7 +127,8 @@ class Optimizer:
         return K.mean(logloss, axis=-1)
 
     # TODO @klein name and description doesn't match what the method seems to do
-    def get_similiarity_between_two_label_string(self, classes):
+    # wbce = weighted_binary_crossentropy
+    def get_similiarity_between_two_label_string(self, classes, neg_pair_wbce=False):
         # Returns the similarity between 2 failures (labels) in respect to the location of occurrence,
         # the type of failure (failure mode) and the condition of the data sample.
         # Input: 1d npy array with pairwise class labels as strings [2*batchsize]
@@ -140,35 +141,9 @@ class Optimizer:
             sim = (self.dataset.get_sim_between_label_pair(a, b, "condition")
                    + self.dataset.get_sim_between_label_pair(a, b, "localization")
                    + self.dataset.get_sim_between_label_pair(a, b, "failuremode")) / 3
-            pairwise_class_label_sim[pair_index] = sim
-            # print("pairwise_class_label_sim: ", sim)
 
-        return pairwise_class_label_sim
-
-    # TODO include this in the method above with boolean parameter NegPairSampleWeightInBCE
-    def getSimiliarityBetweenTwoLabelStringForNegPairSampleWeightInBCE(self, classes):
-        # Returns the similarity between 2 failures (labels) in respect to the location of occurrence,
-        # type of failure (failure mode) and the condition of the data sample.
-        # Implemented for use as label smoother of neg pair in BCE
-        # Input: 1d npy array with pairwise class labels as strings [2*batchsize]
-        # Output: 1d npy [batchsize]
-        pairwise_class_label_sim = np.zeros([len(classes) // 2])
-        for pair_index in range(len(classes) // 2):
-            a = classes[2 * pair_index]
-            b = classes[2 * pair_index + 1]
-            # print("pair_index: ", pair_index, "a: ", a ," b: ",b)
-
-            sim = (self.dataset.get_sim_between_label_pair(a, b, "condition")
-                   + self.dataset.get_sim_between_label_pair(a, b, "localization")
-                   + self.dataset.get_sim_between_label_pair(a, b, "failuremode")) / 3
-
-            # sim = self.dataset.get_sim_between_label_pair(a, b, "failuremode")
-
-            # Transform similarity to a appropriate weight
-            # print("Sim before: ", sim)
-            if sim < 1:
+            if neg_pair_wbce and sim < 1:
                 sim = 1 - sim
-            # print("Sim after: ", sim)
 
             pairwise_class_label_sim[pair_index] = sim
             # print("pairwise_class_label_sim: ", sim)
