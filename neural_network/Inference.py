@@ -62,36 +62,21 @@ class Inference:
         self.quality_condition_quality = 0
 
     def infer_test_dataset(self):
-        correct, num_infers = 0, 0
-        start_time = time.perf_counter()
-
-        # Preparation for querying only failures
-        # TODO Cleanup, über Methode in Dataset
-        # Iteration sollte nicht nötig sein, eher über Numpy Operation
-        idx_examples = np.zeros(1, int)
 
         if self.config.use_only_failures_as_queries_for_inference:
-            idx_cnt = 0
-            for x in self.dataset.y_test_strings_unique:
-                # if not x == 'no_failure':
-                self.num_test_examples = self.num_test_examples + int(
-                    self.dataset.num_instances_by_class_test[idx_cnt][1])
-                idx_examples = np.append(idx_examples, self.dataset.class_idx_to_ex_idxs_test[idx_cnt][
-                                                       :2])
-                # np.append(idx_examples, self.dataset.class_idx_to_ex_idxs_test[idx_cnt][:5])
-                idx_cnt = idx_cnt + 1
-            idx_test_examples_query_pool = np.nditer(idx_examples)
+            idx_test_examples_query_pool = self.dataset.get_indices_failures_only_test()
         else:
-            self.num_test_examples = self.dataset.num_test_instances
             idx_test_examples_query_pool = range(self.dataset.num_test_instances)
+
+        self.num_test_examples = len(idx_test_examples_query_pool)
 
         example_cnt = 0
         example_cnt_failure = 0
+        correct, num_infers = 0, 0
+
+        start_time = time.perf_counter()
 
         for idx_test in idx_test_examples_query_pool:
-
-            max_sim = 0
-            max_sim_index = 0
 
             # measure the similarity between the test series and the training batch series
             sims, labels = self.architecture.get_sims(self.dataset.x_test[idx_test])
@@ -102,14 +87,12 @@ class Inference:
 
             knn_results = []
             for i in range(self.config.k_of_knn):
-                row = [i + 1, 'Class: ' + self.dataset.y_train_strings[ranking_nearest_neighbors_idx[i]],
-                       'Sim: ' + str(np.asanyarray(sims[ranking_nearest_neighbors_idx[i]])),
-                       'Case ID: ' + str(ranking_nearest_neighbors_idx[i]),
-                       'Failure: ' + str(self.dataset.failureTimes_train[ranking_nearest_neighbors_idx[i]]),
-                       'Window: ' + str(self.dataset.windowTimes_train[ranking_nearest_neighbors_idx[i]][0]).replace(
-                           "['YYYYMMDD HH:mm:ss (", "").replace(")']", "") + " - " + str(
-                           self.dataset.windowTimes_train[ranking_nearest_neighbors_idx[i]][2]).replace(
-                           "['YYYYMMDD HH:mm:ss (", "").replace(")']", "")]
+                index = ranking_nearest_neighbors_idx[i]
+                row = [i + 1, 'Class: ' + self.dataset.y_train_strings[index],
+                       'Sim: ' + str(np.asanyarray(sims[index])),
+                       'Case ID: ' + str(index),
+                       'Failure: ' + self.dataset.failureTimes_train[index],
+                       'Window: ' + self.dataset.get_time_window_str(index, 'train')]
                 knn_results.append(row)
 
             real = self.dataset.y_test_strings[idx_test]
@@ -122,12 +105,12 @@ class Inference:
             self.y_pred_sim.append(max_sim)
             self.y_true.append(real)
 
-            self.quality_all_condition_quality += self.dataset.get_sim_between_label_pair(real, max_sim_class,
-                                                                                          "condition")
-            self.quality_all_failure_mode_diagnosis += self.dataset.get_sim_between_label_pair(real, max_sim_class,
-                                                                                               "failuremode")
-            self.quality_all_failure_localization += self.dataset.get_sim_between_label_pair(real, max_sim_class,
-                                                                                             "localization")
+            self.quality_all_condition_quality += self.dataset.get_sim_label_pair(real, max_sim_class,
+                                                                                  "condition")
+            self.quality_all_failure_mode_diagnosis += self.dataset.get_sim_label_pair(real, max_sim_class,
+                                                                                       "failuremode")
+            self.quality_all_failure_localization += self.dataset.get_sim_label_pair(real, max_sim_class,
+                                                                                     "localization")
 
             # Storing the prediction result in respect to a failure occurrence
             if not real == 'no_failure':
@@ -144,12 +127,12 @@ class Inference:
                     self.failure_results.loc[(self.failure_results['Label'].isin([real])) & (
                         self.failure_results['FailureTime'].isin(
                             self.dataset.failureTimes_test[idx_test])), 'AsOtherFailure'] += 1
-                self.quality_condition_quality += self.dataset.get_sim_between_label_pair(real, max_sim_class,
-                                                                                          "condition")
-                self.quality_failure_mode_diagnosis += self.dataset.get_sim_between_label_pair(real, max_sim_class,
-                                                                                               "failuremode")
-                self.quality_failure_localization += self.dataset.get_sim_between_label_pair(real, max_sim_class,
-                                                                                             "localization")
+                self.quality_condition_quality += self.dataset.get_sim_label_pair(real, max_sim_class,
+                                                                                  "condition")
+                self.quality_failure_mode_diagnosis += self.dataset.get_sim_label_pair(real, max_sim_class,
+                                                                                       "failuremode")
+                self.quality_failure_localization += self.dataset.get_sim_label_pair(real, max_sim_class,
+                                                                                     "localization")
 
             # keep track of how many were classified correctly, only used for intermediate output
             if real == max_sim_class:
@@ -177,11 +160,7 @@ class Inference:
                 ['Condition quality:', self.quality_condition_quality / example_cnt_failure],
 
                 # TODO Add get method to dataset with idx_test, 0 as paramters
-                ['Query Window:', str(
-                    str(self.dataset.windowTimes_test[idx_test][0]).replace("['YYYYMMDD HH:mm:ss (", "").replace(")']",
-                                                                                                                 "") + " - " + str(
-                        self.dataset.windowTimes_test[idx_test][2]).replace("['YYYYMMDD HH:mm:ss (", "").replace(")']",
-                                                                                                                 ""))],
+                ['Query Window:', self.dataset.get_time_window_str(idx_test, 'test')],
                 ['Query Failure:', str(self.dataset.failureTimes_test[idx_test])]
             ]
 

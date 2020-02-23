@@ -296,6 +296,23 @@ class FullDataset(Dataset):
         mask = self.get_masking(class_label_train_example)
         return test_example[:, mask], self.x_train[train_example_index][:, mask]
 
+    def get_time_window_str(self, index, dataset_type):
+        if dataset_type == 'test':
+            dataset = self.windowTimes_test
+        elif dataset_type == 'train':
+            dataset = self.windowTimes_train
+        else:
+            raise ValueError('Unkown dataset type')
+
+        rep = lambda x: str(x).replace("['YYYYMMDD HH:mm:ss (", "").replace(")']", "")
+
+        t1 = rep(dataset[index][0])
+        t2 = rep(dataset[index][2])
+        return " - ".join([t1, t2])
+
+    def get_indices_failures_only_test(self):
+        return np.where(self.y_test_strings != 'no_failure')[0]
+
     def encode(self, encoder, encode_test_data=False):
 
         start_time_encoding = perf_counter()
@@ -355,7 +372,7 @@ class FullDataset(Dataset):
 
             return first_idx, second_idx
 
-    def get_sim_between_label_pair(self, label_1, label_2, notion_of_sim):
+    def get_sim_label_pair(self, label_1, label_2, notion_of_sim):
         # Input label1, label2, notion_of_sim as string
         # Output similarity value under consideration of the metric
         # print("label_1: ", label_1, " label_2: ", label_2, " notion_of_sim: ", notion_of_sim)

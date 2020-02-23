@@ -138,9 +138,9 @@ class Optimizer:
             a = classes[2 * pair_index]
             b = classes[2 * pair_index + 1]
             # print("pair_index: ", pair_index, "a: ", a ," b: ",b)
-            sim = (self.dataset.get_sim_between_label_pair(a, b, "condition")
-                   + self.dataset.get_sim_between_label_pair(a, b, "localization")
-                   + self.dataset.get_sim_between_label_pair(a, b, "failuremode")) / 3
+            sim = (self.dataset.get_sim_label_pair(a, b, "condition")
+                   + self.dataset.get_sim_label_pair(a, b, "localization")
+                   + self.dataset.get_sim_label_pair(a, b, "failuremode")) / 3
 
             if neg_pair_wbce and sim < 1:
                 sim = 1 - sim
@@ -280,9 +280,9 @@ class SNNOptimizer(Optimizer):
             if self.config.use_sim_value_for_neg_pair:
                 class_string_a = self.dataset.y_train_strings[neg_pair[0]]
                 class_string_b = self.dataset.y_train_strings[neg_pair[1]]
-                sim = (self.dataset.get_sim_between_label_pair(class_string_a, class_string_b, "condition")
-                       + self.dataset.get_sim_between_label_pair(class_string_a, class_string_b, "localization")
-                       + self.dataset.get_sim_between_label_pair(class_string_a, class_string_b, "failuremode")) / 3
+                sim = (self.dataset.get_sim_label_pair(class_string_a, class_string_b, "condition")
+                       + self.dataset.get_sim_label_pair(class_string_a, class_string_b, "localization")
+                       + self.dataset.get_sim_label_pair(class_string_a, class_string_b, "failuremode")) / 3
                 batch_true_similarities.append(sim)
             else:
                 batch_true_similarities.append(0.0)

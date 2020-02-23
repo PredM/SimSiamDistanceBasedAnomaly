@@ -153,7 +153,7 @@ class Configuration:
         self.use_case_base_extraction_for_inference = True  # default False
 
         # parameter to control the size / number of the queries used for evaluation
-        self.use_only_failures_as_queries_for_inference = False  # default False
+        self.use_only_failures_as_queries_for_inference = True  # default False
 
         # parameter to control if and when a test is conducted through training
         self.use_inference_test_during_training = False  # default False
@@ -195,7 +195,6 @@ class Configuration:
         self.models_folder = '../data/trained_models/'
 
         # path and file name to the specific model that should be used for testing and live classification
-        self.filename_model_to_use = 'temp_snn_model_02-22_14-47-14_epoch-16800'
         self.filename_model_to_use = 'temp_snn_model_02-22_14-47-14_epoch-16800'
         self.directory_model_to_use = self.models_folder + self.filename_model_to_use + '/'
 
