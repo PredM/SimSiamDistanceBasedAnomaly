@@ -2,6 +2,7 @@ import sys
 import os
 import numpy as np
 from numpy.random.mtrand import RandomState
+from shutil import copyfile
 
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 
@@ -29,7 +30,7 @@ def main():
         indices_of_classes.append(np.where(y_train == c)[0])
 
     # reduce classes to equal many examples
-    new_indcies = []
+    new_indices = []
     ran = RandomState(config.random_seed_index_selection)
     for i in range(len(indices_of_classes)):
         length = len(indices_of_classes[i])
@@ -40,42 +41,54 @@ def main():
         temp = ran.choice(indices_of_classes[i], epc, replace=False)
         # print(len(indices_of_classes[i]), len(temp))
 
-        new_indcies.append(temp)
+        new_indices.append(temp)
 
     casebase_features_list = []
     casebase_labels_list = []
     casebase_failures_list = []
-    casebase_windowtimes_list = []
+    casebase_window_times_list = []
 
     # extract the values at the selected indices and add to list
     for i in range(len(classes)):
-        casebase_labels_list.extend(y_train[new_indcies[i]])
-        casebase_features_list.extend(x_train[new_indcies[i]])
-        casebase_failures_list.extend(failureTimes_train[new_indcies[i]])
-        casebase_windowtimes_list.extend(windowTimes_train[new_indcies[i]])
+        casebase_labels_list.extend(y_train[new_indices[i]])
+        casebase_features_list.extend(x_train[new_indices[i]])
+        casebase_failures_list.extend(failureTimes_train[new_indices[i]])
+        casebase_window_times_list.extend(windowTimes_train[new_indices[i]])
 
     # transform list of values back into an array and safe to file
     casebase_labels = np.stack(casebase_labels_list, axis=0)
     casebase_features = np.stack(casebase_features_list, axis=0)
     casebase_failures = np.stack(casebase_failures_list, axis=0)
-    casebase_windowtimes = np.stack(casebase_windowtimes_list, axis=0)
+    casebase_window_times = np.stack(casebase_window_times_list, axis=0)
 
     print('Number of exaples in training data set:', casebase_features.shape[0])
 
     np.save(config.case_base_folder + 'train_features.npy', casebase_features.astype('float32'))
     np.save(config.case_base_folder + 'train_labels.npy', casebase_labels)
     np.save(config.case_base_folder + 'train_failure_times.npy', casebase_failures)
-    np.save(config.case_base_folder + 'train_window_times.npy', casebase_windowtimes)
+    np.save(config.case_base_folder + 'train_window_times.npy', casebase_window_times)
 
     # in order for the dataset object to be created, there must also be files for test data in the folder,
     # even if these are not used for live processing.
-    y_test = np.load(config.training_data_folder + 'test_labels.npy')  # labels of the training data
-    x_test = np.load(config.training_data_folder + 'test_features.npy')  # labels of the training data
-    np.save(config.case_base_folder + 'test_features.npy', x_test.astype('float32'))
-    np.save(config.case_base_folder + 'test_labels.npy', y_test)
+    # y_test = np.load(config.training_data_folder + 'test_labels.npy')  # labels of the test data
+    # x_test = np.load(config.training_data_folder + 'test_features.npy')  # features of the test data
+    # test_window_times = np.load(config.training_data_folder + 'test_window_times.npy')
+    # test_failure_times = np.load(config.training_data_folder + 'test_failure_times.npy')
+    #
+    # np.save(config.case_base_folder + 'test_features.npy', x_test.astype('float32'))
+    # np.save(config.case_base_folder + 'test_labels.npy', y_test)
+    # np.save(config.case_base_folder + 'test_window_times.npy', test_window_times)
+    # np.save(config.case_base_folder + 'test_failure_times.npy', test_failure_times)
+    #
+    # # also copy the file that stores the names of the features
+    # np.save(config.case_base_folder + '', feature_names)
 
-    # also copy the file that stores the names of the features
-    np.save(config.case_base_folder + 'feature_names.npy', feature_names)
+    files_to_copy = ['feature_names.npy', 'test_labels.npy', 'test_features.npy', 'test_window_times.npy',
+                     'test_failure_times.npy', 'FailureMode_Sim_Matrix.csv', 'Lokalization_Sim_Matrix.csv',
+                     'Condition_Sim_Matrix.csv']
+
+    for file in files_to_copy:
+        copyfile(config.training_data_folder + file, config.case_base_folder + file)
 
 
 # this script is used to reduce the training data to a specific amount of examples per class

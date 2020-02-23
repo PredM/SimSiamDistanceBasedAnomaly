@@ -97,14 +97,8 @@ class Optimizer:
 
             grads = tape.gradient(loss, trainable_params)
 
-            # Maybe change back to clipnorm = self.hyper.gradient_cap in adam initialisation
-            if gradient_cap == 0:
-                clipped_grads = grads
-            else:
-                clipped_grads = tf.clip_by_global_norm(grads, gradient_cap)
-
             # Apply the gradients to the trainable parameters
-            optimizer.apply_gradients(zip(clipped_grads, trainable_params))
+            optimizer.apply_gradients(zip(grads, trainable_params))
 
             return loss
 
@@ -187,11 +181,16 @@ class SNNOptimizer(Optimizer):
     def __init__(self, architecture, dataset, config):
 
         super().__init__(architecture, dataset, config)
-        self.adam_optimizer = tf.keras.optimizers.Adam(learning_rate=self.architecture.hyper.learning_rate)
         self.train_loss_results = []
-        self.best_loss = 1000  #
+        self.best_loss = 1000
         self.stopping_step_counter = 0
         self.dir_name_last_model_saved = None
+
+        if self.architecture.hyper.gradient_cap >= 0:
+            self.adam_optimizer = tf.keras.optimizers.Adam(learning_rate=self.architecture.hyper.learning_rate,
+                                                           clipnorm=self.architecture.hyper.gradient_cap)
+        else:
+            self.adam_optimizer = tf.keras.optimizers.Adam(learning_rate=self.architecture.hyper.learning_rate)
 
     def optimize(self):
         current_epoch = 0
@@ -201,9 +200,8 @@ class SNNOptimizer(Optimizer):
             current_epoch = self.architecture.hyper.epochs_current
 
             if current_epoch >= self.architecture.hyper.epochs:
-                print(
-                    'Training already finished. If training should be continued'
-                    ' increase the number of epochs in the hyperparameter file of the safed model')
+                print('Training already finished. If training should be continued'
+                      ' increase the number of epochs in the hyperparameter file of the safed model')
             else:
                 print('Continuing the training at epoch', current_epoch)
 
@@ -423,8 +421,14 @@ class CBSOptimizer(Optimizer, ABC):
         for case_handler in self.architecture.case_handlers:
             self.losses[case_handler.dataset.case] = []
             self.goal_epochs[case_handler.dataset.case] = case_handler.hyper.epochs
-            self.optimizer[case_handler.dataset.case] = tf.keras.optimizers.Adam(
-                learning_rate=case_handler.hyper.learning_rate)
+
+            if case_handler.hyper.gradient_cap >= 0:
+                opt = tf.keras.optimizers.Adam(learning_rate=case_handler.hyper.learning_rate,
+                                               clipnorm=case_handler.hyper.gradient_cap)
+            else:
+                opt = tf.keras.optimizers.Adam(learning_rate=case_handler.hyper.learning_rate)
+
+            self.optimizer[case_handler.dataset.case] = opt
 
         self.max_epoch = max(self.goal_epochs.values())
 

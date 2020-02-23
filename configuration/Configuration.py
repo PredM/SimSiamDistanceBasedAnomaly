@@ -47,7 +47,7 @@ class Configuration:
         # if use_individual_hyperparameters = false interpreted as a single json file, else as a folder
         # containing json files named after the cases they should be used for (see all_cases below for correct names)
         # self.hyper_file = self.hyper_file_folder + 'individual_hyperparameters_test'
-        self.hyper_file = self.hyper_file_folder + 'cnn_niklas_test.json'  # 'ba_cnn_modified.json'
+        self.hyper_file = self.hyper_file_folder + 'small_cnn.json'  # 'ba_cnn_modified.json'
 
         # choose a loss function
         # TODO: TripletLoss, Distance-Based Logistic Loss
@@ -166,7 +166,7 @@ class Configuration:
         self.random_seed_index_selection = 42
 
         # the number of examples per class the training data set should be reduced to for the live classification
-        self.examples_per_class = 150
+        self.examples_per_class = 300
 
         # the k of the knn classifier used for live classification
         self.k_of_knn = 10
@@ -195,7 +195,8 @@ class Configuration:
         self.models_folder = '../data/trained_models/'
 
         # path and file name to the specific model that should be used for testing and live classification
-        self.filename_model_to_use = 'temp_snn_model_02-02_18-17-50_epoch-680'
+        self.filename_model_to_use = 'temp_snn_model_02-22_14-47-14_epoch-16800'
+        self.filename_model_to_use = 'temp_snn_model_02-22_14-47-14_epoch-16800'
         self.directory_model_to_use = self.models_folder + self.filename_model_to_use + '/'
 
         # folder where the preprocessed training and test data for the neural network should be stored
