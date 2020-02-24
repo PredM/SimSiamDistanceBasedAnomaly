@@ -12,9 +12,23 @@ from neural_network.Dataset import FullDataset
 from configuration.Configuration import Configuration
 
 
+class Counter:
+
+    def __init__(self, total):
+        self.total = total
+        self.counter = 0
+        self.lock = threading.Lock()
+
+    def inc_and_print(self):
+        self.lock.acquire()
+        self.counter += 1
+        print("Training examples compares for current test:", self.counter, '/', self.total)
+        self.lock.release()
+
+
 class DTWThread(threading.Thread):
 
-    def __init__(self, indices_train_examples, full_dataset, test_example, use_relevant_only):
+    def __init__(self, indices_train_examples, full_dataset, test_example, use_relevant_only, counter):
         super().__init__()
 
         self.indices_train_examples = indices_train_examples
@@ -22,8 +36,10 @@ class DTWThread(threading.Thread):
         self.test_example = test_example
         self.use_relevant_only = use_relevant_only
         self.results = np.zeros(len(indices_train_examples))
+        self.counter: Counter = counter
 
     def run(self):
+
         for array_index, example_index in enumerate(self.indices_train_examples):
 
             if self.use_relevant_only:
@@ -40,6 +56,8 @@ class DTWThread(threading.Thread):
                 distance, _ = fastdtw(self.test_example, train_example, dist=euclidean)
 
             self.results[array_index] = distance
+            self.counter.inc_and_print()
+
 
 # TODO Add true positive etc
 def execute_dtw_version(dataset: FullDataset, start_index, end_index, parallel_threads, use_relevant_only=False):
@@ -57,10 +75,11 @@ def execute_dtw_version(dataset: FullDataset, start_index, end_index, parallel_t
         chunks = np.array_split(range(dataset.num_train_instances), parallel_threads)
 
         threads = []
+        counter = Counter(dataset.num_train_instances)
 
         for chunk in chunks:
             if len(chunk) > 0:
-                t = DTWThread(chunk, dataset, current_test_example, use_relevant_only)
+                t = DTWThread(chunk, dataset, current_test_example, use_relevant_only, counter)
                 t.start()
                 threads.append(t)
 
@@ -100,8 +119,11 @@ def execute_dtw_version(dataset: FullDataset, start_index, end_index, parallel_t
 def main():
     config = Configuration()
 
-    # create data set
-    dataset = FullDataset(config.training_data_folder, config, False)
+    if config.use_case_base_extraction_for_inference:
+        dataset: FullDataset = FullDataset(config.case_base_folder, config, training=False)
+    else:
+        dataset: FullDataset = FullDataset(config.training_data_folder, config, training=False)
+
     dataset.load()
 
     # select which part of the test dataset to test
