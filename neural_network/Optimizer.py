@@ -305,7 +305,8 @@ class SNNOptimizer(Optimizer):
         model_input_class_strings = np.take(a=self.dataset.y_train_strings, indices=batch_pairs_indices, axis=0)
         if self.architecture.hyper.encoder_variant in ['cnnwithclassattention', 'cnn1dwithclassattention']:
 
-            model_input2 = [self.dataset.get_masking_float(label) for label in model_input_class_strings]
+            model_input2 = np.array([self.dataset.get_masking_float(label) for label in model_input_class_strings],
+                                    dtype='float32')
             # remove one class/case vector of each pair to get a similar input as in test/life without knowing the label
             # model_input2[range(0, self.architecture.hyper.batch_size - 1, 2), :] = np.zeros(
             #    self.dataset.x_auxCaseVector_train.shape[1])
@@ -317,16 +318,18 @@ class SNNOptimizer(Optimizer):
             # print(model_input2)
             # print("model_input: ", model_input.shape)
             if self.architecture.hyper.encoder_variant == 'cnnwithclassattention':
-                model_input = np.reshape(model_input,
-                                         (model_input.shape[0], model_input.shape[1], model_input.shape[2], 1))
+                model_input = model_input.reshape((model_input.shape[0], model_input.shape[1], model_input.shape[2], 1))
             # print("model_input: ", model_input.shape)
+
+            # TODO Check if this is correct = NOPE
+            #if self.architecture.hyper.encoder_variant == 'cnn1dwithclassattention':
+            #    model_input = model_input.reshape((model_input.shape[0], model_input.shape[1], model_input.shape[2]))
 
             batch_loss = self.update_single_model([model_input, model_input2], true_similarities, self.architecture,
                                                   self.adam_optimizer, self.architecture.hyper.gradient_cap,
                                                   query_classes=model_input_class_strings)
         elif self.architecture.hyper.encoder_variant == 'cnn2d':
-            model_input = np.reshape(model_input,
-                                     (model_input.shape[0], model_input.shape[1], model_input.shape[2], 1))
+            model_input = model_input.reshape((model_input.shape[0], model_input.shape[1], model_input.shape[2], 1))
             batch_loss = self.update_single_model(model_input, true_similarities, self.architecture,
                                                   self.adam_optimizer, self.architecture.hyper.gradient_cap,
                                                   query_classes=model_input_class_strings)

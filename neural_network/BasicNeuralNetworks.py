@@ -231,7 +231,7 @@ class CNNWithClassAttention(NN):
             # first layer must be handled separately because the input shape parameter must be set
             if i == 0:
                 conv_layer1 = tf.keras.layers.Conv2D(filters=num_filter, padding='VALID',
-                                                     kernel_size=(filter_size),
+                                                     kernel_size=filter_size,
                                                      strides=stride, input_shape=sensorDataInput.shape)
                 # Added 1D-Conv Layer to provide information across time steps in the first layer
 
@@ -362,6 +362,7 @@ class CNN1DWithClassAttention(NN):
     def create_model(self):
         print('Creating CNN encoder with 1DConv and Modulation/Conditioning  with an input shape: ', self.input_shape)
         sensorDataInput = tf.keras.Input(self.input_shape[0], name="Input0")
+        # this is the number of classes in y_train
         caseDependentVectorInput = tf.keras.Input(self.input_shape[1], name="Input1")
 
         layers = self.hyper.cnn_layers
@@ -504,6 +505,7 @@ class CNN(NN):
             model.add(tf.keras.layers.Reshape((model.layers[len(model.layers) - 1].output.shape[1], 1)))
 
         self.model = model
+
 
 # TODO @klein Remove old code that is / will not be used
 class CNN2D(NN):
