@@ -91,7 +91,7 @@ class Inference:
                 row = [i + 1, 'Class: ' + self.dataset.y_train_strings[index],
                        'Sim: ' + str(np.asanyarray(sims[index])),
                        'Case ID: ' + str(index),
-                       'Failure: ' + self.dataset.failureTimes_train[index],
+                       'Failure: ' + str(self.dataset.failureTimes_train[index]),
                        'Window: ' + self.dataset.get_time_window_str(index, 'train')]
                 knn_results.append(row)
 

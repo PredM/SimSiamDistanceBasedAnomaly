@@ -78,7 +78,6 @@ def execute_dtw_version(dataset: FullDataset, start_index, end_index, parallel_t
         counter = Counter(dataset.num_train_instances)
 
         for chunk in chunks:
-            if len(chunk) > 0:
                 t = DTWThread(chunk, dataset, current_test_example, use_relevant_only, counter)
                 t.start()
                 threads.append(t)
@@ -131,7 +130,7 @@ def main():
     end_index = dataset.num_test_instances
 
     # select the number of threads that the should be used
-    parallel_threads = 20
+    parallel_threads = 4
     use_relevant_only = True
 
     print('Executing DTW for example ', start_index, ' to ', end_index, 'of the test data set in\n',
