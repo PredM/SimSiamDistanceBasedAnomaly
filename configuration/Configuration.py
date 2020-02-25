@@ -47,7 +47,7 @@ class Configuration:
         # if use_individual_hyperparameters = false interpreted as a single json file, else as a folder
         # containing json files named after the cases they should be used for (see all_cases below for correct names)
         # self.hyper_file = self.hyper_file_folder + 'individual_hyperparameters_test'
-        self.hyper_file = self.hyper_file_folder + 'snn_testing.json'  # 'ba_cnn_modified.json'
+        self.hyper_file = self.hyper_file_folder + 'snn_testing.json'  #  'ba_cnn_modified.json'
 
         # choose a loss function
         # TODO: TripletLoss, Distance-Based Logistic Loss
@@ -195,7 +195,7 @@ class Configuration:
         self.models_folder = '../data/trained_models/'
 
         # path and file name to the specific model that should be used for testing and live classification
-        self.filename_model_to_use = 'temp_snn_model_02-25_16-07-40_epoch-200'
+        self.filename_model_to_use = 'temp_snn_model_02-25_17-50-14_epoch-200'
         self.directory_model_to_use = self.models_folder + self.filename_model_to_use + '/'
 
         # folder where the preprocessed training and test data for the neural network should be stored

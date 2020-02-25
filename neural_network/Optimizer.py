@@ -18,7 +18,7 @@ import tensorflow.keras.backend as K
 
 from neural_network.Dataset import FullDataset
 from neural_network.Inference import Inference
-from neural_network.SNN import initialise_snn
+from neural_network.SNN import initialise_snn, SimpleSNN
 
 
 class Optimizer:
@@ -210,20 +210,11 @@ class SNNOptimizer(Optimizer):
                     inference = Inference(self.config, architecture2, dataset2)
                     inference.infer_test_dataset()
 
-    # TODO Change compose batch to method
-    #  make difference between equals class and standard clearer
-    def single_epoch(self, epoch):
-        """
-        Compute the loss of one epoch based on a batch that is generated randomly from the training data
-        Generation of batch in a separate method
-          Args:
-            epoch: int. current epoch
-        """
-        epoch_loss_avg = tf.keras.metrics.Mean()
-
+    def compose_batch(self):
         batch_true_similarities = []  # similarity label for each pair
         batch_pairs_indices = []  # index number of each example used in the training
 
+        # TODO @Klein This is assigned but never used - is this needed?
         # index numbers are the same for the first and the second (first is considered as known query, second unknown,
         # used for CNN with Att.)
         batch_pairs_indices_firstUsedforSecond = []
@@ -240,7 +231,7 @@ class SNNOptimizer(Optimizer):
         for i in range(self.architecture.hyper.batch_size // 2):
 
             #
-            # pos pair here
+            # pos pair
             #
 
             if self.config.equalClassConsideration:
@@ -258,6 +249,7 @@ class SNNOptimizer(Optimizer):
             batch_pairs_indices.append(pos_pair[1])
             # print("Pospair idx: ", self.dataset.y_train_strings[pos_pair[0]], " - ",self.dataset.y_train_strings[pos_pair[1]])
             batch_true_similarities.append(1.0)
+
             batch_pairs_indices_firstUsedforSecond.append(pos_pair[0])
             batch_pairs_indices_firstUsedforSecond.append(pos_pair[0])
 
@@ -265,6 +257,7 @@ class SNNOptimizer(Optimizer):
             # neg pair here
             #
 
+            # Find a negative pair
             if self.config.equalClassConsideration:
                 if i < self.architecture.hyper.batch_size // equal_class_part:
                     neg_pair = self.dataset.draw_pair_by_class_idx(False, from_test=False,
@@ -276,7 +269,12 @@ class SNNOptimizer(Optimizer):
                 neg_pair = self.dataset.draw_pair(False, from_test=False)
             batch_pairs_indices.append(neg_pair[0])
             batch_pairs_indices.append(neg_pair[1])
-            # print("Negpair idx: ", self.dataset.y_train_strings[neg_pair[0]], " - ",self.dataset.y_train_strings[neg_pair[1]])
+
+            # TODO Move the calculation to the dataset
+            # Assign a similarity value
+            # if configured a similarity value is calculated based on the local similarities of
+            # the tree characteristics below
+            # otherwise a similarity of 0 is assumed
             if self.config.use_sim_value_for_neg_pair:
                 class_string_a = self.dataset.y_train_strings[neg_pair[0]]
                 class_string_b = self.dataset.y_train_strings[neg_pair[1]]
@@ -290,53 +288,39 @@ class SNNOptimizer(Optimizer):
             batch_pairs_indices_firstUsedforSecond.append(neg_pair[0])
             batch_pairs_indices_firstUsedforSecond.append(neg_pair[0])
 
-            # create an index vector for CnnWithClassAttention where the first index is used for both examples
-
         # Change the list of ground truth similarities to an array
         true_similarities = np.asarray(batch_true_similarities)
+
+        return batch_pairs_indices, true_similarities
+
+    def single_epoch(self, epoch):
+        """
+        Compute the loss of one epoch based on a batch that is generated randomly from the training data
+        Generation of batch in a separate method
+          Args:
+            epoch: int. current epoch
+        """
+        epoch_loss_avg = tf.keras.metrics.Mean()
+
+        batch_pairs_indices, true_similarities = self.compose_batch()
 
         # Get the example pairs by the selected indices
         model_input = np.take(a=self.dataset.x_train, indices=batch_pairs_indices, axis=0)
 
-        # TODO Maybe relocate to corresponding class
-        # TODO use model_input == xxx in each and call batchloss only once
-        # TODO @klein can the comments/old code be deleted?
-        # Add the auxiliary input if required
         model_input_class_strings = np.take(a=self.dataset.y_train_strings, indices=batch_pairs_indices, axis=0)
+        model_aux_input = None
+
         if self.architecture.hyper.encoder_variant in ['cnnwithclassattention', 'cnn1dwithclassattention']:
+            model_aux_input = np.array([self.dataset.get_masking_float(label) for label in model_input_class_strings],
+                                       dtype='float32')
 
-            model_input2 = np.array([self.dataset.get_masking_float(label) for label in model_input_class_strings],
-                                    dtype='float32')
-            # remove one class/case vector of each pair to get a similar input as in test/life without knowing the label
-            # model_input2[range(0, self.architecture.hyper.batch_size - 1, 2), :] = np.zeros(
-            #    self.dataset.x_auxCaseVector_train.shape[1])
+        # reshape model_input based on encoder.
+        # batch_size and index are irrelevant because not used if aux_input is passed
+        model_input = self.architecture.reshape_input(model_input, 0, 0, aux_input=model_aux_input)
 
-            # print("model_input2: ", model_input2.shape)
-            # model_input2 = model_input2[:16 // 2:2,:]
-            # rows = range(0, 15, 2)
-            # print(rows)
-            # print(model_input2)
-            # print("model_input: ", model_input.shape)
-            if self.architecture.hyper.encoder_variant == 'cnnwithclassattention':
-                model_input = model_input.reshape((model_input.shape[0], model_input.shape[1], model_input.shape[2], 1))
-            # print("model_input: ", model_input.shape)
-
-            # TODO Check if this is correct = NOPE
-            #if self.architecture.hyper.encoder_variant == 'cnn1dwithclassattention':
-            #    model_input = model_input.reshape((model_input.shape[0], model_input.shape[1], model_input.shape[2]))
-
-            batch_loss = self.update_single_model([model_input, model_input2], true_similarities, self.architecture,
-                                                  self.adam_optimizer, self.architecture.hyper.gradient_cap,
-                                                  query_classes=model_input_class_strings)
-        elif self.architecture.hyper.encoder_variant == 'cnn2d':
-            model_input = model_input.reshape((model_input.shape[0], model_input.shape[1], model_input.shape[2], 1))
-            batch_loss = self.update_single_model(model_input, true_similarities, self.architecture,
-                                                  self.adam_optimizer, self.architecture.hyper.gradient_cap,
-                                                  query_classes=model_input_class_strings)
-        else:
-            batch_loss = self.update_single_model(model_input, true_similarities, self.architecture,
-                                                  self.adam_optimizer, self.architecture.hyper.gradient_cap,
-                                                  query_classes=model_input_class_strings)
+        batch_loss = self.update_single_model(model_input, true_similarities, self.architecture,
+                                              self.adam_optimizer, self.architecture.hyper.gradient_cap,
+                                              query_classes=model_input_class_strings)
 
         # Track progress
         epoch_loss_avg.update_state(batch_loss)  # Add current batch loss

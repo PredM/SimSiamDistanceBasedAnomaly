@@ -102,34 +102,41 @@ class SimpleSNN(AbstractSimilarityMeasure):
     # reshape and add auxiliary input for special encoder variants
     # outer index must be used if batch wise calculation is used
     # to access the correct example in the dataset
-    def reshape_input(self, input_pairs, batch_size, outer_index=0):
+    def reshape_input(self, input_pairs, batch_size, outer_index=0, aux_input=None):
 
         # Version from get_sim_in_batches --> contrary to optimizer and non batch cnn1d is reshaped
         # so a fix here or in other parts might be necessary
+        # Attention: can not be used directly, adaption necessary
 
         # if self.hyper.encoder_variant == 'cnn1dwithclassattention':
         #     input_pairs = input_pairs.reshape((input_pairs.shape[0], input_pairs.shape[1], input_pairs.shape[2]))
         # elif self.hyper.encoder_variant in ['cnn2d', 'cnnwithclassattention']:
         #     input_pairs = input_pairs.reshape((input_pairs.shape[0], input_pairs.shape[1], input_pairs.shape[2], 1))
         # if self.hyper.encoder_variant in ['cnn1dwithclassattention', 'cnnwithclassattention']:
-        #     input_pairs = [input_pairs, auxiliaryInput]
+        #     input_pairs = [input_pairs, aux_input]
 
         # Version from get_sim
         # Compute similarities
         if self.hyper.encoder_variant in ['cnnwithclassattention', 'cnn2d']:
             input_pairs = np.reshape(input_pairs, (input_pairs.shape[0], input_pairs.shape[1], input_pairs.shape[2], 1))
 
+        if self.hyper.encoder_variant == 'cnn1dwithclassattention':
+            raise NotImplementedError('Fix necessary')
+
         if self.hyper.encoder_variant in ['cnnwithclassattention', 'cnn1dwithclassattention']:
-            auxiliaryInput = np.zeros((2 * batch_size, self.hyper.time_series_depth), dtype='float32')
 
-            for index in range(batch_size):
-                # noinspection PyUnboundLocalVariable, PyUnresolvedReferences
-                auxiliaryInput[2 * index] = self.dataset.get_masking_float(
-                    self.dataset.y_train_strings[index + outer_index])
-                auxiliaryInput[2 * index + 1] = self.dataset.get_masking_float(
-                    self.dataset.y_train_strings[index + outer_index])
+            # aux_input will always be none except when called by the optimizer
+            if aux_input is None:
+                aux_input = np.zeros((2 * batch_size, self.hyper.time_series_depth), dtype='float32')
 
-            input_pairs = [input_pairs, auxiliaryInput]
+                for index in range(batch_size):
+                    # noinspection PyUnboundLocalVariable, PyUnresolvedReferences
+                    aux_input[2 * index] = self.dataset.get_masking_float(
+                        self.dataset.y_train_strings[index + outer_index])
+                    aux_input[2 * index + 1] = self.dataset.get_masking_float(
+                        self.dataset.y_train_strings[index + outer_index])
+
+            input_pairs = [input_pairs, aux_input]
 
         return input_pairs
 
@@ -159,8 +166,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
     # called during training by optimizer
     @tf.function
     def get_sims_batch(self, batch):
-        print('batch shape', batch[0].shape, batch[1].shape)
-        print('model shape', self.encoder.input_shape)
+
         # calculate the output of the subnet for the examples in the batch
         context_vectors = self.encoder.model(batch, training=self.training)
         # case_embeddings = self.encoder.intermediate_layer_model(batch[1], training=self.training)
