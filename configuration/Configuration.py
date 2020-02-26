@@ -26,7 +26,7 @@ class Configuration:
         self.simple_measures = ['abs_mean', 'euclidean_sim', 'euclidean_dis', 'dot_product', 'cosine']
         self.simple_measure = self.simple_measures[0]
 
-        # in case of cnn2d_withAddInput, additional option:
+        # additional option for encoder variant cnnwithclassattention:
         self.useFeatureWeightedSimilarity = False  # default: False
 
         # Compares each time step of the encoded representation with each other time step

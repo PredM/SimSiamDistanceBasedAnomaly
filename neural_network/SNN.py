@@ -191,6 +191,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
 
         return sims_batch
 
+    # TODO @klein shouldn't cnn2d be added to the first if? because the same reshape operation is done in reshape_input
     @tf.function
     def get_sim_pair(self, context_vectors, pair_index):
         # Reminder if a concat layer is used in the cnn1dclassattention,
@@ -203,8 +204,11 @@ class SimpleSNN(AbstractSimilarityMeasure):
             # Output of encoder are encoded time series and additional things e.g., weights vectors
             a = context_vectors[0][2 * pair_index, :, :]
             b = context_vectors[0][2 * pair_index + 1, :, :]
-            a_weights = context_vectors[1][2 * pair_index, :]
-            b_weights = context_vectors[1][2 * pair_index + 1, :]
+
+            if self.config.useFeatureWeightedSimilarity:
+                a_weights = context_vectors[1][2 * pair_index, :]
+                b_weights = context_vectors[1][2 * pair_index + 1, :]
+
         else:
             a = context_vectors[2 * pair_index, :, :]
             b = context_vectors[2 * pair_index + 1, :, :]

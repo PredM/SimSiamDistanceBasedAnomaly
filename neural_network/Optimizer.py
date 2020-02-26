@@ -57,7 +57,7 @@ class Optimizer:
                     except ValueError:
                         pass
 
-    def update_single_model(self, model_input, true_similarities, model, optimizer, gradient_cap, query_classes=None):
+    def update_single_model(self, model_input, true_similarities, model, optimizer, query_classes=None):
         with tf.GradientTape() as tape:
             pred_similarities = model.get_sims_batch(model_input)
 
@@ -317,8 +317,7 @@ class SNNOptimizer(Optimizer):
         model_input = self.architecture.reshape_input(model_input, 0, 0, aux_input=model_aux_input)
 
         batch_loss = self.update_single_model(model_input, true_similarities, self.architecture,
-                                              self.adam_optimizer, self.architecture.hyper.gradient_cap,
-                                              query_classes=model_input_class_strings)
+                                              self.adam_optimizer, query_classes=model_input_class_strings)
 
         # Track progress
         epoch_loss_avg.update_state(batch_loss)  # Add current batch loss
@@ -540,8 +539,7 @@ class CHOptimizer(threading.Thread):
 
                 batch_loss = self.cbsOptimizer.update_single_model(model_input, true_similarities, self.case_handler,
                                                                    self.cbsOptimizer.optimizer[
-                                                                       self.case_handler.dataset.case],
-                                                                   self.case_handler.hyper.gradient_cap)
+                                                                       self.case_handler.dataset.case])
 
                 # track progress
                 epoch_loss_avg.update_state(batch_loss)

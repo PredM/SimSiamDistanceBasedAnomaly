@@ -15,6 +15,8 @@ class SimpleSimilarityMeasure:
 
     @tf.function
     def get_sim(self, a, b, a_weights=None, b_weights=None):
+
+        # assign to class variables so only common parameters must be passed below
         self.a_weights = a_weights
         self.b_weights = b_weights
 
@@ -34,13 +36,14 @@ class SimpleSimilarityMeasure:
     # Mean absolute difference of all time stamp combinations
     @tf.function
     def abs_mean(self, a, b):
+
         diff = tf.abs(a - b)
         distance = tf.reduce_mean(diff)
         sim = tf.exp(distance)
         return sim
 
     # TODO Why is b_weights unused?
-    # TODO Check if cast is necessary
+    # TODO Check if cast is necessary, might even cause errors
     # Euclidean distance (required in contrastive loss function and converted sim)
     @tf.function
     def euclidean_dis(self, a, b):
@@ -54,12 +57,9 @@ class SimpleSimilarityMeasure:
 
             a_weights_sum = tf.reduce_sum(a_weights)
             a_weights = a_weights / a_weights_sum
-            tf.print(a_weights)
 
             diff = tf.norm(a - b, ord='euclidean', axis=0, keepdims=True)
-
             diff = tf.reduce_sum(tf.abs(diff * a_weights))
-            tf.print('euclid dis', diff)
         else:
             diff = tf.norm(a - b, ord='euclidean')
 
