@@ -17,12 +17,17 @@ class Configuration:
         # fast = encoding of case base only once, example also only once
         # ffnn = uses ffnn as distance measure
         # simple = mean absolute difference as distance measure instead of the ffnn
-        self.architecture_variants = ['standard_simple', 'standard_ffnn', 'fast_simple', 'fast_ffnn']
+
+        # Due to changes  'fast_simple', 'fast_ffnn'  currently are not supported
+        self.architecture_variants = ['standard_simple', 'standard_ffnn']
         self.architecture_variant = self.architecture_variants[0]
+
         # Most related work on time series with SNN use a fc layer at the end of a cnn to merge 1d-conv
         # features of time steps. Seems to be useful for standard_simple architecture, can be used via
         # adding "fc_after_cnn1d_layers" in the hyperparameter configs file
 
+        # Attention: Implementation expects a simple measure to return a similarity!
+        # Only use euclidean_dis for TRAINING with contrastive loss
         self.simple_measures = ['abs_mean', 'euclidean_sim', 'euclidean_dis', 'dot_product', 'cosine']
         self.simple_measure = self.simple_measures[0]
 
@@ -47,16 +52,19 @@ class Configuration:
         # if use_individual_hyperparameters = false interpreted as a single json file, else as a folder
         # containing json files named after the cases they should be used for (see all_cases below for correct names)
         # self.hyper_file = self.hyper_file_folder + 'individual_hyperparameters_test'
-        self.hyper_file = self.hyper_file_folder + 'snn_testing.json'  #  'ba_cnn_modified.json'
+        self.hyper_file = self.hyper_file_folder + 'snn_testing.json'  # 'ba_cnn_modified.json'
 
         # choose a loss function
         # TODO: TripletLoss, Distance-Based Logistic Loss
         self.loss_function_variants = ['binary_cross_entropy', 'constrative_loss', 'mean_squared_error']
         self.type_of_loss_function = self.loss_function_variants[0]
+
         self.margin_of_loss_function = 4  # required for constrative_loss
         # Reduce margin of constrative_loss or in case of BCE: smooth negative examples by half of the sim between different labels
         self.use_margin_reduction_based_on_label_sim = False  # default: False
-        # Use a similarity value instead of 0 for unequal / neg pairs during batch job creation
+
+        # Use a custom similarity values instead of 0 for unequal / negative pairs during batch creation
+        # These are based on the similarity similarity matrices loaded in the dataset
         self.use_sim_value_for_neg_pair = False  # default: False
 
         # Goal loss for CBS
@@ -157,7 +165,7 @@ class Configuration:
 
         # parameter to control if and when a test is conducted through training
         self.use_inference_test_during_training = False  # default False
-        self.test_during_training_every_x_epochs = 10000  # default False
+        self.inference_during_training_epoch_interval = 10000  # default False
 
         # parameter to control the size of data / examples used by inference for similiarity calculation
         self.use_batchsize_for_inference_sim_calculation = True  # default False
@@ -184,8 +192,10 @@ class Configuration:
         self.upsampling_factor = 4  # Default: 4, means half / half
 
         # Stops the training when a specific criterion no longer improves
+        # early_stopping_epochs_limit is the number of epochs after which early stopping stops the
+        # training process if there was no decrease in loss during these epochs
         self.use_early_stopping = True  # default: False
-        self.early_stopping_if_no_loss_decrease_after_num_of_epochs = 1000
+        self.early_stopping_epochs_limit = 1000
 
         ###
         # folders and file names

@@ -130,6 +130,7 @@ class FullDataset(Dataset):
         self.y_train_strings_unique = None
         self.y_test_strings_unique = None
 
+        # TODO Remove
         # additional information to the sensor data about the case e.g., relevant sensor streams ...
         self.x_auxCaseVector_train = None
         self.x_auxCaseVector_test = None
@@ -164,6 +165,7 @@ class FullDataset(Dataset):
         self.failureTimes_test = np.expand_dims(np.load(self.dataset_folder + 'test_failure_times.npy'), axis=-1)
         self.feature_names_all = np.load(self.dataset_folder + 'feature_names.npy')  # names of the features (3. dim)
 
+        # TODO change to methode call and ddd check for config.use...
         # load a matrix with pair-wise similarities between labels in respect
         # to different metrics
         self.df_label_sim_failuremode = pd.read_csv(self.dataset_folder + 'FailureMode_Sim_Matrix.csv', sep=';',
@@ -372,7 +374,7 @@ class FullDataset(Dataset):
 
             return first_idx, second_idx
 
-    def get_sim_label_pair(self, label_1, label_2, notion_of_sim):
+    def get_sim_label_pair_for_notion(self, label_1, label_2, notion_of_sim):
         # Input label1, label2, notion_of_sim as string
         # Output similarity value under consideration of the metric
         # print("label_1: ", label_1, " label_2: ", label_2, " notion_of_sim: ", notion_of_sim)
@@ -389,6 +391,21 @@ class FullDataset(Dataset):
 
         return float(pair_label_sim)
 
+    # used to calculate similarity value based on the local similarities of the tree characteristics
+    def get_sim_label_pair(self, index_1, index_2, dataset_type):
+        if dataset_type == 'test':
+            dataset = self.y_test_strings
+        elif dataset_type == 'train':
+            dataset = self.y_train_strings
+        else:
+            raise ValueError('Unkown dataset type')
+
+        class_label_1 = dataset[index_1]
+        class_label_2 = dataset[index_2]
+        sim = (self.get_sim_label_pair_for_notion(class_label_1, class_label_2, "condition")
+               + self.get_sim_label_pair_for_notion(class_label_1, class_label_2, "localization")
+               + self.get_sim_label_pair_for_notion(class_label_1, class_label_2, "failuremode")) / 3
+        return sim
 
 # variation of the dataset class that consists only of examples of the same case
 # does not contain test data because this isn't needed on the level of each case

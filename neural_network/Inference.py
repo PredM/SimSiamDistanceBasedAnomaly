@@ -105,11 +105,11 @@ class Inference:
             self.y_pred_sim.append(max_sim)
             self.y_true.append(real)
 
-            self.quality_all_condition_quality += self.dataset.get_sim_label_pair(real, max_sim_class,
+            self.quality_all_condition_quality += self.dataset.get_sim_label_pair_for_notion(real, max_sim_class,
                                                                                   "condition")
-            self.quality_all_failure_mode_diagnosis += self.dataset.get_sim_label_pair(real, max_sim_class,
+            self.quality_all_failure_mode_diagnosis += self.dataset.get_sim_label_pair_for_notion(real, max_sim_class,
                                                                                        "failuremode")
-            self.quality_all_failure_localization += self.dataset.get_sim_label_pair(real, max_sim_class,
+            self.quality_all_failure_localization += self.dataset.get_sim_label_pair_for_notion(real, max_sim_class,
                                                                                      "localization")
 
             # Storing the prediction result in respect to a failure occurrence
@@ -127,11 +127,11 @@ class Inference:
                     self.failure_results.loc[(self.failure_results['Label'].isin([real])) & (
                         self.failure_results['FailureTime'].isin(
                             self.dataset.failureTimes_test[idx_test])), 'AsOtherFailure'] += 1
-                self.quality_condition_quality += self.dataset.get_sim_label_pair(real, max_sim_class,
+                self.quality_condition_quality += self.dataset.get_sim_label_pair_for_notion(real, max_sim_class,
                                                                                   "condition")
-                self.quality_failure_mode_diagnosis += self.dataset.get_sim_label_pair(real, max_sim_class,
+                self.quality_failure_mode_diagnosis += self.dataset.get_sim_label_pair_for_notion(real, max_sim_class,
                                                                                        "failuremode")
-                self.quality_failure_localization += self.dataset.get_sim_label_pair(real, max_sim_class,
+                self.quality_failure_localization += self.dataset.get_sim_label_pair_for_notion(real, max_sim_class,
                                                                                      "localization")
 
             # keep track of how many were classified correctly, only used for intermediate output

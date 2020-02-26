@@ -29,6 +29,11 @@ class Optimizer:
         self.config: Configuration = config
         self.last_output_time = None
 
+        # early stopping
+        self.train_loss_results = []
+        self.best_loss = 1000
+        self.stopping_step_counter = 0
+
     def optimize(self):
         raise NotImplementedError('Not implemented for abstract class')
 
@@ -67,30 +72,28 @@ class Optimizer:
             else:
                 trainable_params = model.encoder.model.trainable_variables
 
-            # Calculate the loss and the gradients
+            # Calculate the loss based on configuration
             if self.config.type_of_loss_function == "binary_cross_entropy":
+
                 if self.config.use_margin_reduction_based_on_label_sim:
                     sim = self.get_similarity_between_two_label_string(query_classes, neg_pair_wbce=True)
-                    # print('query_classes', query_classes)
-                    # print('sim', sim)
-                    # bce = tf.keras.losses.BinaryCrossentropy()
-                    # loss = bce(y_true=true_similarities, y_pred=pred_similarities, sample_weight=sim[0])
-
-                    # TODO @klein sim = array, weight expects float, is this correct?
                     loss = self.weighted_binary_crossentropy(y_true=true_similarities, y_pred=pred_similarities,
                                                              weight=sim)
                 else:
                     loss = tf.keras.losses.binary_crossentropy(y_true=true_similarities, y_pred=pred_similarities)
 
             elif self.config.type_of_loss_function == "constrative_loss":
+
                 if self.config.use_margin_reduction_based_on_label_sim:
-                    pairwise_label_similarity = self.get_similarity_between_two_label_string(query_classes)
+                    sim = self.get_similarity_between_two_label_string(query_classes)
                     loss = self.contrastive_loss(y_true=true_similarities, y_pred=pred_similarities,
-                                                 classes=pairwise_label_similarity)
+                                                 classes=sim)
                 else:
                     loss = self.contrastive_loss(y_true=true_similarities, y_pred=pred_similarities)
+
             elif self.config.type_of_loss_function == "mean_squared_error":
                 loss = tf.keras.losses.MSE(true_similarities, pred_similarities)
+
             else:
                 raise AttributeError('Unknown loss function name. Use: "binary_cross_entropy" or "constrative_loss": ',
                                      self.config.type_of_loss_function)
@@ -116,10 +119,13 @@ class Optimizer:
         margin_square = tf.square(tf.maximum(margin - y_pred, 0))
         return tf.keras.backend.mean(y_true * square_pred + (1 - y_true) * margin_square)
 
-    def weighted_binary_crossentropy(self, y_true, y_pred, weight=1.):
+    # noinspection PyMethodMayBeStatic
+    def weighted_binary_crossentropy(self, y_true, y_pred, weight=None):
         """
         Weighted BCE that smoothes only the wrong example according to interclass similarities
         """
+        weight = 1.0 if weight is None else weight
+
         y_true = K.clip(tf.convert_to_tensor(y_true, dtype=tf.float32), K.epsilon(), 1 - K.epsilon())
         y_pred = K.clip(y_pred, K.epsilon(), 1 - K.epsilon())
         # org: logloss = -(y_true * K.log(y_pred) * weight + (1 - y_true) * K.log(1 - y_pred))
@@ -137,9 +143,9 @@ class Optimizer:
             a = classes[2 * pair_index]
             b = classes[2 * pair_index + 1]
 
-            sim = (self.dataset.get_sim_label_pair(a, b, "condition")
-                   + self.dataset.get_sim_label_pair(a, b, "localization")
-                   + self.dataset.get_sim_label_pair(a, b, "failuremode")) / 3
+            sim = (self.dataset.get_sim_label_pair_for_notion(a, b, "condition")
+                   + self.dataset.get_sim_label_pair_for_notion(a, b, "localization")
+                   + self.dataset.get_sim_label_pair_for_notion(a, b, "failuremode")) / 3
 
             if neg_pair_wbce and sim < 1:
                 sim = 1 - sim
@@ -148,15 +154,33 @@ class Optimizer:
 
         return pairwise_class_label_sim
 
+    def execute_early_stop(self):
+
+        if self.config.use_early_stopping:
+
+            # Check if the loss of the last epoch is better than the best loss
+            # If so reset the early stopping progress else continue approaching the limit
+            if self.train_loss_results[-1] < self.best_loss:
+                self.stopping_step_counter = 0
+                self.best_loss = self.train_loss_results[-1]
+            else:
+                self.stopping_step_counter += 1
+
+            # Check if the limit was reached
+            if self.stopping_step_counter >= self.config.early_stopping_epochs_limit:
+                return True
+            else:
+                return False
+        else:
+            # Always continue if early stopping should not be used
+            return False
+
 
 class SNNOptimizer(Optimizer):
 
     def __init__(self, architecture, dataset, config):
 
         super().__init__(architecture, dataset, config)
-        self.train_loss_results = []
-        self.best_loss = 1000
-        self.stopping_step_counter = 0
         self.dir_name_last_model_saved = None
 
         if self.architecture.hyper.gradient_cap >= 0:
@@ -183,30 +207,28 @@ class SNNOptimizer(Optimizer):
         for epoch in range(current_epoch, self.architecture.hyper.epochs):
             self.single_epoch(epoch)
 
-            # TODO Maybe extract to method/class and apply changes to be able to reuse it for cbs
-            # Early stopping based on training loss decrease
-            if self.config.use_early_stopping:
-                if self.train_loss_results[len(self.train_loss_results) - 1] < self.best_loss:
-                    self.stopping_step_counter = 0
-                    self.best_loss = self.train_loss_results[len(self.train_loss_results) - 1]
-                else:
-                    self.stopping_step_counter += 1
-                if self.stopping_step_counter >= self.config.early_stopping_if_no_loss_decrease_after_num_of_epochs:
-                    print("Training stopped at epoch ", epoch, " because loss did not decrease since ",
-                          self.stopping_step_counter, "epochs.")
-                    break
+            if self.execute_early_stop():
+                print("Early stopping: Training stopped at epoch ", epoch, " because loss did not decrease since ",
+                      self.stopping_step_counter, "epochs.")
 
-            if self.config.use_inference_test_during_training and epoch != 0:
-                if epoch % self.config.test_during_training_every_x_epochs == 0:
-                    print("Inference at epoch: ", epoch)
-                    dataset2: FullDataset = FullDataset(self.config.training_data_folder, self.config, training=False)
-                    dataset2.load()
-                    self.config.directory_model_to_use = self.dir_name_last_model_saved
-                    print("self.dir_name_last_model_saved: ", self.dir_name_last_model_saved)
-                    print("self.config.filename_model_to_use: ", self.config.directory_model_to_use)
-                    architecture2 = initialise_snn(self.config, dataset2, False)
-                    inference = Inference(self.config, architecture2, dataset2)
-                    inference.infer_test_dataset()
+                break
+
+            self.inference_during_training(epoch)
+
+
+    def inference_during_training(self, epoch):
+        # TODO Maybe add this to cbs
+        if self.config.use_inference_test_during_training and epoch != 0:
+            if epoch % self.config.inference_during_training_epoch_interval == 0:
+                print("Inference at epoch: ", epoch)
+                dataset2: FullDataset = FullDataset(self.config.training_data_folder, self.config, training=False)
+                dataset2.load()
+                self.config.directory_model_to_use = self.dir_name_last_model_saved
+                print("self.dir_name_last_model_saved: ", self.dir_name_last_model_saved)
+                print("self.config.filename_model_to_use: ", self.config.directory_model_to_use)
+                architecture2 = initialise_snn(self.config, dataset2, False)
+                inference = Inference(self.config, architecture2, dataset2)
+                inference.infer_test_dataset()
 
     def compose_batch(self):
         batch_true_similarities = []  # similarity label for each pair
@@ -217,7 +239,7 @@ class SNNOptimizer(Optimizer):
         # used for CNN with Att.)
         batch_pairs_indices_firstUsedforSecond = []
 
-        # Generate a random vector that contains the number of classes that should be considered in the current batach
+        # Generate a random vector that contains the number of classes that should be considered in the current batch
         # 4 means approx. half of the batch contains no-failure, 1 and 2 uniform
         equal_class_part = self.config.upsampling_factor
         failureClassesToConsider = np.random.randint(low=0, high=len(self.dataset.y_train_strings_unique),
@@ -268,17 +290,9 @@ class SNNOptimizer(Optimizer):
             batch_pairs_indices.append(neg_pair[0])
             batch_pairs_indices.append(neg_pair[1])
 
-            # TODO Move the calculation to the dataset
-            # Assign a similarity value
-            # if configured a similarity value is calculated based on the local similarities of
-            # the tree characteristics below
-            # otherwise a similarity of 0 is assumed
+            # If configured a similarity value is used for the negative pair instead of full dissimilarity
             if self.config.use_sim_value_for_neg_pair:
-                class_string_a = self.dataset.y_train_strings[neg_pair[0]]
-                class_string_b = self.dataset.y_train_strings[neg_pair[1]]
-                sim = (self.dataset.get_sim_label_pair(class_string_a, class_string_b, "condition")
-                       + self.dataset.get_sim_label_pair(class_string_a, class_string_b, "localization")
-                       + self.dataset.get_sim_label_pair(class_string_a, class_string_b, "failuremode")) / 3
+                sim = self.dataset.get_sim_label_pair(neg_pair[0], neg_pair[1], 'train')
                 batch_true_similarities.append(sim)
             else:
                 batch_true_similarities.append(0.0)
@@ -305,14 +319,14 @@ class SNNOptimizer(Optimizer):
         # Get the example pairs by the selected indices
         model_input = np.take(a=self.dataset.x_train, indices=batch_pairs_indices, axis=0)
 
+        # Create auxiliary inputs if necessary for encoder variant
         model_input_class_strings = np.take(a=self.dataset.y_train_strings, indices=batch_pairs_indices, axis=0)
         model_aux_input = None
-
         if self.architecture.hyper.encoder_variant in ['cnnwithclassattention', 'cnn1dwithclassattention']:
             model_aux_input = np.array([self.dataset.get_masking_float(label) for label in model_input_class_strings],
                                        dtype='float32')
 
-        # reshape model_input based on encoder.
+        # Reshape (and integrate model_aux_input) if necessary for encoder variant
         # batch_size and index are irrelevant because not used if aux_input is passed
         model_input = self.architecture.reshape_input(model_input, 0, 0, aux_input=model_aux_input)
 
