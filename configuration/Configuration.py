@@ -24,7 +24,7 @@ class Configuration:
         # adding "fc_after_cnn1d_layers" in the hyperparameter configs file
 
         self.simple_measures = ['abs_mean', 'euclidean_sim', 'euclidean_dis', 'dot_product', 'cosine']
-        self.simple_measure = self.simple_measures[2]
+        self.simple_measure = self.simple_measures[0]
 
         # in case of cnn2d_withAddInput, additional option:
         self.useFeatureWeightedSimilarity = False  # default: False

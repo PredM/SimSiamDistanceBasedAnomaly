@@ -70,7 +70,7 @@ class Optimizer:
             # Calculate the loss and the gradients
             if self.config.type_of_loss_function == "binary_cross_entropy":
                 if self.config.use_margin_reduction_based_on_label_sim:
-                    sim = self.get_similiarity_between_two_label_string(query_classes, neg_pair_wbce=True)
+                    sim = self.get_similarity_between_two_label_string(query_classes, neg_pair_wbce=True)
                     # print('query_classes', query_classes)
                     # print('sim', sim)
                     # bce = tf.keras.losses.BinaryCrossentropy()
@@ -84,7 +84,7 @@ class Optimizer:
 
             elif self.config.type_of_loss_function == "constrative_loss":
                 if self.config.use_margin_reduction_based_on_label_sim:
-                    pairwise_label_similarity = self.get_similiarity_between_two_label_string(query_classes)
+                    pairwise_label_similarity = self.get_similarity_between_two_label_string(query_classes)
                     loss = self.contrastive_loss(y_true=true_similarities, y_pred=pred_similarities,
                                                  classes=pairwise_label_similarity)
                 else:
@@ -126,18 +126,17 @@ class Optimizer:
         logloss = -(y_true * K.log(y_pred) + (1 - y_true + (weight / 2)) * K.log(1 - y_pred))
         return K.mean(logloss, axis=-1)
 
-    # TODO @klein name and description doesn't match what the method seems to do
     # wbce = weighted_binary_crossentropy
-    def get_similiarity_between_two_label_string(self, classes, neg_pair_wbce=False):
+    def get_similarity_between_two_label_string(self, classes, neg_pair_wbce=False):
         # Returns the similarity between 2 failures (labels) in respect to the location of occurrence,
         # the type of failure (failure mode) and the condition of the data sample.
         # Input: 1d npy array with pairwise class labels as strings [2*batchsize]
-        # Output: 1d npy [batchsize]
+        # Output: 1d npy array [batchsize]
         pairwise_class_label_sim = np.zeros([len(classes) // 2])
         for pair_index in range(len(classes) // 2):
             a = classes[2 * pair_index]
             b = classes[2 * pair_index + 1]
-            # print("pair_index: ", pair_index, "a: ", a ," b: ",b)
+
             sim = (self.dataset.get_sim_label_pair(a, b, "condition")
                    + self.dataset.get_sim_label_pair(a, b, "localization")
                    + self.dataset.get_sim_label_pair(a, b, "failuremode")) / 3
@@ -146,7 +145,6 @@ class Optimizer:
                 sim = 1 - sim
 
             pairwise_class_label_sim[pair_index] = sim
-            # print("pairwise_class_label_sim: ", sim)
 
         return pairwise_class_label_sim
 

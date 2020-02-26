@@ -54,9 +54,12 @@ class SimpleSimilarityMeasure:
 
             a_weights_sum = tf.reduce_sum(a_weights)
             a_weights = a_weights / a_weights_sum
+            tf.print(a_weights)
 
             diff = tf.norm(a - b, ord='euclidean', axis=0, keepdims=True)
+
             diff = tf.reduce_sum(tf.abs(diff * a_weights))
+            tf.print('euclid dis', diff)
         else:
             diff = tf.norm(a - b, ord='euclidean')
 

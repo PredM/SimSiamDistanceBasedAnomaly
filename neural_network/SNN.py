@@ -9,10 +9,8 @@ from neural_network.BasicNeuralNetworks import CNN, RNN, FFNN, TCN, CNNWithClass
     CNN2D
 import matplotlib.pyplot as plt
 
+
 # initialises the correct SNN variant depending on the configuration
-
-
-
 def initialise_snn(config: Configuration, dataset, training):
     if training and config.architecture_variant in ['fast_simple', 'fast_ffnn']:
         print('WARNING:')
@@ -193,7 +191,6 @@ class SimpleSNN(AbstractSimilarityMeasure):
 
         return sims_batch
 
-    # TODO
     @tf.function
     def get_sim_pair(self, context_vectors, pair_index):
         # Reminder if a concat layer is used in the cnn1dclassattention,
