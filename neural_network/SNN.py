@@ -4,6 +4,7 @@ import numpy as np
 from configuration.Configuration import Configuration
 from configuration.Hyperparameter import Hyperparameters
 from neural_network.Dataset import Dataset
+from neural_network.SimpleSimilarityMeasure import SimpleSimilarityMeasure
 from neural_network.BasicNeuralNetworks import CNN, RNN, FFNN, TCN, CNNWithClassAttention, CNN1DWithClassAttention, \
     CNN2D
 import matplotlib.pyplot as plt
@@ -20,7 +21,7 @@ def initialise_snn(config: Configuration, dataset, training):
     var = config.architecture_variant
 
     if training and var.endswith('simple') or not training and var == 'standard_simple':
-        print('Creating standard SNN with simple similarity measure: ', config.simple_Distance_Measure)
+        print('Creating standard SNN with simple similarity measure: ', config.simple_measure)
         return SimpleSNN(config, dataset, training)
 
     elif training and var.endswith('ffnn') or not training and var == 'standard_ffnn':
@@ -66,6 +67,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
 
         # Load model only if init was not called by subclass, would otherwise be executed multiple times
         if type(self) is SimpleSNN:
+            self.simple_sim = SimpleSimilarityMeasure(self.config.simple_measure)
             self.load_model()
 
     # get the similarities of the example to each example in the dataset
@@ -189,95 +191,48 @@ class SimpleSNN(AbstractSimilarityMeasure):
 
         return sims_batch
 
+    # TODO @klein shouldn't cnn2d be added to the first if? because the same reshape operation is done in reshape_input
     @tf.function
     def get_sim_pair(self, context_vectors, pair_index):
-        # TODO: Reminder if a concat layer is used in the cnn1dclassattention,
-        #  then context vectors need to be reshaped from 2d to 3d (implement directly in BasicNeuralNetorks)
+        # Reminder if a concat layer is used in the cnn1dclassattention,
+        # then context vectors need to be reshaped from 2d to 3d (implement directly in BasicNeuralNetorks)
         # context_vectors = tf.reshape(context_vectors,[context_vectors.shape[0],context_vectors.shape[1],1])
+        a_weights, b_weights = None, None
 
         # Parsing the input (e.g., two 1d or 2d vectors depending on which encoder is used) to calculate distance / sim
         if self.encoder.hyper.encoder_variant == 'cnnwithclassattention':
             # Output of encoder are encoded time series and additional things e.g., weights vectors
             a = context_vectors[0][2 * pair_index, :, :]
             b = context_vectors[0][2 * pair_index + 1, :, :]
-            a_weights = context_vectors[1][2 * pair_index, :]
-            b_weights = context_vectors[1][2 * pair_index + 1, :]
+
+            if self.config.useFeatureWeightedSimilarity:
+                a_weights = context_vectors[1][2 * pair_index, :]
+                b_weights = context_vectors[1][2 * pair_index + 1, :]
+
         else:
             a = context_vectors[2 * pair_index, :, :]
             b = context_vectors[2 * pair_index + 1, :, :]
 
-        # Time-step wise (each time-step of a is compared with each time-step of b) (from NeuralWarp FFNN)
-        if self.config.use_timestep_wise_simple_similarity:
-            indices_a = tf.range(a.shape[0])
-            indices_a = tf.tile(indices_a, [a.shape[0]])
-            a = tf.gather(a, indices_a)
-            # a shape: [T*T, C]
+        # Time-step wise (each time-step of a is compared each time-step of b) (from NeuralWarp FFNN)
+        if self.config.use_time_step_wise_simple_similarity:
+            a, b = self.transform_to_time_step_wise(a, b)
 
-            indices_b = tf.range(b.shape[0])
-            indices_b = tf.reshape(indices_b, [-1, 1])
-            indices_b = tf.tile(indices_b, [1, b.shape[0]])
-            indices_b = tf.reshape(indices_b, [-1])
-            b = tf.gather(b, indices_b)
+        return self.simple_sim.get_sim(a, b, a_weights, b_weights)
 
-        # TODO Implement as method call and fix in fast version
-        #  tf.exp() was added here directly
+    @tf.function
+    def transform_to_time_step_wise(self, a, b):
+        indices_a = tf.range(a.shape[0])
+        indices_a = tf.tile(indices_a, [a.shape[0]])
+        a = tf.gather(a, indices_a)
+        # a shape: [T*T, C]
 
-        # simple similarity measures:
-        if self.config.simple_Distance_Measure == "abs_mean":
-            # mean of absolute difference / Manhattan Distance ?
-            diff = tf.abs(a - b)
-            distance_example = tf.reduce_mean(diff)
-            sim_example = tf.exp(-distance_example)
+        indices_b = tf.range(b.shape[0])
+        indices_b = tf.reshape(indices_b, [-1, 1])
+        indices_b = tf.tile(indices_b, [1, b.shape[0]])
+        indices_b = tf.reshape(indices_b, [-1])
+        b = tf.gather(b, indices_b)
 
-        elif self.config.simple_Distance_Measure == "euclidean_sim":
-            # Euclidean distance converted as similarity
-            if self.config.useFeatureWeightedSimilarity:
-                diff = tf.norm(a - b, ord='euclidean', axis=0, keepdims=True)
-                # include the weights to influence overall distance
-                a_weights = tf.dtypes.cast(a_weights, tf.float32)
-                a_weights = tf.dtypes.cast(a_weights, tf.float32)
-                a_weights_sum = tf.reduce_sum(a_weights)
-                a_weights = a_weights / a_weights_sum
-                diff = tf.reduce_sum(tf.abs(diff * a_weights))
-            else:
-                diff = tf.norm(a - b, ord='euclidean')
-            sim_example = 1 / (1 + tf.reduce_sum(diff))
-
-        elif self.config.simple_Distance_Measure == "euclidean_dis":
-            # Euclidean distance (required in constrative loss function)
-            if self.config.useFeatureWeightedSimilarity:
-                diff = tf.norm(a - b, ord='euclidean', axis=0, keepdims=True)
-                # include the weights to influence overall distance
-                a_weights = tf.dtypes.cast(a_weights, tf.float32)
-                a_weights_sum = tf.reduce_sum(a_weights)
-                a_weights = a_weights / a_weights_sum
-                diff = tf.reduce_sum(tf.abs(diff * a_weights))
-                diff = tf.reduce_sum(diff)
-            else:
-                diff = tf.norm(a - b, ord='euclidean')
-            sim_example = diff
-
-        elif self.config.simple_Distance_Measure == "dot_product":
-            # dot product
-            sim = tf.matmul(a, b, transpose_b=True)
-            sim_example = tf.reduce_mean(sim)
-
-        elif self.config.simple_Distance_Measure == "cosine":
-            # cosine, source: https://stackoverflow.com/questions/43357732/how-to-calculate-the-cosine-similarity-between-two-tensors/43358711
-            normalize_a = tf.nn.l2_normalize(a, 0)
-            normalize_b = tf.nn.l2_normalize(b, 0)
-            cos_similarity = tf.reduce_sum(tf.multiply(normalize_a, normalize_b))
-            sim_example = cos_similarity
-
-        elif self.config.simple_Distance_Measure == "jaccard":
-            # Prüfen, source: https://stackoverflow.com/questions/43261072/jaccards-distance-matrix-with-tensorflow
-            tp = tf.reduce_sum(tf.multiply(a, b), 1)
-            fn = tf.reduce_sum(tf.multiply(a, 1 - b), 1)
-            fp = tf.reduce_sum(tf.multiply(a, b), 1)
-            return 1 - (tp / (tp + fn + fp))
-        else:
-            raise ValueError('Distance Measure: ', self.config.simple_Distance_Measure, ' is not implemented.')
-        return sim_example
+        return a, b
 
     def print_learned_case_vectors(self, num_of_max_pos=5):
         # this methods prints the learned case embeddings for each class and its values
@@ -479,11 +434,13 @@ class FastSimpleSNN(SimpleSNN):
             # noinspection PyUnresolvedReferences
             self.dataset.encode(self.encoder)
 
+    # TODO Check for new encoders
     def encode_example(self, example):
         ex = np.expand_dims(example, axis=0)  # Model expects array of examples -> add outer dimension
         context_vector = self.encoder.model(ex, training=self.training)
         return np.squeeze(context_vector, axis=0)  # Back to a single example
 
+    # TODO Check if changes necessary
     # example must already be encoded
     def get_sims_in_batches(self, encoded_example):
         num_train = len(self.dataset.x_train)
@@ -498,10 +455,8 @@ class FastSimpleSNN(SimpleSNN):
 
             section_train = self.dataset.x_train[index: index + batch_size].astype('float32')
 
-            sims_batch = self.get_sims_section(section_train, encoded_example)
-
             # collect similarities of all badges
-            sims_all_examples[index:index + batch_size] = sims_batch
+            sims_all_examples[index:index + batch_size] = self.get_sims_section(section_train, encoded_example)
 
         # return the result of the knn classifier using the calculated similarities
         return sims_all_examples, self.dataset.y_train_strings

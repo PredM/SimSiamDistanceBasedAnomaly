@@ -471,7 +471,7 @@ class CNN(NN):
 
         model.add(tf.keras.layers.Dropout(rate=self.hyper.dropout_rate))
 
-        # if  config.simple_Distance_Measure == "cosine":
+        # if  config.simple_measure == "cosine":
         # cosine is calculated between two vectors,
         # todo: reminder: Consider whether to divide the matrix into several vectors
         #  (time over feature or feature over time) for the cosine distance calculation

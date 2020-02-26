@@ -23,15 +23,15 @@ class Configuration:
         # features of time steps. Seems to be useful for standard_simple architecture, can be used via
         # adding "fc_after_cnn1d_layers" in the hyperparameter configs file
 
-        self.simple_Distance_Measures = ['abs_mean', 'euclidean_sim', 'euclidean_dis', 'dot_product', 'cosine']
-        self.simple_Distance_Measure = self.simple_Distance_Measures[0]
+        self.simple_measures = ['abs_mean', 'euclidean_sim', 'euclidean_dis', 'dot_product', 'cosine']
+        self.simple_measure = self.simple_measures[0]
 
-        # in case of cnn2d_withAddInput, additional option:
+        # additional option for encoder variant cnnwithclassattention:
         self.useFeatureWeightedSimilarity = False  # default: False
 
         # Compares each time step of the encoded representation with each other time step
         # Impl. is based on NeuralWarp FFNN just without NN; (but in simple similarity measure)
-        self.use_timestep_wise_simple_similarity = False  # default: False
+        self.use_time_step_wise_simple_similarity = False  # default: False
 
         ###
         # hyperparameters
