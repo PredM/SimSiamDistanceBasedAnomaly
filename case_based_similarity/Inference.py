@@ -16,10 +16,14 @@ def main():
 
     config = Configuration()
 
-    dataset: FullDataset = FullDataset(config.training_data_folder, config, training=False)
-    dataset.load()
+    if config.use_case_base_extraction_for_inference:
+        dataset: FullDataset = FullDataset(config.case_base_folder, config, training=False)
+        cbs = CBS(config, False, config.case_base_folder)
+    else:
+        dataset: FullDataset = FullDataset(config.training_data_folder, config, training=False)
+        cbs = CBS(config, False, config.training_data_folder)
 
-    cbs = CBS(config, False)
+    dataset.load()
     inference = Inference(config, cbs, dataset)
 
     print('Ensure right model file is used:')

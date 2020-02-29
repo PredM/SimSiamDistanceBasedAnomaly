@@ -29,7 +29,7 @@ class Configuration:
         # Attention: Implementation expects a simple measure to return a similarity!
         # Only use euclidean_dis for TRAINING with contrastive loss
         self.simple_measures = ['abs_mean', 'euclidean_sim', 'euclidean_dis', 'dot_product', 'cosine']
-        self.simple_measure = self.simple_measures[0]
+        self.simple_measure = self.simple_measures[4]
 
         # additional option for encoder variant cnnwithclassattention:
         self.useFeatureWeightedSimilarity = False  # default: False
@@ -47,7 +47,7 @@ class Configuration:
 
         # if enabled each case handler of a cbs will use individual hyperparameters
         # no effect on snn architecture
-        self.use_individual_hyperparameters = True
+        self.use_individual_hyperparameters = False
 
         # if use_individual_hyperparameters = false interpreted as a single json file, else as a folder
         # containing json files named after the cases they should be used for (see all_cases below for correct names)
@@ -57,7 +57,7 @@ class Configuration:
         # choose a loss function
         # TODO: TripletLoss, Distance-Based Logistic Loss
         self.loss_function_variants = ['binary_cross_entropy', 'constrative_loss', 'mean_squared_error']
-        self.type_of_loss_function = self.loss_function_variants[0]
+        self.type_of_loss_function = self.loss_function_variants[2]
 
         self.margin_of_loss_function = 4  # required for constrative_loss
         # Reduce margin of constrative_loss or in case of BCE: smooth negative examples by half of the sim between different labels
@@ -66,11 +66,6 @@ class Configuration:
         # Use a custom similarity values instead of 0 for unequal / negative pairs during batch creation
         # These are based on the similarity similarity matrices loaded in the dataset
         self.use_sim_value_for_neg_pair = False  # default: False
-
-        # Goal loss for CBS
-        # Choose a loss value at which the snn of a case should not be trained any further
-        # Set to -1 for no restriction
-        self.goal_loss_case = -1
 
         # select whether training should be continued from the checkpoint defined below
         # currently only working for snns, not cbs
@@ -117,7 +112,7 @@ class Configuration:
                      'txt18_pneumatic_leakage_failure_mode_2_faulty', 'txt18_pneumatic_leakage_failure_mode_3_faulty',
                      'txt18_transport_failure_mode_wout_workpiece', 'txt19_i4_lightbarrier_failure_mode_1',
                      'txt19_i4_lightbarrier_failure_mode_2']
-        self.cases_used = all_cases
+        self.cases_used = ['txt15_i1_lightbarrier_failure_mode_1']
 
         # TODO @klein is this still needed?
         ''' ['no_failure',
@@ -157,7 +152,10 @@ class Configuration:
         ###
         # case base
         ###
-        # parameter to control the size of data used by inference
+
+        # if enabled only the reduced training dataset will be used during inference for similarity assessment
+        # please note that the case base extraction only reduces the training data but fully copies the test data
+        # so all test example will still be evaluated even if this is enabled
         self.use_case_base_extraction_for_inference = True  # default False
 
         # parameter to control the size / number of the queries used for evaluation

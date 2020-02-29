@@ -65,9 +65,11 @@ class SimpleSNN(AbstractSimilarityMeasure):
         self.hyper = None
         self.encoder = None
 
+        if 'simple' in self.config.architecture_variant:
+            self.simple_sim = SimpleSimilarityMeasure(self.config.simple_measure)
+
         # Load model only if init was not called by subclass, would otherwise be executed multiple times
         if type(self) is SimpleSNN:
-            self.simple_sim = SimpleSimilarityMeasure(self.config.simple_measure)
             self.load_model()
 
     # get the similarities of the example to each example in the dataset

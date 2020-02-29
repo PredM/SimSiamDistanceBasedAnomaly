@@ -15,10 +15,11 @@ from neural_network.SNN import SimpleSNN, AbstractSimilarityMeasure, SNN, FastSi
 
 class CBS(AbstractSimilarityMeasure):
 
-    def __init__(self, config: Configuration, training):
+    def __init__(self, config: Configuration, training, dataset_folder):
         super().__init__(training)
 
         self.config: Configuration = config
+        self.dataset_folder = dataset_folder
         self.case_handlers: [SimpleCaseHandler] = []
         self.num_instances_total = 0
         self.number_of_cases = 0
@@ -52,7 +53,7 @@ class CBS(AbstractSimilarityMeasure):
 
             relevant_features = features_cases.get(case)
 
-            dataset = CaseSpecificDataset(self.config.training_data_folder, self.config, case, relevant_features)
+            dataset = CaseSpecificDataset(self.dataset_folder, self.config, case, relevant_features)
             dataset.load()
 
             # add up the total number of examples
@@ -180,7 +181,6 @@ class CaseHandlerHelper:
         print()
 
     # input must be the 'complete' example with all features of a 'full dataset'
-
     def get_sims(self, example):
         # example must be reduced to the features used for this cases
         # before the super class method can be called to calculate the similarities to the case base
