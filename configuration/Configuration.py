@@ -50,7 +50,7 @@ class Configuration:
         self.hyper_file = self.hyper_file_folder + 'snn_testing.json'  #  'ba_cnn_modified.json'
 
         # choose a loss function
-        # TODO: TripletLoss, Distance-Based Logistic Loss
+        # TODO:  TripletLoss, Distance-Based Logistic Loss
         self.loss_function_variants = ['binary_cross_entropy', 'constrative_loss', 'mean_squared_error']
         self.type_of_loss_function = self.loss_function_variants[0]
         self.margin_of_loss_function = 4  # required for constrative_loss

@@ -39,7 +39,7 @@ class SimpleSimilarityMeasure:
 
         diff = tf.abs(a - b)
         distance = tf.reduce_mean(diff)
-        sim = tf.exp(distance)
+        sim = tf.exp(-distance)
         return sim
 
     # TODO Why is b_weights unused?
@@ -73,11 +73,16 @@ class SimpleSimilarityMeasure:
         sim = 1 / (1 + tf.reduce_sum(diff))
         return sim
 
+    # TODO Doesn't work with binary cross entropy loss, always leads to same loss
+    #  Reason might be that this doesn't return a sim in [0,1]
     @tf.function
     def dot_product(self, a, b):
         sim = tf.matmul(a, b, transpose_b=True)
         return tf.reduce_mean(sim)
 
+    # TODO Doesn't work with binary cross entropy loss, always leads to same loss
+    #  Reason might be that this doesn't return a sim in [0,1]
+    #  possiblly this could be used: https://www.tensorflow.org/api_docs/python/tf/keras/losses/CosineSimilarity
     # source: https://bit.ly/390bDPQ
     @tf.function
     def cosine(self, a, b):
