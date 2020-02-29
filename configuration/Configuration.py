@@ -193,7 +193,7 @@ class Configuration:
         # early_stopping_epochs_limit is the number of epochs after which early stopping stops the
         # training process if there was no decrease in loss during these epochs
         self.use_early_stopping = True  # default: False
-        self.early_stopping_epochs_limit = 1000
+        self.early_stopping_epochs_limit = 300
 
         ###
         # folders and file names

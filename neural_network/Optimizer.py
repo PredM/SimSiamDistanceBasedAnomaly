@@ -513,6 +513,11 @@ class CBSOptimizer(Optimizer, ABC):
 
             # create a subdirectory for the model files of this case handler
             subdirectory = self.config.subdirectories_by_case.get(case_handler.dataset.case)
+
+            # FIXME or make this default for all
+            if subdirectory is None:
+                subdirectory = case_handler.dataset.case + '_model'
+
             full_path = os.path.join(dir_name, subdirectory)
             os.mkdir(full_path)
 
