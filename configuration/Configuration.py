@@ -59,6 +59,24 @@ class Configuration:
         # Use a similarity value instead of 0 for unequal / neg pairs during batch job creation
         self.use_sim_value_for_neg_pair = False  # default: False
 
+        # Training Data Sampling
+
+        # The examples of a batch for training are selected based on the number of classes (=True)
+        # and not on the number of training examples contained in the training data set (=False).
+        # This means that each training batch contains almost examples from each class (practically
+        # upsampling of minority classes). Based on recommendation of lessons learned from successful siamese models:
+        # http://openaccess.thecvf.com/content_ICCV_2019/papers/Roy_Siamese_Networks_The_Tale_of_Two_Manifolds_ICCV_2019_paper.pdf
+        self.equalClassConsideration = True  # default: False
+
+        # If equalClassConsideration is true, then this parameter defines the proportion of examples
+        # based on class distribution and example distribution.
+        # Proportion = Batchjobsize/2/ThisFactor. E.g., 2 = class distribution only, 4 = half, 6 = 1/3, 8 = 1/4
+        self.upsampling_factor = 4  # Default: 4, means half / half
+
+        # Stops the training when a specific criterion no longer improves
+        self.use_early_stopping = True  # default: False
+        self.early_stopping_if_no_loss_decrease_after_num_of_epochs = 1000
+
         # Goal loss for CBS
         # Choose a loss value at which the snn of a case should not be trained any further
         # Set to -1 for no restriction
@@ -111,16 +129,6 @@ class Configuration:
                      'txt19_i4_lightbarrier_failure_mode_2']
         self.cases_used = all_cases
 
-        # TODO @klein is this still needed?
-        ''' ['no_failure',
-                        'txt15_i1_lightbarrier_failure_mode_1', 'txt15_i1_lightbarrier_failure_mode_2',
-                        'txt15_i3_lightbarrier_failure_mode_1', 'txt15_i3_lightbarrier_failure_mode_2',
-                        'txt15_m1_t1_high_wear', 'txt15_m1_t1_low_wear', 'txt15_m1_t2_wear',
-                        'txt15_pneumatic_leakage_failure_mode_1', 'txt15_pneumatic_leakage_failure_mode_2',
-                        'txt15_pneumatic_leakage_failure_mode_3', 'txt16_i3_switch_failure_mode_2',
-                        'txt16_i4_lightbarrier_failure_mode_1', 'txt16_m3_t1_high_wear', 'txt16_m3_t1_low_wear',
-                        'txt16_m3_t2_wear']'''
-
         ###
         # kafka / real time classification
         ###
@@ -170,22 +178,6 @@ class Configuration:
 
         # the k of the knn classifier used for live classification
         self.k_of_knn = 10
-
-        # The examples of a batch for training are selected based on the number of classes (=True)
-        # and not on the number of training examples contained in the training data set (=False).
-        # This means that each training batch contains almost examples from each class (practically
-        # upsampling of minority classes). Based on recommendation of lessons learned from successful siamese models:
-        # http://openaccess.thecvf.com/content_ICCV_2019/papers/Roy_Siamese_Networks_The_Tale_of_Two_Manifolds_ICCV_2019_paper.pdf
-        self.equalClassConsideration = True  # default: False
-
-        # If equalClassConsideration is true, then this parameter defines the proportion of examples
-        # based on class distribution and example distribution.
-        # Proportion = Batchjobsize/2/ThisFactor. E.g., 2 = class distribution only, 4 = half, 6 = 1/3, 8 = 1/4
-        self.upsampling_factor = 4  # Default: 4, means half / half
-
-        # Stops the training when a specific criterion no longer improves
-        self.use_early_stopping = True  # default: False
-        self.early_stopping_if_no_loss_decrease_after_num_of_epochs = 1000
 
         ###
         # folders and file names
