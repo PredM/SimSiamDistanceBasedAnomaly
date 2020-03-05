@@ -29,7 +29,7 @@ class Configuration:
         # Attention: Implementation expects a simple measure to return a similarity!
         # Only use euclidean_dis for TRAINING with contrastive loss
         self.simple_measures = ['abs_mean', 'euclidean_sim', 'euclidean_dis', 'dot_product', 'cosine']
-        self.simple_measure = self.simple_measures[4]
+        self.simple_measure = self.simple_measures[0]
 
         # additional option for encoder variant cnnwithclassattention:
         self.useFeatureWeightedSimilarity = False  # default: False
@@ -47,17 +47,16 @@ class Configuration:
 
         # if enabled each case handler of a cbs will use individual hyperparameters
         # no effect on snn architecture
-        self.use_individual_hyperparameters = False
+        self.use_individual_hyperparameters = True
 
         # if use_individual_hyperparameters = false interpreted as a single json file, else as a folder
         # containing json files named after the cases they should be used for (see all_cases below for correct names)
-        # self.hyper_file = self.hyper_file_folder + 'individual_hyperparameters_test'
-        self.hyper_file = self.hyper_file_folder + 'snn_testing.json'  # 'ba_cnn_modified.json'
+        self.hyper_file = self.hyper_file_folder + 'individual_hyperparameters_test'  # 'ba_cnn_modified.json'
 
         # choose a loss function
         # TODO: TripletLoss, Distance-Based Logistic Loss
         self.loss_function_variants = ['binary_cross_entropy', 'constrative_loss', 'mean_squared_error']
-        self.type_of_loss_function = self.loss_function_variants[2]
+        self.type_of_loss_function = self.loss_function_variants[0]
 
         self.margin_of_loss_function = 4  # required for constrative_loss
         # Reduce margin of constrative_loss or in case of BCE: smooth negative examples by half of the sim between different labels
@@ -65,13 +64,13 @@ class Configuration:
 
         # Use a custom similarity values instead of 0 for unequal / negative pairs during batch creation
         # These are based on the similarity similarity matrices loaded in the dataset
-        self.use_sim_value_for_neg_pair = False  # default: False
+        self.use_sim_value_for_neg_pair = True  # default: False
 
         # select whether training should be continued from the checkpoint defined below
         # currently only working for snns, not cbs
         self.continue_training = False
 
-        self.max_gpus_used = 4
+        self.max_gpus_used = 10
 
         # defines how often loss is printed and checkpoints are safed during training
         self.output_interval = 200
@@ -112,7 +111,7 @@ class Configuration:
                      'txt18_pneumatic_leakage_failure_mode_2_faulty', 'txt18_pneumatic_leakage_failure_mode_3_faulty',
                      'txt18_transport_failure_mode_wout_workpiece', 'txt19_i4_lightbarrier_failure_mode_1',
                      'txt19_i4_lightbarrier_failure_mode_2']
-        self.cases_used = ['txt15_i1_lightbarrier_failure_mode_1']
+        self.cases_used = []
 
         # TODO @klein is this still needed?
         ''' ['no_failure',
@@ -193,7 +192,7 @@ class Configuration:
         # early_stopping_epochs_limit is the number of epochs after which early stopping stops the
         # training process if there was no decrease in loss during these epochs
         self.use_early_stopping = True  # default: False
-        self.early_stopping_epochs_limit = 100
+        self.early_stopping_epochs_limit = 1000
 
         ###
         # folders and file names

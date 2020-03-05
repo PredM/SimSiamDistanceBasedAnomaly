@@ -304,7 +304,14 @@ class SimpleSNN(AbstractSimilarityMeasure):
                 model_folder = self.config.directory_model_to_use
                 file_name = 'hyperparameters_used.json'
 
-        self.hyper.load_from_file(model_folder + file_name)
+        try:
+            self.hyper.load_from_file(model_folder + file_name)
+        except (NotADirectoryError, FileNotFoundError) as e:
+            if is_cbs and self.config.use_individual_hyperparameters:
+                print('Using default.json for case ', case)
+                self.hyper.load_from_file(model_folder + 'default.json')
+            else:
+                raise e
 
         self.hyper.set_time_series_properties(self.dataset.time_series_length, self.dataset.time_series_depth)
 
