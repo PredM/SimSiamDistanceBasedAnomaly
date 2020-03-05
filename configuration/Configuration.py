@@ -17,12 +17,17 @@ class Configuration:
         # fast = encoding of case base only once, example also only once
         # ffnn = uses ffnn as distance measure
         # simple = mean absolute difference as distance measure instead of the ffnn
-        self.architecture_variants = ['standard_simple', 'standard_ffnn', 'fast_simple', 'fast_ffnn']
+
+        # Due to changes  'fast_simple', 'fast_ffnn'  currently are not supported
+        self.architecture_variants = ['standard_simple', 'standard_ffnn']
         self.architecture_variant = self.architecture_variants[0]
+
         # Most related work on time series with SNN use a fc layer at the end of a cnn to merge 1d-conv
         # features of time steps. Seems to be useful for standard_simple architecture, can be used via
         # adding "fc_after_cnn1d_layers" in the hyperparameter configs file
 
+        # Attention: Implementation expects a simple measure to return a similarity!
+        # Only use euclidean_dis for TRAINING with contrastive loss
         self.simple_measures = ['abs_mean', 'euclidean_sim', 'euclidean_dis', 'dot_product', 'cosine']
         self.simple_measure = self.simple_measures[0]
 
@@ -56,47 +61,26 @@ class Configuration:
 
         # if use_individual_hyperparameters = false interpreted as a single json file, else as a folder
         # containing json files named after the cases they should be used for (see all_cases below for correct names)
-        # self.hyper_file = self.hyper_file_folder + 'individual_hyperparameters_test'
-        self.hyper_file = self.hyper_file_folder + 'snn_testing.json'  #  'ba_cnn_modified.json'
+        self.hyper_file = self.hyper_file_folder + 'individual_hyperparameters_test'  # 'ba_cnn_modified.json'
 
         # choose a loss function
         # TODO:  TripletLoss, Distance-Based Logistic Loss
         self.loss_function_variants = ['binary_cross_entropy', 'constrative_loss', 'mean_squared_error']
         self.type_of_loss_function = self.loss_function_variants[0]
+
         self.margin_of_loss_function = 4  # required for constrative_loss
         # Reduce margin of constrative_loss or in case of BCE: smooth negative examples by half of the sim between different labels
         self.use_margin_reduction_based_on_label_sim = False  # default: False
-        # Use a similarity value instead of 0 for unequal / neg pairs during batch job creation
-        self.use_sim_value_for_neg_pair = False  # default: False
 
-        # Training Data Sampling
-
-        # The examples of a batch for training are selected based on the number of classes (=True)
-        # and not on the number of training examples contained in the training data set (=False).
-        # This means that each training batch contains almost examples from each class (practically
-        # upsampling of minority classes). Based on recommendation of lessons learned from successful siamese models:
-        # http://openaccess.thecvf.com/content_ICCV_2019/papers/Roy_Siamese_Networks_The_Tale_of_Two_Manifolds_ICCV_2019_paper.pdf
-        self.equalClassConsideration = True  # default: False
-
-        # If equalClassConsideration is true, then this parameter defines the proportion of examples
-        # based on class distribution and example distribution.
-        # Proportion = Batchjobsize/2/ThisFactor. E.g., 2 = class distribution only, 4 = half, 6 = 1/3, 8 = 1/4
-        self.upsampling_factor = 4  # Default: 4, means half / half
-
-        # Stops the training when a specific criterion no longer improves
-        self.use_early_stopping = True  # default: False
-        self.early_stopping_if_no_loss_decrease_after_num_of_epochs = 1000
-
-        # Goal loss for CBS
-        # Choose a loss value at which the snn of a case should not be trained any further
-        # Set to -1 for no restriction
-        self.goal_loss_case = -1
+        # Use a custom similarity values instead of 0 for unequal / negative pairs during batch creation
+        # These are based on the similarity similarity matrices loaded in the dataset
+        self.use_sim_value_for_neg_pair = True  # default: False
 
         # select whether training should be continued from the checkpoint defined below
         # currently only working for snns, not cbs
         self.continue_training = False
 
-        self.max_gpus_used = 4
+        self.max_gpus_used = 10
 
         # defines how often loss is printed and checkpoints are safed during training
         self.output_interval = 200
@@ -137,7 +121,7 @@ class Configuration:
                      'txt18_pneumatic_leakage_failure_mode_2_faulty', 'txt18_pneumatic_leakage_failure_mode_3_faulty',
                      'txt18_transport_failure_mode_wout_workpiece', 'txt19_i4_lightbarrier_failure_mode_1',
                      'txt19_i4_lightbarrier_failure_mode_2']
-        self.cases_used = all_cases
+        self.cases_used = []
 
         ###
         # kafka / real time classification
@@ -167,7 +151,10 @@ class Configuration:
         ###
         # case base
         ###
-        # parameter to control the size of data used by inference
+
+        # if enabled only the reduced training dataset will be used during inference for similarity assessment
+        # please note that the case base extraction only reduces the training data but fully copies the test data
+        # so all test example will still be evaluated even if this is enabled
         self.use_case_base_extraction_for_inference = True  # default False
 
         # parameter to control the size / number of the queries used for evaluation
@@ -175,7 +162,7 @@ class Configuration:
 
         # parameter to control if and when a test is conducted through training
         self.use_inference_test_during_training = False  # default False
-        self.test_during_training_every_x_epochs = 10000  # default False
+        self.inference_during_training_epoch_interval = 10000  # default False
 
         # parameter to control the size of data / examples used by inference for similiarity calculation
         self.use_batchsize_for_inference_sim_calculation = True  # default False
@@ -187,7 +174,25 @@ class Configuration:
         self.examples_per_class = 300
 
         # the k of the knn classifier used for live classification
-        self.k_of_knn = 10
+        self.k_of_knn = 5
+
+        # The examples of a batch for training are selected based on the number of classes (=True)
+        # and not on the number of training examples contained in the training data set (=False).
+        # This means that each training batch contains almost examples from each class (practically
+        # upsampling of minority classes). Based on recommendation of lessons learned from successful siamese models:
+        # http://openaccess.thecvf.com/content_ICCV_2019/papers/Roy_Siamese_Networks_The_Tale_of_Two_Manifolds_ICCV_2019_paper.pdf
+        self.equalClassConsideration = True  # default: False
+
+        # If equalClassConsideration is true, then this parameter defines the proportion of examples
+        # based on class distribution and example distribution.
+        # Proportion = Batchjobsize/2/ThisFactor. E.g., 2 = class distribution only, 4 = half, 6 = 1/3, 8 = 1/4
+        self.upsampling_factor = 4  # Default: 4, means half / half
+
+        # Stops the training when a specific criterion no longer improves
+        # early_stopping_epochs_limit is the number of epochs after which early stopping stops the
+        # training process if there was no decrease in loss during these epochs
+        self.use_early_stopping = True  # default: False
+        self.early_stopping_epochs_limit = 1000
 
         ###
         # folders and file names
@@ -197,7 +202,7 @@ class Configuration:
         self.models_folder = '../data/trained_models/'
 
         # path and file name to the specific model that should be used for testing and live classification
-        self.filename_model_to_use = 'temp_snn_model_02-25_17-50-14_epoch-200'
+        self.filename_model_to_use = 'temp_cbs_model_03-05_12-13-44_epoch-200'
         self.directory_model_to_use = self.models_folder + self.filename_model_to_use + '/'
 
         # folder where the preprocessed training and test data for the neural network should be stored
@@ -293,7 +298,6 @@ class Configuration:
         # all None Variables are read from the config.json file
         self.cases_datasets = None
         self.datasets = None
-        self.subdirectories_by_case = None
 
         # mapping for topic name to prefix of sensor streams, relevant to get the same order of streams
         self.prefixes = None
@@ -346,7 +350,6 @@ class Configuration:
         self.datasets = data['datasets']
         self.prefixes = data['prefixes']
         self.error_descriptions = data['error_descriptions']
-        self.subdirectories_by_case = data['subdirectories_by_case']
         self.zeroOne = data['zeroOne']
         self.intNumbers = data['intNumbers']
         self.realValues = data['realValues']

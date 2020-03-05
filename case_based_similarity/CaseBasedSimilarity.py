@@ -15,16 +15,17 @@ from neural_network.SNN import SimpleSNN, AbstractSimilarityMeasure, SNN, FastSi
 
 class CBS(AbstractSimilarityMeasure):
 
-    def __init__(self, config: Configuration, training):
+    def __init__(self, config: Configuration, training, dataset_folder):
         super().__init__(training)
 
         self.config: Configuration = config
+        self.dataset_folder = dataset_folder
         self.case_handlers: [SimpleCaseHandler] = []
         self.num_instances_total = 0
         self.number_of_cases = 0
 
-        with contextlib.redirect_stdout(None):
-            self.initialise_case_handlers()
+        # with contextlib.redirect_stdout(None):
+        self.initialise_case_handlers()
 
         self.gpus = tf.config.experimental.list_logical_devices('GPU')
         self.nbr_gpus_used = config.max_gpus_used if 1 <= config.max_gpus_used < len(self.gpus) else len(self.gpus)
@@ -51,9 +52,15 @@ class CBS(AbstractSimilarityMeasure):
             print('Creating case handler for case', case)
 
             relevant_features = features_cases.get(case)
-
-            dataset = CaseSpecificDataset(self.config.training_data_folder, self.config, case, relevant_features)
-            dataset.load()
+            try:
+                dataset = CaseSpecificDataset(self.dataset_folder, self.config, case, relevant_features)
+                dataset.load()
+            except ValueError:
+                print('-------------------------------------------------------')
+                print('WARNING: No case handler could be created for', case)
+                print('Reason: No training example of this case in training dataset')
+                print('-------------------------------------------------------')
+                continue
 
             # add up the total number of examples
             self.num_instances_total += dataset.num_train_instances
@@ -83,7 +90,7 @@ class CBS(AbstractSimilarityMeasure):
             print('Creating case handler for ', case_handler.dataset.case)
 
             case_handler.load_model(is_cbs=True, case=case_handler.dataset.case)
-            case_handler.print_detailed_model_info()
+            # case_handler.print_detailed_model_info()
 
         print()
 
@@ -164,7 +171,7 @@ class CaseHandlerHelper:
     # config and training are placeholders for multiple inheritance to work
     def __init__(self, dataset: CaseSpecificDataset):
         self.dataset: CaseSpecificDataset = dataset
-        self.print_case_handler_info()
+        # self.print_case_handler_info()
 
     # debugging method, can be removed when implementation is finished
     def print_case_handler_info(self):
@@ -180,7 +187,6 @@ class CaseHandlerHelper:
         print()
 
     # input must be the 'complete' example with all features of a 'full dataset'
-
     def get_sims(self, example):
         # example must be reduced to the features used for this cases
         # before the super class method can be called to calculate the similarities to the case base

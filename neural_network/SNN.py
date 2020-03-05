@@ -65,9 +65,11 @@ class SimpleSNN(AbstractSimilarityMeasure):
         self.hyper = None
         self.encoder = None
 
+        if 'simple' in self.config.architecture_variant:
+            self.simple_sim = SimpleSimilarityMeasure(self.config.simple_measure)
+
         # Load model only if init was not called by subclass, would otherwise be executed multiple times
         if type(self) is SimpleSNN:
-            self.simple_sim = SimpleSimilarityMeasure(self.config.simple_measure)
             self.load_model()
 
     # get the similarities of the example to each example in the dataset
@@ -338,7 +340,14 @@ class SimpleSNN(AbstractSimilarityMeasure):
                 model_folder = self.config.directory_model_to_use
                 file_name = 'hyperparameters_used.json'
 
-        self.hyper.load_from_file(model_folder + file_name)
+        try:
+            self.hyper.load_from_file(model_folder + file_name)
+        except (NotADirectoryError, FileNotFoundError) as e:
+            if is_cbs and self.config.use_individual_hyperparameters:
+                print('Using default.json for case ', case)
+                self.hyper.load_from_file(model_folder + 'default.json')
+            else:
+                raise e
 
         self.hyper.set_time_series_properties(self.dataset.time_series_length, self.dataset.time_series_depth)
 
