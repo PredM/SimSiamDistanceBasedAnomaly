@@ -113,16 +113,6 @@ class Configuration:
                      'txt19_i4_lightbarrier_failure_mode_2']
         self.cases_used = []
 
-        # TODO @klein is this still needed?
-        ''' ['no_failure',
-                        'txt15_i1_lightbarrier_failure_mode_1', 'txt15_i1_lightbarrier_failure_mode_2',
-                        'txt15_i3_lightbarrier_failure_mode_1', 'txt15_i3_lightbarrier_failure_mode_2',
-                        'txt15_m1_t1_high_wear', 'txt15_m1_t1_low_wear', 'txt15_m1_t2_wear',
-                        'txt15_pneumatic_leakage_failure_mode_1', 'txt15_pneumatic_leakage_failure_mode_2',
-                        'txt15_pneumatic_leakage_failure_mode_3', 'txt16_i3_switch_failure_mode_2',
-                        'txt16_i4_lightbarrier_failure_mode_1', 'txt16_m3_t1_high_wear', 'txt16_m3_t1_low_wear',
-                        'txt16_m3_t2_wear']'''
-
         ###
         # kafka / real time classification
         ###
