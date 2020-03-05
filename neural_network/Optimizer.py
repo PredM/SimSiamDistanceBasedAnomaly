@@ -427,6 +427,7 @@ class CBSOptimizer(Optimizer, ABC):
             while ch_index < ch_len:
                 gpu_index = 0
 
+                # TODO Only start as many as gpus are available, maybe this enhances the performance
                 while gpu_index < self.nbr_gpus_used and ch_index < ch_len:
                     ch: SimpleCaseHandler = self.handlers_still_training[ch_index]
                     case = ch.dataset.case
@@ -442,6 +443,15 @@ class CBSOptimizer(Optimizer, ABC):
 
                     gpu_index += 1
                     ch_index += 1
+            # remove start before
+            # remove join after this block
+            # for i in range threads mit step 2
+                # t_i start
+                # t_i+-1 start
+                # t_i join
+                # t_i join
+
+
 
             # wait for all individual training steps to finish
             for t in threads:

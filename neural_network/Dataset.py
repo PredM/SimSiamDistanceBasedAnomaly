@@ -266,6 +266,7 @@ class FullDataset(Dataset):
     # returns a boolean array with values depending on whether the attribute at this index is relevant
     # for the class of the passed label
     def get_masking(self, class_label):
+
         if class_label not in self.class_label_to_masking_vector:
             raise ValueError('Passed class label', class_label, 'was not found in masking dictionary')
         else:

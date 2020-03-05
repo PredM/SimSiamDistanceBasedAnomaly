@@ -98,7 +98,6 @@ class Configuration:
 
         # defines for which failure cases a case handler in the case based similarity measure is created,
         # subset of all can be used for debugging purposes
-        # if cases_used == [] or == None all in config.json will be used
         all_cases_BA = ['no_failure', 'txt_18_comp_leak', 'txt_17_comp_leak', 'txt15_m1_t1_high_wear',
                         'txt15_m1_t1_low_wear', 'txt15_m1_t2_wear', 'txt16_m3_t1_high_wear', 'txt16_m3_t1_low_wear',
                         'txt16_m3_t2_wear', 'txt16_i4']
@@ -121,7 +120,10 @@ class Configuration:
                      'txt18_pneumatic_leakage_failure_mode_2_faulty', 'txt18_pneumatic_leakage_failure_mode_3_faulty',
                      'txt18_transport_failure_mode_wout_workpiece', 'txt19_i4_lightbarrier_failure_mode_1',
                      'txt19_i4_lightbarrier_failure_mode_2']
-        self.cases_used = []
+
+        # Warning: Unlike previous versions, cases_used may no longer be empty,
+        # but must contain the used cases in each case.
+        self.cases_used = all_cases
 
         ###
         # kafka / real time classification
