@@ -60,7 +60,7 @@ class NN:
     def get_output_shape(self):
         return self.model.output_shape
 
-
+# Used for Neural Warp
 class FFNN(NN):
 
     def __init__(self, hyperparameters, input_shape):
@@ -100,22 +100,32 @@ class FFNN2(NN):
         super().__init__(hyperparameters, input_shape)
 
     def create_model(self):
-        print('Creating FFNN for input shape: ', self.input_shape)
+        print('Creating FFNN2 for input shape: ', self.input_shape)
 
+        input = tf.keras.Input(shape=(64,), name="Input")
+
+        x = tf.keras.layers.Dense(units=32, activation=tf.keras.activations.relu,
+                                  input_shape=(self.input_shape))(input)
+        output = tf.keras.layers.BatchNormalization()(x)
+        '''
+        output = tf.keras.layers.Dense(units=64, activation=tf.keras.activations.relu)(x)
+        x = tf.keras.layers.BatchNormalization()(x)
+        output = tf.keras.layers.Dense(units=32, activation=tf.keras.activations.relu)(x)
+        '''
+        '''
         layers = self.hyper.ffnn_layers.copy()
 
         if len(layers) < 1:
             print('FFNN with less than one layer is not possible')
             sys.exit(1)
-        # Gated:
-        # gates = tf.nn.sigmoid(query_class_gate_FFNN[:, :self._graph_state_dim])
 
         # first layer must be handled separately because the input shape parameter must be set
+
         num_units_first = layers.pop(0)
         input = tf.keras.Input(shape=self.input_shape, name="Input")
 
         x = tf.keras.layers.Dense(units=num_units_first, activation=tf.keras.activations.relu,
-                                  input_shape=self.input_shape)(input)
+                                        input_shape=(self.input_shape))(input)
 
         for num_units in layers:
             x = tf.keras.layers.Dense(units=num_units, activation=tf.keras.activations.relu)(x)
@@ -123,7 +133,7 @@ class FFNN2(NN):
         # regardless of the configured number of layers, add a layer with
         # a single neuron that provides the indicator function output.
         output = tf.keras.layers.Dense(units=1, activation=tf.keras.activations.sigmoid)(x)
-
+        '''
         self.model = tf.keras.Model(inputs=input, outputs=output)
 
 
@@ -436,7 +446,6 @@ class CNN1DWithClassAttention(NN):
         # input_lastConvLayer_attention_seq = tf.keras.layers.Attention()([x, caseDepVectEmbedding])
 
 
-# TODO @klein Remove old code that is / will not be used or create another CNN Variant
 class CNN(NN):
 
     def __init__(self, hyperparameters, input_shape):
@@ -471,25 +480,10 @@ class CNN(NN):
 
         model.add(tf.keras.layers.Dropout(rate=self.hyper.dropout_rate))
 
-        # if  config.simple_measure == "cosine":
-        # cosine is calculated between two vectors,
-        # todo: reminder: Consider whether to divide the matrix into several vectors
-        #  (time over feature or feature over time) for the cosine distance calculation
-        # model.add(tf.keras.layers.GlobalAveragePooling1D())
-        # model.add(tf.keras.layers.Reshape((1,model.layers[len(model.layers)-1].output.shape[1])))
-
         if self.hyper.fc_after_cnn1d_layers is not None:
             print('Adding FC layers')
             layers_fc = self.hyper.fc_after_cnn1d_layers.copy()
 
-            '''
-            model.add(tf.keras.layers.Dense(units=32, activation=tf.keras.activations.relu))
-            model.add(tf.keras.layers.BatchNormalization())
-            model.add(tf.keras.layers.Dense(units=16, activation=tf.keras.activations.relu))
-            model.add(tf.keras.layers.BatchNormalization())
-            model.add(tf.keras.layers.Dense(units=5, activation=tf.keras.activations.relu))
-            model.add(tf.keras.layers.Dropout(rate=self.hyper.dropout_rate))
-            '''
 
             if len(layers) < 1:
                 print('Adding FC with less than one layer is not possible')

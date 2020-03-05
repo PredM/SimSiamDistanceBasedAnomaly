@@ -217,6 +217,10 @@ class SimpleSNN(AbstractSimilarityMeasure):
         if self.config.use_time_step_wise_simple_similarity:
             a, b = self.transform_to_time_step_wise(a, b)
 
+        # Time-step matching
+        if self.config.use_time_step_matching_simple_similarity:
+            a, b = self.match_time_step_wise(a, b)
+
         return self.simple_sim.get_sim(a, b, a_weights, b_weights)
 
     @tf.function
@@ -233,6 +237,38 @@ class SimpleSNN(AbstractSimilarityMeasure):
         b = tf.gather(b, indices_b)
 
         return a, b
+
+    @tf.function
+    def match_time_step_wise(self, a, b):
+        # a and b shape: [T, C]
+        for num_of_matching in range(self.config.num_of_matching_iterations):
+            attentionA, attentionB = self.simple_sim.compute_cross_attention(a, b, self.config.simple_measure_matching)
+            #print("Attention A shape:", attentionA.shape, "Attention B shape:", attentionB.shape)
+
+            # Subtract attention from original input
+            u_a = tf.subtract(a, attentionA)
+            u_b = tf.subtract(b, attentionB)
+        '''
+        attentionA, attentionB = self.simple_sim.compute_cross_attention(u_a, u_b, "euclidiean")
+        u_a = tf.subtract(u_a, attentionA)
+        u_b = tf.subtract(u_b, attentionB)
+        '''
+        a = u_a
+        b = u_b
+
+        if self.config.simple_matching_aggregator == "none":
+            input_a = a
+            input_b = b
+        elif self.config.simple_matching_aggregator == "sum":
+            input_a = tf.reduce_sum(a, axis=0, keepdims=True)
+            input_b = tf.reduce_sum(b, axis=0, keepdims=True)
+        elif self.config.simple_matching_aggregator == "mean":
+            input_a = tf.reduce_mean(a, axis=0, keepdims=True)
+            input_b = tf.reduce_mean(b, axis=0, keepdims=True)
+        else:
+            print("Error: No aggregator function with name: ",self.config.simple_matching_aggregator," found!")
+
+        return input_a, input_b
 
     def print_learned_case_vectors(self, num_of_max_pos=5):
         # this methods prints the learned case embeddings for each class and its values

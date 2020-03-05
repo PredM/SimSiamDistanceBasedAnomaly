@@ -33,6 +33,16 @@ class Configuration:
         # Impl. is based on NeuralWarp FFNN just without NN; (but in simple similarity measure)
         self.use_time_step_wise_simple_similarity = False  # default: False
 
+        self.use_time_step_matching_simple_similarity = False
+        self.simple_measures_matching = ['euclidean', 'dot_product', 'cosine']
+        self.simple_measure_matching = self.simple_measures_matching[0]
+        # how often should the pairwise matching occur:
+        self.num_of_matching_iterations = 2
+        # Aggregator affects output for previous layers
+        # none = 2d output [T,C] , sum or mean = 1d vector with channel length
+        self.simple_matching_aggregators = ['none', 'sum', 'mean']
+        self.simple_matching_aggregator = self.simple_matching_aggregators[2]
+
         ###
         # hyperparameters
         ###
