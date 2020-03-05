@@ -162,20 +162,6 @@
     "txt16_m3_t2_wear": "Wear of type 2 on motor m3 of TXT module 16",
     "txt16_i4": "Failure of light barrier i4 of TXT module 16"
   },
-  "subdirectories_by_case": {
-    "no_failure": "no_failure_model",
-    "txt_18_comp_leak": "txt_18_comp_leak_model",
-    "txt_17_comp_leak": "txt_17_comp_leak_model",
-    "txt15_m1_t1_high_wear": "txt15_m1_t1_high_wear_model",
-    "txt15_m1_t1_low_wear": "txt15_m1_t1_low_wear_model",
-    "txt15_m1_t1_wear": "txt15_m1_t1_wear_model",
-    "txt15_m1_t2_wear": "txt15_m1_t2_wear_model",
-    "txt16_m3_t1_high_wear": "txt16_m3_t1_high_wear_model",
-    "txt16_m3_t1_low_wear": "txt16_m3_t1_low_wear_model",
-    "txt16_m3_t1_wear": "txt16_m3_t1_wear_model",
-    "txt16_m3_t2_wear": "txt16_m3_t2_wear_model",
-    "txt16_i4": "txt16_i4_model"
-  },
   "prefixes": {
     "txt15": "txt15",
     "txt16": "txt16",

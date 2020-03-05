@@ -67,30 +67,28 @@ class Optimizer:
             else:
                 trainable_params = model.encoder.model.trainable_variables
 
-            # Calculate the loss and the gradients
+            # Calculate the loss based on configuration
             if self.config.type_of_loss_function == "binary_cross_entropy":
+
                 if self.config.use_margin_reduction_based_on_label_sim:
                     sim = self.get_similarity_between_two_label_string(query_classes, neg_pair_wbce=True)
-                    # print('query_classes', query_classes)
-                    # print('sim', sim)
-                    # bce = tf.keras.losses.BinaryCrossentropy()
-                    # loss = bce(y_true=true_similarities, y_pred=pred_similarities, sample_weight=sim[0])
-
-                    # TODO @klein sim = array, weight expects float, is this correct?
                     loss = self.weighted_binary_crossentropy(y_true=true_similarities, y_pred=pred_similarities,
                                                              weight=sim)
                 else:
                     loss = tf.keras.losses.binary_crossentropy(y_true=true_similarities, y_pred=pred_similarities)
 
             elif self.config.type_of_loss_function == "constrative_loss":
+
                 if self.config.use_margin_reduction_based_on_label_sim:
-                    pairwise_label_similarity = self.get_similarity_between_two_label_string(query_classes)
+                    sim = self.get_similarity_between_two_label_string(query_classes)
                     loss = self.contrastive_loss(y_true=true_similarities, y_pred=pred_similarities,
-                                                 classes=pairwise_label_similarity)
+                                                 classes=sim)
                 else:
                     loss = self.contrastive_loss(y_true=true_similarities, y_pred=pred_similarities)
+
             elif self.config.type_of_loss_function == "mean_squared_error":
                 loss = tf.keras.losses.MSE(true_similarities, pred_similarities)
+
             else:
                 raise AttributeError('Unknown loss function name. Use: "binary_cross_entropy" or "constrative_loss": ',
                                      self.config.type_of_loss_function)
@@ -116,10 +114,13 @@ class Optimizer:
         margin_square = tf.square(tf.maximum(margin - y_pred, 0))
         return tf.keras.backend.mean(y_true * square_pred + (1 - y_true) * margin_square)
 
-    def weighted_binary_crossentropy(self, y_true, y_pred, weight=1.):
+    # noinspection PyMethodMayBeStatic
+    def weighted_binary_crossentropy(self, y_true, y_pred, weight=None):
         """
         Weighted BCE that smoothes only the wrong example according to interclass similarities
         """
+        weight = 1.0 if weight is None else weight
+
         y_true = K.clip(tf.convert_to_tensor(y_true, dtype=tf.float32), K.epsilon(), 1 - K.epsilon())
         y_pred = K.clip(y_pred, K.epsilon(), 1 - K.epsilon())
         # org: logloss = -(y_true * K.log(y_pred) * weight + (1 - y_true) * K.log(1 - y_pred))
@@ -137,9 +138,9 @@ class Optimizer:
             a = classes[2 * pair_index]
             b = classes[2 * pair_index + 1]
 
-            sim = (self.dataset.get_sim_label_pair(a, b, "condition")
-                   + self.dataset.get_sim_label_pair(a, b, "localization")
-                   + self.dataset.get_sim_label_pair(a, b, "failuremode")) / 3
+            sim = (self.dataset.get_sim_label_pair_for_notion(a, b, "condition")
+                   + self.dataset.get_sim_label_pair_for_notion(a, b, "localization")
+                   + self.dataset.get_sim_label_pair_for_notion(a, b, "failuremode")) / 3
 
             if neg_pair_wbce and sim < 1:
                 sim = 1 - sim
@@ -154,10 +155,12 @@ class SNNOptimizer(Optimizer):
     def __init__(self, architecture, dataset, config):
 
         super().__init__(architecture, dataset, config)
+        self.dir_name_last_model_saved = None
+
+        # early stopping
         self.train_loss_results = []
         self.best_loss = 1000
         self.stopping_step_counter = 0
-        self.dir_name_last_model_saved = None
 
         if self.architecture.hyper.gradient_cap >= 0:
             self.adam_optimizer = tf.keras.optimizers.Adam(learning_rate=self.architecture.hyper.learning_rate,
@@ -183,30 +186,47 @@ class SNNOptimizer(Optimizer):
         for epoch in range(current_epoch, self.architecture.hyper.epochs):
             self.single_epoch(epoch)
 
-            # TODO Maybe extract to method/class and apply changes to be able to reuse it for cbs
-            # Early stopping based on training loss decrease
-            if self.config.use_early_stopping:
-                if self.train_loss_results[len(self.train_loss_results) - 1] < self.best_loss:
-                    self.stopping_step_counter = 0
-                    self.best_loss = self.train_loss_results[len(self.train_loss_results) - 1]
-                else:
-                    self.stopping_step_counter += 1
-                if self.stopping_step_counter >= self.config.early_stopping_if_no_loss_decrease_after_num_of_epochs:
-                    print("Training stopped at epoch ", epoch, " because loss did not decrease since ",
-                          self.stopping_step_counter, "epochs.")
-                    break
+            if self.execute_early_stop():
+                print("Early stopping: Training stopped at epoch ", epoch, " because loss did not decrease since ",
+                      self.stopping_step_counter, "epochs.")
 
-            if self.config.use_inference_test_during_training and epoch != 0:
-                if epoch % self.config.test_during_training_every_x_epochs == 0:
-                    print("Inference at epoch: ", epoch)
-                    dataset2: FullDataset = FullDataset(self.config.training_data_folder, self.config, training=False)
-                    dataset2.load()
-                    self.config.directory_model_to_use = self.dir_name_last_model_saved
-                    print("self.dir_name_last_model_saved: ", self.dir_name_last_model_saved)
-                    print("self.config.filename_model_to_use: ", self.config.directory_model_to_use)
-                    architecture2 = initialise_snn(self.config, dataset2, False)
-                    inference = Inference(self.config, architecture2, dataset2)
-                    inference.infer_test_dataset()
+                break
+
+            self.inference_during_training(epoch)
+
+    def execute_early_stop(self):
+        if self.config.use_early_stopping:
+
+            # Check if the loss of the last epoch is better than the best loss
+            # If so reset the early stopping progress else continue approaching the limit
+            if self.train_loss_results[-1] < self.best_loss:
+                self.stopping_step_counter = 0
+                self.best_loss = self.train_loss_results[-1]
+            else:
+                self.stopping_step_counter += 1
+
+            # Check if the limit was reached
+            if self.stopping_step_counter >= self.config.early_stopping_epochs_limit:
+                return True
+            else:
+                return False
+        else:
+            # Always continue if early stopping should not be used
+            return False
+
+    def inference_during_training(self, epoch):
+        # TODO Maybe add this to cbs
+        if self.config.use_inference_test_during_training and epoch != 0:
+            if epoch % self.config.inference_during_training_epoch_interval == 0:
+                print("Inference at epoch: ", epoch)
+                dataset2: FullDataset = FullDataset(self.config.training_data_folder, self.config, training=False)
+                dataset2.load()
+                self.config.directory_model_to_use = self.dir_name_last_model_saved
+                print("self.dir_name_last_model_saved: ", self.dir_name_last_model_saved)
+                print("self.config.filename_model_to_use: ", self.config.directory_model_to_use)
+                architecture2 = initialise_snn(self.config, dataset2, False)
+                inference = Inference(self.config, architecture2, dataset2)
+                inference.infer_test_dataset()
 
     def compose_batch(self):
         batch_true_similarities = []  # similarity label for each pair
@@ -217,7 +237,7 @@ class SNNOptimizer(Optimizer):
         # used for CNN with Att.)
         batch_pairs_indices_firstUsedforSecond = []
 
-        # Generate a random vector that contains the number of classes that should be considered in the current batach
+        # Generate a random vector that contains the number of classes that should be considered in the current batch
         # 4 means approx. half of the batch contains no-failure, 1 and 2 uniform
         equal_class_part = self.config.upsampling_factor
         failureClassesToConsider = np.random.randint(low=0, high=len(self.dataset.y_train_strings_unique),
@@ -268,17 +288,9 @@ class SNNOptimizer(Optimizer):
             batch_pairs_indices.append(neg_pair[0])
             batch_pairs_indices.append(neg_pair[1])
 
-            # TODO Move the calculation to the dataset
-            # Assign a similarity value
-            # if configured a similarity value is calculated based on the local similarities of
-            # the tree characteristics below
-            # otherwise a similarity of 0 is assumed
+            # If configured a similarity value is used for the negative pair instead of full dissimilarity
             if self.config.use_sim_value_for_neg_pair:
-                class_string_a = self.dataset.y_train_strings[neg_pair[0]]
-                class_string_b = self.dataset.y_train_strings[neg_pair[1]]
-                sim = (self.dataset.get_sim_label_pair(class_string_a, class_string_b, "condition")
-                       + self.dataset.get_sim_label_pair(class_string_a, class_string_b, "localization")
-                       + self.dataset.get_sim_label_pair(class_string_a, class_string_b, "failuremode")) / 3
+                sim = self.dataset.get_sim_label_pair(neg_pair[0], neg_pair[1], 'train')
                 batch_true_similarities.append(sim)
             else:
                 batch_true_similarities.append(0.0)
@@ -305,14 +317,14 @@ class SNNOptimizer(Optimizer):
         # Get the example pairs by the selected indices
         model_input = np.take(a=self.dataset.x_train, indices=batch_pairs_indices, axis=0)
 
+        # Create auxiliary inputs if necessary for encoder variant
         model_input_class_strings = np.take(a=self.dataset.y_train_strings, indices=batch_pairs_indices, axis=0)
         model_aux_input = None
-
         if self.architecture.hyper.encoder_variant in ['cnnwithclassattention', 'cnn1dwithclassattention']:
             model_aux_input = np.array([self.dataset.get_masking_float(label) for label in model_input_class_strings],
                                        dtype='float32')
 
-        # reshape model_input based on encoder.
+        # Reshape (and integrate model_aux_input) if necessary for encoder variant
         # batch_size and index are irrelevant because not used if aux_input is passed
         model_input = self.architecture.reshape_input(model_input, 0, 0, aux_input=model_aux_input)
 
@@ -360,7 +372,6 @@ class SNNOptimizer(Optimizer):
             self.architecture.ffnn.model.save_weights(dir_name + ffnn_file_name)
 
 
-# noinspection DuplicatedCode
 class CBSOptimizer(Optimizer, ABC):
 
     def __init__(self, architecture, dataset, config):
@@ -377,9 +388,16 @@ class CBSOptimizer(Optimizer, ABC):
         self.optimizer = dict()
         self.goal_epochs = dict()
 
+        self.best_loss = dict()
+        self.stopping_step_counter = dict()
+
         for case_handler in self.architecture.case_handlers:
-            self.losses[case_handler.dataset.case] = []
-            self.goal_epochs[case_handler.dataset.case] = case_handler.hyper.epochs
+            case = case_handler.dataset.case
+
+            self.losses[case] = []
+            self.goal_epochs[case] = case_handler.hyper.epochs
+            self.best_loss[case] = 1000
+            self.stopping_step_counter[case] = 0
 
             if case_handler.hyper.gradient_cap >= 0:
                 opt = tf.keras.optimizers.Adam(learning_rate=case_handler.hyper.learning_rate,
@@ -387,7 +405,7 @@ class CBSOptimizer(Optimizer, ABC):
             else:
                 opt = tf.keras.optimizers.Adam(learning_rate=case_handler.hyper.learning_rate)
 
-            self.optimizer[case_handler.dataset.case] = opt
+            self.optimizer[case] = opt
 
         self.max_epoch = max(self.goal_epochs.values())
 
@@ -441,13 +459,6 @@ class CBSOptimizer(Optimizer, ABC):
             case = case_handler.dataset.case
             loss_of_case = self.losses.get(case)[-1].numpy()
 
-            # Dont continue training if goal loss was reached for this case
-            # Value of -1 means no goal defined, always continue
-            if self.config.goal_loss_case != -1 \
-                    and loss_of_case <= self.config.goal_loss_case \
-                    and case_handler in self.handlers_still_training:
-                self.handlers_still_training.remove(case_handler)
-
             # Dont continue training if goal epoch was reached for this case
             if case_handler in self.handlers_still_training \
                     and self.goal_epochs.get(case) < current_epoch + self.config.output_interval:
@@ -462,6 +473,29 @@ class CBSOptimizer(Optimizer, ABC):
         self.save_models(current_epoch)
         self.last_output_time = perf_counter()
 
+    def execute_early_stop(self, case_handler: SimpleCaseHandler):
+        if self.config.use_early_stopping:
+
+            case = case_handler.dataset.case
+            last_loss = self.losses[case][-1]
+            # Check if the loss of the last epoch is better than the best loss
+            # If so reset the early stopping progress else continue approaching the limit
+            if last_loss < self.best_loss[case]:
+                self.stopping_step_counter[case] = 0
+                self.best_loss[case] = last_loss
+            else:
+                self.stopping_step_counter[case] += 1
+
+            # Check if the limit was reached
+            if self.stopping_step_counter[case] >= self.config.early_stopping_epochs_limit:
+                self.handlers_still_training.remove(case_handler)
+                return True
+            else:
+                return False
+        else:
+            # Always continue if early stopping should not be used
+            return False
+
     def save_models(self, current_epoch):
         if current_epoch <= 0:
             return
@@ -475,7 +509,7 @@ class CBSOptimizer(Optimizer, ABC):
         for case_handler in self.architecture.case_handlers:
 
             # create a subdirectory for the model files of this case handler
-            subdirectory = self.config.subdirectories_by_case.get(case_handler.dataset.case)
+            subdirectory = case_handler.dataset.case + '_model'
             full_path = os.path.join(dir_name, subdirectory)
             os.mkdir(full_path)
 
@@ -507,7 +541,9 @@ class CHOptimizer(threading.Thread):
 
     def run(self):
         with tf.device(self.gpu):
-            print('Training ', self.case_handler.dataset.case, 'with', self.gpu, 'for', self.training_interval)
+            # debugging output to check distribution to multiple gpus
+            # print('Training ', self.case_handler.dataset.case, 'with', self.gpu, 'for', self.training_interval)
+
             for epoch in range(self.training_interval):
 
                 epoch_loss_avg = tf.keras.metrics.Mean()
@@ -545,129 +581,7 @@ class CHOptimizer(threading.Thread):
                 epoch_loss_avg.update_state(batch_loss)
                 self.cbsOptimizer.losses.get(self.case_handler.dataset.case).append(epoch_loss_avg.result())
 
-
-# noinspection DuplicatedCode
-class ClassicCBSOptimizer(Optimizer):
-
-    def __init__(self, architecture, dataset, config):
-        super().__init__(architecture, dataset, config)
-        self.architecture: CBS = architecture
-        self.losses = dict()
-        self.handlers_still_training = self.architecture.case_handlers.copy()
-
-        self.optimizer = dict()
-        for case_handler in self.architecture.case_handlers:
-            self.losses[case_handler.dataset.case] = []
-            self.optimizer[case_handler.dataset.case] = tf.keras.optimizers.Adam(
-                learning_rate=0.0001)
-            # self.optimizer[case_handler.dataset.case] = tf.keras.optimizers.Adam(
-            # learning_rate=case_handler.hyper.learning_rate)
-
-    def optimize(self):
-        current_epoch = 0
-
-        if self.config.continue_training:
-            raise NotImplementedError()
-
-        self.last_output_time = perf_counter()
-
-        goal = self.architecture.case_handlers[0].hyper.epochs
-
-        for epoch in range(current_epoch, goal):
-            self.single_epoch(epoch)
-
-    def single_epoch(self, epoch):
-
-        for case_handler in self.architecture.case_handlers:
-
-            if case_handler in self.handlers_still_training:
-
-                case_handler: SimpleCaseHandler = case_handler
-
-                epoch_loss_avg = tf.keras.metrics.Mean()
-
-                batch_true_similarities = []
-                batch_pairs_indices = []
-
-                # compose batch
-                # // 2 because each iteration one similar and one dissimilar pair is added
-                for i in range(case_handler.hyper.batch_size // 2):
-                    pos_pair = self.dataset.draw_pair_cbs(True, case_handler.dataset.indices_cases)
-                    batch_pairs_indices.append(pos_pair[0])
-                    batch_pairs_indices.append(pos_pair[1])
-                    batch_true_similarities.append(1.0)
-
-                    neg_pair = self.dataset.draw_pair_cbs(False, case_handler.dataset.indices_cases)
-                    batch_pairs_indices.append(neg_pair[0])
-                    batch_pairs_indices.append(neg_pair[1])
-                    batch_true_similarities.append(0.0)
-
-                # change the list of ground truth similarities to an array
-                true_similarities = np.asarray(batch_true_similarities)
-
-                # get the example pairs by the selected indices
-                model_input = np.take(a=self.dataset.x_train, indices=batch_pairs_indices, axis=0)
-
-                # reduce to the features used by this case handler
-                model_input = model_input[:, :, case_handler.dataset.indices_features]
-
-                batch_loss = self.update_single_model(model_input, true_similarities, case_handler,
-                                                      self.optimizer[case_handler.dataset.case])
-
-                # track progress
-                epoch_loss_avg.update_state(batch_loss)
-                self.losses.get(case_handler.dataset.case).append(epoch_loss_avg.result())
-
-        if epoch % self.config.output_interval == 0:
-            print("Timestamp: {} ({:.2f} Seconds since last output) - Epoch: {}".format(
-                datetime.now().strftime('%d.%m %H:%M:%S'),
-                perf_counter() - self.last_output_time,
-                epoch))
-
-            for case_handler in self.architecture.case_handlers:
-                case = case_handler.dataset.case
-                loss_of_case = self.losses.get(case)[-1].numpy()
-
-                # Dont continue training if goal loss was reached for this case
-                # Value of -1 means no goal defined, always continue
-                if self.config.goal_loss_case != -1 \
-                        and loss_of_case <= self.config.goal_loss_case \
-                        and case_handler in self.handlers_still_training:
-                    self.handlers_still_training.remove(case_handler)
-
-                status = 'Yes' if case_handler in self.handlers_still_training else 'No'
-                print("   Case: {: <28} Still training: {: <15} Loss: {:.5}"
-                      .format(case, status, loss_of_case))
-
-            print()
-            self.delete_old_checkpoints(epoch)
-            self.save_models(epoch)
-            self.last_output_time = perf_counter()
-
-    def save_models(self, current_epoch):
-        if current_epoch <= 0:
-            return
-        # generate a name and create the directory, where the model files of this epoch should be stored
-        epoch_string = 'epoch-' + str(current_epoch)
-        dt_string = datetime.now().strftime("%m-%d_%H-%M-%S")
-        dir_name = self.config.models_folder + '_'.join(['temp', 'cbs', 'model', dt_string, epoch_string]) + '/'
-        os.mkdir(dir_name)
-
-        for case_handler in self.architecture.case_handlers:
-
-            # create a subdirectory for the model files of this case handler
-            subdirectory = self.config.subdirectories_by_case.get(case_handler.dataset.case)
-            full_path = os.path.join(dir_name, subdirectory)
-            os.mkdir(full_path)
-
-            # write model configuration to file
-            case_handler.hyper.epochs_current = current_epoch
-            case_handler.hyper.write_to_file(full_path + '/' + 'hyperparameters_used.json')
-
-            # generate the file names and save the model files in the directory created before
-            encoder_file_name = '_'.join(['encoder', case_handler.hyper.encoder_variant, epoch_string]) + '.h5'
-            case_handler.encoder.model.save_weights(os.path.join(full_path, encoder_file_name))
-
-            if self.config.architecture_variant in ['standard_ffnn', 'fast_ffnn']:
-                ffnn_file_name = '_'.join(['ffnn', epoch_string]) + '.h5'
-                case_handler.ffnn.model.save_weights(os.path.join(full_path, ffnn_file_name))
+                if self.cbsOptimizer.execute_early_stop(self.case_handler):
+                    # Removal of case_handler from still trained ones is done in execute_early_stopping.
+                    print('Casehandler for case', self.case_handler.dataset.case, 'reached early stopping criterion.')
+                    break

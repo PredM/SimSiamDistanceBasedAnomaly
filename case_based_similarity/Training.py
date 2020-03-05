@@ -6,8 +6,7 @@ sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 from case_based_similarity.CaseBasedSimilarity import CBS
 from configuration.Configuration import Configuration
 from neural_network.Dataset import FullDataset
-from configuration.Hyperparameter import Hyperparameters
-from neural_network.Optimizer import CBSOptimizer, ClassicCBSOptimizer
+from neural_network.Optimizer import CBSOptimizer
 
 
 def main():
@@ -20,8 +19,8 @@ def main():
     dataset.load()
 
     print('Initializing case based similarity measure ...\n')
-    cbs = CBS(config, True)
-    #cbs.print_info()
+    cbs = CBS(config, True, config.training_data_folder)
+    # cbs.print_info()
 
     print('\nTraining:\n')
     optimizer = CBSOptimizer(cbs, dataset, config)

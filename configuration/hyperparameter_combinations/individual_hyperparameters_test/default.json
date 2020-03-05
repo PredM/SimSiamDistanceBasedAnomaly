@@ -1,25 +1,25 @@
 {
   "encoder_variant": "cnn",
   "batch_size": 64,
-  "epochs": 200,
+  "epochs": 400000,
   "epochs_current": 0,
   "learning_rate": 0.0001,
   "gradient_cap": 10,
   "dropout_rate": 0.05,
   "ffnn_layers": [
-    32,
+    64,
     16,
     1
   ],
   "cnn_layers": [
-    256,
+    128,
     64,
-    16
+    32
   ],
   "cnn_kernel_length": [
-    3,
-    3,
-    2
+    7,
+    7,
+    5
   ],
   "cnn_strides": [
     2,

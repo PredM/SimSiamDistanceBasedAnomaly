@@ -9,17 +9,21 @@ from neural_network.Dataset import FullDataset
 from neural_network.Inference import Inference
 
 
-# only idealisation must be changed, inference process of the snn can be used
+# only initialisation must be changed, inference process of the snn can be used
 def main():
     # suppress debugging messages of TensorFlow
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
     config = Configuration()
 
-    dataset: FullDataset = FullDataset(config.training_data_folder, config, training=False)
-    dataset.load()
+    if config.use_case_base_extraction_for_inference:
+        dataset: FullDataset = FullDataset(config.case_base_folder, config, training=False)
+        cbs = CBS(config, False, config.case_base_folder)
+    else:
+        dataset: FullDataset = FullDataset(config.training_data_folder, config, training=False)
+        cbs = CBS(config, False, config.training_data_folder)
 
-    cbs = CBS(config, False)
+    dataset.load()
     inference = Inference(config, cbs, dataset)
 
     print('Ensure right model file is used:')

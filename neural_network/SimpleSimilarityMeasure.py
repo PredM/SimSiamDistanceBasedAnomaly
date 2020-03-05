@@ -40,6 +40,7 @@ class SimpleSimilarityMeasure:
         diff = tf.abs(a - b)
         distance = tf.reduce_mean(diff)
         sim = tf.exp(-distance)
+
         return sim
 
     # TODO Why is b_weights unused?
@@ -89,6 +90,8 @@ class SimpleSimilarityMeasure:
         normalize_a = tf.nn.l2_normalize(a, 0)
         normalize_b = tf.nn.l2_normalize(b, 0)
         cos_similarity = tf.reduce_sum(tf.multiply(normalize_a, normalize_b))
+        #tf.print(cos_similarity)
+
         return cos_similarity
 
     # TODO Verify implementation

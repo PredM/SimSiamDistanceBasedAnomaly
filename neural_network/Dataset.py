@@ -104,9 +104,6 @@ class FullDataset(Dataset):
         self.class_idx_to_ex_idxs_train = {}
         self.class_idx_to_ex_idxs_test = {}
 
-        # TODO Unused, only assigned, delete maybe
-        self.class_idx_to_class_string = {}
-
         # np array that contains the number of instances for each classLabel in the training data
         self.num_instances_by_class_train = None
 
@@ -129,10 +126,6 @@ class FullDataset(Dataset):
 
         self.y_train_strings_unique = None
         self.y_test_strings_unique = None
-
-        # additional information to the sensor data about the case e.g., relevant sensor streams ...
-        self.x_auxCaseVector_train = None
-        self.x_auxCaseVector_test = None
 
         # additional information for each example about their window time frame and failure occurrence time
         self.windowTimes_train = None
@@ -163,18 +156,6 @@ class FullDataset(Dataset):
         self.windowTimes_test = np.expand_dims(np.load(self.dataset_folder + 'test_window_times.npy'), axis=-1)
         self.failureTimes_test = np.expand_dims(np.load(self.dataset_folder + 'test_failure_times.npy'), axis=-1)
         self.feature_names_all = np.load(self.dataset_folder + 'feature_names.npy')  # names of the features (3. dim)
-
-        # load a matrix with pair-wise similarities between labels in respect
-        # to different metrics
-        self.df_label_sim_failuremode = pd.read_csv(self.dataset_folder + 'FailureMode_Sim_Matrix.csv', sep=';',
-                                                    index_col=0)
-        self.df_label_sim_failuremode.index = self.df_label_sim_failuremode.index.str.replace('\'', '')
-        self.df_label_sim_localization = pd.read_csv(self.dataset_folder + 'Lokalization_Sim_Matrix.csv', sep=';',
-                                                     index_col=0)
-        self.df_label_sim_localization.index = self.df_label_sim_localization.index.str.replace('\'', '')
-        self.df_label_sim_condition = pd.read_csv(self.dataset_folder + 'Condition_Sim_Matrix.csv', sep=';',
-                                                  index_col=0)
-        self.df_label_sim_condition.index = self.df_label_sim_condition.index.str.replace('\'', '')
 
         # create a encoder, sparse output must be disabled to get the intended output format
         # added categories='auto' to use future behavior
@@ -219,12 +200,6 @@ class FullDataset(Dataset):
         for i in range(self.num_classes):
             self.class_idx_to_ex_idxs_train[i] = np.argwhere(self.y_train[:, i] > 0)
             self.class_idx_to_ex_idxs_test[i] = np.argwhere(self.y_test[:, i] > 0)
-            self.class_idx_to_class_string[i] = self.classes_total[i]
-
-        # create/load auxiliary information about the case (in addition to the sensor data)
-        # for test purposes, equal to the one-hot-encoded labels
-        self.x_auxCaseVector_train = self.y_train
-        self.x_auxCaseVector_test = self.y_test
 
         # collect number of instances for each class in training and test
         self.y_train_strings_unique, counts = np.unique(self.y_train_strings, return_counts=True)
@@ -236,21 +211,21 @@ class FullDataset(Dataset):
         self.classes_in_both = np.intersect1d(self.num_instances_by_class_test[:, 0],
                                               self.num_instances_by_class_train[:, 0])
 
-        # TODO Add back when file available
-        if True:
-            # required for inference metric calculation
-            # get all failures and labels as unique entry
-            testArr_label_failureTime = np.stack((self.y_test_strings, np.squeeze(self.failureTimes_test))).T
-            # extract unique permutations between failure occurence time and labeled entry
-            testArr_label_failureTime_uniq, testArr_label_failureTime_counts = np.unique(testArr_label_failureTime,
-                                                                                         axis=0,
-                                                                                         return_counts=True)
-            # remove noFailure entries
-            idx = np.where(np.char.find(testArr_label_failureTime_uniq, 'noFailure') >= 0)
-            self.testArr_label_failureTime_uniq = np.delete(testArr_label_failureTime_uniq, idx, 0)
-            self.testArr_label_failureTime_counts = np.delete(testArr_label_failureTime_counts, idx, 0)
+        # required for inference metric calculation
+        # get all failures and labels as unique entry
+        testArr_label_failureTime = np.stack((self.y_test_strings, np.squeeze(self.failureTimes_test))).T
+        # extract unique permutations between failure occurrence time and labeled entry
+        testArr_label_failureTime_uniq, testArr_label_failureTime_counts = np.unique(testArr_label_failureTime,
+                                                                                     axis=0,
+                                                                                     return_counts=True)
+        # remove noFailure entries
+        idx = np.where(np.char.find(testArr_label_failureTime_uniq, 'noFailure') >= 0)
+        self.testArr_label_failureTime_uniq = np.delete(testArr_label_failureTime_uniq, idx, 0)
+        self.testArr_label_failureTime_counts = np.delete(testArr_label_failureTime_counts, idx, 0)
 
         self.calculate_maskings()
+        self.load_sim_matrices()
+
 
         # data
         # 1. dimension: example
@@ -261,16 +236,26 @@ class FullDataset(Dataset):
         print('Shape of training set (example, time, channels):', self.x_train.shape)
         print('Shape of test set (example, time, channels):', self.x_test.shape)
         print('Num of classes in train and test together:', self.num_classes)
-
         # print('Classes used in training: ', len(self.y_train_strings_unique)," :",self.y_train_strings_unique)
         # print('Classes used in test: ', len(self.y_test_strings_unique)," :", self.y_test_strings_unique)
         # print('Classes in total: ', self.classes_total)
-
         print()
+
+    def load_sim_matrices(self):
+        # load a matrix with pair-wise similarities between labels in respect
+        # to different metrics
+        self.df_label_sim_failuremode = pd.read_csv(self.dataset_folder + 'FailureMode_Sim_Matrix.csv', sep=';',
+                                                    index_col=0)
+        self.df_label_sim_failuremode.index = self.df_label_sim_failuremode.index.str.replace('\'', '')
+        self.df_label_sim_localization = pd.read_csv(self.dataset_folder + 'Lokalization_Sim_Matrix.csv', sep=';',
+                                                     index_col=0)
+        self.df_label_sim_localization.index = self.df_label_sim_localization.index.str.replace('\'', '')
+        self.df_label_sim_condition = pd.read_csv(self.dataset_folder + 'Condition_Sim_Matrix.csv', sep=';',
+                                                  index_col=0)
+        self.df_label_sim_condition.index = self.df_label_sim_condition.index.str.replace('\'', '')
 
     def calculate_maskings(self):
         map_case_to_relevant_features: dict = self.config.relevant_features
-        print(self.feature_names_all)
 
         for case in self.config.cases_used:
             relevant_features_for_case = map_case_to_relevant_features.get(case)
@@ -289,7 +274,7 @@ class FullDataset(Dataset):
     def get_masking_float(self, class_label):
         return self.get_masking(class_label).astype(float)
 
-    # will return the test example and the train_example (of the passed index) reduced to the
+    # will return the test example and the train example (of the passed index) reduced to the
     # relevant attributes of the case of the train_example
     def reduce_to_relevant(self, test_example, train_example_index):
         class_label_train_example = self.y_train_strings[train_example_index]
@@ -372,7 +357,7 @@ class FullDataset(Dataset):
 
             return first_idx, second_idx
 
-    def get_sim_label_pair(self, label_1, label_2, notion_of_sim):
+    def get_sim_label_pair_for_notion(self, label_1, label_2, notion_of_sim):
         # Input label1, label2, notion_of_sim as string
         # Output similarity value under consideration of the metric
         # print("label_1: ", label_1, " label_2: ", label_2, " notion_of_sim: ", notion_of_sim)
@@ -388,6 +373,22 @@ class FullDataset(Dataset):
             pair_label_sim = 0
 
         return float(pair_label_sim)
+
+    # used to calculate similarity value based on the local similarities of the tree characteristics
+    def get_sim_label_pair(self, index_1, index_2, dataset_type):
+        if dataset_type == 'test':
+            dataset = self.y_test_strings
+        elif dataset_type == 'train':
+            dataset = self.y_train_strings
+        else:
+            raise ValueError('Unkown dataset type')
+
+        class_label_1 = dataset[index_1]
+        class_label_2 = dataset[index_2]
+        sim = (self.get_sim_label_pair_for_notion(class_label_1, class_label_2, "condition")
+               + self.get_sim_label_pair_for_notion(class_label_1, class_label_2, "localization")
+               + self.get_sim_label_pair_for_notion(class_label_1, class_label_2, "failuremode")) / 3
+        return sim
 
 
 # variation of the dataset class that consists only of examples of the same case
@@ -490,5 +491,4 @@ class CaseSpecificDataset(Dataset):
 
     # draw a random pair of instances
     def draw_pair(self, is_positive):
-
         return Dataset.draw_from_ds(self, self.y_train, self.num_train_instances, is_positive)
