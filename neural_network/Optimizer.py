@@ -484,11 +484,8 @@ class CBSOptimizer(Optimizer, ABC):
                 self.stopping_step_counter[case] = 0
                 self.best_loss[case] = last_loss
             else:
-                # TODO Check if this works
                 self.stopping_step_counter[case] += 1
 
-            print('last loss:', last_loss, 'best_loss', self.best_loss[case], 'counter',
-                  self.stopping_step_counter[case])
             # Check if the limit was reached
             if self.stopping_step_counter[case] >= self.config.early_stopping_epochs_limit:
                 self.handlers_still_training.remove(case_handler)
@@ -512,12 +509,7 @@ class CBSOptimizer(Optimizer, ABC):
         for case_handler in self.architecture.case_handlers:
 
             # create a subdirectory for the model files of this case handler
-            subdirectory = self.config.subdirectories_by_case.get(case_handler.dataset.case)
-
-            # FIXME or make this default for all
-            if subdirectory is None:
-                subdirectory = case_handler.dataset.case + '_model'
-
+            subdirectory = case_handler.dataset.case + '_model'
             full_path = os.path.join(dir_name, subdirectory)
             os.mkdir(full_path)
 
@@ -549,7 +541,8 @@ class CHOptimizer(threading.Thread):
 
     def run(self):
         with tf.device(self.gpu):
-            print('Training ', self.case_handler.dataset.case, 'with', self.gpu, 'for', self.training_interval)
+            # debugging output to check distribution to multiple gpus
+            # print('Training ', self.case_handler.dataset.case, 'with', self.gpu, 'for', self.training_interval)
 
             for epoch in range(self.training_interval):
 
@@ -589,4 +582,6 @@ class CHOptimizer(threading.Thread):
                 self.cbsOptimizer.losses.get(self.case_handler.dataset.case).append(epoch_loss_avg.result())
 
                 if self.cbsOptimizer.execute_early_stop(self.case_handler):
+                    # Removal of case_handler from still trained ones is done in execute_early_stopping.
+                    print('Casehandler for case', self.case_handler.dataset.case, 'reached early stopping criterion.')
                     break

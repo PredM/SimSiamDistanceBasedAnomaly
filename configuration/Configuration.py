@@ -175,7 +175,7 @@ class Configuration:
         self.examples_per_class = 300
 
         # the k of the knn classifier used for live classification
-        self.k_of_knn = 10
+        self.k_of_knn = 5
 
         # The examples of a batch for training are selected based on the number of classes (=True)
         # and not on the number of training examples contained in the training data set (=False).
@@ -193,7 +193,7 @@ class Configuration:
         # early_stopping_epochs_limit is the number of epochs after which early stopping stops the
         # training process if there was no decrease in loss during these epochs
         self.use_early_stopping = True  # default: False
-        self.early_stopping_epochs_limit = 300
+        self.early_stopping_epochs_limit = 100
 
         ###
         # folders and file names
@@ -203,7 +203,7 @@ class Configuration:
         self.models_folder = '../data/trained_models/'
 
         # path and file name to the specific model that should be used for testing and live classification
-        self.filename_model_to_use = 'temp_snn_model_02-25_17-50-14_epoch-200'
+        self.filename_model_to_use = 'temp_cbs_model_03-05_12-13-44_epoch-200'
         self.directory_model_to_use = self.models_folder + self.filename_model_to_use + '/'
 
         # folder where the preprocessed training and test data for the neural network should be stored
@@ -299,7 +299,6 @@ class Configuration:
         # all None Variables are read from the config.json file
         self.cases_datasets = None
         self.datasets = None
-        self.subdirectories_by_case = None
 
         # mapping for topic name to prefix of sensor streams, relevant to get the same order of streams
         self.prefixes = None
@@ -352,7 +351,6 @@ class Configuration:
         self.datasets = data['datasets']
         self.prefixes = data['prefixes']
         self.error_descriptions = data['error_descriptions']
-        self.subdirectories_by_case = data['subdirectories_by_case']
         self.zeroOne = data['zeroOne']
         self.intNumbers = data['intNumbers']
         self.realValues = data['realValues']

@@ -15,7 +15,11 @@ def main():
 
     config = Configuration()
 
-    dataset = FullDataset(config.training_data_folder, config, training=True)
+    if config.use_case_base_extraction_for_inference:
+        dataset: FullDataset = FullDataset(config.case_base_folder, config, training=False)
+    else:
+        dataset: FullDataset = FullDataset(config.training_data_folder, config, training=False)
+
     dataset.load()
 
     print('Initializing case based similarity measure ...\n')

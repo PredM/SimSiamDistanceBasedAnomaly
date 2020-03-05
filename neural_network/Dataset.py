@@ -224,9 +224,8 @@ class FullDataset(Dataset):
         self.testArr_label_failureTime_counts = np.delete(testArr_label_failureTime_counts, idx, 0)
 
         self.calculate_maskings()
+        self.load_sim_matrices()
 
-        if self.config.use_sim_value_for_neg_pair:
-            self.load_sim_matrices()
 
         # data
         # 1. dimension: example

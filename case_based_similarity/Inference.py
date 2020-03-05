@@ -9,7 +9,7 @@ from neural_network.Dataset import FullDataset
 from neural_network.Inference import Inference
 
 
-# only idealisation must be changed, inference process of the snn can be used
+# only initialisation must be changed, inference process of the snn can be used
 def main():
     # suppress debugging messages of TensorFlow
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
