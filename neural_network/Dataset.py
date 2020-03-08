@@ -476,6 +476,7 @@ class CaseSpecificDataset(Dataset):
         # 3. dimension: array of all channels
         print('Casebase for case', self.case, 'loaded')
         print('\tShape:', self.x_train.shape)
+        print()
 
     def encode(self, encoder):
         start_time_encoding = perf_counter()

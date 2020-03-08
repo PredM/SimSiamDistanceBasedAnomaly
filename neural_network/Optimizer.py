@@ -418,16 +418,14 @@ class CBSOptimizer(Optimizer, ABC):
 
         self.last_output_time = perf_counter()
 
-        threads = []
-
         while len(self.handlers_still_training) > 0:
             ch_index = 0
             ch_len = len(self.handlers_still_training)
+            threads = []
 
             while ch_index < ch_len:
                 gpu_index = 0
 
-                # TODO Only start as many as gpus are available, maybe this enhances the performance
                 while gpu_index < self.nbr_gpus_used and ch_index < ch_len:
                     ch: SimpleCaseHandler = self.handlers_still_training[ch_index]
                     case = ch.dataset.case
@@ -443,15 +441,6 @@ class CBSOptimizer(Optimizer, ABC):
 
                     gpu_index += 1
                     ch_index += 1
-            # remove start before
-            # remove join after this block
-            # for i in range threads mit step 2
-                # t_i start
-                # t_i+-1 start
-                # t_i join
-                # t_i join
-
-
 
             # wait for all individual training steps to finish
             for t in threads:
@@ -552,10 +541,9 @@ class CHOptimizer(threading.Thread):
     def run(self):
         with tf.device(self.gpu):
             # debugging output to check distribution to multiple gpus
-            # print('Training ', self.case_handler.dataset.case, 'with', self.gpu, 'for', self.training_interval)
+            print('Training ', self.case_handler.dataset.case, 'with', self.gpu, 'for', self.training_interval)
 
             for epoch in range(self.training_interval):
-
                 epoch_loss_avg = tf.keras.metrics.Mean()
 
                 batch_true_similarities = []
