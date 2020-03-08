@@ -6,6 +6,8 @@ import numpy as np
 from fastdtw import fastdtw
 from scipy.spatial.distance import euclidean
 
+from neural_network.Evaluator import Evaluator
+
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 
 from neural_network.Dataset import FullDataset
@@ -61,14 +63,13 @@ class SubsetCalculationThread(threading.Thread):
             self.counter.inc_and_print()
 
 
-# TODO Add true positive etc
-def execute_baseline_test(dataset: FullDataset, start_index, end_index, parallel_threads, algorithm_used,
+def execute_baseline_test(dataset: FullDataset, start_index, end_index, parallel_threads, algorithm_used, k_of_knn,
                           use_relevant_only=False):
     print("Consider only relevant attributes defined in config.json for the class of the training example: ",
           use_relevant_only, '\n')
 
-    score = 0.0
     start_time = time.clock()
+    evaluator = Evaluator(dataset, end_index - start_index, k_of_knn)
 
     for test_index in range(start_index, end_index):
         # currently classified example
@@ -90,32 +91,11 @@ def execute_baseline_test(dataset: FullDataset, start_index, end_index, parallel
             t.join()
             results[t.indices_train_examples] = t.results
 
-        index_min_distance = np.argmin(results)
-
-        # check if the selected training example has the same label as the current test example
-        score += 1.0 if (np.array_equal(dataset.y_test[test_index], dataset.y_train[index_min_distance])) else 0.0
-
-        # print results over all processed test examples
-        current_example = test_index - start_index + 1
-
-        print('Current example:', current_example,
-              'Class:', dataset.y_test_strings[test_index],
-              'Predicted:', dataset.y_train_strings[index_min_distance],
-              'Min distance: ', results[index_min_distance],
-              'Current score:', score,
-              'Current accuracy:', score / current_example)
+        evaluator.add_single_example_results(results, test_index)
 
     elapsed_time = time.clock() - start_time
-
-    # print final results
-    print('\n----------------------------------------------------')
-    print('Final results of the FastDTW test:')
-    print('----------------------------------------------------')
-    print('Examples classified:', end_index - start_index)
-    print('Correctly classified:', score)
-    print('Classification accuracy: ', score / (end_index - start_index))
-    print('Elapsed time:', elapsed_time)
-    print('----------------------------------------------------')
+    evaluator.calculate_results()
+    evaluator.print_results(elapsed_time)
 
 
 def main():
@@ -140,7 +120,8 @@ def main():
     print('Executing', algorithm_used, 'for example ', start_index, ' to ', end_index, 'of the test data set in\n',
           config.training_data_folder, '\n')
 
-    execute_baseline_test(dataset, start_index, end_index, parallel_threads, algorithm_used, use_relevant_only)
+    execute_baseline_test(dataset, start_index, end_index, parallel_threads, algorithm_used, config.k_of_knn,
+                          use_relevant_only)
 
 
 # this script is used to execute the dtw test for comparision with the neural network

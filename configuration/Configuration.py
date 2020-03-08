@@ -123,9 +123,7 @@ class Configuration:
 
         # Warning: Unlike previous versions, cases_used may no longer be empty,
         # but must contain the used cases in each case.
-        self.cases_used = ['no_failure', 'txt15_conveyor_failure_mode_driveshaft_slippage_failure',
-                           'txt15_i1_lightbarrier_failure_mode_1', 'txt15_i1_lightbarrier_failure_mode_2',
-                           'txt15_i3_lightbarrier_failure_mode_1', ]
+        self.cases_used = all_cases
 
         ###
         # kafka / real time classification
@@ -206,7 +204,7 @@ class Configuration:
         self.models_folder = '../data/trained_models/'
 
         # path and file name to the specific model that should be used for testing and live classification
-        self.filename_model_to_use = 'temp_cbs_model_03-05_12-13-44_epoch-200'
+        self.filename_model_to_use = 'cnn_test'
         self.directory_model_to_use = self.models_folder + self.filename_model_to_use + '/'
 
         # folder where the preprocessed training and test data for the neural network should be stored
