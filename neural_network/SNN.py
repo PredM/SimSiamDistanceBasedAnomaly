@@ -134,9 +134,10 @@ class SimpleSNN(AbstractSimilarityMeasure):
                 aux_input = np.zeros((2 * batch_size, self.hyper.time_series_depth), dtype='float32')
 
                 for index in range(batch_size):
-                    # noinspection PyUnboundLocalVariable, PyUnresolvedReferences
+                    # noinspection PyUnresolvedReferences
                     aux_input[2 * index] = self.dataset.get_masking_float(
                         self.dataset.y_train_strings[index + outer_index])
+                    # noinspection PyUnresolvedReferences
                     aux_input[2 * index + 1] = self.dataset.get_masking_float(
                         self.dataset.y_train_strings[index + outer_index])
 

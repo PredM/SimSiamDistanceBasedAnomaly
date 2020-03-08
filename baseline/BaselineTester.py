@@ -5,6 +5,7 @@ import os
 import numpy as np
 from fastdtw import fastdtw
 from scipy.spatial.distance import euclidean
+from sklearn import preprocessing
 
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 
@@ -90,11 +91,19 @@ def execute_baseline_test(dataset: FullDataset, start_index, end_index, parallel
             t.join()
             results[t.indices_train_examples] = t.results
 
+        if algorithm_used in ['dtw']:  # if algorithm returns distance instead of similiarity
+            results = distance_to_sim(results)
+
         evaluator.add_single_example_results(results, test_index)
 
     elapsed_time = time.clock() - start_time
     evaluator.calculate_results()
     evaluator.print_results(elapsed_time)
+
+
+# Temporary solution
+def distance_to_sim(distances):
+    return 1 - preprocessing.minmax_scale(distances, feature_range=(0, 1))
 
 
 def main():

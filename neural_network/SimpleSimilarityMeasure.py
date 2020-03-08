@@ -50,7 +50,7 @@ class SimpleSimilarityMeasure:
         use_weighted_sim = self.a_weights is not None and self.b_weights is not None
 
         if use_weighted_sim:
-            # Hint: only one weight vector is used (a_weights) to simulate a retrieval situation
+            # Note: only one weight vector is used (a_weights) to simulate a retrieval situation
             # where only weights of the case are known
             a_weights_sum = tf.reduce_sum(self.a_weights)
             weight_matrix = tf.reshape(tf.tile(self.a_weights, [a.shape[0]]), [a.shape[0], a.shape[1]])

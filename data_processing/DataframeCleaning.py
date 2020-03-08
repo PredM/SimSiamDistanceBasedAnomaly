@@ -12,8 +12,8 @@ def clean_up_dataframe(df: pd.DataFrame, config: Configuration):
     print('\nCleaning up dataframe with shape: ', df.shape, '...')
     # get list of attributes by type and remove those that aren't in the dataframe
     used = set(config.features_used)
-    bools = list(set(config.bools).intersection(used))
-    combined = list(set(config.bools + config.zeroOne + config.intNumbers).intersection(used))
+    bools = list(set(config.categoricalValues).intersection(used))
+    combined = list(set(config.categoricalValues + config.zeroOne + config.intNumbers).intersection(used))
     real_values = list(set(config.realValues).intersection(used))
 
     print('\tReplace True/False with 1/0 - Already done, now part of DataImport.py with hard coded attribute values')

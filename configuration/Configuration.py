@@ -61,7 +61,7 @@ class Configuration:
 
         # if use_individual_hyperparameters = false interpreted as a single json file, else as a folder
         # containing json files named after the cases they should be used for (see all_cases below for correct names)
-        self.hyper_file = self.hyper_file_folder + 'individual_hyperparameters_test'  # 'ba_cnn_modified.json'
+        self.hyper_file = self.hyper_file_folder + 'snn_testing.json'  # 'ba_cnn_modified.json'
 
         # choose a loss function
         # TODO:  TripletLoss, Distance-Based Logistic Loss
@@ -92,38 +92,13 @@ class Configuration:
         # Important: CBS will only function correctly if ALL_CBS or a superset of it is selected
         # ALL_CBS will use all feature of self.relevant_features, without consideration of the case structure
         # self.features_used will be assigned at config.json loading
-        self.feature_variants = ['featuresBA', 'featuresAll', 'ALL_CBS']
+        self.feature_variants = ['relevant_features_bachelor_thesis', 'all_features', 'ALL_CBS']
         self.feature_variant = self.feature_variants[1]
         self.features_used = None
 
-        # defines for which failure cases a case handler in the case based similarity measure is created,
-        # subset of all can be used for debugging purposes
-        all_cases_BA = ['no_failure', 'txt_18_comp_leak', 'txt_17_comp_leak', 'txt15_m1_t1_high_wear',
-                        'txt15_m1_t1_low_wear', 'txt15_m1_t2_wear', 'txt16_m3_t1_high_wear', 'txt16_m3_t1_low_wear',
-                        'txt16_m3_t2_wear', 'txt16_i4']
-        all_cases = ['no_failure', 'txt15_conveyor_failure_mode_driveshaft_slippage_failure',
-                     'txt15_i1_lightbarrier_failure_mode_1', 'txt15_i1_lightbarrier_failure_mode_2',
-                     'txt15_i3_lightbarrier_failure_mode_1', 'txt15_i3_lightbarrier_failure_mode_2',
-                     'txt15_m1_t1_high_wear', 'txt15_m1_t1_low_wear', 'txt15_m1_t2_wear',
-                     'txt15_pneumatic_leakage_failure_mode_1', 'txt15_pneumatic_leakage_failure_mode_2',
-                     'txt15_pneumatic_leakage_failure_mode_3',
-                     'txt16_conveyor_failure_mode_driveshaft_slippage_failure',
-                     'txt16_conveyorbelt_big_gear_tooth_broken_failure',
-                     'txt16_conveyorbelt_small_gear_tooth_broken_failure',
-                     'txt16_i3_switch_failure_mode_2', 'txt16_i4_lightbarrier_failure_mode_1',
-                     'txt16_m3_t1_high_wear', 'txt16_m3_t1_low_wear', 'txt16_m3_t2_wear',
-                     'txt16_pneumatic_leakage_failure_mode_1', 'txt17_i1_switch_failure_mode_1',
-                     'txt17_i1_switch_failure_mode_2',
-                     'txt17_pneumatic_leakage_failure_mode_1',
-                     'txt17_workingstation_transport_failure_mode_wout_workpiece',
-                     'txt18_pneumatic_leakage_failure_mode_1', 'txt18_pneumatic_leakage_failure_mode_2',
-                     'txt18_pneumatic_leakage_failure_mode_2_faulty', 'txt18_pneumatic_leakage_failure_mode_3_faulty',
-                     'txt18_transport_failure_mode_wout_workpiece', 'txt19_i4_lightbarrier_failure_mode_1',
-                     'txt19_i4_lightbarrier_failure_mode_2']
-
-        # Warning: Unlike previous versions, cases_used may no longer be empty,
-        # but must contain the used cases in each case.
-        self.cases_used = all_cases
+        # Define the subset of cases that should be used for CBS
+        # If None or empty it will be set to all cases configured in config.json
+        self.cases_used = None
 
         ###
         # kafka / real time classification
@@ -224,7 +199,7 @@ class Configuration:
         self.cases_folder = '../data/cases/'
 
         # file from which the case information should be loaded, used in dataset creation
-        self.case_file = '../configuration/cases_refined_final_20-12-19_wFailure.csv'
+        self.case_file = 'cases.csv'
 
         ##
         # lists of topics separated by types that need different import variants
@@ -310,7 +285,7 @@ class Configuration:
         # list of all features contained in the relevant_features in config.json, sorted and without duplicates
         # used for dataset creation
         self.all_features_configured = None
-        self.zeroOne, self.intNumbers, self.realValues, self.bools = None, None, None, None
+        self.zeroOne, self.intNumbers, self.realValues, self.categoricalValues = None, None, None, None
 
         self.load_config_json('../configuration/config.json')
 
@@ -355,12 +330,14 @@ class Configuration:
         self.zeroOne = data['zeroOne']
         self.intNumbers = data['intNumbers']
         self.realValues = data['realValues']
-        self.bools = data['bools']
+        self.categoricalValues = data['categoricalValues']
 
         features_all_cases = data['relevant_features']
+        all_cases = data['all_cases']
 
         # Reduce features of all cases to the subset of cases configured in self.cases_used
         if self.cases_used is None or len(self.cases_used) == 0:
+            self.cases_used = all_cases
             self.relevant_features = features_all_cases
         else:
             self.relevant_features = {case: features_all_cases[case] for case in self.cases_used if
@@ -377,10 +354,10 @@ class Configuration:
         # Depending on the self.feature_variant the relevant features for creating a dataset are selected
         if self.feature_variant == 'ALL_CBS':
             self.features_used = sorted(list(set(flatten(features_all_cases.values()))))
-        elif self.feature_variant == 'featuresBA':
-            self.features_used = data['featuresBA']
-        elif self.feature_variant == 'featuresAll':
-            self.features_used = data['featuresAll']
+        elif self.feature_variant == 'relevant_features_bachelor_thesis':
+            self.features_used = data['relevant_features_bachelor_thesis']
+        elif self.feature_variant == 'all_features':
+            self.features_used = data['all_features']
         else:
             raise AttributeError('Unknown feature variant:', self.feature_variant)
 
