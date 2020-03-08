@@ -6,10 +6,9 @@ import numpy as np
 from fastdtw import fastdtw
 from scipy.spatial.distance import euclidean
 
-from neural_network.Evaluator import Evaluator
-
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 
+from neural_network.Evaluator import Evaluator
 from neural_network.Dataset import FullDataset
 from configuration.Configuration import Configuration
 
@@ -112,7 +111,7 @@ def main():
     start_index = dataset.num_test_instances - 30
     end_index = dataset.num_test_instances
 
-    parallel_threads = 20
+    parallel_threads = 4
     use_relevant_only = True
     implemented_algorithms = ['dtw']
     algorithm_used = implemented_algorithms[0]
