@@ -32,7 +32,7 @@ class Configuration:
         self.simple_measure = self.simple_measures[0]
 
         # SNN output is normalized (x = x/|x|) (useful for eucl.?)
-        self.normalize_snn_encoder_output = True   # default: False
+        self.normalize_snn_encoder_output = False   # default: False
 
         # additional option for encoder variant cnnwithclassattention:
         self.useFeatureWeightedSimilarity = False  # default: False
@@ -69,14 +69,17 @@ class Configuration:
 
         # if use_individual_hyperparameters = false interpreted as a single json file, else as a folder
         # containing json files named after the cases they should be used for (see all_cases below for correct names)
-        self.hyper_file = self.hyper_file_folder + 'snn_testing.json'  # 'ba_cnn_modified.json'
+        self.hyper_file = self.hyper_file_folder + 'cnn1d.json'  # 'ba_cnn_modified.json'
 
         # choose a loss function
         # TODO:  TripletLoss, Distance-Based Logistic Loss
         self.loss_function_variants = ['binary_cross_entropy', 'constrative_loss', 'mean_squared_error']
         self.type_of_loss_function = self.loss_function_variants[0]
 
-        self.margin_of_loss_function = 4  # required for constrative_loss
+        self.use_early_stopping = True
+        self.early_stopping_epochs_limit = 1000
+
+        self.margin_of_loss_function = 0.1  # required for constrative_loss
         # Reduce margin of constrative_loss or in case of BCE: smooth negative examples by half of the sim between different labels
         self.use_margin_reduction_based_on_label_sim = False  # default: False
 
