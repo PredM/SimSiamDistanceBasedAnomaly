@@ -98,7 +98,7 @@ class Configuration:
 
         # Define the subset of cases that should be used for CBS
         # If None or empty it will be set to all cases configured in config.json
-        self.cases_used = None
+        self.cases_used = []
 
         ###
         # kafka / real time classification
