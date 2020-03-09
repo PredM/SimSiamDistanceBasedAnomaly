@@ -2,6 +2,8 @@ import threading
 import time
 import sys
 import os
+from datetime import datetime
+
 import numpy as np
 from fastdtw import fastdtw
 from scipy.spatial.distance import euclidean
@@ -16,15 +18,18 @@ from configuration.Configuration import Configuration
 
 class Counter:
 
-    def __init__(self, total):
+    def __init__(self, total, temp_output_interval):
         self.total = total
+        self.temp_output_interval = temp_output_interval
         self.counter = 0
         self.lock = threading.Lock()
 
     def inc_and_print(self):
         self.lock.acquire()
         self.counter += 1
-        print("Training examples compares for current test:", self.counter, '/', self.total)
+        if self.temp_output_interval > 0 and self.counter % self.temp_output_interval == 0:
+            print("Training examples compares for current test:", self.counter, '/', self.total, 'Current time:',
+                  datetime.now().time())
         self.lock.release()
 
 
@@ -64,10 +69,7 @@ class SubsetCalculationThread(threading.Thread):
 
 
 def execute_baseline_test(dataset: FullDataset, start_index, end_index, parallel_threads, algorithm_used, k_of_knn,
-                          use_relevant_only=False):
-    print("Consider only relevant attributes defined in config.json for the class of the training example: ",
-          use_relevant_only, '\n')
-
+                          temp_output_interval, use_relevant_only=False):
     start_time = time.clock()
     evaluator = Evaluator(dataset, end_index - start_index, k_of_knn)
 
@@ -79,7 +81,7 @@ def execute_baseline_test(dataset: FullDataset, start_index, end_index, parallel
         chunks = np.array_split(range(dataset.num_train_instances), parallel_threads)
 
         threads = []
-        counter = Counter(dataset.num_train_instances)
+        counter = Counter(dataset.num_train_instances, temp_output_interval)
 
         for chunk in chunks:
             t = SubsetCalculationThread(chunk, dataset, current_test_example, use_relevant_only, counter,
@@ -117,19 +119,26 @@ def main():
     dataset.load()
 
     # select which part of the test dataset to test
-    start_index = dataset.num_test_instances - 30
+    start_index = 0
     end_index = dataset.num_test_instances
 
-    parallel_threads = 4
+    # Output interval of how many examples have been compared so far. < 0 for no output
+    temp_output_intervall = 100
+    parallel_threads = 10
     use_relevant_only = True
     implemented_algorithms = ['dtw']
     algorithm_used = implemented_algorithms[0]
 
-    print('Executing', algorithm_used, 'for example ', start_index, ' to ', end_index, 'of the test data set in\n',
-          config.training_data_folder, '\n')
+    print('Algorithm used:', algorithm_used)
+    print('Used relevant only:', use_relevant_only)
+    print('Start index:', start_index)
+    print('End index:', end_index)
+    print('Number of parallel threads:', parallel_threads)
+    print('Case Based used for inference:', config.use_case_base_extraction_for_inference)
+    print()
 
     execute_baseline_test(dataset, start_index, end_index, parallel_threads, algorithm_used, config.k_of_knn,
-                          use_relevant_only)
+                          temp_output_intervall, use_relevant_only)
 
 
 # this script is used to execute the dtw test for comparision with the neural network
