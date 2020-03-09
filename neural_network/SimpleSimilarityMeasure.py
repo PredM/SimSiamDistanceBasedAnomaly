@@ -10,7 +10,7 @@ class SimpleSimilarityMeasure:
         self.a_weights = None
         self.b_weights = None
 
-        self.implemented = ['abs_mean', 'euclidean_sim', 'euclidean_dis', 'dot_product', 'cosine']
+        self.implemented = ['abs_mean', 'euclidean_sim', 'euclidean_dis', 'dot_product', 'cosine', 'attention_based']
         assert sim_type in self.implemented
 
     @tf.function
@@ -25,7 +25,8 @@ class SimpleSimilarityMeasure:
             'euclidean_sim': self.euclidean_sim,
             'euclidean_dis': self.euclidean_dis,
             'dot_product': self.dot_product,
-            'cosine': self.cosine
+            'cosine': self.cosine,
+            'attention_based': self.attention_based
         }
 
         # Get the function from switcher dictionary
@@ -99,6 +100,21 @@ class SimpleSimilarityMeasure:
         fn = tf.reduce_sum(tf.multiply(a, 1 - b), 1)
         fp = tf.reduce_sum(tf.multiply(a, b), 1)
         return 1 - (tp / (tp + fn + fp))
+
+    #
+    #
+    @tf.function
+    def attention_based(self, a, b):
+
+        diff_a = tf.abs(a - self.a_weights)
+        diff_b = tf.abs(b - self.b_weights)
+        distance_a = tf.reduce_mean(diff_a)
+        distance_b = tf.reduce_mean(diff_b)
+        distance = (distance_a+ distance_b)/2
+        sim = tf.exp(-distance)
+        #tf.print("distance_a: ", distance_a, "distance_b: ", distance_b,"distance: ", distance, "sim: ", sim)
+
+        return sim
 
     ### Pairwise similiarity functions
     def pairwise_euclidean_similarity(self, x, y):

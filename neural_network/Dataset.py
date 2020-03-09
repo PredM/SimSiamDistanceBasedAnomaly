@@ -381,7 +381,7 @@ class FullDataset(Dataset):
         elif dataset_type == 'train':
             dataset = self.y_train_strings
         else:
-            raise ValueError('Unkown dataset type')
+            raise ValueError('Unkown dataset type. dataset_type: ', dataset_type)
 
         class_label_1 = dataset[index_1]
         class_label_2 = dataset[index_2]

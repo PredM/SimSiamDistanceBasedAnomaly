@@ -91,9 +91,7 @@ class FFNN(NN):
 
         self.model = tf.keras.Model(inputs=input, outputs=output)
 
-
-# TODO @klein Remove if not used
-# Not working
+# Used for Time Series (Step) Matching
 class FFNN2(NN):
 
     def __init__(self, hyperparameters, input_shape):

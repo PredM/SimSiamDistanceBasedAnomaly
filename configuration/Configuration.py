@@ -28,24 +28,32 @@ class Configuration:
 
         # Attention: Implementation expects a simple measure to return a similarity!
         # Only use euclidean_dis for TRAINING with contrastive loss
-        self.simple_measures = ['abs_mean', 'euclidean_sim', 'euclidean_dis', 'dot_product', 'cosine']
+        self.simple_measures = ['abs_mean', 'euclidean_sim', 'euclidean_dis', 'dot_product', 'cosine','attention_based']
         self.simple_measure = self.simple_measures[0]
+
+        # SNN output is normalized (x = x/|x|) (useful for eucl.?)
+        self.normalize_snn_encoder_output = True   # default: False
 
         # additional option for encoder variant cnnwithclassattention:
         self.useFeatureWeightedSimilarity = False  # default: False
+        # Option to simulate a retrieval situation (during training) where only the weights of the
+        # example from the case base/training data set are known:
+        self.use_same_feature_weights_for_unsimilar_pairs = False # default: ?
 
         # Compares each time step of the encoded representation with each other time step
         # Impl. is based on NeuralWarp FFNN just without NN; (but in simple similarity measure)
         self.use_time_step_wise_simple_similarity = False  # default: False
 
-        self.use_time_step_matching_simple_similarity = False
+        # Matches each time step with each time step from the other encoding which is implemented as a subtraction
+        # of the attention weights multiplied with the other time series
+        self.use_time_step_matching_simple_similarity = True
         self.simple_measures_matching = ['euclidean', 'dot_product', 'cosine']
         self.simple_measure_matching = self.simple_measures_matching[0]
         # how often should the pairwise matching occur:
-        self.num_of_matching_iterations = 2
+        self.num_of_matching_iterations = 1
         # Aggregator affects output for previous layers
         # none = 2d output [T,C] , sum or mean = 1d vector with channel length
-        self.simple_matching_aggregators = ['none', 'sum', 'mean']
+        self.simple_matching_aggregators = ['none_attention_only','none', 'sum', 'mean']
         self.simple_matching_aggregator = self.simple_matching_aggregators[2]
 
         ###
@@ -72,9 +80,23 @@ class Configuration:
         # Reduce margin of constrative_loss or in case of BCE: smooth negative examples by half of the sim between different labels
         self.use_margin_reduction_based_on_label_sim = False  # default: False
 
+        # Training Data Sampling
+
+        # The examples of a batch for training are selected based on the number of classes (=True)
+        # and not on the number of training examples contained in the training data set (=False).
+        # This means that each training batch contains almost examples from each class (practically
+        # upsampling of minority classes). Based on recommendation of lessons learned from successful siamese models:
+        # http://openaccess.thecvf.com/content_ICCV_2019/papers/Roy_Siamese_Networks_The_Tale_of_Two_Manifolds_ICCV_2019_paper.pdf
+        self.equalClassConsideration = True  # default: False
+
+        # If equalClassConsideration is true, then this parameter defines the proportion of examples
+        # based on class distribution and example distribution.
+        # Proportion = Batchjobsize/2/ThisFactor. E.g., 2 = class distribution only, 4 = half, 6 = 1/3, 8 = 1/4
+        self.upsampling_factor = 4  # Default: 4, means half / half
+
         # Use a custom similarity values instead of 0 for unequal / negative pairs during batch creation
         # These are based on the similarity similarity matrices loaded in the dataset
-        self.use_sim_value_for_neg_pair = True  # default: False
+        self.use_sim_value_for_neg_pair = False  # default: False
 
         # select whether training should be continued from the checkpoint defined below
         # currently only working for snns, not cbs
@@ -83,10 +105,10 @@ class Configuration:
         self.max_gpus_used = 10
 
         # defines how often loss is printed and checkpoints are safed during training
-        self.output_interval = 200
+        self.output_interval = 10
 
         # how many model checkpoints are kept
-        self.model_files_stored = 200
+        self.model_files_stored = 20
 
         # select which subset of features should be used for creating a dataset
         # Important: CBS will only function correctly if ALL_CBS or a superset of it is selected
@@ -121,7 +143,7 @@ class Configuration:
                      'txt18_pneumatic_leakage_failure_mode_2_faulty', 'txt18_pneumatic_leakage_failure_mode_3_faulty',
                      'txt18_transport_failure_mode_wout_workpiece', 'txt19_i4_lightbarrier_failure_mode_1',
                      'txt19_i4_lightbarrier_failure_mode_2']
-        self.cases_used = []
+        self.cases_used = all_cases
 
         ###
         # kafka / real time classification
@@ -158,7 +180,7 @@ class Configuration:
         self.use_case_base_extraction_for_inference = True  # default False
 
         # parameter to control the size / number of the queries used for evaluation
-        self.use_only_failures_as_queries_for_inference = True  # default False
+        self.use_only_failures_as_queries_for_inference = False  # default False
 
         # parameter to control if and when a test is conducted through training
         self.use_inference_test_during_training = False  # default False
@@ -174,25 +196,7 @@ class Configuration:
         self.examples_per_class = 300
 
         # the k of the knn classifier used for live classification
-        self.k_of_knn = 5
-
-        # The examples of a batch for training are selected based on the number of classes (=True)
-        # and not on the number of training examples contained in the training data set (=False).
-        # This means that each training batch contains almost examples from each class (practically
-        # upsampling of minority classes). Based on recommendation of lessons learned from successful siamese models:
-        # http://openaccess.thecvf.com/content_ICCV_2019/papers/Roy_Siamese_Networks_The_Tale_of_Two_Manifolds_ICCV_2019_paper.pdf
-        self.equalClassConsideration = True  # default: False
-
-        # If equalClassConsideration is true, then this parameter defines the proportion of examples
-        # based on class distribution and example distribution.
-        # Proportion = Batchjobsize/2/ThisFactor. E.g., 2 = class distribution only, 4 = half, 6 = 1/3, 8 = 1/4
-        self.upsampling_factor = 4  # Default: 4, means half / half
-
-        # Stops the training when a specific criterion no longer improves
-        # early_stopping_epochs_limit is the number of epochs after which early stopping stops the
-        # training process if there was no decrease in loss during these epochs
-        self.use_early_stopping = True  # default: False
-        self.early_stopping_epochs_limit = 1000
+        self.k_of_knn = 10
 
         ###
         # folders and file names
@@ -202,7 +206,7 @@ class Configuration:
         self.models_folder = '../data/trained_models/'
 
         # path and file name to the specific model that should be used for testing and live classification
-        self.filename_model_to_use = 'temp_cbs_model_03-05_12-13-44_epoch-200'
+        self.filename_model_to_use = 'temp_snn_model_03-09_08-10-46_epoch-3150'
         self.directory_model_to_use = self.models_folder + self.filename_model_to_use + '/'
 
         # folder where the preprocessed training and test data for the neural network should be stored
