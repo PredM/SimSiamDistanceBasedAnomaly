@@ -138,6 +138,7 @@ class Evaluator:
         # Output the results of this example
         ###
         local_ecf = self.example_counter_fails if self.example_counter_fails > 0 else self.example_counter_fails
+        local_ecf = 1 if local_ecf == 0 else local_ecf # Fix for ZeroDivisionError: division by zero
         nbr_tested_as_string = str(self.example_counter)
         current_tp = self.get_nbr_correctly_classified()
         # create output for this example
@@ -267,14 +268,14 @@ class Evaluator:
         print('-------------------------------------------------------------')
         print('Classification accuracy split by classes:')
         print('FPR = false positive rate , TPR = true positive rate , AUC = area under curve, ACC = accuracy\n')
-        print(self.results)
+        print(self.results.to_string())
         print()
         print('-------------------------------------------------------------\n')
         print("Multiclass Results:")
         print(report)
         print('-------------------------------------------------------------\n')
         print("Classification Result Report based on occurrence:")
-        print(failure_results_local)
+        print(failure_results_local.to_string())
         print()
         print('-------------------------------------------------------------\n')
         print('Self-defined quality measures:')
