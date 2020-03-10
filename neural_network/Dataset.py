@@ -1,3 +1,5 @@
+import sys
+
 import numpy as np
 from sklearn import preprocessing
 from time import perf_counter
@@ -225,7 +227,6 @@ class FullDataset(Dataset):
 
         self.calculate_maskings()
         self.load_sim_matrices()
-
 
         # data
         # 1. dimension: example

@@ -139,6 +139,7 @@ class Evaluator:
         ###
         local_ecf = self.example_counter_fails if self.example_counter_fails > 0 else self.example_counter_fails
         local_ecf = 1 if local_ecf == 0 else local_ecf # Fix for ZeroDivisionError: division by zero
+
         nbr_tested_as_string = str(self.example_counter)
         current_tp = self.get_nbr_correctly_classified()
         # create output for this example
