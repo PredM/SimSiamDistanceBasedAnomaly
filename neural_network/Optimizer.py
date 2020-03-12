@@ -1,7 +1,6 @@
 import os
 import shutil
 import threading
-from abc import ABC
 
 import tensorflow as tf
 import numpy as np
@@ -372,7 +371,7 @@ class SNNOptimizer(Optimizer):
             self.architecture.ffnn.model.save_weights(dir_name + ffnn_file_name)
 
 
-class CBSOptimizer(Optimizer, ABC):
+class CBSOptimizer(Optimizer):
 
     def __init__(self, architecture, dataset, config):
         super().__init__(architecture, dataset, config)

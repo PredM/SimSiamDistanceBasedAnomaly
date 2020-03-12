@@ -1,9 +1,9 @@
 import multiprocessing
 import os
 import sys
-import time
 
 import numpy as np
+from time import perf_counter
 from fastdtw import fastdtw
 from scipy.spatial.distance import euclidean
 from sklearn import preprocessing
@@ -59,7 +59,7 @@ def run(proc_id, return_dict, counter, dataset, test_index, indices_train_exampl
 
 def execute_baseline_test(dataset: FullDataset, start_index, end_index, nbr_threads, algorithm, k_of_knn,
                           temp_output_interval, use_relevant_only=False):
-    start_time = time.clock()
+    start_time = perf_counter()
     evaluator = Evaluator(dataset, end_index - start_index, k_of_knn)
 
     for test_index in range(start_index, end_index):
@@ -96,7 +96,7 @@ def execute_baseline_test(dataset: FullDataset, start_index, end_index, nbr_thre
             print('')
         evaluator.add_single_example_results(results, test_index)
 
-    elapsed_time = time.clock() - start_time
+    elapsed_time = perf_counter() - start_time
     evaluator.calculate_results()
     evaluator.print_results(elapsed_time)
 
@@ -117,7 +117,7 @@ def main():
     dataset.load()
 
     # select which part of the test dataset to test
-    start_index = 0
+    start_index = dataset.num_test_instances - 2
     end_index = dataset.num_test_instances
 
     # Output interval of how many examples have been compared so far. < 0 for no output

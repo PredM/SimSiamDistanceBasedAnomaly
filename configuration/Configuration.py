@@ -28,17 +28,18 @@ class Configuration:
 
         # Attention: Implementation expects a simple measure to return a similarity!
         # Only use euclidean_dis for TRAINING with contrastive loss
-        self.simple_measures = ['abs_mean', 'euclidean_sim', 'euclidean_dis', 'dot_product', 'cosine','attention_based']
+        self.simple_measures = ['abs_mean', 'euclidean_sim', 'euclidean_dis', 'dot_product', 'cosine',
+                                'attention_based']
         self.simple_measure = self.simple_measures[0]
 
         # SNN output is normalized (x = x/|x|) (useful for eucl.?)
-        self.normalize_snn_encoder_output = False   # default: False
+        self.normalize_snn_encoder_output = False  # default: False
 
         # additional option for encoder variant cnnwithclassattention:
         self.useFeatureWeightedSimilarity = False  # default: False
         # Option to simulate a retrieval situation (during training) where only the weights of the
         # example from the case base/training data set are known:
-        self.use_same_feature_weights_for_unsimilar_pairs = False # default: ?
+        self.use_same_feature_weights_for_unsimilar_pairs = False  # default: ?
 
         # Compares each time step of the encoded representation with each other time step
         # Impl. is based on NeuralWarp FFNN just without NN; (but in simple similarity measure)
@@ -53,7 +54,7 @@ class Configuration:
         self.num_of_matching_iterations = 1
         # Aggregator affects output for previous layers
         # none = 2d output [T,C] , sum or mean = 1d vector with channel length
-        self.simple_matching_aggregators = ['none_attention_only','none', 'sum', 'mean']
+        self.simple_matching_aggregators = ['none_attention_only', 'none', 'sum', 'mean']
         self.simple_matching_aggregator = self.simple_matching_aggregators[2]
 
         ###
@@ -65,7 +66,7 @@ class Configuration:
 
         # if enabled each case handler of a cbs will use individual hyperparameters
         # no effect on snn architecture
-        self.use_individual_hyperparameters = True
+        self.use_individual_hyperparameters = False
 
         # if use_individual_hyperparameters = false interpreted as a single json file, else as a folder
         # containing json files named after the cases they should be used for (see all_cases below for correct names)
@@ -123,7 +124,8 @@ class Configuration:
 
         # Define the subset of cases that should be used for CBS
         # If None or empty it will be set to all cases configured in config.json
-        self.cases_used = []
+        self.cases_used = [
+        ]
 
         ###
         # kafka / real time classification
