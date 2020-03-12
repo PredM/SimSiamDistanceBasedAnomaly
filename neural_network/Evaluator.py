@@ -2,6 +2,7 @@ import warnings
 
 import numpy as np
 import pandas as pd
+import sklearn
 from sklearn import metrics
 
 from neural_network.Dataset import FullDataset
@@ -31,11 +32,9 @@ class Evaluator:
         self.y_true = []
         self.y_pred = []
         self.y_pred_sim = []
-        
-        # TODO @Klein This is unused currently.
-        # storing max similarity of each class for each example for computing roc_auc_score
-        self.y_predSimForEachClass = np.zeros(
-            [self.dataset.num_test_instances, len(self.dataset.y_test_strings_unique)])
+
+        self.all_sims_for_auc = []
+        self.test_example_indices = []
 
         self.unique_test_failures = np.unique(self.dataset.failureTimes_test)
         idx = np.where(np.char.find(self.unique_test_failures, 'noFailure') >= 0)
@@ -45,8 +44,8 @@ class Evaluator:
         # Auxiliary dataframe failure_results contains results with respect to failure occurrences
         self.failure_results = pd.DataFrame({'Label': self.dataset.testArr_label_failureTime_uniq[:, 0],
                                              'FailureTime': self.dataset.testArr_label_failureTime_uniq[:, 1],
-                                             'Correct': np.zeros(self.dataset.testArr_label_failureTime_uniq.shape[0]),
                                              'Chances': self.dataset.testArr_label_failureTime_counts,
+                                             'Correct': np.zeros(self.dataset.testArr_label_failureTime_uniq.shape[0]),
                                              'AsHealth': np.zeros(self.dataset.testArr_label_failureTime_uniq.shape[0]),
                                              'AsOtherFailure': np.zeros(
                                                  self.dataset.testArr_label_failureTime_uniq.shape[0])})
@@ -91,6 +90,9 @@ class Evaluator:
         self.y_true.append(true_class)
         self.y_pred.append(max_sim_class)
         self.y_pred_sim.append(max_sim)
+
+        self.all_sims_for_auc.append(sims)
+        self.test_example_indices.append(test_example_index)
 
         # Increase the value of this "label pair"
         self.multi_class_results.loc[max_sim_class, true_class] += 1
@@ -218,9 +220,20 @@ class Evaluator:
             self.results.loc[class_in_test, 'FPR'] = self.rate_calculation(false_positives, true_negatives)
             self.results.loc[class_in_test, 'FDR'] = self.rate_calculation(false_positives, true_positives)
 
-            # # TODO @Klein check if this is the correct input (fixed the value error)
-            # self.results.loc[class_in_test, 'ROCAUC'] = metrics.roc_auc_score(np.array(self.y_true),
-            #                                                                   np.array(self.y_pred_sim))
+            # WIP
+            # TODO Check if this is the correct and also select multi class parameter (see: https://bit.ly/2Q7HtCU)
+            # # ValueError: Target scores need to be probabilities for multiclass roc_auc, i.e. they should sum up to 1.0 over classes
+            # major_version = int(sklearn.__version__.split('.')[1])
+            #
+            # if major_version >= 22:
+            #     labels = list(self.dataset.y_test_strings[self.test_example_indices])
+            #     self.results.loc[class_in_test, 'ROCAUC'] = metrics.roc_auc_score(np.stack(self.y_true),
+            #                                                                       np.stack(self.all_sims_for_auc),
+            #                                                                       labels=labels,
+            #                                                                       multi_class='ovr')
+            # else:
+            #     print('ROC could not be calculated. Update sklearn using: ')
+            #     print('pip install --user --upgrade scikit-learn')
 
         # Fill the combined row with the sum of each class
         self.results.loc['combined', 'TP'] = self.results['TP'].sum()

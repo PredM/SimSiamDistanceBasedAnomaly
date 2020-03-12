@@ -117,8 +117,8 @@ def main():
     dataset.load()
 
     # select which part of the test dataset to test
-    start_index = dataset.num_test_instances - 55
-    end_index = dataset.num_test_instances-50
+    start_index = dataset.num_test_instances - 5
+    end_index = dataset.num_test_instances
 
     # Output interval of how many examples have been compared so far. < 0 for no output
     temp_output_intervall = -1
