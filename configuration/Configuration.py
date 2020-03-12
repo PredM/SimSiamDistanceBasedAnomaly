@@ -3,6 +3,11 @@ import json
 import pandas as pd
 
 
+# TODO: Important
+#  If errors occur, the inheritance sequence should first be adapted to the main class.
+#  This should solve most problems, if any occur.
+
+
 ####
 # Note: Division into different classes only serves to improve clarity.
 # Only the Configuration class should be used to access all variables.
