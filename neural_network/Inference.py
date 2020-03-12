@@ -20,7 +20,7 @@ class Inference:
         self.architecture = architecture
         self.dataset: FullDataset = dataset
 
-        if self.config.use_only_failures_as_queries_for_inference:
+        if self.config.inference_with_failures_only:
             self.idx_test_examples_query_pool = self.dataset.get_indices_failures_only_test()
         else:
             self.idx_test_examples_query_pool = range(self.dataset.num_test_instances)
@@ -51,7 +51,7 @@ def main():
 
     config = Configuration()
 
-    if config.use_case_base_extraction_for_inference:
+    if config.case_base_for_inference:
         dataset: FullDataset = FullDataset(config.case_base_folder, config, training=False)
     else:
         dataset: FullDataset = FullDataset(config.training_data_folder, config, training=False)

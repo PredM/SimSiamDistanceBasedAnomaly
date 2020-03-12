@@ -16,7 +16,7 @@ def main():
 
     config = Configuration()
 
-    if config.use_case_base_extraction_for_inference:
+    if config.case_base_for_inference:
         dataset: FullDataset = FullDataset(config.case_base_folder, config, training=False)
         cbs = CBS(config, False, config.case_base_folder)
     else:

@@ -109,7 +109,7 @@ def distance_to_sim(distances):
 def main():
     config = Configuration()
 
-    if config.use_case_base_extraction_for_inference:
+    if config.case_base_for_inference:
         dataset: FullDataset = FullDataset(config.case_base_folder, config, training=False)
     else:
         dataset: FullDataset = FullDataset(config.training_data_folder, config, training=False)
@@ -122,7 +122,6 @@ def main():
 
     # Output interval of how many examples have been compared so far. < 0 for no output
     temp_output_intervall = -1
-    parallel_threads = 20
     use_relevant_only = True
     implemented_algorithms = ['dtw']
     algorithm_used = implemented_algorithms[0]
@@ -131,11 +130,11 @@ def main():
     print('Used relevant only:', use_relevant_only)
     print('Start index:', start_index)
     print('End index:', end_index)
-    print('Number of parallel threads:', parallel_threads)
-    print('Case Based used for inference:', config.use_case_base_extraction_for_inference)
+    print('Number of parallel threads:', config.max_parallel_cores)
+    print('Case Based used for inference:', config.case_base_for_inference)
     print()
 
-    execute_baseline_test(dataset, start_index, end_index, parallel_threads, algorithm_used, config.k_of_knn,
+    execute_baseline_test(dataset, start_index, end_index, config.max_parallel_cores, algorithm_used, config.k_of_knn,
                           temp_output_intervall, use_relevant_only)
 
 

@@ -3,46 +3,105 @@ import json
 import pandas as pd
 
 
-# TODO Rearrange based on commonly changed values
-class Configuration:
+####
+# Note: Division into different classes only serves to improve clarity.
+# Only the Configuration class should be used to access all variables.
+# Important: It must be ensured that variable names are only used once.
+# Otherwise they will be overwritten depending on the order of inheritance!
+# All methods should be added to the Configuration class to be able to access all variables
+####
 
-    def __init__(self, dataset_to_import=0):
+class GeneralConfiguration:
+
+    def __init__(self):
+        ###
+        # This configuration contains overall settings that couldn't be match to a specific program component
+        ###
+
+        # Specifies the maximum number of gpus used
+        self.max_gpus_used = 10
+
+        # Specifies the maximum number of cores to be used
+        self.max_parallel_cores = 60
+
+        # Folder where the trained models are saved to during learning process
+        self.models_folder = '../data/trained_models/'
+
+        # Path and file name to the specific model that should be used for testing and live classification
+        self.filename_model_to_use = 'cnn_test'
+        self.directory_model_to_use = self.models_folder + self.filename_model_to_use + '/'
+
+
+class ModelConfiguration:
+
+    def __init__(self):
+        pass
 
         ###
-        # neural network
+        # This configuration contains all parameters defining the structure of the classifier.
+        # (SNNs as well as the CBS similarity measure)
         ###
 
-        # architecture independent of whether snn or cbs is used
+        ##
+        # Architecture (independent of whether a single SNN or the CBS is used)
+        ##
+
+        # Due to changes  'fast_simple', 'fast_ffnn'  currently are not supported
         # standard = classic snn behaviour, context vectors calculated each time, also multiple times for the example
         # fast = encoding of case base only once, example also only once
         # ffnn = uses ffnn as distance measure
         # simple = mean absolute difference as distance measure instead of the ffnn
-
-        # Due to changes  'fast_simple', 'fast_ffnn'  currently are not supported
         self.architecture_variants = ['standard_simple', 'standard_ffnn']
         self.architecture_variant = self.architecture_variants[0]
 
-        # Most related work on time series with SNN use a fc layer at the end of a cnn to merge 1d-conv
-        # features of time steps. Seems to be useful for standard_simple architecture, can be used via
-        # adding "fc_after_cnn1d_layers" in the hyperparameter configs file
+        ##
+        # Determines how the similarity between two embedding vectors is determined (when a simple architecture is used)
+        ##
 
-        # Attention: Implementation expects a simple measure to return a similarity!
+        # Most related work on time series with SNN use a fc layer at the end of a cnn to merge 1d-conv
+        # features of time steps. Can be used via adding "fc_after_cnn1d_layers" in the hyperparameter configs file
+
+        # Attention: Implementation expects a simple measure to return a similarity in the interval of [0,1]!
         # Only use euclidean_dis for TRAINING with contrastive loss
         self.simple_measures = ['abs_mean', 'euclidean_sim', 'euclidean_dis', 'dot_product', 'cosine',
                                 'attention_based']
         self.simple_measure = self.simple_measures[0]
 
+        ###
+        # Hyperparameters
+        ###
+
+        # Main directory where the hyperparameter config files are stored
+        self.hyper_file_folder = '../configuration/hyperparameter_combinations/'
+        self.use_hyper_file = True
+
+        # If enabled each case handler of a CBS will use individual hyperparameters
+        # No effect on SNN architecture
+        self.use_individual_hyperparameters = False
+
+        # If !use_individual_hyperparameters interpreted as a single json file, else as a folder
+        # which contains json files named after the cases they should be used for
+        # If no file with this name is present the 'default.json' Config will be used
+        self.hyper_file = self.hyper_file_folder + 'cnn1d.json'  # 'ba_cnn_modified.json'
+
+        ##
+        # Various settings influencing the ssimilarity calculation
+        ##
+
         # SNN output is normalized (x = x/|x|) (useful for eucl.?)
         self.normalize_snn_encoder_output = False  # default: False
 
-        # additional option for encoder variant cnnwithclassattention:
+        # Additional option for encoder variant cnnwithclassattention and the euclidean distance:
+        # Weighted euclidean similarity based on relevant attributes
         self.useFeatureWeightedSimilarity = False  # default: False
+
         # Option to simulate a retrieval situation (during training) where only the weights of the
         # example from the case base/training data set are known:
         self.use_same_feature_weights_for_unsimilar_pairs = False  # default: ?
 
         # Compares each time step of the encoded representation with each other time step
-        # Impl. is based on NeuralWarp FFNN just without NN; (but in simple similarity measure)
+        # (instead of only comparing the ones with the same indices)
+        # Implantation is based on NeuralWarp FFNN but used for simple similarity measures
         self.use_time_step_wise_simple_similarity = False  # default: False
 
         # Matches each time step with each time step from the other encoding which is implemented as a subtraction
@@ -50,43 +109,56 @@ class Configuration:
         self.use_time_step_matching_simple_similarity = False
         self.simple_measures_matching = ['euclidean', 'dot_product', 'cosine']
         self.simple_measure_matching = self.simple_measures_matching[0]
+
         # how often should the pairwise matching occur:
         self.num_of_matching_iterations = 1
+
         # Aggregator affects output for previous layers
         # none = 2d output [T,C] , sum or mean = 1d vector with channel length
         self.simple_matching_aggregators = ['none_attention_only', 'none', 'sum', 'mean']
         self.simple_matching_aggregator = self.simple_matching_aggregators[2]
 
+
+class TrainingConfiguration:
+
+    def __init__(self):
         ###
-        # hyperparameters
+        # This configuration contains all parameters defining the way the model is trained
         ###
 
-        self.hyper_file_folder = '../configuration/hyperparameter_combinations/'
-        self.use_hyper_file = True
+        # Select which subset of features should be used for creating a dataset
+        # Important: CBS will only function correctly if ALL_CBS or a superset of it is selected
+        # ALL_CBS will use all feature of self.relevant_features, without consideration of the case structure
+        # self.features_used will be assigned at config.json loading
+        self.feature_variants = ['relevant_features_bachelor_thesis', 'all_features', 'ALL_CBS']
+        self.feature_variant = self.feature_variants[1]
+        self.features_used = None
 
-        # if enabled each case handler of a cbs will use individual hyperparameters
-        # no effect on snn architecture
-        self.use_individual_hyperparameters = False
+        # TODO: Use other variables for the intended purpose (limiting cbs) and the usage for creating masking vectors
+        # Define the subset of cases that should be used for CBS
+        # If None or empty it will be set to all cases configured in config.json
+        self.cases_used = [
+        ]
 
-        # if use_individual_hyperparameters = false interpreted as a single json file, else as a folder
-        # containing json files named after the cases they should be used for (see all_cases below for correct names)
-        self.hyper_file = self.hyper_file_folder + 'cnn1d.json'  # 'ba_cnn_modified.json'
-
-        # choose a loss function
-        # TODO:  TripletLoss, Distance-Based Logistic Loss
+        # TODO: TripletLoss, Distance-Based Logistic Loss
         self.loss_function_variants = ['binary_cross_entropy', 'constrative_loss', 'mean_squared_error']
         self.type_of_loss_function = self.loss_function_variants[0]
+
+        # Settings for constrative_loss
+        self.margin_of_loss_function = 0.1
+
+        # Reduce margin of constrative_loss or in case of binary cross entropy loss
+        # smooth negative examples by half of the sim between different labels
+        self.use_margin_reduction_based_on_label_sim = False  # default: False
 
         self.use_early_stopping = True
         self.early_stopping_epochs_limit = 1000
 
-        self.margin_of_loss_function = 0.1  # required for constrative_loss
-        # Reduce margin of constrative_loss or in case of BCE: smooth negative examples by half of the sim between different labels
-        self.use_margin_reduction_based_on_label_sim = False  # default: False
+        # Parameter to control if and when a test is conducted through training
+        self.use_inference_test_during_training = False  # default False
+        self.inference_during_training_epoch_interval = 10000  # default False
 
-        # Training Data Sampling
-
-        # The examples of a batch for training are selected based on the number of classes (=True)
+        # The examples of a batch during training are selected based on the number of classes (=True)
         # and not on the number of training examples contained in the training data set (=False).
         # This means that each training batch contains almost examples from each class (practically
         # upsampling of minority classes). Based on recommendation of lessons learned from successful siamese models:
@@ -95,81 +167,83 @@ class Configuration:
 
         # If equalClassConsideration is true, then this parameter defines the proportion of examples
         # based on class distribution and example distribution.
-        # Proportion = Batchjobsize/2/ThisFactor. E.g., 2 = class distribution only, 4 = half, 6 = 1/3, 8 = 1/4
-        self.upsampling_factor = 4  # Default: 4, means half / half
+        # Proportion = BatchSize/2/ThisFactor. E.g., 2 = class distribution only, 4 = half, 6 = 1/3, 8 = 1/4
+        self.upsampling_factor = 4  # default: 4, means half / half
 
         # Use a custom similarity values instead of 0 for unequal / negative pairs during batch creation
-        # These are based on the similarity similarity matrices loaded in the dataset
+        # These are based on the similarity matrices loaded in the dataset
         self.use_sim_value_for_neg_pair = False  # default: False
 
-        # select whether training should be continued from the checkpoint defined below
-        # currently only working for snns, not cbs
-        self.continue_training = False
+        # Select whether the training should be continued from the checkpoint defined as 'filename_model_to_use'
+        # Currently only working for SNNs, not CBS
+        self.continue_training = False  # default: False
 
-        self.max_gpus_used = 10
-
-        # defines how often loss is printed and checkpoints are safed during training
+        # Defines how often loss is printed and checkpoints are saved during training
         self.output_interval = 200
 
-        # how many model checkpoints are kept
+        # How many model checkpoints are kept
         self.model_files_stored = 200
 
-        # select which subset of features should be used for creating a dataset
-        # Important: CBS will only function correctly if ALL_CBS or a superset of it is selected
-        # ALL_CBS will use all feature of self.relevant_features, without consideration of the case structure
-        # self.features_used will be assigned at config.json loading
-        self.feature_variants = ['relevant_features_bachelor_thesis', 'all_features', 'ALL_CBS']
-        self.feature_variant = self.feature_variants[1]
-        self.features_used = None
 
-        # Define the subset of cases that should be used for CBS
-        # If None or empty it will be set to all cases configured in config.json
-        self.cases_used = [
-        ]
+class InferenceConfiguration:
 
+    def __init__(self):
+        ##
+        # Settings and parameters for all inference processes
+        ##
+        # Notes:
+        #   - Folder of used model is specified in GeneralConfiguration
+        #   - Does not include settings for BaselineTester
+
+        # If enabled only the reduced training dataset (via CaseBaseExtraction) will be used for
+        # similarity assessment during inference.
+        # Please note that the case base extraction only reduces the training data but fully copies the test data
+        # so all test example will still be evaluated even if this is enabled
+        self.case_base_for_inference = True  # default False
+
+        # Parameter to control the size / number of the queries used for evaluation
+        self.inference_with_failures_only = False  # default False
+
+        # TODO: Possible performance optimization: Add extra parameters instead of going down to batch size directly
+        # If enabled the similarity assessment of the test dataset to the training datset will be split into
+        # chunks with batchsize many example.
+        # Possibly necessary due to VRam limitation
+        self.split_sim_calculation = False  # default False
+
+
+class ClassificationConfiguration:
+
+    def __init__(self):
         ###
-        # kafka / real time classification
+        # This configuration contains settings regarding the real time classification
+        # and the therefore required Kafka server and case base
         ###
+        # Note: Folder of used model specified in GeneralConfiguration
 
         # server information
         self.ip = 'localhost'  # '192.168.1.10'
         self.port = '9092'
-        self.port = '9092'
 
         self.error_descriptions = None  # Read from config.json
 
-        # set to true if using the fabric simulation
-        # will read from the beginning of the topics, so the fabric simulation only has to be run once
+        # Set to true if using the fabric simulation (FabricSimulation.py)
+        # This setting causes the live classification to read from the beginning of the topics on the Kafka server,
+        # so the simulation only has to be run only once.
         self.testing_using_fabric_sim = True
 
-        ##
-        # settings for exporting the classification results back to kafka
-        ##
-
-        # enables the functionality
+        # Enables the functionality to export the classification results back to the Kafka server
         self.export_results_to_kafka = True
 
-        # topic where the messages should be written to. Automatically created if not existing
+        # Topic where the messages should be written to. Automatically created if not existing.
         self.export_topic = 'classification-results'
 
+        # Determines on which topic's messages the time interval for creating an example is based on
+        # Only txt topics can be used
+        self.limiting_topic = 'txt15'
+
         ###
-        # case base
+        # Case base
         ###
-
-        # if enabled only the reduced training dataset will be used during inference for similarity assessment
-        # please note that the case base extraction only reduces the training data but fully copies the test data
-        # so all test example will still be evaluated even if this is enabled
-        self.use_case_base_extraction_for_inference = True  # default False
-
-        # parameter to control the size / number of the queries used for evaluation
-        self.use_only_failures_as_queries_for_inference = False  # default False
-
-        # parameter to control if and when a test is conducted through training
-        self.use_inference_test_during_training = False  # default False
-        self.inference_during_training_epoch_interval = 10000  # default False
-
-        # parameter to control the size of data / examples used by inference for similiarity calculation
-        self.use_batchsize_for_inference_sim_calculation = True  # default False
 
         # the random seed the index selection is based on
         self.random_seed_index_selection = 42
@@ -180,64 +254,20 @@ class Configuration:
         # the k of the knn classifier used for live classification
         self.k_of_knn = 10
 
+
+class PreprocessingConfiguration:
+
+    def __init__(self):
         ###
-        # folders and file names
+        # This configuration contains information and settings relevant for the data preprocessing and dataset creation
         ###
-
-        # folder where the trained models are saved to during learning process
-        self.models_folder = '../data/trained_models/'
-
-        # path and file name to the specific model that should be used for testing and live classification
-        self.filename_model_to_use = 'cnn_test'
-        self.directory_model_to_use = self.models_folder + self.filename_model_to_use + '/'
-
-        # folder where the preprocessed training and test data for the neural network should be stored
-        self.training_data_folder = '../data/training_data/'
-
-        # folder where the normalisation models should be stored
-        self.scaler_folder = '../data/scaler/'
-
-        # name of the files the dataframes are saved to after the import and cleaning
-        self.filename_pkl = 'export_data.pkl'
-        self.filename_pkl_cleaned = 'cleaned_data.pkl'
-
-        # folder where the reduced training data set aka. case base is saved to
-        self.case_base_folder = '../data/case_base/'
-
-        # folder where text files with extracted cases are saved to, for export
-        self.cases_folder = '../data/cases/'
-
-        # file from which the case information should be loaded, used in dataset creation
-        self.case_file = '../configuration/cases_refined_final_20-12-19_wFailure.csv'
 
         ##
-        # lists of topics separated by types that need different import variants
+        # Import and data visualisation
         ##
 
-        self.txt_topics = ['txt15', 'txt16', 'txt17', 'txt18', 'txt19']
-
-        # unused topics: 'bmx055-VSG-gyr','bmx055-VSG-mag','bmx055-HRS-gyr','bmx055-HRS-mag'
-        self.acc_topics = ['adxl0', 'adxl1', 'adxl2', 'adxl3']
-
-        self.bmx_acc_topics = []  # unused topics: 'bmx055-VSG-acc', 'bmx055-HRS-acc'
-
-        self.pressure_topics = ['pressureSensors']
-
-        # combination of all topics in a single list
-        self.topic_list = self.txt_topics + self.acc_topics + self.bmx_acc_topics + self.pressure_topics
-
-        # determines on which topic's messages the time interval for creating an example is based
-        # only txt topics possible
-        self.limiting_topic = 'txt15'
-
-        self.pressure_sensor_names = ['Oven', 'VSG']  # 'Sorter' not used
-
-        ###
-        # import and data visualisation
-        ###
-
-        self.plot_txts: bool = True
-        self.plot_pressure_sensors: bool = True
+        self.plot_txts: bool = False
+        self.plot_pressure_sensors: bool = False
         self.plot_acc_sensors: bool = False
         self.plot_bmx_sensors: bool = False
         self.plot_all_sensors: bool = False
@@ -247,26 +277,26 @@ class Configuration:
         self.print_column_names: bool = False
         self.save_pkl_file: bool = True
 
-        ###
-        # preprocessing and example properties
-        ###
+        ##
+        # Preprocessing
+        ##
 
-        # value is used to ensure a constant frequency of the measurement time points
+        # Value is used to ensure a constant frequency of the measurement time points
         self.resample_frequency = "4ms"  # need to be the same for DataImport as well as DatasetCreation
 
-        # define the length (= the number of timestamps)
-        # of the time series generated for training & live classification
+        # Define the length (= the number of timestamps) of the time series generated
         self.time_series_length = 1000
 
-        # define the time window length in seconds the timestamps of a single time series should be distributed on
+        # Define the time window length in seconds the timestamps of a single time series should be distributed on
         self.interval_in_seconds = 4
 
-        # to some extent the time series in each examples overlaps to another one
-        # default: False if true: interval in seconds is not considered, just time series length
+        # To some extent the time series in each examples overlaps to another one
+        # If true: interval in seconds is not considered, just time series length
+        # Default: False
         self.use_over_lapping_windows = True
         self.over_lapping_window_interval_in_seconds = 1  # only used if overlapping windows is true
 
-        # configure the motor failure parameters used in case extraction
+        # Configure the motor failure parameters used in case extraction
         self.split_t1_high_low = True
         self.type1_start_percentage = 0.5
         self.type1_high_wear_rul = 25
@@ -278,12 +308,39 @@ class Configuration:
         # share of examples used as test set
         self.test_split_size = 0.2
 
-        # specifies the maximum number of cores to be used in parallel during data processing.
-        self.max_parallel_cores = 60
+        ##
+        # Lists of topics separated by types that need different import variants
+        ##
 
-        # all None Variables are read from the config.json file
-        self.cases_datasets = None
-        self.datasets = None
+        self.txt_topics = ['txt15', 'txt16', 'txt17', 'txt18', 'txt19']
+
+        # Unused topics: 'bmx055-VSG-gyr','bmx055-VSG-mag','bmx055-HRS-gyr','bmx055-HRS-mag'
+        self.acc_topics = ['adxl0', 'adxl1', 'adxl2', 'adxl3']
+
+        self.bmx_acc_topics = []  # unused topics: 'bmx055-VSG-acc', 'bmx055-HRS-acc'
+
+        self.pressure_topics = ['pressureSensors']
+
+        self.pressure_sensor_names = ['Oven', 'VSG']  # 'Sorter' not used
+
+        # Combination of all topics in a single list
+        self.topic_list = self.txt_topics + self.acc_topics + self.bmx_acc_topics + self.pressure_topics
+
+
+class StaticConfiguration:
+
+    def __init__(self, dataset_to_import):
+        ###
+        # This configuration contains data that rarely needs to be changed, such as the paths to certain directories
+        ###
+
+        ##
+        # Static values
+        ##
+        # All of the following None-Variables are read from the config.json file because they are mostly static
+        # and don't have to be changed very often
+
+        self.cases_datasets, self.datasets = None, None
 
         # mapping for topic name to prefix of sensor streams, relevant to get the same order of streams
         self.prefixes = None
@@ -291,23 +348,46 @@ class Configuration:
         # dict, keys: all case names configured above in self.cases_used, value: list of relevant features for
         # this case (will be loaded from config.json below)
         self.relevant_features = None
+
         # list of all features contained in the relevant_features in config.json, sorted and without duplicates
         # used for dataset creation
         self.all_features_configured = None
         self.zeroOne, self.intNumbers, self.realValues, self.categoricalValues = None, None, None, None
 
-        self.load_config_json('../configuration/config.json')
+        ##
+        # Folders and file names
+        ##
+        # Note: Folder of used model specified in GeneralConfiguration
 
-        # select specific dataset with given parameter
-        # preprocessing however will include all defined datasets
+        # Folder where the preprocessed training and test data for the neural network should be stored
+        self.training_data_folder = '../data/training_data/'
+
+        # Folder where the normalisation models should be stored
+        self.scaler_folder = '../data/scaler/'
+
+        # Name of the files the dataframes are saved to after the import and cleaning
+        self.filename_pkl = 'export_data.pkl'
+        self.filename_pkl_cleaned = 'cleaned_data.pkl'
+
+        # Folder where the reduced training data set aka. case base is saved to
+        self.case_base_folder = '../data/case_base/'
+
+        # Folder where text files with extracted cases are saved to, for export
+        self.cases_folder = '../data/cases/'
+
+        # File from which the case information should be loaded, used in dataset creation
+        self.case_file = '../configuration/cases.csv'
+
+        # Select specific dataset with given parameter
+        # Preprocessing however will include all defined datasets
         self.pathPrefix = self.datasets[dataset_to_import][0]
         self.startTimestamp = self.datasets[dataset_to_import][1]
         self.endTimestamp = self.datasets[dataset_to_import][2]
 
-        # query to reduce datasets to the given time interval
+        # Query to reduce datasets to the given time interval
         self.query = "timestamp <= \'" + self.endTimestamp + "\' & timestamp >= \'" + self.startTimestamp + "\' "
 
-        # define file names for all topics
+        # Define file names for all topics
         self.txt15 = self.pathPrefix + 'raw_data/txt15.txt'
         self.txt16 = self.pathPrefix + 'raw_data/txt16.txt'
         self.txt17 = self.pathPrefix + 'raw_data/txt17.txt'
@@ -328,6 +408,21 @@ class Configuration:
         self.bmx055_VSG_acc = self.pathPrefix + 'raw_data/bmx055-VSG-acc.txt'
         self.bmx055_VSG_gyr = self.pathPrefix + 'raw_data/bmx055-VSG-gyr.txt'
         self.bmx055_VSG_mag = self.pathPrefix + 'raw_data/bmx055-VSG-mag.txt'
+
+
+class Configuration(
+    StaticConfiguration,
+    PreprocessingConfiguration,
+    ClassificationConfiguration,
+    InferenceConfiguration,
+    TrainingConfiguration,
+    ModelConfiguration,
+    GeneralConfiguration
+):
+
+    def __init__(self, dataset_to_import=0):
+        super().__init__(dataset_to_import)
+        self.load_config_json('../configuration/config.json')
 
     def load_config_json(self, file_path):
         with open(file_path, 'r') as f:
@@ -357,8 +452,8 @@ class Configuration:
         for key in self.relevant_features:
             self.relevant_features[key] = sorted(self.relevant_features[key])
 
-        def flatten(l):
-            return [item for sublist in l for item in sublist]
+        def flatten(list_of_lists):
+            return [item for sublist in list_of_lists for item in sublist]
 
         # Depending on the self.feature_variant the relevant features for creating a dataset are selected
         if self.feature_variant == 'ALL_CBS':

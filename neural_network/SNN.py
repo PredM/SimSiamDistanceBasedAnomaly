@@ -144,7 +144,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
                 # Option to simulate a retrieval situation (during training) where only the weights of the
                 # example from the case base/training data set are known
                 if self.config.use_same_feature_weights_for_unsimilar_pairs:
-                    for index in range(aux_input.shape[0]//2):
+                    for index in range(aux_input.shape[0] // 2):
                         # noinspection PyUnboundLocalVariable, PyUnresolvedReferences
                         aux_input[2 * index] = aux_input[2 * index]
                         aux_input[2 * index + 1] = aux_input[2 * index]
@@ -158,7 +158,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
 
         # TODO check if this is still necessary
         # Splitting the batch size for inference in the case of using a TCN with warping FFNN due to GPU memory issues
-        if type(self.encoder) == TCN or self.config.use_batchsize_for_inference_sim_calculation:
+        if type(self.encoder) == TCN or self.config.split_sim_calculation:
             return self.get_sims_in_batches(example)
 
         batch_size = len(self.dataset.x_train)
@@ -222,7 +222,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
             a = context_vectors[2 * pair_index, :, :]
             b = context_vectors[2 * pair_index + 1, :, :]
 
-        #Normalization
+        # Normalization
         if self.config.normalize_snn_encoder_output:
             a = a / tf.norm(a)
             b = b / tf.norm(b)
@@ -233,7 +233,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
 
         # Time-step matching
         if self.config.use_time_step_matching_simple_similarity:
-            a,b, a_weights, b_weights = self.match_time_step_wise(a, b)
+            a, b, a_weights, b_weights = self.match_time_step_wise(a, b)
 
         return self.simple_sim.get_sim(a, b, a_weights, b_weights)
 
@@ -257,7 +257,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
         # a and b shape: [T, C]
         for num_of_matching in range(self.config.num_of_matching_iterations):
             attentionA, attentionB = self.simple_sim.compute_cross_attention(a, b, self.config.simple_measure_matching)
-            #print("Attention A shape:", attentionA.shape, "Attention B shape:", attentionB.shape)
+            # print("Attention A shape:", attentionA.shape, "Attention B shape:", attentionB.shape)
 
             # Subtract attention from original input
             u_a = tf.subtract(a, attentionA)
@@ -276,7 +276,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
             input_a = tf.reduce_mean(u_a, axis=0, keepdims=True)
             input_b = tf.reduce_mean(u_b, axis=0, keepdims=True)
         else:
-            print("Error: No aggregator function with name: ",self.config.simple_matching_aggregator," found!")
+            print("Error: No aggregator function with name: ", self.config.simple_matching_aggregator, " found!")
 
         return input_a, input_b, attentionA, attentionB
 
@@ -468,8 +468,8 @@ class SNN(SimpleSNN):
         return tf.exp(-tf.reduce_mean(warped_dists))
 
     def get_sim_pair(self, context_vectors, pair_index):
-        #print("context_vectors.shape:" , context_vectors.shape)
-        #print("pair_index: ", tf.print(pair_index))
+        # print("context_vectors.shape:" , context_vectors.shape)
+        # print("pair_index: ", tf.print(pair_index))
         """Compute the warped distance with a neural network with each pair_index value
 
         Args:
@@ -484,21 +484,21 @@ class SNN(SimpleSNN):
         b = context_vectors[2 * pair_index + 1, :, :]
         # a and b shape: [T, C]
 
-        attentionA, attentionB = self.simple_sim.compute_cross_attention(a,b,"euclidiean")
+        attentionA, attentionB = self.simple_sim.compute_cross_attention(a, b, "euclidiean")
 
         print("Attention A shape:", attentionA.shape, "Attention B shape:", attentionB.shape)
 
         # Subtract attention from original input
-        u_a = tf.subtract(a,attentionA)
-        u_b = tf.subtract(b,attentionB)
+        u_a = tf.subtract(a, attentionA)
+        u_b = tf.subtract(b, attentionB)
 
-        #a = tf.concat([a, u_a], axis=1)
-        #a = self.ffnn2.model(a, training=self.training)
+        # a = tf.concat([a, u_a], axis=1)
+        # a = self.ffnn2.model(a, training=self.training)
         a = u_a
         print("a shape: ", a.shape)
 
-        #b = tf.concat([b, u_b], axis=1)
-        #b = self.ffnn2.model(b, training=self.training)
+        # b = tf.concat([b, u_b], axis=1)
+        # b = self.ffnn2.model(b, training=self.training)
         b = u_b
         '''
         # second input:
@@ -544,11 +544,10 @@ class SNN(SimpleSNN):
         # Scale / Weight (due to multiplication) the absolute distance of each time step combinations
         # with the predicted "weight" for each time step
         warped_dists = tf.multiply(timestepwise_mean_abs_difference, ffnn)
-        #print("warped_dists.shape: ", warped_dists.shape)
-        #print("warped_dists:", tf.print(tf.reduce_mean(warped_dists)))
+        # print("warped_dists.shape: ", warped_dists.shape)
+        # print("warped_dists:", tf.print(tf.reduce_mean(warped_dists)))
 
         return tf.exp(-tf.reduce_mean(warped_dists))
-
 
     def print_detailed_model_info(self):
         print('')

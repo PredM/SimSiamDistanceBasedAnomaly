@@ -1,10 +1,9 @@
-import sys
 import os
+import sys
 
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 
 from configuration.Configuration import Configuration
-from configuration.Hyperparameter import Hyperparameters
 from neural_network.Dataset import FullDataset
 from neural_network.Optimizer import SNNOptimizer
 from neural_network.SNN import initialise_snn
