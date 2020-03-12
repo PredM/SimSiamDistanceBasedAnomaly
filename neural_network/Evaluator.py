@@ -17,10 +17,10 @@ class Evaluator:
         # Dataframe that stores the results that will be output at the end of the inference process
         # Is not filled with data during the inference
         index = list(dataset.y_test_strings_unique) + ['combined']
-        cols = ['TP', 'FP', 'TN', 'FN', '#Examples', 'FPR', 'TPR', 'AUC', 'ACC']
+        cols = ['#Examples', 'TP', 'FP', 'TN', 'FN', 'FPR', 'TPR', 'AUC', 'FNR', 'FDR', 'ACC']
         self.results = pd.DataFrame(0, index=index, columns=cols)
         self.results.index.name = 'Classes'
-        self.results.loc['combined', '#Examples'] = dataset.num_test_instances
+        self.results.loc['combined', '#Examples'] = self.num_test_examples
 
         # Auxiliary dataframe multi_class_results with predicted class (provided by CB) as row
         # and actucal class (as given by the test set) as column, but for ease of use: all unique classes are used
@@ -31,7 +31,8 @@ class Evaluator:
         self.y_true = []
         self.y_pred = []
         self.y_pred_sim = []
-
+        
+        # TODO @Klein This is unused currently.
         # storing max similarity of each class for each example for computing roc_auc_score
         self.y_predSimForEachClass = np.zeros(
             [self.dataset.num_test_instances, len(self.dataset.y_test_strings_unique)])
@@ -57,12 +58,10 @@ class Evaluator:
         self.quality_fails_mode_diagnosis = 0
         self.quality_fails_condition_quality = 0
 
-        self.example_counter = 0
         self.example_counter_fails = 0
-        # correct, num_infers = 0, 0
 
     def get_nbr_examples_tested(self):
-        return self.results['#Examples'].sum()
+        return self.results['#Examples'].drop('combined', axis=0).sum()
 
     def get_nbr_correctly_classified(self):
         return np.diag(self.multi_class_results).sum()
@@ -104,8 +103,7 @@ class Evaluator:
                                                                                             "localization")
 
         # Increase the number of examples of true_class that have been tested and the total number of tested examples
-        self.results.loc[true_class, '#Examples'] = + 1
-        self.example_counter += 1
+        self.results.loc[true_class, '#Examples'] += 1
 
         # Store the prediction result in respect to a failure occurrence
         if not true_class == 'no_failure':
@@ -138,13 +136,14 @@ class Evaluator:
         # Output the results of this example
         ###
         local_ecf = self.example_counter_fails if self.example_counter_fails > 0 else 1
-        nbr_tested_as_string = str(self.example_counter)
+        nbr_tested_as_string = str(self.get_nbr_examples_tested())
         current_tp = self.get_nbr_correctly_classified()
+
         # create output for this example
         example_results = [
             ['Example:', nbr_tested_as_string + '/' + str(self.num_test_examples)],
             ['Correctly classified:', str(current_tp) + '/' + nbr_tested_as_string],
-            ['Current accuracy:', current_tp / self.get_nbr_examples_tested()],
+            ['Correctly classified %:', (current_tp / self.get_nbr_examples_tested()) * 100.0],
             ['Classified as:', max_sim_class],
             ['Correct class:', true_class],
             ['Similarity:', max_sim],
@@ -212,15 +211,16 @@ class Evaluator:
             # Calculate false positive rate (FPR) and true positive rate (TPR) and other metrics
             fpr, tpr, thresholds = metrics.roc_curve(np.stack(self.y_true, axis=0), np.stack(self.y_pred_sim, axis=0),
                                                      pos_label=class_in_test)
+            self.results.loc[class_in_test, 'AUC'] = metrics.auc(fpr, tpr)
 
             self.results.loc[class_in_test, 'TPR'] = self.rate_calculation(true_positives, false_negatives)
             self.results.loc[class_in_test, 'FNR'] = self.rate_calculation(false_negatives, true_positives)
             self.results.loc[class_in_test, 'FPR'] = self.rate_calculation(false_positives, true_negatives)
             self.results.loc[class_in_test, 'FDR'] = self.rate_calculation(false_positives, true_positives)
 
-            self.results.loc[class_in_test, 'AUC'] = metrics.auc(fpr, tpr)
-            # self.results.loc[class_in_test, 'ROCAUC'] = metrics.roc_auc_score(np.stack(self.y_true, axis=0),
-            # np.stack(self.y_pred_sim, axis=0)) # ValueError: multiclass format is not supported
+            # # TODO @Klein check if this is the correct input (fixed the value error)
+            # self.results.loc[class_in_test, 'ROCAUC'] = metrics.roc_auc_score(np.array(self.y_true),
+            #                                                                   np.array(self.y_pred_sim))
 
         # Fill the combined row with the sum of each class
         self.results.loc['combined', 'TP'] = self.results['TP'].sum()
@@ -231,6 +231,10 @@ class Evaluator:
         # Calculate the classification accuracy for all classes and save in the intended column
         self.results['ACC'] = (self.results['TP'] + self.results['TN']) / self.num_test_examples
         self.results['ACC'] = self.results['ACC'].fillna(0) * 100
+
+        # Correction of the accuracy for the "combined" row
+        self.results.loc['combined', 'ACC'] = (self.results.loc['combined', ['TP', 'TN']].sum() / self.results.loc[
+            'combined', ['TP', 'TN', 'FP', 'FN']].sum()) * 100
 
     def rate_calculation(self, numerator, denominator_part2):
         if numerator + denominator_part2 == 0:
@@ -274,6 +278,7 @@ class Evaluator:
         print(report)
         print('-------------------------------------------------------------\n')
         print("Classification Result Report based on occurrence:")
+        print("Note: Chances only correct if complete test dataset is used.")
         print(failure_results_local.to_string())
         print()
         print('-------------------------------------------------------------\n')
