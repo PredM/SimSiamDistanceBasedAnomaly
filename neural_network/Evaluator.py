@@ -222,9 +222,11 @@ class Evaluator:
 
             # WIP
             # TODO Check if this is the correct and also select multi class parameter (see: https://bit.ly/2Q7HtCU)
+            # TODO Change 2nd parameter
+            # TODO Change 1st parameter multilabel case expects binary label indicators with shape (n_samples, n_classes)
             # # ValueError: Target scores need to be probabilities for multiclass roc_auc, i.e. they should sum up to 1.0 over classes
             # major_version = int(sklearn.__version__.split('.')[1])
-            #
+            # New version is necessary for multi class (see old doc.: https://bit.ly/2TIphlg)
             # if major_version >= 22:
             #     labels = list(self.dataset.y_test_strings[self.test_example_indices])
             #     self.results.loc[class_in_test, 'ROCAUC'] = metrics.roc_auc_score(np.stack(self.y_true),
