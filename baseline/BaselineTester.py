@@ -117,12 +117,12 @@ def main():
     dataset.load()
 
     # select which part of the test dataset to test
-    start_index = dataset.num_test_instances - 2
+    start_index = 0
     end_index = dataset.num_test_instances
 
     # Output interval of how many examples have been compared so far. < 0 for no output
     temp_output_intervall = -1
-    use_relevant_only = True
+    use_relevant_only = False
     implemented_algorithms = ['dtw']
     algorithm_used = implemented_algorithms[0]
 

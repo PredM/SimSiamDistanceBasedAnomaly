@@ -359,6 +359,9 @@ class StaticConfiguration:
         self.all_features_configured = None
         self.zeroOne, self.intNumbers, self.realValues, self.categoricalValues = None, None, None, None
 
+        # noinspection PyUnresolvedReferences
+        self.load_config_json('../configuration/config.json')
+
         ##
         # Folders and file names
         ##
@@ -416,18 +419,23 @@ class StaticConfiguration:
 
 
 class Configuration(
-    StaticConfiguration,
     PreprocessingConfiguration,
     ClassificationConfiguration,
     InferenceConfiguration,
     TrainingConfiguration,
     ModelConfiguration,
-    GeneralConfiguration
+    GeneralConfiguration,
+    StaticConfiguration,
 ):
 
     def __init__(self, dataset_to_import=0):
-        super().__init__(dataset_to_import)
-        self.load_config_json('../configuration/config.json')
+        PreprocessingConfiguration.__init__(self)
+        ClassificationConfiguration.__init__(self)
+        InferenceConfiguration.__init__(self)
+        TrainingConfiguration.__init__(self)
+        ModelConfiguration.__init__(self)
+        GeneralConfiguration.__init__(self)
+        StaticConfiguration.__init__(self, dataset_to_import)
 
     def load_config_json(self, file_path):
         with open(file_path, 'r') as f:

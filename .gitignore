@@ -139,5 +139,5 @@ data/training_data_encoded/*
 data/case_base/*
 !data/case_base/.gitkeep
 
-logs/*
-!logs/.gitkeep
+#logs/*
+#!logs/.gitkeep
