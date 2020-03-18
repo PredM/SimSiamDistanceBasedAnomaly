@@ -68,21 +68,6 @@ def main():
     np.save(config.case_base_folder + 'train_failure_times.npy', casebase_failures)
     np.save(config.case_base_folder + 'train_window_times.npy', casebase_window_times)
 
-    # in order for the dataset object to be created, there must also be files for test data in the folder,
-    # even if these are not used for live processing.
-    # y_test = np.load(config.training_data_folder + 'test_labels.npy')  # labels of the test data
-    # x_test = np.load(config.training_data_folder + 'test_features.npy')  # features of the test data
-    # test_window_times = np.load(config.training_data_folder + 'test_window_times.npy')
-    # test_failure_times = np.load(config.training_data_folder + 'test_failure_times.npy')
-    #
-    # np.save(config.case_base_folder + 'test_features.npy', x_test.astype('float32'))
-    # np.save(config.case_base_folder + 'test_labels.npy', y_test)
-    # np.save(config.case_base_folder + 'test_window_times.npy', test_window_times)
-    # np.save(config.case_base_folder + 'test_failure_times.npy', test_failure_times)
-    #
-    # # also copy the file that stores the names of the features
-    # np.save(config.case_base_folder + '', feature_names)
-
     files_to_copy = ['feature_names.npy', 'test_labels.npy', 'test_features.npy', 'test_window_times.npy',
                      'test_failure_times.npy', 'FailureMode_Sim_Matrix.csv', 'Lokalization_Sim_Matrix.csv',
                      'Condition_Sim_Matrix.csv']

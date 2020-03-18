@@ -59,6 +59,11 @@ class Evaluator:
 
         self.example_counter_fails = 0
 
+        major_version = int(sklearn.__version__.split('.')[1])
+        if major_version < 22:
+            raise SystemExit('ROC AUC Score can not be calculated. Update sklearn using: \n'
+                             'pip install --user --upgrade scikit-learn')
+
     def get_nbr_examples_tested(self):
         return self.results['#Examples'].drop('combined', axis=0).sum()
 
@@ -177,7 +182,7 @@ class Evaluator:
 
         print("K-nearest Neighbors of", nbr_tested_example, ':')
         for row in knn_results:
-            print("{: <3} {: <40} {: <20} {: <20} {: <20} {: <20}".format(*row))
+            print("{: <3} {: <60} {: <20} {: <20} {: <20} {: <20}".format(*row))
 
     # Calculates the final results based on the information added for each example during inference
     # Must be called after inference before print_results is called.
@@ -225,17 +230,17 @@ class Evaluator:
             # TODO Change 2nd parameter
             # TODO Change 1st parameter multilabel case expects binary label indicators with shape (n_samples, n_classes)
             # # ValueError: Target scores need to be probabilities for multiclass roc_auc, i.e. they should sum up to 1.0 over classes
-            # major_version = int(sklearn.__version__.split('.')[1])
+            major_version = int(sklearn.__version__.split('.')[1])
             # New version is necessary for multi class (see old doc.: https://bit.ly/2TIphlg)
-            # if major_version >= 22:
-            #     labels = list(self.dataset.y_test_strings[self.test_example_indices])
-            #     self.results.loc[class_in_test, 'ROCAUC'] = metrics.roc_auc_score(np.stack(self.y_true),
-            #                                                                       np.stack(self.all_sims_for_auc),
-            #                                                                       labels=labels,
-            #                                                                       multi_class='ovr')
-            # else:
-            #     print('ROC could not be calculated. Update sklearn using: ')
-            #     print('pip install --user --upgrade scikit-learn')
+            if major_version >= 22:
+                labels = list(self.dataset.y_test_strings[self.test_example_indices])
+                self.results.loc[class_in_test, 'ROCAUC'] = metrics.roc_auc_score(np.stack(self.y_true),
+                                                                                  np.stack(self.all_sims_for_auc),
+                                                                                  labels=labels,
+                                                                                  multi_class='ovr')
+            else:
+                print('ROC could not be calculated. Update sklearn using: ')
+                print('pip install --user --upgrade scikit-learn')
 
         # Fill the combined row with the sum of each class
         self.results.loc['combined', 'TP'] = self.results['TP'].sum()
