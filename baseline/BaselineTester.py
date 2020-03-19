@@ -64,6 +64,7 @@ def run(proc_id, return_dict, counter, dataset, test_index, indices_train_exampl
     except KeyboardInterrupt:
         pass
 
+
 def execute_baseline_test(dataset: FullDataset, start_index, end_index, nbr_threads, algorithm, k_of_knn,
                           temp_output_interval, use_relevant_only=False, conversion_method=None):
     start_time = perf_counter()
@@ -134,14 +135,14 @@ def main():
     dataset.load()
 
     # select which part of the test dataset to test
-    start_index = dataset.num_test_instances - 20
+    start_index = dataset.num_test_instances - 10
     end_index = dataset.num_test_instances
 
     # Output interval of how many examples have been compared so far. < 0 for no output
-    temp_output_intervall = -1
+    temp_output_interval = -1
     use_relevant_only = True
     implemented_algorithms = ['dtw', 'dtw_weighting_nbr_features']
-    algorithm_used = implemented_algorithms[0]
+    algorithm_used = implemented_algorithms[1]
     distance_to_sim_methods = ['1/(1+d)', 'div_max', 'min_max_scaling']
     distance_to_sim_method = distance_to_sim_methods[0]
 
@@ -154,12 +155,12 @@ def main():
     print()
 
     execute_baseline_test(dataset, start_index, end_index, config.max_parallel_cores, algorithm_used, config.k_of_knn,
-                          temp_output_intervall, use_relevant_only, distance_to_sim_method)
+                          temp_output_interval, use_relevant_only, distance_to_sim_method)
 
 
 # this script is used to execute the dtw test for comparision with the neural network
 if __name__ == '__main__':
     try:
-       main()
+        main()
     except KeyboardInterrupt:
         sys.exit(0)

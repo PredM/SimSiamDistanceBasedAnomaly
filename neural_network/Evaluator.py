@@ -18,7 +18,7 @@ class Evaluator:
         # Dataframe that stores the results that will be output at the end of the inference process
         # Is not filled with data during the inference
         index = list(dataset.y_test_strings_unique) + ['combined']
-        cols = ['#Examples', 'TP', 'FP', 'TN', 'FN', 'FPR', 'TPR', 'AUC', 'FNR', 'FDR', 'ACC']
+        cols = ['#Examples', 'TP', 'FP', 'TN', 'FN', 'TPR', 'FPR', 'FNR', 'FDR', 'AUC', 'ACC']
         self.results = pd.DataFrame(0, index=index, columns=cols)
         self.results.index.name = 'Classes'
         self.results.loc['combined', '#Examples'] = self.num_test_examples
@@ -36,19 +36,20 @@ class Evaluator:
         self.all_sims_for_auc = []
         self.test_example_indices = []
 
-        self.unique_test_failures = np.unique(self.dataset.failureTimes_test)
+        self.unique_test_failures = np.unique(self.dataset.failure_times)
         idx = np.where(np.char.find(self.unique_test_failures, 'noFailure') >= 0)
         self.unique_test_failures = np.delete(self.unique_test_failures, idx, 0)
         self.num_test_failures = self.unique_test_failures.shape[0]
 
         # Auxiliary dataframe failure_results contains results with respect to failure occurrences
-        self.failure_results = pd.DataFrame({'Label': self.dataset.testArr_label_failureTime_uniq[:, 0],
-                                             'FailureTime': self.dataset.testArr_label_failureTime_uniq[:, 1],
-                                             'Chances': self.dataset.testArr_label_failureTime_counts,
-                                             'Correct': np.zeros(self.dataset.testArr_label_failureTime_uniq.shape[0]),
-                                             'AsHealth': np.zeros(self.dataset.testArr_label_failureTime_uniq.shape[0]),
+        self.failure_results = pd.DataFrame({'Label': self.dataset.unique_failure_times_label[:, 0],
+                                             'FailureTime': self.dataset.unique_failure_times_label[:, 1],
+                                             'Chances': self.dataset.failure_times_count,
+                                             'Correct': np.zeros(self.dataset.unique_failure_times_label.shape[0]),
                                              'AsOtherFailure': np.zeros(
-                                                 self.dataset.testArr_label_failureTime_uniq.shape[0])})
+                                                 self.dataset.unique_failure_times_label.shape[0]),
+                                             'AsHealth': np.zeros(self.dataset.unique_failure_times_label.shape[0])}
+                                            )
 
         self.quality_all_failure_localization = 0
         self.quality_all_failure_mode_diagnosis = 0
@@ -119,17 +120,17 @@ class Evaluator:
             if true_class == max_sim_class:
                 self.failure_results.loc[(self.failure_results['Label'].isin([true_class])) & (
                     self.failure_results['FailureTime'].isin(
-                        self.dataset.failureTimes_test[test_example_index])), 'Correct'] += 1
+                        self.dataset.failure_times[test_example_index])), 'Correct'] += 1
 
             elif max_sim_class == 'no_failure':
                 self.failure_results.loc[(self.failure_results['Label'].isin([true_class])) & (
                     self.failure_results['FailureTime'].isin(
-                        self.dataset.failureTimes_test[test_example_index])), 'AsHealth'] += 1
+                        self.dataset.failure_times[test_example_index])), 'AsHealth'] += 1
 
             else:
                 self.failure_results.loc[(self.failure_results['Label'].isin([true_class])) & (
                     self.failure_results['FailureTime'].isin(
-                        self.dataset.failureTimes_test[test_example_index])), 'AsOtherFailure'] += 1
+                        self.dataset.failure_times[test_example_index])), 'AsOtherFailure'] += 1
 
             self.quality_fails_condition_quality += self.dataset.get_sim_label_pair_for_notion(true_class,
                                                                                                max_sim_class,
@@ -158,7 +159,7 @@ class Evaluator:
             ['Localization quality:', self.quality_fails_localization / local_ecf],
             ['Condition quality:', self.quality_fails_condition_quality / local_ecf],
             ['Query Window:', self.dataset.get_time_window_str(test_example_index, 'test')],
-            ['Query Failure:', str(self.dataset.failureTimes_test[test_example_index])]
+            ['Query Failure:', str(self.dataset.failure_times[test_example_index])]
         ]
 
         # output results for this example
@@ -225,23 +226,6 @@ class Evaluator:
             self.results.loc[class_in_test, 'FPR'] = self.rate_calculation(false_positives, true_negatives)
             self.results.loc[class_in_test, 'FDR'] = self.rate_calculation(false_positives, true_positives)
 
-            # WIP
-            # TODO Check if this is the correct and also select multi class parameter (see: https://bit.ly/2Q7HtCU)
-            # TODO Change 2nd parameter
-            # TODO Change 1st parameter multilabel case expects binary label indicators with shape (n_samples, n_classes)
-            # # ValueError: Target scores need to be probabilities for multiclass roc_auc, i.e. they should sum up to 1.0 over classes
-            major_version = int(sklearn.__version__.split('.')[1])
-            # New version is necessary for multi class (see old doc.: https://bit.ly/2TIphlg)
-            if major_version >= 22:
-                labels = list(self.dataset.y_test_strings[self.test_example_indices])
-                self.results.loc[class_in_test, 'ROCAUC'] = metrics.roc_auc_score(np.stack(self.y_true),
-                                                                                  np.stack(self.all_sims_for_auc),
-                                                                                  labels=labels,
-                                                                                  multi_class='ovr')
-            else:
-                print('ROC could not be calculated. Update sklearn using: ')
-                print('pip install --user --upgrade scikit-learn')
-
         # Fill the combined row with the sum of each class
         self.results.loc['combined', 'TP'] = self.results['TP'].sum()
         self.results.loc['combined', 'TN'] = self.results['TN'].sum()
@@ -255,6 +239,13 @@ class Evaluator:
         # Correction of the accuracy for the "combined" row
         self.results.loc['combined', 'ACC'] = (self.results.loc['combined', ['TP', 'TN']].sum() / self.results.loc[
             'combined', ['TP', 'TN', 'FP', 'FN']].sum()) * 100
+
+        # Calculate rates for combined row
+        tpc, tnc, fpc, fnc = self.results.loc['combined', ['TP', 'TN', 'FP', 'FN']]
+        self.results.loc['combined', 'TPR'] = self.rate_calculation(tpc, fnc)
+        self.results.loc['combined', 'FNR'] = self.rate_calculation(fnc, tpc)
+        self.results.loc['combined', 'FPR'] = self.rate_calculation(fpc, tnc)
+        self.results.loc['combined', 'FDR'] = self.rate_calculation(fpc, tpc)
 
     def rate_calculation(self, numerator, denominator_part2):
         if numerator + denominator_part2 == 0:
@@ -273,9 +264,12 @@ class Evaluator:
         failure_detected_asHealth_sum = self.failure_results['AsHealth'].sum()
         failure_detected_AsOtherFailure_sum = self.failure_results['AsOtherFailure'].sum()
 
-        self.failure_results.loc[-1] = ["Combined", "Sum: ", failure_detected_correct_sum,
-                                        failure_detected_chances_sum, failure_detected_asHealth_sum,
-                                        failure_detected_AsOtherFailure_sum]
+        self.failure_results.loc[-1] = ["Combined", "Sum: ",
+                                        failure_detected_chances_sum,
+                                        failure_detected_correct_sum,
+                                        failure_detected_AsOtherFailure_sum,
+                                        failure_detected_asHealth_sum]
+
         # Local copy because using label as index would break the result adding function
         failure_results_local = self.failure_results.set_index('Label')
 
