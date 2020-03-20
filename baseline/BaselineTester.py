@@ -71,7 +71,6 @@ def execute_baseline_test(dataset: FullDataset, start_index, end_index, nbr_thre
     evaluator = Evaluator(dataset, end_index - start_index, k_of_knn)
 
     for test_index in range(start_index, end_index):
-
         results = np.zeros(dataset.num_train_instances)
 
         # Split the training examples into n chunks, where n == the number of threads that should be used.
@@ -135,7 +134,7 @@ def main():
     dataset.load()
 
     # select which part of the test dataset to test
-    start_index = dataset.num_test_instances - 10
+    start_index = dataset.num_test_instances - 35
     end_index = dataset.num_test_instances
 
     # Output interval of how many examples have been compared so far. < 0 for no output

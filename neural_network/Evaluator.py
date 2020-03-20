@@ -1,9 +1,10 @@
+import sys
 import warnings
 
 import numpy as np
 import pandas as pd
 import sklearn
-from sklearn import metrics
+from sklearn import metrics, preprocessing
 
 from neural_network.Dataset import FullDataset
 
@@ -34,7 +35,6 @@ class Evaluator:
         self.y_pred_sim = []
 
         self.all_sims_for_auc = []
-        self.test_example_indices = []
 
         self.unique_test_failures = np.unique(self.dataset.failure_times)
         idx = np.where(np.char.find(self.unique_test_failures, 'noFailure') >= 0)
@@ -98,7 +98,6 @@ class Evaluator:
         self.y_pred_sim.append(max_sim)
 
         self.all_sims_for_auc.append(sims)
-        self.test_example_indices.append(test_example_index)
 
         # Increase the value of this "label pair"
         self.multi_class_results.loc[max_sim_class, true_class] += 1
@@ -203,13 +202,13 @@ class Evaluator:
             self.results.loc[class_in_test, 'TP'] = true_positives
 
             # Calculate false_positive for each class:
-            rowSum = self.multi_class_results.loc[class_in_test, 'sumRowWiseAxis1']
-            false_positives = rowSum - true_positives
+            row_sum = self.multi_class_results.loc[class_in_test, 'sumRowWiseAxis1']
+            false_positives = row_sum - true_positives
             self.results.loc[class_in_test, 'FP'] = false_positives
 
             # Calculate false_negative for each class:
-            columnSum = self.multi_class_results.loc[class_in_test, 'sumColumnWiseAxis0']
-            false_negatives = columnSum - true_positives
+            column_sum = self.multi_class_results.loc[class_in_test, 'sumColumnWiseAxis0']
+            false_negatives = column_sum - true_positives
             self.results.loc[class_in_test, 'FN'] = false_negatives
 
             # Calculate false_negative for each class:
@@ -236,6 +235,17 @@ class Evaluator:
         self.results['ACC'] = (self.results['TP'] + self.results['TN']) / self.num_test_examples
         self.results['ACC'] = self.results['ACC'].fillna(0) * 100
 
+        # Undefined !
+        # self.roc_auc_class_wise()
+
+        # FIXME Check calculation
+        all_classes = list(self.results.index.values)
+        all_classes.remove('combined')
+        y_true_one_hot, y_score, labels = self.get_auc_score_input(all_classes)
+        auc_score = metrics.roc_auc_score(y_true=y_true_one_hot, y_score=y_score, labels=labels,
+                                          multi_class='ovr')
+        self.results.loc['combined', 'ROC_AUC'] = auc_score
+
         # Correction of the accuracy for the "combined" row
         self.results.loc['combined', 'ACC'] = (self.results.loc['combined', ['TP', 'TN']].sum() / self.results.loc[
             'combined', ['TP', 'TN', 'FP', 'FN']].sum()) * 100
@@ -246,6 +256,75 @@ class Evaluator:
         self.results.loc['combined', 'FNR'] = self.rate_calculation(fnc, tpc)
         self.results.loc['combined', 'FPR'] = self.rate_calculation(fpc, tnc)
         self.results.loc['combined', 'FDR'] = self.rate_calculation(fpc, tpc)
+
+    # TODO Archive this because undefined
+    def roc_auc_class_wise(self):
+        for c in self.results.index.values:
+
+            if c == 'combined':
+                continue
+
+            y_true_one_hot, y_score, labels = self.get_auc_score_input([c])
+
+            if y_true_one_hot is None:
+                self.results.loc[c, 'ROC_AUC'] = np.NaN
+            else:
+                self.results.loc[c, 'ROC_AUC'] = np.NaN
+                print(y_true_one_hot)
+                #  Only one class present in y_true. ROC AUC score is not defined in that case.
+                # auc_score = metrics.roc_auc_score(y_true=y_true_one_hot, y_score=y_score, labels=labels,
+                #                                   multi_class='ovr')
+                # self.results.loc[c, 'ROC_AUC'] = auc_score
+
+    def get_auc_score_input(self, classes: list):
+        # df = pd.dataframe(columns=labels)
+        y_true_array = np.array(self.y_true)
+        all_unique_classes = list(np.unique(y_true_array))
+
+        # Reduce array to examples where its true class is in the list of classes passed
+        indices_examples_with_c = [i for i in range(len(y_true_array)) if y_true_array[i] in classes]
+        y_true_array = y_true_array[indices_examples_with_c]
+
+        if len(indices_examples_with_c) == 0:
+            return None, None, None
+
+        # Get one hot encoding of true classes for all examples,
+        # More complicated because all unique classes should be columns, not only those present in y_true_array
+        df = pd.DataFrame({"col": y_true_array})
+        df['col'] = pd.Categorical(df['col'], categories=all_unique_classes)
+        df = pd.get_dummies(df['col'])
+
+        y_true_one_hot = df.to_numpy()
+        labels = list(df.columns.to_numpy())
+
+        scores = []
+
+        # for each example calculate the probabilities for each class
+        for i in indices_examples_with_c:
+            # create empty array with length == nbr of labels
+            class_props = np.zeros(len(all_unique_classes))
+
+            # get the similarity values for this example
+            sims_i = self.all_sims_for_auc[i]
+            sum_sims = sims_i.sum()
+
+            train_labels = self.dataset.y_train_strings
+
+            for j, c in enumerate(all_unique_classes):
+                # calculate the sum of similarities of example with class c
+                sum_sims_with_c = sims_i[train_labels == c].sum()
+
+                # calculate the ratio for this class and store
+                ratio = sum_sims_with_c / sum_sims
+                class_props[j] = ratio
+
+            # append the class props for each example
+            scores.append(class_props)
+
+        # (n_samples, n_classes).
+        # In the multi class case, the order of the class scores must correspond to the order of labels
+        y_score = np.array(scores)
+        return y_true_one_hot, y_score, labels
 
     def rate_calculation(self, numerator, denominator_part2):
         if numerator + denominator_part2 == 0:
