@@ -1,5 +1,5 @@
 import tensorflow as tf
-
+from scipy.spatial import distance
 
 # noinspection PyMethodMayBeStatic
 class SimpleSimilarityMeasure:
@@ -9,16 +9,20 @@ class SimpleSimilarityMeasure:
 
         self.a_weights = None
         self.b_weights = None
+        self.a_context = None
+        self.b_context = None
 
         self.implemented = ['abs_mean', 'euclidean_sim', 'euclidean_dis', 'dot_product', 'cosine', 'attention_based']
         assert sim_type in self.implemented
 
     @tf.function
-    def get_sim(self, a, b, a_weights=None, b_weights=None):
+    def get_sim(self, a, b, a_weights=None, b_weights=None, a_context=None, b_context=None):
 
         # assign to class variables so only common parameters must be passed below
         self.a_weights = a_weights
         self.b_weights = b_weights
+        self.a_context = a_context
+        self.b_context = b_context
 
         switcher = {
             'abs_mean': self.abs_mean,
@@ -38,8 +42,25 @@ class SimpleSimilarityMeasure:
     @tf.function
     def abs_mean(self, a, b):
 
-        diff = tf.abs(a - b)
-        distance = tf.reduce_mean(diff)
+        use_weighted_sim = self.a_weights is not None and self.b_weights is not None
+        use_additional_sim = self.a_context is not None and self.b_context is not None
+
+        if use_weighted_sim:
+            # Note: only one weight vector is used (a_weights) to simulate a retrieval situation
+            # where only weights of the case are known
+            weight_matrix = tf.reshape(tf.tile(self.a_weights, [a.shape[0]]), [a.shape[0], a.shape[1]])
+            a_weights_sum = tf.reduce_sum(weight_matrix)
+            weight_matrix = weight_matrix / a_weights_sum
+            diff = tf.abs(a - b)
+            # feature weighted distance:
+            distance = tf.reduce_mean(weight_matrix * diff)
+            if use_additional_sim:
+                diff2 = tf.abs(self.a_context - self.b_context)
+                distance2 = tf.reduce_mean(diff2)
+                distance = (distance2+distance)/2
+        else:
+            diff = tf.abs(a - b)
+            distance = tf.reduce_mean(diff)
         sim = tf.exp(-distance)
 
         return sim
@@ -53,11 +74,11 @@ class SimpleSimilarityMeasure:
         if use_weighted_sim:
             # Note: only one weight vector is used (a_weights) to simulate a retrieval situation
             # where only weights of the case are known
-            a_weights_sum = tf.reduce_sum(self.a_weights)
             weight_matrix = tf.reshape(tf.tile(self.a_weights, [a.shape[0]]), [a.shape[0], a.shape[1]])
+            a_weights_sum = tf.reduce_sum(weight_matrix)
             weight_matrix = weight_matrix / a_weights_sum
             q = a-b
-            weighted_dist = tf.reduce_sum(weight_matrix*q*q)
+            weighted_dist = tf.sqrt(tf.reduce_sum(weight_matrix*q*q))
             diff = weighted_dist
         else:
             diff = tf.norm(a - b, ord='euclidean')
@@ -85,10 +106,19 @@ class SimpleSimilarityMeasure:
     # source: https://bit.ly/390bDPQ
     @tf.function
     def cosine(self, a, b):
-        normalize_a = tf.nn.l2_normalize(a, 0)
-        normalize_b = tf.nn.l2_normalize(b, 0)
-        cos_similarity = tf.reduce_sum(tf.multiply(normalize_a, normalize_b))
-        #tf.print(cos_similarity)
+        use_weighted_sim = self.a_weights is not None and self.b_weights is not None
+        if use_weighted_sim:
+            # source: https: // stats.stackexchange.com / questions / 384419 / weighted - cosine - similarity
+            weight_vec = self.a_weights / tf.reduce_sum(self.a_weights)
+            normalize_a = tf.nn.l2_normalize(a, 0) * weight_vec
+            normalize_b = tf.nn.l2_normalize(b, 0) * weight_vec
+            cos_similarity = tf.reduce_sum(tf.multiply(normalize_a, normalize_b) * weight_vec)
+            #cos_similarity = 1-distance.cosine(a.numpy(),b.numpy(),self.a_weights)
+        else:
+            normalize_a = tf.nn.l2_normalize(a, 0)
+            normalize_b = tf.nn.l2_normalize(b, 0)
+            cos_similarity = tf.reduce_sum(tf.multiply(normalize_a, normalize_b))
+            #tf.print(cos_similarity)
 
         return cos_similarity
 

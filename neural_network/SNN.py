@@ -207,6 +207,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
         # then context vectors need to be reshaped from 2d to 3d (implement directly in BasicNeuralNetorks)
         # context_vectors = tf.reshape(context_vectors,[context_vectors.shape[0],context_vectors.shape[1],1])
         a_weights, b_weights = None, None
+        a_context, b_context = None, None
 
         # Parsing the input (e.g., two 1d or 2d vectors depending on which encoder is used) to calculate distance / sim
         if self.encoder.hyper.encoder_variant == 'cnnwithclassattention':
@@ -217,6 +218,8 @@ class SimpleSNN(AbstractSimilarityMeasure):
             if self.config.useFeatureWeightedSimilarity:
                 a_weights = context_vectors[1][2 * pair_index, :]
                 b_weights = context_vectors[1][2 * pair_index + 1, :]
+                a_context = context_vectors[2][2 * pair_index, :]
+                b_context = context_vectors[2][2 * pair_index + 1, :]
 
         else:
             a = context_vectors[2 * pair_index, :, :]
@@ -235,7 +238,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
         if self.config.use_time_step_matching_simple_similarity:
             a, b, a_weights, b_weights = self.match_time_step_wise(a, b)
 
-        return self.simple_sim.get_sim(a, b, a_weights, b_weights)
+        return self.simple_sim.get_sim(a, b, a_weights, b_weights,a_context,b_context)
 
     @tf.function
     def transform_to_time_step_wise(self, a, b):

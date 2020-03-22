@@ -33,7 +33,7 @@ class GeneralConfiguration:
         self.models_folder = '../data/trained_models/'
 
         # Path and file name to the specific model that should be used for testing and live classification
-        self.filename_model_to_use = 'cnn_test'
+        self.filename_model_to_use = 'temp_snn_model_03-22_22-42-09_epoch-2220'
         self.directory_model_to_use = self.models_folder + self.filename_model_to_use + '/'
 
 
@@ -87,7 +87,7 @@ class ModelConfiguration:
         # If !use_individual_hyperparameters interpreted as a single json file, else as a folder
         # which contains json files named after the cases they should be used for
         # If no file with this name is present the 'default.json' Config will be used
-        self.hyper_file = self.hyper_file_folder + 'cnn1d.json'  # 'ba_cnn_modified.json'
+        self.hyper_file = self.hyper_file_folder + 'cnn2d_withAddInput.json'  # 'ba_cnn_modified.json'
 
         ##
         # Various settings influencing the ssimilarity calculation
@@ -98,11 +98,11 @@ class ModelConfiguration:
 
         # Additional option for encoder variant cnnwithclassattention and the euclidean distance:
         # Weighted euclidean similarity based on relevant attributes
-        self.useFeatureWeightedSimilarity = False  # default: False
+        self.useFeatureWeightedSimilarity = True  # default: False
 
         # Option to simulate a retrieval situation (during training) where only the weights of the
         # example from the case base/training data set are known:
-        self.use_same_feature_weights_for_unsimilar_pairs = False  # default: ?
+        self.use_same_feature_weights_for_unsimilar_pairs = True  # default: ?
 
         # Compares each time step of the encoded representation with each other time step
         # (instead of only comparing the ones with the same indices)
@@ -146,11 +146,11 @@ class TrainingConfiguration:
         ]
 
         # TODO: TripletLoss, Distance-Based Logistic Loss
-        self.loss_function_variants = ['binary_cross_entropy', 'constrative_loss', 'mean_squared_error']
-        self.type_of_loss_function = self.loss_function_variants[0]
+        self.loss_function_variants = ['binary_cross_entropy', 'constrative_loss', 'mean_squared_error', 'huber_loss']
+        self.type_of_loss_function = self.loss_function_variants[2]
 
         # Settings for constrative_loss
-        self.margin_of_loss_function = 0.1
+        self.margin_of_loss_function = 2
 
         # Reduce margin of constrative_loss or in case of binary cross entropy loss
         # smooth negative examples by half of the sim between different labels
@@ -173,21 +173,21 @@ class TrainingConfiguration:
         # If equalClassConsideration is true, then this parameter defines the proportion of examples
         # based on class distribution and example distribution.
         # Proportion = BatchSize/2/ThisFactor. E.g., 2 = class distribution only, 4 = half, 6 = 1/3, 8 = 1/4
-        self.upsampling_factor = 4  # default: 4, means half / half
+        self.upsampling_factor = 2  # default: 4, means half / half
 
         # Use a custom similarity values instead of 0 for unequal / negative pairs during batch creation
         # These are based on the similarity matrices loaded in the dataset
-        self.use_sim_value_for_neg_pair = False  # default: False
+        self.use_sim_value_for_neg_pair = True  # default: False
 
         # Select whether the training should be continued from the checkpoint defined as 'filename_model_to_use'
         # Currently only working for SNNs, not CBS
         self.continue_training = False  # default: False
 
         # Defines how often loss is printed and checkpoints are saved during training
-        self.output_interval = 200
+        self.output_interval = 10
 
         # How many model checkpoints are kept
-        self.model_files_stored = 200
+        self.model_files_stored = 10
 
 
 class InferenceConfiguration:
@@ -213,7 +213,7 @@ class InferenceConfiguration:
         # If enabled the similarity assessment of the test dataset to the training datset will be split into
         # chunks with batchsize many example.
         # Possibly necessary due to VRam limitation
-        self.split_sim_calculation = False  # default False
+        self.split_sim_calculation = True  # default False
 
 
 class ClassificationConfiguration:

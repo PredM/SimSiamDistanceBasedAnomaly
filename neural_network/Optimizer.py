@@ -88,6 +88,9 @@ class Optimizer:
             elif self.config.type_of_loss_function == "mean_squared_error":
                 loss = tf.keras.losses.MSE(true_similarities, pred_similarities)
 
+            elif self.config.type_of_loss_function == "huber_loss":
+                huber = tf.keras.losses.Huber(delta=0.1)
+                loss = huber(true_similarities, pred_similarities)
             else:
                 raise AttributeError('Unknown loss function name. Use: "binary_cross_entropy" or "constrative_loss": ',
                                      self.config.type_of_loss_function)
@@ -147,7 +150,6 @@ class Optimizer:
             pairwise_class_label_sim[pair_index] = sim
 
         return pairwise_class_label_sim
-
 
 class SNNOptimizer(Optimizer):
 
