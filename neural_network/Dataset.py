@@ -133,11 +133,11 @@ class FullDataset(Dataset):
         self.windowTimes_train = None
         self.windowTimes_test = None
         self.failureTimes_train = None
-        self.failureTimes_test = None
+        self.failure_times = None
 
         # numpy array (x,2) that contains each unique permutation between failure occurrence time and assigned label
-        self.testArr_label_failureTime_uniq = None
-        self.testArr_label_failureTime_counts = None
+        self.unique_failure_times_label = None
+        self.failure_times_count = None
 
         # pandas df ( = matrix) with pair-wise similarities between labels in respect to a metric
         self.df_label_sim_localization = None
@@ -156,7 +156,7 @@ class FullDataset(Dataset):
         self.x_test = np.load(self.dataset_folder + 'test_features.npy')  # data testing
         self.y_test_strings = np.expand_dims(np.load(self.dataset_folder + 'test_labels.npy'), axis=-1)
         self.windowTimes_test = np.expand_dims(np.load(self.dataset_folder + 'test_window_times.npy'), axis=-1)
-        self.failureTimes_test = np.expand_dims(np.load(self.dataset_folder + 'test_failure_times.npy'), axis=-1)
+        self.failure_times = np.expand_dims(np.load(self.dataset_folder + 'test_failure_times.npy'), axis=-1)
         self.feature_names_all = np.load(self.dataset_folder + 'feature_names.npy')  # names of the features (3. dim)
 
         # create a encoder, sparse output must be disabled to get the intended output format
@@ -215,15 +215,13 @@ class FullDataset(Dataset):
 
         # required for inference metric calculation
         # get all failures and labels as unique entry
-        testArr_label_failureTime = np.stack((self.y_test_strings, np.squeeze(self.failureTimes_test))).T
+        failure_times_label = np.stack((self.y_test_strings, np.squeeze(self.failure_times))).T
         # extract unique permutations between failure occurrence time and labeled entry
-        testArr_label_failureTime_uniq, testArr_label_failureTime_counts = np.unique(testArr_label_failureTime,
-                                                                                     axis=0,
-                                                                                     return_counts=True)
+        unique_failure_times_label, failure_times_count = np.unique(failure_times_label, axis=0, return_counts=True)
         # remove noFailure entries
-        idx = np.where(np.char.find(testArr_label_failureTime_uniq, 'noFailure') >= 0)
-        self.testArr_label_failureTime_uniq = np.delete(testArr_label_failureTime_uniq, idx, 0)
-        self.testArr_label_failureTime_counts = np.delete(testArr_label_failureTime_counts, idx, 0)
+        idx = np.where(np.char.find(unique_failure_times_label, 'noFailure') >= 0)
+        self.unique_failure_times_label = np.delete(unique_failure_times_label, idx, 0)
+        self.failure_times_count = np.delete(failure_times_count, idx, 0)
 
         self.calculate_maskings()
         self.load_sim_matrices()

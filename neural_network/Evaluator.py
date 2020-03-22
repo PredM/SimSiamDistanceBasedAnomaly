@@ -1,9 +1,10 @@
+import sys
 import warnings
 
 import numpy as np
 import pandas as pd
 import sklearn
-from sklearn import metrics
+from sklearn import metrics, preprocessing
 
 from neural_network.Dataset import FullDataset
 
@@ -18,7 +19,7 @@ class Evaluator:
         # Dataframe that stores the results that will be output at the end of the inference process
         # Is not filled with data during the inference
         index = list(dataset.y_test_strings_unique) + ['combined']
-        cols = ['#Examples', 'TP', 'FP', 'TN', 'FN', 'FPR', 'TPR', 'AUC', 'FNR', 'FDR', 'ACC']
+        cols = ['#Examples', 'TP', 'FP', 'TN', 'FN', 'TPR', 'FPR', 'FNR', 'FDR', 'AUC', 'ACC']
         self.results = pd.DataFrame(0, index=index, columns=cols)
         self.results.index.name = 'Classes'
         self.results.loc['combined', '#Examples'] = self.num_test_examples
@@ -34,21 +35,21 @@ class Evaluator:
         self.y_pred_sim = []
 
         self.all_sims_for_auc = []
-        self.test_example_indices = []
 
-        self.unique_test_failures = np.unique(self.dataset.failureTimes_test)
+        self.unique_test_failures = np.unique(self.dataset.failure_times)
         idx = np.where(np.char.find(self.unique_test_failures, 'noFailure') >= 0)
         self.unique_test_failures = np.delete(self.unique_test_failures, idx, 0)
         self.num_test_failures = self.unique_test_failures.shape[0]
 
         # Auxiliary dataframe failure_results contains results with respect to failure occurrences
-        self.failure_results = pd.DataFrame({'Label': self.dataset.testArr_label_failureTime_uniq[:, 0],
-                                             'FailureTime': self.dataset.testArr_label_failureTime_uniq[:, 1],
-                                             'Chances': self.dataset.testArr_label_failureTime_counts,
-                                             'Correct': np.zeros(self.dataset.testArr_label_failureTime_uniq.shape[0]),
-                                             'AsHealth': np.zeros(self.dataset.testArr_label_failureTime_uniq.shape[0]),
+        self.failure_results = pd.DataFrame({'Label': self.dataset.unique_failure_times_label[:, 0],
+                                             'FailureTime': self.dataset.unique_failure_times_label[:, 1],
+                                             'Chances': self.dataset.failure_times_count,
+                                             'Correct': np.zeros(self.dataset.unique_failure_times_label.shape[0]),
                                              'AsOtherFailure': np.zeros(
-                                                 self.dataset.testArr_label_failureTime_uniq.shape[0])})
+                                                 self.dataset.unique_failure_times_label.shape[0]),
+                                             'AsHealth': np.zeros(self.dataset.unique_failure_times_label.shape[0])}
+                                            )
 
         self.quality_all_failure_localization = 0
         self.quality_all_failure_mode_diagnosis = 0
@@ -58,6 +59,11 @@ class Evaluator:
         self.quality_fails_condition_quality = 0
 
         self.example_counter_fails = 0
+
+        major_version = int(sklearn.__version__.split('.')[1])
+        if major_version < 22:
+            raise SystemExit('ROC AUC Score can not be calculated. Update sklearn using: \n'
+                             'pip install --user --upgrade scikit-learn')
 
     def get_nbr_examples_tested(self):
         return self.results['#Examples'].drop('combined', axis=0).sum()
@@ -92,7 +98,6 @@ class Evaluator:
         self.y_pred_sim.append(max_sim)
 
         self.all_sims_for_auc.append(sims)
-        self.test_example_indices.append(test_example_index)
 
         # Increase the value of this "label pair"
         self.multi_class_results.loc[max_sim_class, true_class] += 1
@@ -114,17 +119,17 @@ class Evaluator:
             if true_class == max_sim_class:
                 self.failure_results.loc[(self.failure_results['Label'].isin([true_class])) & (
                     self.failure_results['FailureTime'].isin(
-                        self.dataset.failureTimes_test[test_example_index])), 'Correct'] += 1
+                        self.dataset.failure_times[test_example_index])), 'Correct'] += 1
 
             elif max_sim_class == 'no_failure':
                 self.failure_results.loc[(self.failure_results['Label'].isin([true_class])) & (
                     self.failure_results['FailureTime'].isin(
-                        self.dataset.failureTimes_test[test_example_index])), 'AsHealth'] += 1
+                        self.dataset.failure_times[test_example_index])), 'AsHealth'] += 1
 
             else:
                 self.failure_results.loc[(self.failure_results['Label'].isin([true_class])) & (
                     self.failure_results['FailureTime'].isin(
-                        self.dataset.failureTimes_test[test_example_index])), 'AsOtherFailure'] += 1
+                        self.dataset.failure_times[test_example_index])), 'AsOtherFailure'] += 1
 
             self.quality_fails_condition_quality += self.dataset.get_sim_label_pair_for_notion(true_class,
                                                                                                max_sim_class,
@@ -153,7 +158,7 @@ class Evaluator:
             ['Localization quality:', self.quality_fails_localization / local_ecf],
             ['Condition quality:', self.quality_fails_condition_quality / local_ecf],
             ['Query Window:', self.dataset.get_time_window_str(test_example_index, 'test')],
-            ['Query Failure:', str(self.dataset.failureTimes_test[test_example_index])]
+            ['Query Failure:', str(self.dataset.failure_times[test_example_index])]
         ]
 
         # output results for this example
@@ -177,7 +182,7 @@ class Evaluator:
 
         print("K-nearest Neighbors of", nbr_tested_example, ':')
         for row in knn_results:
-            print("{: <3} {: <40} {: <20} {: <20} {: <20} {: <20}".format(*row))
+            print("{: <3} {: <60} {: <20} {: <20} {: <20} {: <20}".format(*row))
 
     # Calculates the final results based on the information added for each example during inference
     # Must be called after inference before print_results is called.
@@ -197,13 +202,13 @@ class Evaluator:
             self.results.loc[class_in_test, 'TP'] = true_positives
 
             # Calculate false_positive for each class:
-            rowSum = self.multi_class_results.loc[class_in_test, 'sumRowWiseAxis1']
-            false_positives = rowSum - true_positives
+            row_sum = self.multi_class_results.loc[class_in_test, 'sumRowWiseAxis1']
+            false_positives = row_sum - true_positives
             self.results.loc[class_in_test, 'FP'] = false_positives
 
             # Calculate false_negative for each class:
-            columnSum = self.multi_class_results.loc[class_in_test, 'sumColumnWiseAxis0']
-            false_negatives = columnSum - true_positives
+            column_sum = self.multi_class_results.loc[class_in_test, 'sumColumnWiseAxis0']
+            false_negatives = column_sum - true_positives
             self.results.loc[class_in_test, 'FN'] = false_negatives
 
             # Calculate false_negative for each class:
@@ -220,23 +225,6 @@ class Evaluator:
             self.results.loc[class_in_test, 'FPR'] = self.rate_calculation(false_positives, true_negatives)
             self.results.loc[class_in_test, 'FDR'] = self.rate_calculation(false_positives, true_positives)
 
-            # WIP
-            # TODO Check if this is the correct and also select multi class parameter (see: https://bit.ly/2Q7HtCU)
-            # TODO Change 2nd parameter
-            # TODO Change 1st parameter multilabel case expects binary label indicators with shape (n_samples, n_classes)
-            # # ValueError: Target scores need to be probabilities for multiclass roc_auc, i.e. they should sum up to 1.0 over classes
-            # major_version = int(sklearn.__version__.split('.')[1])
-            # New version is necessary for multi class (see old doc.: https://bit.ly/2TIphlg)
-            # if major_version >= 22:
-            #     labels = list(self.dataset.y_test_strings[self.test_example_indices])
-            #     self.results.loc[class_in_test, 'ROCAUC'] = metrics.roc_auc_score(np.stack(self.y_true),
-            #                                                                       np.stack(self.all_sims_for_auc),
-            #                                                                       labels=labels,
-            #                                                                       multi_class='ovr')
-            # else:
-            #     print('ROC could not be calculated. Update sklearn using: ')
-            #     print('pip install --user --upgrade scikit-learn')
-
         # Fill the combined row with the sum of each class
         self.results.loc['combined', 'TP'] = self.results['TP'].sum()
         self.results.loc['combined', 'TN'] = self.results['TN'].sum()
@@ -247,9 +235,96 @@ class Evaluator:
         self.results['ACC'] = (self.results['TP'] + self.results['TN']) / self.num_test_examples
         self.results['ACC'] = self.results['ACC'].fillna(0) * 100
 
+        # Undefined !
+        # self.roc_auc_class_wise()
+
+        # FIXME Check calculation
+        all_classes = list(self.results.index.values)
+        all_classes.remove('combined')
+        y_true_one_hot, y_score, labels = self.get_auc_score_input(all_classes)
+        auc_score = metrics.roc_auc_score(y_true=y_true_one_hot, y_score=y_score, labels=labels,
+                                          multi_class='ovr')
+        self.results.loc['combined', 'ROC_AUC'] = auc_score
+
         # Correction of the accuracy for the "combined" row
         self.results.loc['combined', 'ACC'] = (self.results.loc['combined', ['TP', 'TN']].sum() / self.results.loc[
             'combined', ['TP', 'TN', 'FP', 'FN']].sum()) * 100
+
+        # Calculate rates for combined row
+        tpc, tnc, fpc, fnc = self.results.loc['combined', ['TP', 'TN', 'FP', 'FN']]
+        self.results.loc['combined', 'TPR'] = self.rate_calculation(tpc, fnc)
+        self.results.loc['combined', 'FNR'] = self.rate_calculation(fnc, tpc)
+        self.results.loc['combined', 'FPR'] = self.rate_calculation(fpc, tnc)
+        self.results.loc['combined', 'FDR'] = self.rate_calculation(fpc, tpc)
+
+    # TODO Archive this because undefined
+    def roc_auc_class_wise(self):
+        for c in self.results.index.values:
+
+            if c == 'combined':
+                continue
+
+            y_true_one_hot, y_score, labels = self.get_auc_score_input([c])
+
+            if y_true_one_hot is None:
+                self.results.loc[c, 'ROC_AUC'] = np.NaN
+            else:
+                self.results.loc[c, 'ROC_AUC'] = np.NaN
+                print(y_true_one_hot)
+                #  Only one class present in y_true. ROC AUC score is not defined in that case.
+                # auc_score = metrics.roc_auc_score(y_true=y_true_one_hot, y_score=y_score, labels=labels,
+                #                                   multi_class='ovr')
+                # self.results.loc[c, 'ROC_AUC'] = auc_score
+
+    def get_auc_score_input(self, classes: list):
+        # df = pd.dataframe(columns=labels)
+        y_true_array = np.array(self.y_true)
+        all_unique_classes = list(np.unique(y_true_array))
+
+        # Reduce array to examples where its true class is in the list of classes passed
+        indices_examples_with_c = [i for i in range(len(y_true_array)) if y_true_array[i] in classes]
+        y_true_array = y_true_array[indices_examples_with_c]
+
+        if len(indices_examples_with_c) == 0:
+            return None, None, None
+
+        # Get one hot encoding of true classes for all examples,
+        # More complicated because all unique classes should be columns, not only those present in y_true_array
+        df = pd.DataFrame({"col": y_true_array})
+        df['col'] = pd.Categorical(df['col'], categories=all_unique_classes)
+        df = pd.get_dummies(df['col'])
+
+        y_true_one_hot = df.to_numpy()
+        labels = list(df.columns.to_numpy())
+
+        scores = []
+
+        # for each example calculate the probabilities for each class
+        for i in indices_examples_with_c:
+            # create empty array with length == nbr of labels
+            class_props = np.zeros(len(all_unique_classes))
+
+            # get the similarity values for this example
+            sims_i = self.all_sims_for_auc[i]
+            sum_sims = sims_i.sum()
+
+            train_labels = self.dataset.y_train_strings
+
+            for j, c in enumerate(all_unique_classes):
+                # calculate the sum of similarities of example with class c
+                sum_sims_with_c = sims_i[train_labels == c].sum()
+
+                # calculate the ratio for this class and store
+                ratio = sum_sims_with_c / sum_sims
+                class_props[j] = ratio
+
+            # append the class props for each example
+            scores.append(class_props)
+
+        # (n_samples, n_classes).
+        # In the multi class case, the order of the class scores must correspond to the order of labels
+        y_score = np.array(scores)
+        return y_true_one_hot, y_score, labels
 
     def rate_calculation(self, numerator, denominator_part2):
         if numerator + denominator_part2 == 0:
@@ -268,9 +343,12 @@ class Evaluator:
         failure_detected_asHealth_sum = self.failure_results['AsHealth'].sum()
         failure_detected_AsOtherFailure_sum = self.failure_results['AsOtherFailure'].sum()
 
-        self.failure_results.loc[-1] = ["Combined", "Sum: ", failure_detected_correct_sum,
-                                        failure_detected_chances_sum, failure_detected_asHealth_sum,
-                                        failure_detected_AsOtherFailure_sum]
+        self.failure_results.loc[-1] = ["Combined", "Sum: ",
+                                        failure_detected_chances_sum,
+                                        failure_detected_correct_sum,
+                                        failure_detected_AsOtherFailure_sum,
+                                        failure_detected_asHealth_sum]
+
         # Local copy because using label as index would break the result adding function
         failure_results_local = self.failure_results.set_index('Label')
 
