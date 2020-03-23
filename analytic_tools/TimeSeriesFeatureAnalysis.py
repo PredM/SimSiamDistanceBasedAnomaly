@@ -5,9 +5,8 @@ from tsfresh import extract_features
 import pandas as pd
 import datetime
 from numpy.random.mtrand import RandomState
-from sklearn import preprocessing #http://scikit-learn.org/stable/
+from sklearn import preprocessing
 from sklearn.feature_selection import mutual_info_classif
-
 
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 
@@ -17,17 +16,17 @@ from configuration.Configuration import Configuration
 def main():
     config = Configuration()
     print("TS Fresh Feature Extraction Script started at: ", datetime.datetime.now())
-    #y_train = np.load(config.training_data_folder + 'train_labels.npy')  # labels of the training data
-    #x_train = np.load(config.training_data_folder + 'train_features.npy')  # labels of the training data
-    #feature_names = np.load(config.training_data_folder + 'feature_names.npy')
-    #failureTimes_train = np.load(config.training_data_folder + 'train_failure_times.npy')
-    #windowTimes_train = np.load(config.training_data_folder + 'train_window_times.npy')
-    #y_test = np.load(config.training_data_folder + 'test_labels.npy')  # labels of the training data
-    #x_test = np.load(config.training_data_folder + 'test_features.npy')  # labels of the training data
+    # y_train = np.load(config.training_data_folder + 'train_labels.npy')  # labels of the training data
+    # x_train = np.load(config.training_data_folder + 'train_features.npy')  # labels of the training data
+    # feature_names = np.load(config.training_data_folder + 'feature_names.npy')
+    # failureTimes_train = np.load(config.training_data_folder + 'train_failure_times.npy')
+    # windowTimes_train = np.load(config.training_data_folder + 'train_window_times.npy')
+    # y_test = np.load(config.training_data_folder + 'test_labels.npy')  # labels of the training data
+    # x_test = np.load(config.training_data_folder + 'test_features.npy')  # labels of the training data
     x_train = np.load(config.case_base_folder + '2ms_3sec/train_features.npy')  # data training
     y_train_strings = np.expand_dims(np.load(config.case_base_folder + '2ms_3sec/train_labels.npy'), axis=-1)
     feature_names = np.load(config.training_data_folder + '2ms_3sec/feature_names.npy')
-    columns = np.concatenate((['id','time'],feature_names))
+    columns = np.concatenate((['id', 'time'], feature_names))
     print(columns.shape)
 
     print(x_train.shape)
@@ -35,8 +34,8 @@ def main():
     time_series_length = x_train.shape[1]
     attributes = x_train.shape[2]
 
-    #tsfresh_input_x_test = np.zeros([examples * time_series_length, attributes+2])
-    tsfresh_input_x_test = np.zeros([1,63])
+    # tsfresh_input_x_test = np.zeros([examples * time_series_length, attributes+2])
+    tsfresh_input_x_test = np.zeros([1, 63])
     # add 2 columns for id and timestamp
     '''
     for example in range(examples):
@@ -106,25 +105,25 @@ def main():
     X = pd.read_pickle(config.case_base_folder + '2ms_3sec/extractedFeatures_X_caseBase_unfiltered.pkl')
 
     df_informationGainOfFeature = pd.DataFrame(data=feature_names)
-    #print(df_informationGainOfFeature)
+    # print(df_informationGainOfFeature)
     df_informationGainOfFeature.columns = ['Attribut']
     df_informationGainOfFeature["InfoGainSum"] = 0
     df_informationGainOfFeature = df_informationGainOfFeature.set_index('Attribut')
-    #df_informationGainOfFeature.loc['a_16_3_x', "InfoGainSum"] = 2
-    #df_informationGainOfFeature.loc['a_16_3_x', "InfoGainSum"] += 2
-    #df_informationGainOfFeature.loc['a_16_3_x', "InfoGainSum"] += 1
-    #print("df_informationGainOfFeature.loc[a_16_3_x, InfoGainSum]_", df_informationGainOfFeature.loc['a_16_3_x', "InfoGainSum"])
-    #print(dsd)
+    # df_informationGainOfFeature.loc['a_16_3_x', "InfoGainSum"] = 2
+    # df_informationGainOfFeature.loc['a_16_3_x', "InfoGainSum"] += 2
+    # df_informationGainOfFeature.loc['a_16_3_x', "InfoGainSum"] += 1
+    # print("df_informationGainOfFeature.loc[a_16_3_x, InfoGainSum]_", df_informationGainOfFeature.loc['a_16_3_x', "InfoGainSum"])
+    # print(dsd)
 
     from tsfresh.utilities.dataframe_functions import impute
     # Remove NANs
     X = impute(X)
 
     # Select Labels to analyze
-    #labels_to_analyze = ['txt15_m1_t1_high_wear','txt15_m1_t1_low_wear','txt15_m1_t2_wear',
+    # labels_to_analyze = ['txt15_m1_t1_high_wear','txt15_m1_t1_low_wear','txt15_m1_t2_wear',
     #                           "no_failure", "txt16_m3_t1_high_wear", "txt16_m3_t1_low_wear"]
 
-    labels_to_analyze = ["no_failure",'txt16_i3_switch_failure_mode_2']
+    labels_to_analyze = ["no_failure", 'txt16_i3_switch_failure_mode_2']
 
     for i, failureLabel in enumerate(labels_to_analyze):
         # Get indexes to delete:
@@ -140,42 +139,40 @@ def main():
     print("X shape: ", X_npy.shape, " Labels shape: ", y_train_strings.shape)
     headers = X.dtypes.index
     headers = headers.values
-    X = pd.DataFrame(X_npy, columns = headers)
+    X = pd.DataFrame(X_npy, columns=headers)
     X['Label'] = y_train_strings
-    #print(X[['2__kurtosis', 'Label']].to_string())
-    #print(X[['3__kurtosis','Label']].to_string())
-    #print(X[['1__kurtosis','Label']].to_string())
-    #test = X[['2__kurtosis','4__kurtosis', '6__kurtosis','Label']]
-    #print(test.groupby('Label').median())
+    # print(X[['2__kurtosis', 'Label']].to_string())
+    # print(X[['3__kurtosis','Label']].to_string())
+    # print(X[['1__kurtosis','Label']].to_string())
+    # test = X[['2__kurtosis','4__kurtosis', '6__kurtosis','Label']]
+    # print(test.groupby('Label').median())
     feature_scores = mutual_info_classif(X_npy, y_train_strings)
     # for score, fname in sorted(zip(feature_scores, dv.get_feature_names()), reverse=True)[:10]:
-    print('Feature Scores: ',feature_scores)
+    print('Feature Scores: ', feature_scores)
 
     resultlist = zip(feature_scores, headers)
-    file = open(config.case_base_folder +'score_feature_file_2.txt', 'w')
+    file = open(config.case_base_folder + 'score_feature_file_2.txt', 'w')
     for score, featureName in sorted(zip(feature_scores, headers), key=lambda x: x[0], reverse=True):
         print(score, featureName)
         file.write(str(score) + ' - ' + featureName + '\n')
-        df_informationGainOfFeature.loc[featureName.split('__')[0],"InfoGainSum"] += score
+        df_informationGainOfFeature.loc[featureName.split('__')[0], "InfoGainSum"] += score
         # print('resultlist unsorted: ', set(resultlist))
     # sorted(resultlist)
     # print('sorted: ', sorted(resultlist, key=lambda x: x[0],reverse=True))
-    #print(df_informationGainOfFeature.to_string())
+    # print(df_informationGainOfFeature.to_string())
     print(df_informationGainOfFeature.sort_values(by=['InfoGainSum']).to_string())
     file.close()
 
-    #print('Number of exaples in training data set:', x_train.shape[0])
-    #print('Reducing to', config.examples_per_class, 'examples per class with', len(classes), 'classes')
-
-
+    # print('Number of exaples in training data set:', x_train.shape[0])
+    # print('Reducing to', config.examples_per_class, 'examples per class with', len(classes), 'classes')
 
     # transform list of values back into an array and safe to file
-    #casebase_labels = np.stack(casebase_labels_list, axis=0)
-    #casebase_features = np.stack(casebase_features_list, axis=0)
-    #casebase_failures =  np.stack(casebase_failures_list, axis=0)
-    #casebase_windowtimes =  np.stack(casebase_windowtimes_list, axis=0)
+    # casebase_labels = np.stack(casebase_labels_list, axis=0)
+    # casebase_features = np.stack(casebase_features_list, axis=0)
+    # casebase_failures =  np.stack(casebase_failures_list, axis=0)
+    # casebase_windowtimes =  np.stack(casebase_windowtimes_list, axis=0)
 
-    #print('Number of exaples in training data set:', casebase_features.shape[0])
+    # print('Number of exaples in training data set:', casebase_features.shape[0])
     '''
     np.save(config.case_base_folder + 'train_features.npy', casebase_features.astype('float32'))
     np.save(config.case_base_folder + 'train_labels.npy', casebase_labels)
@@ -193,7 +190,6 @@ def main():
     np.save(config.case_base_folder + 'feature_names.npy', feature_names)
     '''
 
-# this script is used to reduce the training data to a specific amount of examples per class
-# to use during live classification because using all examples is not efficient enough
+
 if __name__ == '__main__':
     main()

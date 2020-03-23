@@ -7,6 +7,7 @@ sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 
 from configuration.Configuration import Configuration
 
+
 def main():
     config = Configuration()
 
