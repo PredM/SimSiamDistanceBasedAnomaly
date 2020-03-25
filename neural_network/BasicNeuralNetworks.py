@@ -60,6 +60,7 @@ class NN:
     def get_output_shape(self):
         return self.model.output_shape
 
+
 # Used for Neural Warp
 class FFNN(NN):
 
@@ -90,6 +91,7 @@ class FFNN(NN):
         output = tf.keras.layers.Dense(units=1, activation=tf.keras.activations.sigmoid)(x)
 
         self.model = tf.keras.Model(inputs=input, outputs=output)
+
 
 # Used for Time Series (Step) Matching
 class FFNN2(NN):
@@ -255,13 +257,13 @@ class CNNWithClassAttention(NN):
                 sensorDataInput2 = sensorDataInput
 
                 # Add ABCNN matrix from beginning
-                #'''
+                # '''
                 caseDependentMatrixInput = tf.expand_dims(caseDependentMatrixInput, -1)
                 sensorDataInput2 = tf.concat([sensorDataInput2, caseDependentMatrixInput], axis=3)
-                #'''
+                # '''
 
                 x = conv_layer1(sensorDataInput2)
-                #x = tf.keras.layers.SpatialDropout2D(rate=self.hyper.dropout_rate)(x)
+                # x = tf.keras.layers.SpatialDropout2D(rate=self.hyper.dropout_rate)(x)
             else:
                 conv_layer = tf.keras.layers.Conv2D(filters=num_filter, padding='VALID',
                                                     kernel_size=(filter_size),
@@ -270,7 +272,7 @@ class CNNWithClassAttention(NN):
             x = tf.keras.layers.BatchNormalization()(x)
             x = tf.keras.layers.ReLU()(x)
 
-        #x = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(x)
+        # x = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(x)
 
         reshape = tf.keras.layers.Reshape((x.shape[1], x.shape[2]))
         x = reshape(x)
@@ -294,28 +296,29 @@ class CNNWithClassAttention(NN):
         x = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(x)
 
         # Chancelwise feature Aggregation via FFNNs
-        x = tf.keras.layers.Permute((2, 1))(x) # transpose
+        x = tf.keras.layers.Permute((2, 1))(x)  # transpose
         x = tf.keras.layers.BatchNormalization()(x)
-        x = tf.keras.layers.TimeDistributed(tf.keras.layers.Dense(units=128, activation=tf.keras.activations.relu),)(x)
-        #x = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(x)
+        x = tf.keras.layers.TimeDistributed(tf.keras.layers.Dense(units=128, activation=tf.keras.activations.relu), )(x)
+        # x = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(x)
         x = tf.keras.layers.BatchNormalization()(x)
         x = tf.keras.layers.TimeDistributed(tf.keras.layers.Dense(units=64, activation=tf.keras.activations.relu), )(x)
-        #x = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(x)
-        #x = tf.keras.layers.BatchNormalization()(x)
-        #x = tf.keras.layers.TimeDistributed(tf.keras.layers.Dense(units=32, activation=tf.keras.activations.relu), )(x)
+        # x = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(x)
+        # x = tf.keras.layers.BatchNormalization()(x)
+        # x = tf.keras.layers.TimeDistributed(tf.keras.layers.Dense(units=32, activation=tf.keras.activations.relu), )(x)
         x = tf.keras.layers.Permute((2, 1))(x)  # transpose
 
         # weights adjustment
         caseDependentVectorInput_ = tf.expand_dims(caseDependentVectorInput, -1)
-        caseDependentVectorInput_o = tf.keras.layers.TimeDistributed(tf.keras.layers.Dense(units=1, activation=tf.keras.activations.sigmoid), )(caseDependentVectorInput_)
+        caseDependentVectorInput_o = tf.keras.layers.TimeDistributed(
+            tf.keras.layers.Dense(units=1, activation=tf.keras.activations.sigmoid), )(caseDependentVectorInput_)
         caseDependentVectorInput_o = tf.squeeze(caseDependentVectorInput_o)
 
         #
         c = tf.keras.layers.BatchNormalization()(x)
-        #gate: only values from relevant sensors:
-        #gates = tf.nn.sigmoid(caseDependentVectorInput)
+        # gate: only values from relevant sensors:
+        # gates = tf.nn.sigmoid(caseDependentVectorInput)
         c = tf.keras.layers.Multiply()([x, caseDependentVectorInput])
-        #build context module:
+        # build context module:
         c = tf.keras.layers.Flatten()(c)
         c = tf.keras.layers.Dense(units=256, activation=tf.keras.activations.relu)(c)
         c = tf.keras.layers.BatchNormalization()(c)
@@ -324,13 +327,13 @@ class CNNWithClassAttention(NN):
         c = tf.keras.layers.Dense(units=64, activation=tf.keras.activations.relu)(c)
         c = tf.keras.layers.Reshape([64, 1])(c)
 
-
         self.model = tf.keras.Model(inputs=[sensorDataInput, caseDependentVectorInput],
-                                    outputs=[x, caseDependentVectorInput_o,c])
+                                    outputs=[x, caseDependentVectorInput_o, c])
         '''
         self.intermediate_layer_model = tf.keras.Model(inputs=caseDependentVectorInput,
                                                       outputs=self.model.get_layer("softmax").output)
         '''
+
 
 # TODO @klein Remove old code that is / will not be used
 class CNN1DWithClassAttention(NN):
@@ -452,7 +455,6 @@ class CNN(NN):
         if self.hyper.fc_after_cnn1d_layers is not None:
             print('Adding FC layers')
             layers_fc = self.hyper.fc_after_cnn1d_layers.copy()
-
 
             if len(layers) < 1:
                 print('Adding FC with less than one layer is not possible')

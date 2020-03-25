@@ -1,0 +1,237 @@
+{
+  "all_features_bachelor_thesis": [
+    "txt15_i1",
+    "txt15_i3",
+    "txt15_i6",
+    "txt15_i7",
+    "txt15_i8",
+    "txt16_i1",
+    "txt16_i2",
+    "txt16_i3",
+    "txt16_i4",
+    "txt16_i5",
+    "txt17_i1",
+    "txt17_i2",
+    "txt17_i3",
+    "txt17_i5",
+    "txt19_i1",
+    "txt19_i4",
+    "txt15_m1.speed",
+    "txt16_m1.speed",
+    "txt16_m2.speed",
+    "txt16_m3.speed",
+    "txt17_m1.speed",
+    "txt17_m2.speed",
+    "txt18_m1.speed",
+    "txt18_m2.speed",
+    "txt18_m3.speed",
+    "txt19_m1.speed",
+    "txt19_m2.speed",
+    "txt19_m3.speed",
+    "txt19_m4.speed",
+    "txt15_o5",
+    "txt15_o6",
+    "txt15_o7",
+    "txt16_o7",
+    "txt16_o8",
+    "txt17_o5",
+    "txt17_o6",
+    "txt17_o7",
+    "txt18_o7",
+    "txt18_o8",
+    "a_15_1_x",
+    "a_15_1_y",
+    "a_15_1_z",
+    "a_15_c_x",
+    "a_15_c_y",
+    "a_15_c_z",
+    "a_16_3_x",
+    "a_16_3_y",
+    "a_16_3_z",
+    "a_18_1_x",
+    "a_18_1_y",
+    "a_18_1_z",
+    "hPa_17",
+    "hPa_18",
+    "txt18_vsg_x",
+    "txt18_vsg_y",
+    "txt18_vsg_z",
+    "txt15_m1.finished",
+    "txt16_m3.finished"
+  ],
+  "relevant_features_bachelor_thesis": {
+    "no_failure": [
+      "hPa_18",
+      "a_18_1_x",
+      "a_18_1_y",
+      "a_18_1_z",
+      "hPa_17",
+      "txt15_m1.speed",
+      "a_15_1_x",
+      "a_15_1_y",
+      "a_15_1_z",
+      "txt16_m3.speed",
+      "a_16_3_x",
+      "a_16_3_y",
+      "a_16_3_z",
+      "txt19_i4"
+    ],
+    "txt_18_comp_leak": [
+      "hPa_18",
+      "txt18_o7",
+      "txt18_o8"
+    ],
+    "txt_17_comp_leak": [
+      "hPa_17",
+      "txt16_o8",
+      "txt17_o5",
+      "txt17_o6",
+      "txt17_o7",
+      "txt16_o7"
+    ],
+    "txt15_m1_t1_high_wear": [
+      "txt15_m1.speed",
+      "a_15_1_x",
+      "a_15_1_y",
+      "a_15_1_z",
+      "txt15_i1",
+      "txt15_i2",
+      "txt15_i3"
+    ],
+    "txt15_m1_t1_low_wear": [
+      "txt15_m1.speed",
+      "a_15_1_x",
+      "a_15_1_y",
+      "a_15_1_z",
+      "txt15_i1",
+      "txt15_i2",
+      "txt15_i3"
+    ],
+    "txt15_m1_t2_wear": [
+      "txt15_m1.speed",
+      "a_15_1_x",
+      "a_15_1_y",
+      "a_15_1_z",
+      "txt15_i1",
+      "txt15_i2",
+      "txt15_i3"
+    ],
+    "txt16_m3_t1_high_wear": [
+      "txt16_m3.speed",
+      "a_16_3_x",
+      "a_16_3_y",
+      "a_16_3_z",
+      "txt16_i3",
+      "txt16_i4"
+    ],
+    "txt16_m3_t1_low_wear": [
+      "txt16_m3.speed",
+      "a_16_3_x",
+      "a_16_3_y",
+      "a_16_3_z",
+      "txt16_i3",
+      "txt16_i4"
+    ],
+    "txt16_m3_t2_wear": [
+      "txt16_m3.speed",
+      "a_16_3_x",
+      "a_16_3_y",
+      "a_16_3_z",
+      "txt16_i3",
+      "txt16_i4"
+    ],
+    "txt16_i4": [
+      "txt16_i4"
+    ]
+  },
+  "all_cases_bachelor_thesis": [
+    "no_failure",
+    "txt_18_comp_leak",
+    "txt_17_comp_leak",
+    "txt15_m1_t1_high_wear",
+    "txt15_m1_t1_low_wear",
+    "txt15_m1_t2_wear",
+    "txt16_m3_t1_high_wear",
+    "txt16_m3_t1_low_wear",
+    "txt16_m3_t2_wear",
+    "txt16_i4"
+  ],
+  "datasets_bachelor_thesis": [
+    [
+      "../data/datasets/txt15_m1_t1_p1/",
+      "2019-05-23 09:30:20",
+      "2019-05-23 10:20:09.85"
+    ],
+    [
+      "../data/datasets/txt15_m1_t1_p2/",
+      "2019-06-07 18:30:42.30",
+      "2019-06-07 20:23:22.96"
+    ],
+    [
+      "../data/datasets/txt15_m1_t2_p1/",
+      "2019-05-23 10:27:00.45",
+      "2019-05-23 11:12:22.66"
+    ],
+    [
+      "../data/datasets/txt15_m1_t2_p2/",
+      "2019-05-28 07:41:07.26",
+      "2019-05-28 08:50:25.66"
+    ],
+    [
+      "../data/datasets/txt16_m3_t1_p1/",
+      "2019-05-23 13:21:45.49",
+      "2019-05-23 13:47:07.55"
+    ],
+    [
+      "../data/datasets/txt16_m3_t1_p2/",
+      "2019-06-05 18:41:43.97",
+      "2019-06-05 19:09:33.21"
+    ],
+    [
+      "../data/datasets/txt16_m3_t1_p3/",
+      "2019-06-05 19:15:26.59",
+      "2019-06-05 21:30:59.64"
+    ],
+    [
+      "../data/datasets/txt16_m3_t1_p4/",
+      "2019-06-07 14:18:16.81",
+      "2019-06-07 15:27:57.04"
+    ],
+    [
+      "../data/datasets/txt16_m3_t1_p5/",
+      "2019-06-07 16:39:42.08",
+      "2019-06-07 17:21:52.94"
+    ],
+    [
+      "../data/datasets/txt16_m3_t1_p6/",
+      "2019-06-07 17:33:42.46",
+      "2019-06-07 18:19:17.06"
+    ],
+    [
+      "../data/datasets/txt16_m3_t2_p1/",
+      "2019-05-23 16:26:22.13",
+      "2019-05-23 17:35:11.74"
+    ],
+    [
+      "../data/datasets/txt16_m3_t2_p2/",
+      "2019-05-28 18:27:37.74",
+      "2019-05-28 19:37:50.57"
+    ],
+    [
+      "../data/datasets/no_failure_and_leakage/",
+      "2019-05-23 17:48:59",
+      "2019-05-23 20:30:03.87"
+    ],
+    [
+      "../data/datasets/light_barrier_txt16_i4/",
+      "2019-05-28 15:03:24.94",
+      "2019-05-28 15:52:48.03"
+    ],
+    [
+      "../data/datasets/leakage_p1/",
+      "2019-06-08 11:38:02.64",
+      "2019-06-08 12:22:42.63"
+    ]
+  ]
+
+}
