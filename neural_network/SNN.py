@@ -290,7 +290,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
         for i in range(len(self.dataset.feature_names_all)):
             print(i, ": ", self.dataset.feature_names_all[i])
 
-        # TODO not tested
+        # FIXME
         input = np.array([self.dataset.get_masking_float(case_label) for case_label in self.config.cases_used])
         case_embeddings = self.encoder.intermediate_layer_model(input, training=self.training)
         # Get positions with maximum values

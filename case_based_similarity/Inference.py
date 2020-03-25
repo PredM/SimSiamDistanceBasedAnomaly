@@ -1,11 +1,11 @@
-import sys
 import os
+import sys
 
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 
 from case_based_similarity.CaseBasedSimilarity import CBS
 from configuration.Configuration import Configuration
-from neural_network.Dataset import FullDataset
+from neural_network.Dataset import CBSDataset
 from neural_network.Inference import Inference
 
 
@@ -17,11 +17,11 @@ def main():
     config = Configuration()
 
     if config.case_base_for_inference:
-        dataset: FullDataset = FullDataset(config.case_base_folder, config, training=False)
-        cbs = CBS(config, False, config.case_base_folder)
+        dataset: CBSDataset = CBSDataset(config.case_base_folder, config, training=False)
+        cbs = CBS(config, False, dataset)
     else:
-        dataset: FullDataset = FullDataset(config.training_data_folder, config, training=False)
-        cbs = CBS(config, False, config.training_data_folder)
+        dataset: CBSDataset = CBSDataset(config.training_data_folder, config, training=False)
+        cbs = CBS(config, False, dataset)
 
     dataset.load()
     inference = Inference(config, cbs, dataset)
@@ -33,4 +33,7 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    try:
+        main()
+    except KeyboardInterrupt:
+        pass
