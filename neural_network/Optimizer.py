@@ -409,16 +409,49 @@ class CBSOptimizer(Optimizer):
         while len(self.handlers_still_training) > 0:
 
             for group_handler in self.handlers_still_training:
-                # TODO: Handle most of this in run method,
-                # here: pass how many epochs should be done and ref to cbsoptimizer
-                # can return results if
+                training_interval = self.config.output_interval
 
-                batch_pairs_indices, true_similarities = self.compose_batch(group_handler)
+                # goal epoch for this case handler will be reached during this training step
+                if self.goal_epochs.get(group_handler.group_id) <= current_epoch + training_interval:
+                    training_interval = self.goal_epochs.get(group_handler.group_id) - current_epoch
 
+                elem = (self, group_handler, training_interval)
+                group_handler.input_queue.put(elem)
 
+            for group_handler in self.handlers_still_training:
+                output = group_handler.output_queue.get()
+
+                # TODO Remove
+                print(group_handler.group_id, output)
 
             self.output(current_epoch)
             current_epoch += self.config.output_interval
+
+    # will be executed by GroupHandler-Process so that it will be executed in parallel
+    def train_group_handler(self, group_handler, training_interval):
+        group_id = group_handler.group_id
+        for epoch in range(training_interval):
+            epoch_loss_avg = tf.keras.metrics.Mean()
+
+            batch_pairs_indices, true_similarities = self.compose_batch(group_handler)
+
+            # get the example pairs by the selected indices
+            model_input = np.take(a=self.dataset.x_train, indices=batch_pairs_indices, axis=0)
+
+            # reduce to the features used by this case handler
+            model_input = model_input[:, :, self.dataset.get_masking_group(group_id)]
+
+            batch_loss = self.update_single_model(model_input, true_similarities, group_handler.model,
+                                                  self.optimizer[group_id])
+
+            # track progress
+            epoch_loss_avg.update_state(batch_loss)
+            self.losses.get(group_id).append(epoch_loss_avg.result())
+
+            if self.execute_early_stop(group_handler):
+                # Removal of group_handler from still trained list is done in execute_early_stopping
+                print('GroupHandler with ID', group_id, 'reached early stopping criterion.')
+                break
 
     # Overwrites the standard implementation because some features are not compatible with the cbs currently
     def compose_batch(self, group_handler: CBSGroupHandler):
@@ -452,3 +485,85 @@ class CBSOptimizer(Optimizer):
         true_similarities = np.asarray(batch_true_similarities)
 
         return batch_pairs_indices, true_similarities
+
+    def output(self, current_epoch):
+        print("Timestamp: {} ({:.2f} Seconds since last output) - Epoch: {}".format(
+            datetime.now().strftime('%d.%m %H:%M:%S'),
+            perf_counter() - self.last_output_time, current_epoch))
+
+        for group_handler in self.architecture.group_handlers:
+            group_handler: CBSGroupHandler = group_handler
+            group_id = group_handler.group_id
+
+            loss_of_case = self.losses.get(group_id)[-1].numpy()
+
+            # Dont continue training if goal epoch was reached for this case
+            if group_handler in self.handlers_still_training \
+                    and self.goal_epochs.get(group_id) < current_epoch + self.config.output_interval:
+                self.handlers_still_training.remove(group_handler)
+
+            status = 'Yes' if group_handler in self.handlers_still_training else 'No'
+            print("   GroupID: {: <28} Still training: {: <15} Loss: {:.5}"
+                  .format(group_id, status, loss_of_case))
+
+        print()
+        self.delete_old_checkpoints(current_epoch)
+        self.save_models(current_epoch)
+        self.last_output_time = perf_counter()
+
+    def execute_early_stop(self, group_handler: CBSGroupHandler):
+        if self.config.use_early_stopping:
+
+            group_handler: CBSGroupHandler = group_handler
+            group_id = group_handler.group_id
+            last_loss = self.losses[group_id][-1]
+            # Check if the loss of the last epoch is better than the best loss
+            # If so reset the early stopping progress else continue approaching the limit
+            if last_loss < self.best_loss[group_id]:
+                self.stopping_step_counter[group_id] = 0
+                self.best_loss[group_id] = last_loss
+            else:
+                self.stopping_step_counter[group_id] += 1
+
+            # Check if the limit was reached
+            if self.stopping_step_counter[group_id] >= self.config.early_stopping_epochs_limit:
+                self.handlers_still_training.remove(group_handler)
+                return True
+            else:
+                return False
+        else:
+            # Always continue if early stopping should not be used
+            return False
+
+    def save_models(self, current_epoch):
+        if current_epoch <= 0:
+            return
+
+        # generate a name and create the directory, where the model files of this epoch should be stored
+        epoch_string = 'epoch-' + str(current_epoch)
+        dt_string = datetime.now().strftime("%m-%d_%H-%M-%S")
+        dir_name = self.config.models_folder + '_'.join(['temp', 'cbs', 'model', dt_string, epoch_string]) + '/'
+        os.mkdir(dir_name)
+
+        for group_handler in self.architecture.group_handlers:
+            group_handler: CBSGroupHandler = group_handler
+            group_id = group_handler.group_id
+            group_hyper = group_handler.model.hyper
+
+            # create a subdirectory for the model files of this case handler
+            subdirectory = group_id + '_model'
+            full_path = os.path.join(dir_name, subdirectory)
+            os.mkdir(full_path)
+
+            # write model configuration to file
+            group_hyper.epochs_current = current_epoch if current_epoch <= group_hyper.epochs \
+                else group_hyper.epochs
+            group_hyper.write_to_file(full_path + '/' + group_id + '.json')
+
+            # generate the file names and save the model files in the directory created before
+            encoder_file_name = '_'.join(['encoder', group_hyper.encoder_variant, epoch_string]) + '.h5'
+            group_handler.model.encoder.model.save_weights(os.path.join(full_path, encoder_file_name))
+
+            if self.config.architecture_variant in ['standard_ffnn', 'fast_ffnn']:
+                ffnn_file_name = '_'.join(['ffnn', epoch_string]) + '.h5'
+                group_handler.model.ffnn.model.save_weights(os.path.join(full_path, ffnn_file_name))

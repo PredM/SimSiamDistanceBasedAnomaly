@@ -4,6 +4,8 @@ import sys
 import numpy as np
 import tensorflow as tf
 
+from neural_network.Optimizer import CBSOptimizer
+
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 
 from multiprocessing import Process, Queue
@@ -46,7 +48,17 @@ class CBS(AbstractSimilarityMeasure):
         self.number_of_groups = len(self.config.group_id_to_cases.keys())
 
         counter = 0
-        for group, cases in self.config.group_id_to_cases.items():
+
+        # Limit used groups for debugging purposes
+        if self.config.cbs_groups_used is None or len(self.config.cbs_groups_used) == 0:
+            id_to_cases = self.config.group_id_to_cases
+        else:
+            id_to_cases = dict((k, self.config.group_id_to_cases[k]) for k in self.config.cbs_groups_used if
+                               k in self.config.group_id_to_cases)
+
+        print(id_to_cases)
+
+        for group, cases in id_to_cases.items():
             print('Creating group handler for cases: ', cases)
 
             nbr_examples_for_group = len(self.dataset.group_to_indices_train.get(group))
@@ -130,13 +142,19 @@ class CBSGroupHandler(Process):
             self.model = initialise_snn(self.config, self.dataset, self.training)
 
             # Change the execution of the process depending on
-            # whether the model is trained (batch as input) or applied (single example as input)
-            expect_batch = self.training
+            # whether the model is trained or applied
+            # as additional variable so it can't be changed during execution
+            is_training = self.training
 
-            while expect_batch:
-                # TODO split input into vars and pass to training method
-                pass
-            while not expect_batch:
+            while is_training:
+                optimizer, group_handler, training_interval = self.input_queue.get(block=True)
+                optimizer: CBSOptimizer = optimizer
+                optimizer.train_group_handler(group_handler, training_interval)
+                # put a dummy object in the queue to notify the optimizer that this group handler finished
+                # this training interval
+                self.output_queue.put('dummy_return_value')
+
+            while not is_training:
                 example = self.input_queue.get(block=True)
                 example = self.dataset.get_masked_example_group(example, self.group_id)
 

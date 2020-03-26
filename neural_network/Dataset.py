@@ -344,7 +344,6 @@ class FullDataset(Dataset):
 
         return Dataset.draw_from_ds(self, ds_y, num_instances, is_positive, class_idx)
 
-
     def get_sim_label_pair_for_notion(self, label_1, label_2, notion_of_sim):
         # Input label1, label2, notion_of_sim as string
         # Output similarity value under consideration of the metric
@@ -426,3 +425,15 @@ class CBSDataset(FullDataset):
                         break
 
             return first_idx, second_idx
+
+    def get_masking_group(self, group_id):
+
+        if group_id not in self.group_id_to_masking_vector:
+            raise ValueError('Passed group id', group_id, 'was not found in masking dictionary')
+        else:
+            mask = self.group_id_to_masking_vector.get(group_id)
+            return mask
+
+    def get_masked_example_group(self, test_example, group_id):
+        mask = self.get_masking_group(group_id)
+        return test_example[:, mask]

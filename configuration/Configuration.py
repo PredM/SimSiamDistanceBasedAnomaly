@@ -32,6 +32,14 @@ class GeneralConfiguration:
         self.directory_model_to_use = self.models_folder + self.filename_model_to_use + '/'
 
 
+        ##
+        # Debugging - Don't use for feature implementation
+        ##
+
+        # Limit the groups that should be used for a cbs model
+        # List content must match the group ids in config.json
+        self.cbs_groups_used = ['g6']
+
 class ModelConfiguration:
 
     def __init__(self):

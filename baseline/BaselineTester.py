@@ -134,14 +134,14 @@ def main():
     dataset.load()
 
     # select which part of the test dataset to test
-    start_index = dataset.num_test_instances - 35
+    start_index = 0
     end_index = dataset.num_test_instances
 
     # Output interval of how many examples have been compared so far. < 0 for no output
     temp_output_interval = -1
-    use_relevant_only = True
+    use_relevant_only = False
     implemented_algorithms = ['dtw', 'dtw_weighting_nbr_features']
-    algorithm_used = implemented_algorithms[1]
+    algorithm_used = implemented_algorithms[0]
     distance_to_sim_methods = ['1/(1+d)', 'div_max', 'min_max_scaling']
     distance_to_sim_method = distance_to_sim_methods[0]
 
