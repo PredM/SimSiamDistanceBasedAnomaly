@@ -46,6 +46,15 @@ class Hyperparameters:
         self.tcn_layers = None
         self.tcn_kernel_length = None
 
+        self.abcnn1 = None
+        self.use1dContext = None
+        self.useChannelWiseAggregation = None
+        self.cnn2d_channelWiseAggregation = None
+        self.useAddContextForSim = None
+        self.useAddContextForSim_LearnOrFixWeightVale = None
+        self.cnn2d_contextModule = None
+        self.cnn2d_learnWeightForContextUsedInSim = None
+
     def set_time_series_properties(self, time_series_length, time_series_depth):
         self.time_series_length = time_series_length
         self.time_series_depth = time_series_depth
@@ -99,6 +108,27 @@ class Hyperparameters:
             self.cnn2d_layers = data['cnn2d_layers']
             self.cnn2d_kernel_length = data['cnn2d_kernel_length']
             self.cnn2d_strides = data['cnn2d_strides']
+
+        if self.encoder_variant in ["cnnwithclassattention"]:
+            self.abcnn1 = data['abcnn1']
+            self.useChannelWiseAggregation = data['useChannelWiseAggregation']
+            self.cnn2d_channelWiseAggregation = data['cnn2d_channelWiseAggregation']
+            self.cnn2d_contextModule = data['cnn2d_contextModule']
+            self.cnn2d_learnWeightForContextUsedInSim = data['cnn2d_learnWeightForContextUsedInSim']
+            if data['learnFeatureWeights'] == 'True':
+                self.learnFeatureWeights = 'True'
+            else:
+                self.learnFeatureWeights = 'False'
+
+            if data['use1dContext'] == 'True':
+                self.use1dContext = 'True'
+            else:
+                self.use1dContext = 'False'
+            if data['useAddContextForSim'] == 'True':
+                self.useAddContextForSim = 'True'
+            else:
+                self.useAddContextForSim = 'False'
+            self.useAddContextForSim_LearnOrFixWeightVale = data['useAddContextForSim_LearnOrFixWeightVale']
 
     def write_to_file(self, path_to_file):
 

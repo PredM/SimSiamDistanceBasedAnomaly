@@ -30,10 +30,10 @@ class GeneralConfiguration:
         self.max_parallel_cores = 60
 
         # Folder where the trained models are saved to during learning process
-        self.models_folder = '../data/trained_models/'
+        self.models_folder = '../data/trained_models3/'
 
         # Path and file name to the specific model that should be used for testing and live classification
-        self.filename_model_to_use = 'temp_snn_model_03-22_22-42-09_epoch-2220'
+        self.filename_model_to_use = 'temp_snn_model_03-26_12-51-59_epoch-6500'
         self.directory_model_to_use = self.models_folder + self.filename_model_to_use + '/'
 
 
@@ -70,7 +70,7 @@ class ModelConfiguration:
         # Only use euclidean_dis for TRAINING with contrastive loss
         self.simple_measures = ['abs_mean', 'euclidean_sim', 'euclidean_dis', 'dot_product', 'cosine',
                                 'attention_based']
-        self.simple_measure = self.simple_measures[0]
+        self.simple_measure = self.simple_measures[1]
 
         ###
         # Hyperparameters
@@ -102,7 +102,7 @@ class ModelConfiguration:
 
         # Option to simulate a retrieval situation (during training) where only the weights of the
         # example from the case base/training data set are known:
-        self.use_same_feature_weights_for_unsimilar_pairs = True  # default: ?
+        self.use_same_feature_weights_for_unsimilar_pairs = True  # default: True
 
         # Compares each time step of the encoded representation with each other time step
         # (instead of only comparing the ones with the same indices)
@@ -147,7 +147,7 @@ class TrainingConfiguration:
 
         # TODO: TripletLoss, Distance-Based Logistic Loss
         self.loss_function_variants = ['binary_cross_entropy', 'constrative_loss', 'mean_squared_error', 'huber_loss']
-        self.type_of_loss_function = self.loss_function_variants[2]
+        self.type_of_loss_function = self.loss_function_variants[1]
 
         # Settings for constrative_loss
         self.margin_of_loss_function = 2
@@ -173,7 +173,7 @@ class TrainingConfiguration:
         # If equalClassConsideration is true, then this parameter defines the proportion of examples
         # based on class distribution and example distribution.
         # Proportion = BatchSize/2/ThisFactor. E.g., 2 = class distribution only, 4 = half, 6 = 1/3, 8 = 1/4
-        self.upsampling_factor = 2  # default: 4, means half / half
+        self.upsampling_factor = 4  # default: 4, means half / half
 
         # Use a custom similarity values instead of 0 for unequal / negative pairs during batch creation
         # These are based on the similarity matrices loaded in the dataset
