@@ -10,21 +10,25 @@ from neural_network.Optimizer import CBSOptimizer
 
 
 def main():
-    # suppress debugging messages of TensorFlow
-    os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
-    config = Configuration()
 
-    dataset = CBSDataset(config.training_data_folder, config, training=True)
-    dataset.load()
+    try:
+        # suppress debugging messages of TensorFlow
+        os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
-    print('Initializing case based similarity measure ...\n')
-    cbs = CBS(config, True, dataset)
+        config = Configuration()
 
-    print('\nTraining:\n')
-    optimizer = CBSOptimizer(cbs, dataset, config)
-    optimizer.optimize()
+        dataset = CBSDataset(config.training_data_folder, config, training=True)
+        dataset.load()
 
+        print('Initializing case based similarity measure ...\n')
+        cbs = CBS(config, True, dataset)
+        print('\nTraining:\n')
+        optimizer = CBSOptimizer(cbs, dataset, config)
+        optimizer.optimize()
+    except KeyboardInterrupt:
+        cbs.kill_threads()
 
 if __name__ == '__main__':
     main()
+

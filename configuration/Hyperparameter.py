@@ -46,9 +46,13 @@ class Hyperparameters:
         self.tcn_layers = None
         self.tcn_kernel_length = None
 
-    def set_time_series_properties(self, time_series_length, time_series_depth):
-        self.time_series_length = time_series_length
-        self.time_series_depth = time_series_depth
+    def set_time_series_properties(self, dataset, is_cbs=False, group_id=''):
+        self.time_series_length = dataset.time_series_length
+
+        if is_cbs:
+            self.time_series_depth = dataset.get_ts_depth(group_id)
+        else:
+            self.time_series_depth = dataset.time_series_depth
 
     # Allows the import of a hyper parameter configuration from a json file
     def load_from_file(self, file_path):

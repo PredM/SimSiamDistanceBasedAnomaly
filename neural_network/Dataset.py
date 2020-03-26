@@ -395,7 +395,9 @@ class CBSDataset(FullDataset):
         self.group_to_indices_train = {}
         self.group_to_indices_test = {}
 
-    def load_cbs(self):
+    # TODO Check if this is working correctly
+    def load(self):
+        super().load()
 
         for group, cases in self.config.group_id_to_cases.items():
             self.group_to_indices_train[group] = [i for i, case in enumerate(self.y_train_strings) if case in cases]
@@ -437,3 +439,8 @@ class CBSDataset(FullDataset):
     def get_masked_example_group(self, test_example, group_id):
         mask = self.get_masking_group(group_id)
         return test_example[:, mask]
+
+    def get_ts_depth(self, group_id):
+        # int cast is important, otherwise var will will be a numpy int type which can not be serialised into json
+        # (used for hyperparameters)
+        return int(self.group_id_to_masking_vector.get(group_id).sum())

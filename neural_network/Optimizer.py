@@ -1,6 +1,6 @@
 import os
 import shutil
-import threading
+from multiprocessing import Manager
 
 import tensorflow as tf
 import numpy as np
@@ -9,7 +9,7 @@ from datetime import datetime
 from os import listdir
 from time import perf_counter
 
-from case_based_similarity.CaseBasedSimilarity import CBS, SimpleCaseHandler, CBSGroupHandler
+from case_based_similarity.CaseBasedSimilarity import CBS, CBSGroupHandler
 from configuration.Configuration import Configuration
 from configuration.Hyperparameter import Hyperparameters
 from neural_network.BasicNeuralNetworks import TCN
@@ -415,21 +415,19 @@ class CBSOptimizer(Optimizer):
                 if self.goal_epochs.get(group_handler.group_id) <= current_epoch + training_interval:
                     training_interval = self.goal_epochs.get(group_handler.group_id) - current_epoch
 
-                elem = (self, group_handler, training_interval)
-                group_handler.input_queue.put(elem)
+                group_handler.input_queue.put(training_interval)
 
             for group_handler in self.handlers_still_training:
                 output = group_handler.output_queue.get()
-
-                # TODO Remove
-                print(group_handler.group_id, output)
+                self.losses.get(group_handler.group_id).append(output)
 
             self.output(current_epoch)
             current_epoch += self.config.output_interval
 
     # will be executed by GroupHandler-Process so that it will be executed in parallel
-    def train_group_handler(self, group_handler, training_interval):
+    def train(self, group_handler, training_interval):
         group_id = group_handler.group_id
+
         for epoch in range(training_interval):
             epoch_loss_avg = tf.keras.metrics.Mean()
 

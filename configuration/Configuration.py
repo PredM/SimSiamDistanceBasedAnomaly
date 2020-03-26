@@ -19,7 +19,7 @@ class GeneralConfiguration:
         ###
 
         # Specifies the maximum number of gpus used
-        self.max_gpus_used = 10
+        self.max_gpus_used = 1
 
         # Specifies the maximum number of cores to be used
         self.max_parallel_cores = 60
@@ -31,14 +31,14 @@ class GeneralConfiguration:
         self.filename_model_to_use = 'temp_snn_model_03-22_22-42-09_epoch-2220'
         self.directory_model_to_use = self.models_folder + self.filename_model_to_use + '/'
 
-
         ##
         # Debugging - Don't use for feature implementation
         ##
 
         # Limit the groups that should be used for a cbs model
         # List content must match the group ids in config.json
-        self.cbs_groups_used = ['g6']
+        self.cbs_groups_used = ['g6', 'g7']  # 'g7'
+
 
 class ModelConfiguration:
 
@@ -144,7 +144,7 @@ class TrainingConfiguration:
 
         # TODO: TripletLoss, Distance-Based Logistic Loss
         self.loss_function_variants = ['binary_cross_entropy', 'constrative_loss', 'mean_squared_error', 'huber_loss']
-        self.type_of_loss_function = self.loss_function_variants[2]
+        self.type_of_loss_function = self.loss_function_variants[0]
 
         # Settings for constrative_loss
         self.margin_of_loss_function = 2
@@ -181,7 +181,7 @@ class TrainingConfiguration:
         self.continue_training = False  # default: False
 
         # Defines how often loss is printed and checkpoints are saved during training
-        self.output_interval = 10
+        self.output_interval = 100
 
         # How many model checkpoints are kept
         self.model_files_stored = 10

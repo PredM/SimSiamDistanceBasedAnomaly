@@ -10,8 +10,9 @@ from neural_network.BasicNeuralNetworks import CNN, RNN, FFNN, TCN, CNNWithClass
 import matplotlib.pyplot as plt
 
 
+# TODO Add new parameters to others
 # initialises the correct SNN variant depending on the configuration
-def initialise_snn(config: Configuration, dataset, training):
+def initialise_snn(config: Configuration, dataset, training, for_cbs, group_id):
     if training and config.architecture_variant in ['fast_simple', 'fast_ffnn']:
         print('WARNING:')
         print('The fast version can only be used for inference.')
@@ -22,7 +23,7 @@ def initialise_snn(config: Configuration, dataset, training):
 
     if training and var.endswith('simple') or not training and var == 'standard_simple':
         print('Creating standard SNN with simple similarity measure: ', config.simple_measure)
-        return SimpleSNN(config, dataset, training)
+        return SimpleSNN(config, dataset, training, for_cbs, group_id)
 
     elif training and var.endswith('ffnn') or not training and var == 'standard_ffnn':
         print('Creating standard SNN with FFNN similarity measure')
@@ -57,7 +58,7 @@ class AbstractSimilarityMeasure:
 
 class SimpleSNN(AbstractSimilarityMeasure):
 
-    def __init__(self, config, dataset, training):
+    def __init__(self, config, dataset, training, for_group_handler=False, group_id=''):
         super().__init__(training)
 
         self.dataset: Dataset = dataset
@@ -70,7 +71,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
 
         # Load model only if init was not called by subclass, would otherwise be executed multiple times
         if type(self) is SimpleSNN:
-            self.load_model()
+            self.load_model(is_cbs=for_group_handler, group_id=group_id)
 
     # get the similarities of the example to each example in the dataset
     def get_sims_in_batches(self, example):
@@ -238,7 +239,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
         if self.config.use_time_step_matching_simple_similarity:
             a, b, a_weights, b_weights = self.match_time_step_wise(a, b)
 
-        return self.simple_sim.get_sim(a, b, a_weights, b_weights,a_context,b_context)
+        return self.simple_sim.get_sim(a, b, a_weights, b_weights, a_context, b_context)
 
     @tf.function
     def transform_to_time_step_wise(self, a, b):
@@ -321,7 +322,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
                 plt.savefig(i + '_matrix.png')
                 cnt = cnt + 1
 
-    def load_model(self, is_cbs=False, case='', cont=False):
+    def load_model(self, is_cbs=False, group_id='', cont=False):
 
         self.hyper = Hyperparameters()
 
@@ -332,17 +333,17 @@ class SimpleSNN(AbstractSimilarityMeasure):
             if self.config.use_individual_hyperparameters:
                 if self.training:
                     model_folder = self.config.hyper_file + '/'
-                    file_name = case
+                    file_name = group_id
 
                 else:
-                    model_folder = self.config.directory_model_to_use + case + '_model/'
-                    file_name = case
+                    model_folder = self.config.directory_model_to_use + group_id + '_model/'
+                    file_name = group_id
             else:
                 if self.training:
                     file_name = self.config.hyper_file
                 else:
-                    model_folder = self.config.directory_model_to_use + case + '_model/'
-                    file_name = case
+                    model_folder = self.config.directory_model_to_use + group_id + '_model/'
+                    file_name = group_id
         else:
             if self.training and self.config.use_hyper_file:
                 file_name = self.config.hyper_file
@@ -355,12 +356,12 @@ class SimpleSNN(AbstractSimilarityMeasure):
             self.hyper.load_from_file(model_folder + file_name)
         except (NotADirectoryError, FileNotFoundError) as e:
             if is_cbs and self.config.use_individual_hyperparameters:
-                print('Using default.json for case ', case)
+                print('Using default.json for case ', group_id)
                 self.hyper.load_from_file(model_folder + 'default.json')
             else:
                 raise e
 
-        self.hyper.set_time_series_properties(self.dataset.time_series_length, self.dataset.time_series_depth)
+        self.hyper.set_time_series_properties(self.dataset, is_cbs, group_id)
 
         # Create encoder, necessary for all types
         input_shape_encoder = (self.hyper.time_series_length, self.hyper.time_series_depth)
