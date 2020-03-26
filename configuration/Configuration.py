@@ -3,11 +3,6 @@ import json
 import pandas as pd
 
 
-# TODO: Important
-#  If errors occur, the inheritance sequence should first be adapted to the main class.
-#  This should solve most problems, if any occur.
-
-
 ####
 # Note: Division into different classes only serves to improve clarity.
 # Only the Configuration class should be used to access all variables.
@@ -87,7 +82,7 @@ class ModelConfiguration:
         # If !use_individual_hyperparameters interpreted as a single json file, else as a folder
         # which contains json files named after the cases they should be used for
         # If no file with this name is present the 'default.json' Config will be used
-        self.hyper_file = self.hyper_file_folder + 'cnn2d_withAddInput.json'  # 'ba_cnn_modified.json'
+        self.hyper_file = self.hyper_file_folder + 'snn_testing.json'  # 'ba_cnn_modified.json'
 
         ##
         # Various settings influencing the ssimilarity calculation
@@ -131,19 +126,13 @@ class TrainingConfiguration:
         # This configuration contains all parameters defining the way the model is trained
         ###
 
-        # Select which subset of features should be used for creating a dataset
-        # Important: CBS will only function correctly if ALL_CBS or a superset of it is selected
-        # ALL_CBS will use all feature of self.relevant_features, without consideration of the case structure
-        # self.features_used will be assigned at config.json loading
-        self.feature_variants = ['relevant_features_bachelor_thesis', 'all_features', 'ALL_CBS']
+        # Important: CBS will only function correctly if cbs_features or a superset of it is selected
+        # cbs_features for SNNs will use the a subset of all_features, which are considered to be relevant
+        # for at least one case
+        # self.features_used will be assigned when config.json loading
+        self.feature_variants = ['all_features', 'cbs_features']
         self.feature_variant = self.feature_variants[1]
         self.features_used = None
-
-        # TODO: Use other variables for the intended purpose (limiting cbs) and the usage for creating masking vectors
-        # Define the subset of cases that should be used for CBS
-        # If None or empty it will be set to all cases configured in config.json
-        self.cases_used = [
-        ]
 
         # TODO: TripletLoss, Distance-Based Logistic Loss
         self.loss_function_variants = ['binary_cross_entropy', 'constrative_loss', 'mean_squared_error', 'huber_loss']
@@ -350,13 +339,10 @@ class StaticConfiguration:
         # mapping for topic name to prefix of sensor streams, relevant to get the same order of streams
         self.prefixes = None
 
-        # dict, keys: all case names configured above in self.cases_used, value: list of relevant features for
-        # this case (will be loaded from config.json below)
-        self.relevant_features = None
+        self.case_to_group_id = None
+        self.group_id_to_cases = None
+        self.group_id_to_features = None
 
-        # list of all features contained in the relevant_features in config.json, sorted and without duplicates
-        # used for dataset creation
-        self.all_features_configured = None
         self.zeroOne, self.intNumbers, self.realValues, self.categoricalValues = None, None, None, None
 
         # noinspection PyUnresolvedReferences
@@ -449,34 +435,24 @@ class Configuration(
         self.realValues = data['realValues']
         self.categoricalValues = data['categoricalValues']
 
-        features_all_cases = data['relevant_features']
-        all_cases = data['all_cases']
-
-        # Reduce features of all cases to the subset of cases configured in self.cases_used
-        if self.cases_used is None or len(self.cases_used) == 0:
-            self.cases_used = all_cases
-            self.relevant_features = features_all_cases
-        else:
-            self.relevant_features = {case: features_all_cases[case] for case in self.cases_used if
-                                      case in features_all_cases}
-
-        # sort feature names to ensure that the order matches the one in the list of indices of the features in
-        # the case base class
-        for key in self.relevant_features:
-            self.relevant_features[key] = sorted(self.relevant_features[key])
-
         def flatten(list_of_lists):
             return [item for sublist in list_of_lists for item in sublist]
 
+        self.case_to_group_id: dict = data['case_to_group_id']
+        self.group_id_to_cases: dict = data['group_id_to_cases']
+        self.group_id_to_features: dict = data['group_id_to_features']
+
         # Depending on the self.feature_variant the relevant features for creating a dataset are selected
-        if self.feature_variant == 'ALL_CBS':
-            self.features_used = sorted(list(set(flatten(features_all_cases.values()))))
-        elif self.feature_variant == 'relevant_features_bachelor_thesis':
-            self.features_used = data['relevant_features_bachelor_thesis']
+        if self.feature_variant == 'cbs_features':
+            self.features_used = sorted(list(set(flatten(self.group_id_to_features.values()))))
         elif self.feature_variant == 'all_features':
-            self.features_used = data['all_features']
+            self.features_used = sorted(data['all_features'])
         else:
             raise AttributeError('Unknown feature variant:', self.feature_variant)
+
+    def get_relevant_features(self, case):
+        group = self.case_to_group_id.get(case)
+        return self.group_id_to_features.get(group)
 
     # return the error case description for the passed label
     def get_error_description(self, error_label: str):

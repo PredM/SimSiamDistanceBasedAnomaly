@@ -254,10 +254,8 @@ class FullDataset(Dataset):
         self.df_label_sim_condition.index = self.df_label_sim_condition.index.str.replace('\'', '')
 
     def calculate_maskings(self):
-        map_case_to_relevant_features: dict = self.config.relevant_features
-
-        for case in self.config.cases_used:
-            relevant_features_for_case = map_case_to_relevant_features.get(case)
+        for case in self.classes_total:
+            relevant_features_for_case = self.config.get_relevant_features(case)
             masking = np.isin(self.feature_names_all, relevant_features_for_case)
 
             self.class_label_to_masking_vector[case] = masking
@@ -391,15 +389,25 @@ class FullDataset(Dataset):
         return sim
 
 
+# TODO
+#  - Case must be converted to a list of cases
+#  - All usages of case must be checked and adapted
+#  - Should be renamed to CBSDataset
+#  - Must get a "group_id" variable (Should be a case handler var)
+#  - Loading and saving must be based on group name
+#  - Important: Ensure that sim, label pairs are correct --> Correct matching to the specific case
+#  -  Should be fine because of "# all equal to case but" ..., but check again
+#  - (Update the documentation when finished)
+
 # variation of the dataset class that consists only of examples of the same case
 # does not contain test data because this isn't needed on the level of each case
 class CaseSpecificDataset(Dataset):
 
-    def __init__(self, dataset_folder, config: Configuration, case, features_used=None):
+    def __init__(self, dataset_folder, config: Configuration, cases: list, features_used=None):
 
         # the case all the examples of x_train have
         super().__init__(dataset_folder, config)
-        self.case = case
+        self.cases: list = cases
 
         # the features that are relevant for the case of this dataset
         self.features_used = features_used
