@@ -19,7 +19,7 @@ class GeneralConfiguration:
         ###
 
         # Specifies the maximum number of gpus used
-        self.max_gpus_used = 1
+        self.max_gpus_used = 4
 
         # Specifies the maximum number of cores to be used
         self.max_parallel_cores = 60
@@ -28,7 +28,7 @@ class GeneralConfiguration:
         self.models_folder = '../data/trained_models/'
 
         # Path and file name to the specific model that should be used for testing and live classification
-        self.filename_model_to_use = 'temp_snn_model_03-22_22-42-09_epoch-2220'
+        self.filename_model_to_use = 'temp_cbs_model_03-27_14-32-53_epoch-240'
         self.directory_model_to_use = self.models_folder + self.filename_model_to_use + '/'
 
         ##
@@ -37,7 +37,7 @@ class GeneralConfiguration:
 
         # Limit the groups that should be used for a cbs model
         # List content must match the group ids in config.json
-        self.cbs_groups_used = ['g6', 'g7']  # 'g7'
+        self.cbs_groups_used = ['g6', 'g7']  #
 
 
 class ModelConfiguration:
@@ -85,12 +85,12 @@ class ModelConfiguration:
 
         # If enabled each case handler of a CBS will use individual hyperparameters
         # No effect on SNN architecture
-        self.use_individual_hyperparameters = False
+        self.use_individual_hyperparameters = True
 
         # If !use_individual_hyperparameters interpreted as a single json file, else as a folder
         # which contains json files named after the cases they should be used for
         # If no file with this name is present the 'default.json' Config will be used
-        self.hyper_file = self.hyper_file_folder + 'snn_testing.json'  # 'ba_cnn_modified.json'
+        self.hyper_file = self.hyper_file_folder + 'individual_hyperparameters_test'#'snn_testing.json'  # 'ba_cnn_modified.json'
 
         ##
         # Various settings influencing the ssimilarity calculation
@@ -181,10 +181,10 @@ class TrainingConfiguration:
         self.continue_training = False  # default: False
 
         # Defines how often loss is printed and checkpoints are saved during training
-        self.output_interval = 100
+        self.output_interval = 40
 
         # How many model checkpoints are kept
-        self.model_files_stored = 10
+        self.model_files_stored = 2
 
 
 class InferenceConfiguration:

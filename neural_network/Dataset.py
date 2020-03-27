@@ -1,3 +1,4 @@
+import contextlib
 from time import perf_counter
 
 import numpy as np
@@ -145,7 +146,7 @@ class FullDataset(Dataset):
         self.df_label_sim_failuremode = None
         self.df_label_sim_condition = None
 
-    def load(self):
+    def load_files(self):
         # dtype conversion necessary because layers use float32 by default
         # .astype('float32') removed because already included in dataset creation
 
@@ -159,6 +160,9 @@ class FullDataset(Dataset):
         self.windowTimes_test = np.expand_dims(np.load(self.dataset_folder + 'test_window_times.npy'), axis=-1)
         self.failure_times = np.expand_dims(np.load(self.dataset_folder + 'test_failure_times.npy'), axis=-1)
         self.feature_names_all = np.load(self.dataset_folder + 'feature_names.npy')  # names of the features (3. dim)
+
+    def load(self, print_info=True):
+        self.load_files()
 
         # create a encoder, sparse output must be disabled to get the intended output format
         # added categories='auto' to use future behavior
@@ -226,15 +230,17 @@ class FullDataset(Dataset):
         # 1. dimension: example
         # 2. dimension: time index
         # 3. dimension: array of all channels
-        print()
-        print('Dataset loaded:')
-        print('Shape of training set (example, time, channels):', self.x_train.shape)
-        print('Shape of test set (example, time, channels):', self.x_test.shape)
-        print('Num of classes in train and test together:', self.num_classes)
-        # print('Classes used in training: ', len(self.y_train_strings_unique)," :",self.y_train_strings_unique)
-        # print('Classes used in test: ', len(self.y_test_strings_unique)," :", self.y_test_strings_unique)
-        # print('Classes in total: ', self.classes_total)
-        print()
+
+        if print_info:
+            print()
+            print('Dataset loaded:')
+            print('Shape of training set (example, time, channels):', self.x_train.shape)
+            print('Shape of test set (example, time, channels):', self.x_test.shape)
+            print('Num of classes in train and test together:', self.num_classes)
+            # print('Classes used in training: ', len(self.y_train_strings_unique)," :",self.y_train_strings_unique)
+            # print('Classes used in test: ', len(self.y_test_strings_unique)," :", self.y_test_strings_unique)
+            # print('Classes in total: ', self.classes_total)
+            print()
 
     def load_sim_matrices(self):
         # load a matrix with pair-wise similarities between labels in respect
@@ -286,6 +292,11 @@ class FullDataset(Dataset):
         class_label_train_example = self.y_train_strings[train_example_index]
         mask = self.get_masking(class_label_train_example)
         return test_example[:, mask], self.x_train[train_example_index][:, mask]
+
+    # def get_reduced_train_example(self, train_example_index):
+    #     class_label_train_example = self.y_train_strings[train_example_index]
+    #     mask = self.get_masking(class_label_train_example)
+    #     return self.x_train[train_example_index][:, mask]
 
     def get_time_window_str(self, index, dataset_type):
         if dataset_type == 'test':
@@ -396,8 +407,8 @@ class CBSDataset(FullDataset):
         self.group_to_indices_test = {}
 
     # TODO Check if this is working correctly
-    def load(self):
-        super().load()
+    def load(self, print_info=True):
+        super().load(print_info)
 
         for group, cases in self.config.group_id_to_cases.items():
             self.group_to_indices_train[group] = [i for i, case in enumerate(self.y_train_strings) if case in cases]
@@ -436,11 +447,46 @@ class CBSDataset(FullDataset):
             mask = self.group_id_to_masking_vector.get(group_id)
             return mask
 
+    def create_group_dataset(self, group_id):
+        dataset = GroupDataset(self.dataset_folder, self.config, self.training, self, group_id)
+        dataset.load()
+        return dataset
+
     def get_masked_example_group(self, test_example, group_id):
         mask = self.get_masking_group(group_id)
         return test_example[:, mask]
 
-    def get_ts_depth(self, group_id):
-        # int cast is important, otherwise var will will be a numpy int type which can not be serialised into json
-        # (used for hyperparameters)
-        return int(self.group_id_to_masking_vector.get(group_id).sum())
+
+class GroupDataset(FullDataset):
+
+    def __init__(self, dataset_folder, config: Configuration, training, main_dataset: CBSDataset, group_id):
+        super().__init__(dataset_folder, config, training)
+        self.main_dataset = main_dataset
+        self.group_id = group_id
+
+    def load_files(self):
+        self.x_train = self.main_dataset.x_train.copy()  # data training
+        self.y_train_strings = np.expand_dims(self.main_dataset.y_train_strings.copy(), axis=-1)
+        self.windowTimes_train = self.main_dataset.windowTimes_train
+        self.failureTimes_train = self.main_dataset.failureTimes_train
+
+        # Temp solution, x_test only in here so load of full dataset works
+        # --> Fix Num of classes in train and test together output
+        self.x_test = self.main_dataset.x_test.copy()
+        self.y_test_strings = np.expand_dims(self.main_dataset.y_test_strings.copy(), axis=-1)
+        self.windowTimes_test = self.main_dataset.windowTimes_test
+        self.failure_times = self.main_dataset.failure_times
+        self.feature_names_all = self.main_dataset.feature_names_all
+
+        # Reduce training data to the cases of this group
+        indices = self.main_dataset.group_to_indices_train.get(self.group_id)
+        self.x_train = self.x_train[indices, :, :]
+        self.y_train_strings = self.y_train_strings[indices, :]
+
+        # Reduce x_train to the features of this group
+        mask = self.main_dataset.group_id_to_masking_vector.get(self.group_id)
+        self.x_train = self.x_train[:, :, mask]
+
+    def load(self, print_info=False):
+        # with contextlib.redirect_stdout(None):
+        super().load(print_info)

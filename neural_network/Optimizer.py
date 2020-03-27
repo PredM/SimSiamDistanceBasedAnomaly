@@ -371,9 +371,7 @@ class CBSOptimizer(Optimizer):
         self.handlers_still_training = self.architecture.group_handlers.copy()
 
         self.losses = dict()
-        self.optimizer = dict()
         self.goal_epochs = dict()
-
         self.best_loss = dict()
         self.stopping_step_counter = dict()
 
@@ -386,14 +384,6 @@ class CBSOptimizer(Optimizer):
             self.goal_epochs[group_id] = group_hyper.epochs
             self.best_loss[group_id] = 1000
             self.stopping_step_counter[group_id] = 0
-
-            if group_hyper.gradient_cap >= 0:
-                opt = tf.keras.optimizers.Adam(learning_rate=group_hyper.learning_rate,
-                                               clipnorm=group_hyper.gradient_cap)
-            else:
-                opt = tf.keras.optimizers.Adam(learning_rate=group_hyper.learning_rate)
-
-            self.optimizer[group_id] = opt
 
         self.max_epoch = max(self.goal_epochs.values())
 
@@ -418,71 +408,12 @@ class CBSOptimizer(Optimizer):
                 group_handler.input_queue.put(training_interval)
 
             for group_handler in self.handlers_still_training:
-                output = group_handler.output_queue.get()
-                self.losses.get(group_handler.group_id).append(output)
+                losses_of_training_interval = group_handler.output_queue.get()
+                loss_list = self.losses.get(group_handler.group_id)
+                loss_list += losses_of_training_interval
 
             self.output(current_epoch)
             current_epoch += self.config.output_interval
-
-    # will be executed by GroupHandler-Process so that it will be executed in parallel
-    def train(self, group_handler, training_interval):
-        group_id = group_handler.group_id
-
-        for epoch in range(training_interval):
-            epoch_loss_avg = tf.keras.metrics.Mean()
-
-            batch_pairs_indices, true_similarities = self.compose_batch(group_handler)
-
-            # get the example pairs by the selected indices
-            model_input = np.take(a=self.dataset.x_train, indices=batch_pairs_indices, axis=0)
-
-            # reduce to the features used by this case handler
-            model_input = model_input[:, :, self.dataset.get_masking_group(group_id)]
-
-            batch_loss = self.update_single_model(model_input, true_similarities, group_handler.model,
-                                                  self.optimizer[group_id])
-
-            # track progress
-            epoch_loss_avg.update_state(batch_loss)
-            self.losses.get(group_id).append(epoch_loss_avg.result())
-
-            if self.execute_early_stop(group_handler):
-                # Removal of group_handler from still trained list is done in execute_early_stopping
-                print('GroupHandler with ID', group_id, 'reached early stopping criterion.')
-                break
-
-    # Overwrites the standard implementation because some features are not compatible with the cbs currently
-    def compose_batch(self, group_handler: CBSGroupHandler):
-        batch_true_similarities = []  # similarity label for each pair
-        batch_pairs_indices = []  # index number of each example used in the training
-        group_hyper = group_handler.model.hyper
-        indices_with_cases_of_group = self.dataset.group_to_indices_train.get(group_handler.group_id)
-
-        # Compose batch
-        # // 2 because each iteration one similar and one dissimilar pair is added
-
-        for i in range(group_hyper.batch_size // 2):
-
-            pos_pair = self.dataset.draw_pair_cbs(True, indices_with_cases_of_group)
-            batch_pairs_indices.append(pos_pair[0])
-            batch_pairs_indices.append(pos_pair[1])
-            batch_true_similarities.append(1.0)
-
-            neg_pair = self.dataset.draw_pair_cbs(False, indices_with_cases_of_group)
-            batch_pairs_indices.append(neg_pair[0])
-            batch_pairs_indices.append(neg_pair[1])
-
-            # If configured a similarity value is used for the negative pair instead of full dissimilarity
-            if self.config.use_sim_value_for_neg_pair:
-                sim = self.dataset.get_sim_label_pair(neg_pair[0], neg_pair[1], 'train')
-                batch_true_similarities.append(sim)
-            else:
-                batch_true_similarities.append(0.0)
-
-        # Change the list of ground truth similarities to an array
-        true_similarities = np.asarray(batch_true_similarities)
-
-        return batch_pairs_indices, true_similarities
 
     def output(self, current_epoch):
         print("Timestamp: {} ({:.2f} Seconds since last output) - Epoch: {}".format(
@@ -509,6 +440,7 @@ class CBSOptimizer(Optimizer):
         self.save_models(current_epoch)
         self.last_output_time = perf_counter()
 
+    # TODO Add to cbs optimizer helper
     def execute_early_stop(self, group_handler: CBSGroupHandler):
         if self.config.use_early_stopping:
 

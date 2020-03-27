@@ -10,8 +10,6 @@ from neural_network.Optimizer import CBSOptimizer
 
 
 def main():
-
-
     try:
         # suppress debugging messages of TensorFlow
         os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
@@ -29,6 +27,6 @@ def main():
     except KeyboardInterrupt:
         cbs.kill_threads()
 
+
 if __name__ == '__main__':
     main()
-
