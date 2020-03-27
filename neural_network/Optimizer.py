@@ -243,8 +243,13 @@ class CBSOptimizer(Optimizer):
 
             for group_handler in self.handlers_still_training:
                 losses_of_training_interval = group_handler.output_queue.get()
-                loss_list = self.losses.get(group_handler.group_id)
+                loss_list, info = self.losses.get(group_handler.group_id)
+
                 loss_list += losses_of_training_interval
+
+                if info == 'early_stopping':
+                    self.handlers_still_training.remove(group_handler)
+                    print('Early stopping group handler', group_handler.group_id)
 
             self.output(current_epoch)
             current_epoch += self.config.output_interval
@@ -273,31 +278,6 @@ class CBSOptimizer(Optimizer):
         self.delete_old_checkpoints(current_epoch)
         self.save_models(current_epoch)
         self.last_output_time = perf_counter()
-
-    # TODO Add to cbs optimizer helper
-    def execute_early_stop(self, group_handler: CBSGroupHandler):
-        if self.config.use_early_stopping:
-
-            group_handler: CBSGroupHandler = group_handler
-            group_id = group_handler.group_id
-            last_loss = self.losses[group_id][-1]
-            # Check if the loss of the last epoch is better than the best loss
-            # If so reset the early stopping progress else continue approaching the limit
-            if last_loss < self.best_loss[group_id]:
-                self.stopping_step_counter[group_id] = 0
-                self.best_loss[group_id] = last_loss
-            else:
-                self.stopping_step_counter[group_id] += 1
-
-            # Check if the limit was reached
-            if self.stopping_step_counter[group_id] >= self.config.early_stopping_epochs_limit:
-                self.handlers_still_training.remove(group_handler)
-                return True
-            else:
-                return False
-        else:
-            # Always continue if early stopping should not be used
-            return False
 
     def save_models(self, current_epoch):
         if current_epoch <= 0:

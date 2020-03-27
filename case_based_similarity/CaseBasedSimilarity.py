@@ -161,8 +161,8 @@ class CBSGroupHandler(threading.Thread):
                     break
 
                 if is_training:
-                    losses = self.train(elem)
-                    self.output_queue.put(losses)
+                    feedback = self.train(elem)
+                    self.output_queue.put(feedback)
                 else:
                     elem = self.dataset.get_masked_example_group(elem, self.group_id)
                     output = self.model.get_sims(elem)
@@ -201,6 +201,11 @@ class CBSGroupHandler(threading.Thread):
 
             # track progress
             epoch_loss_avg.update_state(batch_loss)
-            losses.append(epoch_loss_avg.result())
+            current_loss = epoch_loss_avg.result()
 
-        return losses
+            losses.append(current_loss)
+
+            if self.optimizer_helper.execute_early_stop(current_loss):
+                return losses, 'early_stopping'
+
+        return losses, ''

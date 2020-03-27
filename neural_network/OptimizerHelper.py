@@ -184,6 +184,10 @@ class CBSOptimizerHelper(OptimizerHelper):
         super().__init__(model, config, dataset)
         self.group_id = group_id
 
+        self.losses = []
+        self.best_loss = 1000
+        self.stopping_step_counter = 0
+
     # Overwrites the standard implementation because some features are not compatible with the cbs currently
     def compose_batch(self):
         batch_true_similarities = []  # similarity label for each pair
@@ -216,3 +220,25 @@ class CBSOptimizerHelper(OptimizerHelper):
         true_similarities = np.asarray(batch_true_similarities)
 
         return batch_pairs_indices, true_similarities
+
+    # TODO Add to cbs optimizer helper
+    def execute_early_stop(self, last_loss):
+        if self.config.use_early_stopping:
+            self.losses.append(last_loss)
+
+            # Check if the loss of the last epoch is better than the best loss
+            # If so reset the early stopping progress else continue approaching the limit
+            if last_loss < self.best_loss:
+                self.stopping_step_counter = 0
+                self.best_loss = last_loss
+            else:
+                self.stopping_step_counter += 1
+
+            # Check if the limit was reached
+            if self.stopping_step_counter >= self.config.early_stopping_epochs_limit:
+                return True
+            else:
+                return False
+        else:
+            # Always continue if early stopping should not be used
+            return False
