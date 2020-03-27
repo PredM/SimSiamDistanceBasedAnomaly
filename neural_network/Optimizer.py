@@ -1,23 +1,19 @@
 import os
 import shutil
-from multiprocessing import Manager
-
-import tensorflow as tf
-import numpy as np
-
 from datetime import datetime
 from os import listdir
 from time import perf_counter
 
+import numpy as np
+import tensorflow as tf
+
 from case_based_similarity.CaseBasedSimilarity import CBS, CBSGroupHandler
 from configuration.Configuration import Configuration
 from configuration.Hyperparameter import Hyperparameters
-from neural_network.BasicNeuralNetworks import TCN
-import tensorflow.keras.backend as K
-
 from neural_network.Dataset import FullDataset, CBSDataset
 from neural_network.Inference import Inference
-from neural_network.SNN import initialise_snn, SimpleSNN
+from neural_network.OptimizerHelper import OptimizerHelper
+from neural_network.SNN import initialise_snn
 
 
 class Optimizer:
@@ -56,101 +52,6 @@ class Optimizer:
                     except ValueError:
                         pass
 
-    def update_single_model(self, model_input, true_similarities, model, optimizer, query_classes=None):
-        with tf.GradientTape() as tape:
-            pred_similarities = model.get_sims_batch(model_input)
-
-            # Get parameters of subnet and ffnn (if complex sim measure)
-            if self.config.architecture_variant in ['standard_ffnn', 'fast_ffnn']:
-                trainable_params = model.ffnn.model.trainable_variables + model.encoder.model.trainable_variables
-            else:
-                trainable_params = model.encoder.model.trainable_variables
-
-            # Calculate the loss based on configuration
-            if self.config.type_of_loss_function == "binary_cross_entropy":
-
-                if self.config.use_margin_reduction_based_on_label_sim:
-                    sim = self.get_similarity_between_two_label_string(query_classes, neg_pair_wbce=True)
-                    loss = self.weighted_binary_crossentropy(y_true=true_similarities, y_pred=pred_similarities,
-                                                             weight=sim)
-                else:
-                    loss = tf.keras.losses.binary_crossentropy(y_true=true_similarities, y_pred=pred_similarities)
-
-            elif self.config.type_of_loss_function == "constrative_loss":
-
-                if self.config.use_margin_reduction_based_on_label_sim:
-                    sim = self.get_similarity_between_two_label_string(query_classes)
-                    loss = self.contrastive_loss(y_true=true_similarities, y_pred=pred_similarities,
-                                                 classes=sim)
-                else:
-                    loss = self.contrastive_loss(y_true=true_similarities, y_pred=pred_similarities)
-
-            elif self.config.type_of_loss_function == "mean_squared_error":
-                loss = tf.keras.losses.MSE(true_similarities, pred_similarities)
-
-            elif self.config.type_of_loss_function == "huber_loss":
-                huber = tf.keras.losses.Huber(delta=0.1)
-                loss = huber(true_similarities, pred_similarities)
-            else:
-                raise AttributeError('Unknown loss function name. Use: "binary_cross_entropy" or "constrative_loss": ',
-                                     self.config.type_of_loss_function)
-
-            grads = tape.gradient(loss, trainable_params)
-
-            # Apply the gradients to the trainable parameters
-            optimizer.apply_gradients(zip(grads, trainable_params))
-
-            return loss
-
-    def contrastive_loss(self, y_true, y_pred, classes=None):
-        """
-        Contrastive loss from Hadsell-et-al.'06
-        http://yann.lecun.com/exdb/publis/pdf/hadsell-chopra-lecun-06.pdf
-        """
-        margin = self.config.margin_of_loss_function
-        if self.config.use_margin_reduction_based_on_label_sim:
-            # label adapted margin, classes contains the
-            margin = (1 - classes) * margin
-        # print("margin: ", margin)
-        square_pred = tf.square(y_pred)
-        margin_square = tf.square(tf.maximum(margin - y_pred, 0))
-        return tf.keras.backend.mean(y_true * square_pred + (1 - y_true) * margin_square)
-
-    # noinspection PyMethodMayBeStatic
-    def weighted_binary_crossentropy(self, y_true, y_pred, weight=None):
-        """
-        Weighted BCE that smoothes only the wrong example according to interclass similarities
-        """
-        weight = 1.0 if weight is None else weight
-
-        y_true = K.clip(tf.convert_to_tensor(y_true, dtype=tf.float32), K.epsilon(), 1 - K.epsilon())
-        y_pred = K.clip(y_pred, K.epsilon(), 1 - K.epsilon())
-        # org: logloss = -(y_true * K.log(y_pred) * weight + (1 - y_true) * K.log(1 - y_pred))
-        logloss = -(y_true * K.log(y_pred) + (1 - y_true + (weight / 2)) * K.log(1 - y_pred))
-        return K.mean(logloss, axis=-1)
-
-    # wbce = weighted_binary_crossentropy
-    def get_similarity_between_two_label_string(self, classes, neg_pair_wbce=False):
-        # Returns the similarity between 2 failures (labels) in respect to the location of occurrence,
-        # the type of failure (failure mode) and the condition of the data sample.
-        # Input: 1d npy array with pairwise class labels as strings [2*batchsize]
-        # Output: 1d npy array [batchsize]
-        pairwise_class_label_sim = np.zeros([len(classes) // 2])
-        for pair_index in range(len(classes) // 2):
-            a = classes[2 * pair_index]
-            b = classes[2 * pair_index + 1]
-
-            sim = (self.dataset.get_sim_label_pair_for_notion(a, b, "condition")
-                   + self.dataset.get_sim_label_pair_for_notion(a, b, "localization")
-                   + self.dataset.get_sim_label_pair_for_notion(a, b, "failuremode")) / 3
-
-            if neg_pair_wbce and sim < 1:
-                sim = 1 - sim
-
-            pairwise_class_label_sim[pair_index] = sim
-
-        return pairwise_class_label_sim
-
 
 class SNNOptimizer(Optimizer):
 
@@ -164,11 +65,7 @@ class SNNOptimizer(Optimizer):
         self.best_loss = 1000
         self.stopping_step_counter = 0
 
-        if self.architecture.hyper.gradient_cap >= 0:
-            self.adam_optimizer = tf.keras.optimizers.Adam(learning_rate=self.architecture.hyper.learning_rate,
-                                                           clipnorm=self.architecture.hyper.gradient_cap)
-        else:
-            self.adam_optimizer = tf.keras.optimizers.Adam(learning_rate=self.architecture.hyper.learning_rate)
+        self.optimizer_helper = OptimizerHelper(self.architecture, self.config, self.dataset)
 
     def optimize(self):
         current_epoch = 0
@@ -195,6 +92,50 @@ class SNNOptimizer(Optimizer):
                 break
 
             self.inference_during_training(epoch)
+
+    def single_epoch(self, epoch):
+        """
+        Compute the loss of one epoch based on a batch that is generated randomly from the training data
+        Generation of batch in a separate method
+          Args:
+            epoch: int. current epoch
+        """
+        epoch_loss_avg = tf.keras.metrics.Mean()
+
+        batch_pairs_indices, true_similarities = self.optimizer_helper.compose_batch()
+
+        # Get the example pairs by the selected indices
+        model_input = np.take(a=self.dataset.x_train, indices=batch_pairs_indices, axis=0)
+
+        # Create auxiliary inputs if necessary for encoder variant
+        model_input_class_strings = np.take(a=self.dataset.y_train_strings, indices=batch_pairs_indices, axis=0)
+        model_aux_input = None
+        if self.architecture.hyper.encoder_variant in ['cnnwithclassattention', 'cnn1dwithclassattention']:
+            model_aux_input = np.array([self.dataset.get_masking_float(label) for label in model_input_class_strings],
+                                       dtype='float32')
+
+        # Reshape (and integrate model_aux_input) if necessary for encoder variant
+        # batch_size and index are irrelevant because not used if aux_input is passed
+        model_input = self.architecture.reshape_input(model_input, 0, 0, aux_input=model_aux_input)
+
+        batch_loss = self.optimizer_helper.update_single_model(model_input, true_similarities,
+                                                               query_classes=model_input_class_strings)
+
+        # Track progress
+        epoch_loss_avg.update_state(batch_loss)  # Add current batch loss
+        self.train_loss_results.append(epoch_loss_avg.result())
+
+        if epoch % self.config.output_interval == 0:
+            print("Timestamp: {} ({:.2f} Seconds since last output) - Epoch: {} - Loss: {:.5f}".format(
+                datetime.now().strftime('%d.%m %H:%M:%S'),
+                (perf_counter() - self.last_output_time),
+                epoch,
+                epoch_loss_avg.result()
+            ))
+
+            self.delete_old_checkpoints(epoch)
+            self.save_models(epoch)
+            self.last_output_time = perf_counter()
 
     def execute_early_stop(self):
         if self.config.use_early_stopping:
@@ -229,113 +170,6 @@ class SNNOptimizer(Optimizer):
                 architecture2 = initialise_snn(self.config, dataset2, False)
                 inference = Inference(self.config, architecture2, dataset2)
                 inference.infer_test_dataset()
-
-    def compose_batch(self):
-        batch_true_similarities = []  # similarity label for each pair
-        batch_pairs_indices = []  # index number of each example used in the training
-
-        # Generate a random vector that contains the number of classes that should be considered in the current batch
-        # 4 means approx. half of the batch contains no-failure, 1 and 2 uniform
-        equal_class_part = self.config.upsampling_factor
-        failureClassesToConsider = np.random.randint(low=0, high=len(self.dataset.y_train_strings_unique),
-                                                     size=self.architecture.hyper.batch_size // equal_class_part)
-        # print("failureClassesToConsider: ", failureClassesToConsider)
-
-        # Compose batch
-        # // 2 because each iteration one similar and one dissimilar pair is added
-        for i in range(self.architecture.hyper.batch_size // 2):
-
-            #
-            # pos pair
-            #
-
-            if self.config.equalClassConsideration:
-                if i < self.architecture.hyper.batch_size // equal_class_part:
-                    # print(i,": ", failureClassesToConsider[i-self.architecture.hyper.batch_size // 4])
-
-                    idx = (failureClassesToConsider[i - self.architecture.hyper.batch_size // equal_class_part])
-                    pos_pair = self.dataset.draw_pair_by_class_idx(True, from_test=False, class_idx=idx)
-                    # class_idx=(i % self.dataset.num_classes))
-                else:
-                    pos_pair = self.dataset.draw_pair(True, from_test=False)
-            else:
-                pos_pair = self.dataset.draw_pair(True, from_test=False)
-            batch_pairs_indices.append(pos_pair[0])
-            batch_pairs_indices.append(pos_pair[1])
-            batch_true_similarities.append(1.0)
-
-            #
-            # neg pair here
-            #
-
-            # Find a negative pair
-            if self.config.equalClassConsideration:
-                if i < self.architecture.hyper.batch_size // equal_class_part:
-
-                    idx = (failureClassesToConsider[i - self.architecture.hyper.batch_size // equal_class_part])
-                    neg_pair = self.dataset.draw_pair_by_class_idx(False, from_test=False, class_idx=idx)
-                else:
-                    neg_pair = self.dataset.draw_pair(False, from_test=False)
-            else:
-                neg_pair = self.dataset.draw_pair(False, from_test=False)
-            batch_pairs_indices.append(neg_pair[0])
-            batch_pairs_indices.append(neg_pair[1])
-
-            # If configured a similarity value is used for the negative pair instead of full dissimilarity
-            if self.config.use_sim_value_for_neg_pair:
-                sim = self.dataset.get_sim_label_pair(neg_pair[0], neg_pair[1], 'train')
-                batch_true_similarities.append(sim)
-            else:
-                batch_true_similarities.append(0.0)
-
-        # Change the list of ground truth similarities to an array
-        true_similarities = np.asarray(batch_true_similarities)
-
-        return batch_pairs_indices, true_similarities
-
-    def single_epoch(self, epoch):
-        """
-        Compute the loss of one epoch based on a batch that is generated randomly from the training data
-        Generation of batch in a separate method
-          Args:
-            epoch: int. current epoch
-        """
-        epoch_loss_avg = tf.keras.metrics.Mean()
-
-        batch_pairs_indices, true_similarities = self.compose_batch()
-
-        # Get the example pairs by the selected indices
-        model_input = np.take(a=self.dataset.x_train, indices=batch_pairs_indices, axis=0)
-
-        # Create auxiliary inputs if necessary for encoder variant
-        model_input_class_strings = np.take(a=self.dataset.y_train_strings, indices=batch_pairs_indices, axis=0)
-        model_aux_input = None
-        if self.architecture.hyper.encoder_variant in ['cnnwithclassattention', 'cnn1dwithclassattention']:
-            model_aux_input = np.array([self.dataset.get_masking_float(label) for label in model_input_class_strings],
-                                       dtype='float32')
-
-        # Reshape (and integrate model_aux_input) if necessary for encoder variant
-        # batch_size and index are irrelevant because not used if aux_input is passed
-        model_input = self.architecture.reshape_input(model_input, 0, 0, aux_input=model_aux_input)
-
-        batch_loss = self.update_single_model(model_input, true_similarities, self.architecture,
-                                              self.adam_optimizer, query_classes=model_input_class_strings)
-
-        # Track progress
-        epoch_loss_avg.update_state(batch_loss)  # Add current batch loss
-        self.train_loss_results.append(epoch_loss_avg.result())
-
-        if epoch % self.config.output_interval == 0:
-            print("Timestamp: {} ({:.2f} Seconds since last output) - Epoch: {} - Loss: {:.5f}".format(
-                datetime.now().strftime('%d.%m %H:%M:%S'),
-                (perf_counter() - self.last_output_time),
-                epoch,
-                epoch_loss_avg.result()
-            ))
-
-            self.delete_old_checkpoints(epoch)
-            self.save_models(epoch)
-            self.last_output_time = perf_counter()
 
     def save_models(self, current_epoch):
         if current_epoch <= 0:

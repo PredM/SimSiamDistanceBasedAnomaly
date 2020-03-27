@@ -85,12 +85,12 @@ class ModelConfiguration:
 
         # If enabled each case handler of a CBS will use individual hyperparameters
         # No effect on SNN architecture
-        self.use_individual_hyperparameters = True
+        self.use_individual_hyperparameters = False
 
         # If !use_individual_hyperparameters interpreted as a single json file, else as a folder
         # which contains json files named after the cases they should be used for
         # If no file with this name is present the 'default.json' Config will be used
-        self.hyper_file = self.hyper_file_folder + 'individual_hyperparameters_test'#'snn_testing.json'  # 'ba_cnn_modified.json'
+        self.hyper_file = self.hyper_file_folder + 'snn_testing.json' # 'ba_cnn_modified.json'
 
         ##
         # Various settings influencing the ssimilarity calculation
@@ -101,11 +101,11 @@ class ModelConfiguration:
 
         # Additional option for encoder variant cnnwithclassattention and the euclidean distance:
         # Weighted euclidean similarity based on relevant attributes
-        self.useFeatureWeightedSimilarity = True  # default: False
+        self.useFeatureWeightedSimilarity = False  # default: False
 
         # Option to simulate a retrieval situation (during training) where only the weights of the
         # example from the case base/training data set are known:
-        self.use_same_feature_weights_for_unsimilar_pairs = True  # default: ?
+        self.use_same_feature_weights_for_unsimilar_pairs = False  # default: ?
 
         # Compares each time step of the encoded representation with each other time step
         # (instead of only comparing the ones with the same indices)
@@ -165,7 +165,7 @@ class TrainingConfiguration:
         # This means that each training batch contains almost examples from each class (practically
         # upsampling of minority classes). Based on recommendation of lessons learned from successful siamese models:
         # http://openaccess.thecvf.com/content_ICCV_2019/papers/Roy_Siamese_Networks_The_Tale_of_Two_Manifolds_ICCV_2019_paper.pdf
-        self.equalClassConsideration = True  # default: False
+        self.equalClassConsideration = False  # default: False
 
         # If equalClassConsideration is true, then this parameter defines the proportion of examples
         # based on class distribution and example distribution.
