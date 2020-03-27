@@ -5,7 +5,7 @@ import sys
 import numpy as np
 from time import perf_counter
 from fastdtw import fastdtw
-from scipy.spatial.distance import euclidean
+from scipy.spatial.distance import euclidean, minkowski
 from sklearn import preprocessing
 
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
@@ -13,6 +13,7 @@ sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 from neural_network.Evaluator import Evaluator
 from neural_network.Dataset import FullDataset
 from configuration.Configuration import Configuration
+from neural_network.SimpleSimilarityMeasure import SimpleSimilarityMeasure
 
 
 class Counter:
@@ -31,7 +32,6 @@ class Counter:
         with self.val.get_lock():
             return self.val.value
 
-
 def run(proc_id, return_dict, counter, dataset, test_index, indices_train_examples, algorithm, relevant_only):
     try:
 
@@ -40,20 +40,40 @@ def run(proc_id, return_dict, counter, dataset, test_index, indices_train_exampl
         for array_index, example_index in enumerate(indices_train_examples):
 
             if relevant_only:
-                # Another approach: Instead of splitting the examples into relevant attributes and calculating
-                # them separately, we reduce the examples to the relevant attributes and
-                # input them together into the DTW algorithm
-                test_example = dataset.x_test[test_index]
-                test_example, train_example = dataset.reduce_to_relevant(test_example, example_index)
+                if algorithm == 'feature_based':
+                    # feature based data is 2d-structured (examples,features)
+                    test_example = dataset.x_test_TSFresh_features[test_index, :]
+                    test_example, train_example, masking = dataset.reduce_to_relevant_features(test_example,
+                                                                                               example_index)
+                else:
+                    # Another approach: Instead of splitting the examples into relevant attributes and calculating
+                    # them separately, we reduce the examples to the relevant attributes and
+                    # input them together into the DTW algorithm
+                    test_example = dataset.x_test[test_index]
+                    test_example, train_example = dataset.reduce_to_relevant(test_example, example_index)
             else:
-                test_example = dataset.x_test[test_index]
-                train_example = dataset.x_train[example_index]
+                if algorithm == 'feature_based':
+                    #feature based data is 2d-structured (examples,features)
+                    test_example = dataset.x_test_TSFresh_features[test_index, :]
+                    train_example = dataset.x_train_TSFresh_features[example_index, :]
+                else:
+                    test_example = dataset.x_test[test_index]
+                    train_example = dataset.x_train[example_index]
 
             if algorithm == 'dtw':
                 distance, _ = fastdtw(test_example, train_example, dist=euclidean)
             elif algorithm == 'dtw_weighting_nbr_features':
                 distance, _ = fastdtw(test_example, train_example, dist=euclidean)
                 distance = distance / test_example.shape[1]
+            elif algorithm == 'feature_based':
+                if relevant_only:
+                    weights = masking / (np.sum(masking))
+                    distance = minkowski(test_example, train_example,2,weights)
+                    # Adjustment based on feature amount (improved performance)
+                    distance = distance * (1 / (np.sum(masking)))
+                else:
+                    distance = minkowski(test_example, train_example,2)
+
             else:
                 raise ValueError('Unkown algorithm:', algorithm)
 
@@ -95,7 +115,7 @@ def execute_baseline_test(dataset: FullDataset, start_index, end_index, nbr_thre
             threads[i].join()
             results[chunk] = return_dict.get(i)
 
-        if algorithm in ['dtw', 'dtw_weighting_nbr_features']:  # if algorithm returns distance instead of similiarity
+        if algorithm in ['dtw', 'dtw_weighting_nbr_features', 'feature_based']:  # if algorithm returns distance instead of similiarity
             results = distance_to_sim(results, conversion_method)
 
         # Add additional empty line if temp. outputs are enabled
@@ -125,7 +145,7 @@ def distance_to_sim(distances, conversion_method):
 
 def main():
     config = Configuration()
-
+    #os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
     if config.case_base_for_inference:
         dataset: FullDataset = FullDataset(config.case_base_folder, config, training=False)
     else:
@@ -134,16 +154,20 @@ def main():
     dataset.load()
 
     # select which part of the test dataset to test
-    start_index = dataset.num_test_instances - 35
-    end_index = dataset.num_test_instances
+    start_index = 0 #dataset.num_test_instances
+    end_index = 3388 #dataset.num_test_instances
 
     # Output interval of how many examples have been compared so far. < 0 for no output
     temp_output_interval = -1
     use_relevant_only = True
-    implemented_algorithms = ['dtw', 'dtw_weighting_nbr_features']
-    algorithm_used = implemented_algorithms[1]
+    implemented_algorithms = ['dtw', 'dtw_weighting_nbr_features','feature_based']
+    algorithm_used = implemented_algorithms[2]
     distance_to_sim_methods = ['1/(1+d)', 'div_max', 'min_max_scaling']
     distance_to_sim_method = distance_to_sim_methods[0]
+
+    if algorithm_used == 'feature_based':
+        # Load features from TSFresh
+        dataset.load_feature_based_representation()
 
     print('Algorithm used:', algorithm_used)
     print('Used relevant only:', use_relevant_only)

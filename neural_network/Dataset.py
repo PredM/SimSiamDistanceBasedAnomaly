@@ -31,6 +31,10 @@ class Dataset:
         # the names of all features of the dataset loaded from files
         self.feature_names_all = None
 
+        self.x_train_TSFresh_features = None
+        self.x_test_TSFresh_features = None
+        self.TSFresh_selected_relevantAttributes = None
+
     def load(self):
         raise NotImplemented('Not implemented for abstract class')
 
@@ -98,6 +102,10 @@ class FullDataset(Dataset):
         self.y_test_strings = None
         self.num_test_instances = None
         self.training = training
+
+        self.x_train_TSFresh_features = None
+        self.x_test_TSFresh_features = None
+        self.TSFresh_selected_relevantAttributes = None
 
         # total number of classes
         self.num_classes = None
@@ -240,6 +248,27 @@ class FullDataset(Dataset):
         # print('Classes in total: ', self.classes_total)
         print()
 
+    def load_feature_based_representation(self):
+        # Loading TS-Fresh generated features
+        filteredCB_df = (pd.read_pickle(self.config.case_base_folder + 'extractedFeatures_X_caseBase_filtered_4ms4sec.pkl'))
+        unfilteredTestExamples_df = (pd.read_pickle(
+            self.config.training_data_folder + 'extractedFeatures_X_test_unfiltered_imputed_4ms4sec.pkl'))
+        # Attributes selected after TSFresh Significane Test on Case Base
+        self.TSFresh_selected_relevantAttributes = filteredCB_df.columns
+        filteredTestExamples_df = unfilteredTestExamples_df[self.TSFresh_selected_relevantAttributes]
+
+        #print("unfilteredTestExamples_df: ", unfilteredTestExamples_df.shape)
+        #print("filteredCB_df: ", filteredCB_df.shape)
+        #merged_df = pd.concat([filteredCB_df, unfilteredTestExamples_df])
+
+        # Preprocessing
+        #min_max_scaler = preprocessing.MinMaxScaler()
+        #filteredCB_np_scaled = min_max_scaler.fit_transform(filteredCB_df)
+        #filteredTestExamples_np_scaled = min_max_scaler.transform(filteredTestExamples_df)
+
+        self.x_test_TSFresh_features = filteredTestExamples_df.values #filteredTestExamples_np_scaled
+        self.x_train_TSFresh_features = filteredCB_df.values #filteredCB_np_scaled
+
     def load_sim_matrices(self):
         # load a matrix with pair-wise similarities between labels in respect
         # to different metrics
@@ -278,6 +307,18 @@ class FullDataset(Dataset):
         class_label_train_example = self.y_train_strings[train_example_index]
         mask = self.get_masking(class_label_train_example)
         return test_example[:, mask], self.x_train[train_example_index][:, mask]
+
+    # will return the test example and the train example (of the passed index) reduced to the
+    # relevant attributes of the case of the train_example
+    def reduce_to_relevant_features(self, test_example, train_example_index):
+        class_label_train_example = self.y_train_strings[train_example_index]
+        relevant_features_for_case = self.config.get_relevant_features(class_label_train_example)
+        masking = np.zeros(len(self.TSFresh_selected_relevantAttributes))
+
+        idx = [i for i, x in enumerate(self.TSFresh_selected_relevantAttributes) if x.split('__')[0] in relevant_features_for_case]
+        masking[idx]=1
+        #return test_example * masking, self.x_train_TSFresh_features[train_example_index]* masking,masking
+        return test_example, self.x_train_TSFresh_features[train_example_index],masking
 
     def get_time_window_str(self, index, dataset_type):
         if dataset_type == 'test':
