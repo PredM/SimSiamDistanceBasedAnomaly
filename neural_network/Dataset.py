@@ -284,9 +284,12 @@ class FullDataset(Dataset):
 
     def calculate_maskings(self):
         for case in self.classes_total:
-            relevant_features_for_case = self.config.get_relevant_features(case)
+            if self.config.masking_vector_based_on_individual_attributes:
+                relevant_features_for_case = self.config.get_relevant_features_individual_defined(case)
+            else:
+                relevant_features_for_case = self.config.get_relevant_features(case)
             masking = np.isin(self.feature_names_all, relevant_features_for_case)
-
+            #print("Label: ", case, " \t \t relevant features ", relevant_features_for_case , "\n masking: ", masking)
             self.class_label_to_masking_vector[case] = masking
 
     # returns a boolean array with values depending on whether the attribute at this index is relevant
@@ -312,11 +315,12 @@ class FullDataset(Dataset):
     # relevant attributes of the case of the train_example
     def reduce_to_relevant_features(self, test_example, train_example_index):
         class_label_train_example = self.y_train_strings[train_example_index]
-        relevant_features_for_case = self.config.get_relevant_features(class_label_train_example)
+        relevant_features_for_case = self.config.get_relevant_features_individual_defined(class_label_train_example)
         masking = np.zeros(len(self.TSFresh_selected_relevantAttributes))
-
+       #print("self.TSFresh_selected_relevantAttributes: ", self.TSFresh_selected_relevantAttributes)
         idx = [i for i, x in enumerate(self.TSFresh_selected_relevantAttributes) if x.split('__')[0] in relevant_features_for_case]
         masking[idx]=1
+        #print("failuremode: ",class_label_train_example, "features: ", relevant_features_for_case,"\n masking: ", masking,"\n")
         #return test_example * masking, self.x_train_TSFresh_features[train_example_index]* masking,masking
         return test_example, self.x_train_TSFresh_features[train_example_index],masking
 

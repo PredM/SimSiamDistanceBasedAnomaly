@@ -95,6 +95,11 @@ class ModelConfiguration:
         # Weighted euclidean similarity based on relevant attributes
         self.useFeatureWeightedSimilarity = True  # default: False
 
+        # Weights are based on masking vectors that contain 1 if a feature is selected as relevant for a
+        # label (failure mode) accrodings to features.json and 0 otherwise. If option is set False then features based
+        # on groups are used.
+        self.masking_vector_based_on_individual_attributes = True # default: True
+
         # Option to simulate a retrieval situation (during training) where only the weights of the
         # example from the case base/training data set are known:
         self.use_same_feature_weights_for_unsimilar_pairs = True  # default: True
@@ -348,6 +353,8 @@ class StaticConfiguration:
         # noinspection PyUnresolvedReferences
         self.load_config_json('../configuration/config.json')
 
+        self.load_features_json('../data/feature_selection/features.json')
+
         ##
         # Folders and file names
         ##
@@ -450,9 +457,19 @@ class Configuration(
         else:
             raise AttributeError('Unknown feature variant:', self.feature_variant)
 
+    # loads the features.json file
+    def load_features_json(self, file_path):
+        with open(file_path, 'r') as f:
+            data = json.load(f)
+            self.label_to_individual_features: dict = data['relevant_features']
+
     def get_relevant_features(self, case):
         group = self.case_to_group_id.get(case)
         return self.group_id_to_features.get(group)
+
+    # returns individual defined features (instead of group features)
+    def get_relevant_features_individual_defined(self, label):
+        return self.label_to_individual_features.get(label)
 
     # return the error case description for the passed label
     def get_error_description(self, error_label: str):

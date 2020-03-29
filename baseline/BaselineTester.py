@@ -67,10 +67,13 @@ def run(proc_id, return_dict, counter, dataset, test_index, indices_train_exampl
                 distance = distance / test_example.shape[1]
             elif algorithm == 'feature_based':
                 if relevant_only:
-                    weights = masking / (np.sum(masking))
+                    weights = masking / ((np.sum(masking)))
                     distance = minkowski(test_example, train_example,2,weights)
                     # Adjustment based on feature amount (improved performance)
-                    distance = distance * (1 / (np.sum(masking)))
+                    small_num_of_attributes_penalty = (1 / ((np.sum(masking))))
+                    #if small_num_of_attributes_penalty > 1:
+                    #    small_num_of_attributes_penalty = 1
+                    distance = distance * small_num_of_attributes_penalty
                 else:
                     distance = minkowski(test_example, train_example,2)
 

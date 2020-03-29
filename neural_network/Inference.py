@@ -28,7 +28,6 @@ class Inference:
         self.evaluator = Evaluator(dataset, len(self.idx_test_examples_query_pool), self.config.k_of_knn)
 
     def infer_test_dataset(self):
-
         start_time = time.perf_counter()
 
         for idx_test in self.idx_test_examples_query_pool:

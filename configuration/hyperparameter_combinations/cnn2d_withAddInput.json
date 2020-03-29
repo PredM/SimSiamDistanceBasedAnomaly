@@ -54,7 +54,7 @@
   ],
   "abcnn1": "weighted",
   "use1dContext": "False",
-  "learnFeatureWeights": "False",
+  "learnFeatureWeights": "True",
   "useChannelWiseAggregation": "True",
   "useAddContextForSim": "True",
   "useAddContextForSim_LearnOrFixWeightVale": "True",
