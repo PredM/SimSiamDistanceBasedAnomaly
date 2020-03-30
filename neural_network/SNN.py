@@ -260,6 +260,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
 
         return a, b
 
+    # TODO @Klein is the u_a, u_b assignment correct? because it's overwritten each iteration
     @tf.function
     def match_time_step_wise(self, a, b):
         # a and b shape: [T, C]

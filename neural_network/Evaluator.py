@@ -36,7 +36,7 @@ class Evaluator:
 
         self.all_sims_for_auc = []
 
-        self.unique_test_failures = np.unique(self.dataset.failure_times)
+        self.unique_test_failures = np.unique(self.dataset.failure_times_test)
         idx = np.where(np.char.find(self.unique_test_failures, 'noFailure') >= 0)
         self.unique_test_failures = np.delete(self.unique_test_failures, idx, 0)
         self.num_test_failures = self.unique_test_failures.shape[0]
@@ -119,17 +119,17 @@ class Evaluator:
             if true_class == max_sim_class:
                 self.failure_results.loc[(self.failure_results['Label'].isin([true_class])) & (
                     self.failure_results['FailureTime'].isin(
-                        self.dataset.failure_times[test_example_index])), 'Correct'] += 1
+                        self.dataset.failure_times_test[test_example_index])), 'Correct'] += 1
 
             elif max_sim_class == 'no_failure':
                 self.failure_results.loc[(self.failure_results['Label'].isin([true_class])) & (
                     self.failure_results['FailureTime'].isin(
-                        self.dataset.failure_times[test_example_index])), 'AsHealth'] += 1
+                        self.dataset.failure_times_test[test_example_index])), 'AsHealth'] += 1
 
             else:
                 self.failure_results.loc[(self.failure_results['Label'].isin([true_class])) & (
                     self.failure_results['FailureTime'].isin(
-                        self.dataset.failure_times[test_example_index])), 'AsOtherFailure'] += 1
+                        self.dataset.failure_times_test[test_example_index])), 'AsOtherFailure'] += 1
 
             self.quality_fails_condition_quality += self.dataset.get_sim_label_pair_for_notion(true_class,
                                                                                                max_sim_class,
@@ -158,7 +158,7 @@ class Evaluator:
             ['Localization quality:', self.quality_fails_localization / local_ecf],
             ['Condition quality:', self.quality_fails_condition_quality / local_ecf],
             ['Query Window:', self.dataset.get_time_window_str(test_example_index, 'test')],
-            ['Query Failure:', str(self.dataset.failure_times[test_example_index])]
+            ['Query Failure:', str(self.dataset.failure_times_test[test_example_index])]
         ]
 
         # output results for this example
@@ -176,7 +176,7 @@ class Evaluator:
             row = [i + 1, 'Class: ' + self.dataset.y_train_strings[index],
                    'Sim: ' + str(round(sims[index], 6)),
                    'Case ID: ' + str(index),
-                   'Failure: ' + str(self.dataset.failureTimes_train[index]),
+                   'Failure: ' + str(self.dataset.failure_times_train[index]),
                    'Window: ' + self.dataset.get_time_window_str(index, 'train')]
             knn_results.append(row)
 

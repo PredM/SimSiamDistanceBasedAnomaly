@@ -32,7 +32,7 @@ class Dataset:
 
         self.x_train_TSFresh_features = None
         self.x_test_TSFresh_features = None
-        self.TSFresh_selected_relevantAttributes = None
+        self.relevant_features_by_TSFresh = None
 
     def load(self):
         raise NotImplemented('Not implemented for abstract class')
@@ -104,7 +104,7 @@ class FullDataset(Dataset):
 
         self.x_train_TSFresh_features = None
         self.x_test_TSFresh_features = None
-        self.TSFresh_selected_relevantAttributes = None
+        self.relevant_features_by_TSFresh = None
 
         # total number of classes
         self.num_classes = None
@@ -139,10 +139,10 @@ class FullDataset(Dataset):
         self.y_test_strings_unique = None
 
         # additional information for each example about their window time frame and failure occurrence time
-        self.windowTimes_train = None
-        self.windowTimes_test = None
-        self.failureTimes_train = None
-        self.failure_times = None
+        self.window_times_train = None
+        self.window_times_test = None
+        self.failure_times_train = None
+        self.failure_times_test = None
 
         # numpy array (x,2) that contains each unique permutation between failure occurrence time and assigned label
         self.unique_failure_times_label = None
@@ -157,13 +157,13 @@ class FullDataset(Dataset):
 
         self.x_train = np.load(self.dataset_folder + 'train_features.npy')  # data training
         self.y_train_strings = np.expand_dims(np.load(self.dataset_folder + 'train_labels.npy'), axis=-1)
-        self.windowTimes_train = np.expand_dims(np.load(self.dataset_folder + 'train_window_times.npy'), axis=-1)
-        self.failureTimes_train = np.expand_dims(np.load(self.dataset_folder + 'train_failure_times.npy'), axis=-1)
+        self.window_times_train = np.expand_dims(np.load(self.dataset_folder + 'train_window_times.npy'), axis=-1)
+        self.failure_times_train = np.expand_dims(np.load(self.dataset_folder + 'train_failure_times.npy'), axis=-1)
 
         self.x_test = np.load(self.dataset_folder + 'test_features.npy')  # data testing
         self.y_test_strings = np.expand_dims(np.load(self.dataset_folder + 'test_labels.npy'), axis=-1)
-        self.windowTimes_test = np.expand_dims(np.load(self.dataset_folder + 'test_window_times.npy'), axis=-1)
-        self.failure_times = np.expand_dims(np.load(self.dataset_folder + 'test_failure_times.npy'), axis=-1)
+        self.window_times_test = np.expand_dims(np.load(self.dataset_folder + 'test_window_times.npy'), axis=-1)
+        self.failure_times_test = np.expand_dims(np.load(self.dataset_folder + 'test_failure_times.npy'), axis=-1)
         self.feature_names_all = np.load(self.dataset_folder + 'feature_names.npy')  # names of the features (3. dim)
 
     def load(self, print_info=True):
@@ -220,7 +220,7 @@ class FullDataset(Dataset):
 
         # required for inference metric calculation
         # get all failures and labels as unique entry
-        failure_times_label = np.stack((self.y_test_strings, np.squeeze(self.failure_times))).T
+        failure_times_label = np.stack((self.y_test_strings, np.squeeze(self.failure_times_test))).T
         # extract unique permutations between failure occurrence time and labeled entry
         unique_failure_times_label, failure_times_count = np.unique(failure_times_label, axis=0, return_counts=True)
         # remove noFailure entries
@@ -247,28 +247,30 @@ class FullDataset(Dataset):
             # print('Classes in total: ', self.classes_total)
             print()
 
-    # TODO Files shouldn't be hardcoded
+    # TODO Use passed folder
     def load_feature_based_representation(self):
-        # Load TS-Fresh generated features
-        filteredCB_df = (
-            pd.read_pickle(self.config.case_base_folder + 'extractedFeatures_X_caseBase_filtered_4ms4sec.pkl'))
-        unfilteredTestExamples_df = (pd.read_pickle(
-            self.config.training_data_folder + 'extractedFeatures_X_test_unfiltered_imputed_4ms4sec.pkl'))
-        # Attributes selected after TSFresh Significane Test on Case Base
-        self.TSFresh_selected_relevantAttributes = filteredCB_df.columns
-        filteredTestExamples_df = unfilteredTestExamples_df[self.TSFresh_selected_relevantAttributes]
 
-        # print("unfilteredTestExamples_df: ", unfilteredTestExamples_df.shape)
-        # print("filteredCB_df: ", filteredCB_df.shape)
-        # merged_df = pd.concat([filteredCB_df, unfilteredTestExamples_df])
+        # Load TS-Fresh generated features
+        filtered_file = 'extractedFeatures_X_caseBase_filtered_4ms4sec.pkl'
+        unfiltered_file = 'extractedFeatures_X_test_unfiltered_imputed_4ms4sec.pkl'
+        filtered_cb_df = (pd.read_pickle(self.config.case_base_folder + filtered_file))
+        unfiltered_test_examples_df = (pd.read_pickle(self.config.training_data_folder + unfiltered_file))
+
+        # Attributes selected after TSFresh significance test on case base
+        self.relevant_features_by_TSFresh = filtered_cb_df.columns
+        filtered_test_examples_df = unfiltered_test_examples_df[self.relevant_features_by_TSFresh]
+
+        # print("unfiltered_test_examples_df: ", unfiltered_test_examples_df.shape)
+        # print("filtered_cb_df: ", filtered_cb_df.shape)
+        # merged_df = pd.concat([filtered_cb_df, unfiltered_test_examples_df])
 
         # Preprocessing
         # min_max_scaler = preprocessing.MinMaxScaler()
-        # filteredCB_np_scaled = min_max_scaler.fit_transform(filteredCB_df)
-        # filteredTestExamples_np_scaled = min_max_scaler.transform(filteredTestExamples_df)
+        # filteredCB_np_scaled = min_max_scaler.fit_transform(filtered_cb_df)
+        # filteredTestExamples_np_scaled = min_max_scaler.transform(filtered_test_examples_df)
 
-        self.x_test_TSFresh_features = filteredTestExamples_df.values  # filteredTestExamples_np_scaled
-        self.x_train_TSFresh_features = filteredCB_df.values  # filteredCB_np_scaled
+        self.x_test_TSFresh_features = filtered_test_examples_df.values  # filteredTestExamples_np_scaled
+        self.x_train_TSFresh_features = filtered_cb_df.values  # filteredCB_np_scaled
 
     def load_sim_matrices(self):
         # load a matrix with pair-wise similarities between labels in respect
@@ -285,13 +287,13 @@ class FullDataset(Dataset):
 
     def calculate_maskings(self):
         for case in self.classes_total:
+
             if self.config.individual_relevant_feature_selection:
                 relevant_features_for_case = self.config.get_relevant_features_case(case)
             else:
                 relevant_features_for_case = self.config.get_relevant_features_group(case)
 
             masking = np.isin(self.feature_names_all, relevant_features_for_case)
-            # print("Label: ", case, " \t \t relevant features ", relevant_features_for_case , "\n masking: ", masking)
             self.class_label_to_masking_vector[case] = masking
 
         for group_id, features in self.config.group_id_to_features.items():
@@ -326,24 +328,35 @@ class FullDataset(Dataset):
         return test_example[:, mask], self.x_train[train_example_index][:, mask]
 
     # Will to the same as reduce_to_relevant but selecting the relevant features based on TS Fresh
-    def reduce_to_relevant_by_ts_fresh(self, test_example, train_example_index):
+    # def reduce_to_relevant_by_ts_fresh(self, test_example, train_example_index):
+    #     class_label_train_example = self.y_train_strings[train_example_index]
+    #     relevant_features_for_case = self.config.get_relevant_features_case(class_label_train_example)
+    #     masking = np.zeros(len(self.TSFresh_selected_relevantAttributes))
+    #     # print("self.TSFresh_selected_relevantAttributes: ", self.TSFresh_selected_relevantAttributes)
+    #     idx = [i for i, x in enumerate(self.TSFresh_selected_relevantAttributes) if
+    #            x.split('__')[0] in relevant_features_for_case]
+    #     masking[idx] = 1
+    #     # print("failuremode: ",class_label_train_example, "features: ", relevant_features_for_case,"\n masking: ",
+    #     # masking,"\n")
+    #     # return test_example * masking, self.x_train_TSFresh_features[train_example_index]* masking,masking
+    #     return test_example, self.x_train_TSFresh_features[train_example_index], masking
+
+    def get_ts_fresh_masking(self, train_example_index):
         class_label_train_example = self.y_train_strings[train_example_index]
         relevant_features_for_case = self.config.get_relevant_features_case(class_label_train_example)
-        masking = np.zeros(len(self.TSFresh_selected_relevantAttributes))
-        # print("self.TSFresh_selected_relevantAttributes: ", self.TSFresh_selected_relevantAttributes)
-        idx = [i for i, x in enumerate(self.TSFresh_selected_relevantAttributes) if
+        masking = np.zeros(len(self.relevant_features_by_TSFresh))
+
+        idx = [i for i, x in enumerate(self.relevant_features_by_TSFresh) if
                x.split('__')[0] in relevant_features_for_case]
         masking[idx] = 1
-        # print("failuremode: ",class_label_train_example, "features: ", relevant_features_for_case,"\n masking: ",
-        # masking,"\n")
-        # return test_example * masking, self.x_train_TSFresh_features[train_example_index]* masking,masking
-        return test_example, self.x_train_TSFresh_features[train_example_index], masking
+
+        return masking
 
     def get_time_window_str(self, index, dataset_type):
         if dataset_type == 'test':
-            dataset = self.windowTimes_test
+            dataset = self.window_times_test
         elif dataset_type == 'train':
-            dataset = self.windowTimes_train
+            dataset = self.window_times_train
         else:
             raise ValueError('Unkown dataset type')
 
@@ -496,14 +509,14 @@ class GroupDataset(FullDataset):
     def load_files(self):
         self.x_train = self.main_dataset.x_train.copy()  # data training
         self.y_train_strings = np.expand_dims(self.main_dataset.y_train_strings.copy(), axis=-1)
-        self.windowTimes_train = self.main_dataset.windowTimes_train.copy()
-        self.failureTimes_train = self.main_dataset.failureTimes_train.copy()
+        self.window_times_train = self.main_dataset.window_times_train.copy()
+        self.failure_times_train = self.main_dataset.failure_times_train.copy()
 
         # Temp solution, x_test only in here so load of full dataset works
         self.x_test = self.main_dataset.x_test.copy()
         self.y_test_strings = np.expand_dims(self.main_dataset.y_test_strings.copy(), axis=-1)
-        self.windowTimes_test = self.main_dataset.windowTimes_test
-        self.failure_times = self.main_dataset.failure_times
+        self.window_times_test = self.main_dataset.window_times_test
+        self.failure_times_test = self.main_dataset.failure_times_test
         self.feature_names_all = self.main_dataset.feature_names_all
 
         # Reduce training data to the cases of this group
@@ -519,8 +532,8 @@ class GroupDataset(FullDataset):
         # Reduce metadata to relevant indices, too
         # (currently not used by SNN, so it wouldn't be necessary but done ensure future correctness, wrong index call,
         # may not be noticed)
-        self.windowTimes_train = self.windowTimes_train[indices, :]
-        self.failureTimes_train = self.failureTimes_train[indices, :]
+        self.window_times_train = self.window_times_train[indices, :]
+        self.failure_times_train = self.failure_times_train[indices, :]
 
     def load(self, print_info=False):
         super().load(print_info)

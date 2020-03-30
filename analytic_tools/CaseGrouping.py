@@ -1,5 +1,8 @@
-import pandas as pd
 import json
+
+import pandas as pd
+
+from configuration.Configuration import Configuration
 
 
 def flatten(lis):
@@ -11,17 +14,13 @@ def get_cols(df, row_name):
 
 
 def load():
-    with open('../data/feature_selection/features.json', 'r') as f:
-        data = json.load(f)
+    config = Configuration()
+    relevant_features = config.case_to_individual_features
 
-        relevant_features: dict = data['relevant_features']
+    for key in relevant_features:
+        relevant_features[key] = sorted(relevant_features[key])
 
-        # sort feature names to ensure that the order matches the one in the list of indices of the features in
-        # the case base class
-        for key in relevant_features:
-            relevant_features[key] = sorted(relevant_features[key])
-
-        return sorted(relevant_features.keys()), relevant_features
+    return sorted(relevant_features.keys()), relevant_features
 
 
 def export_excel_for_grouping(export_to_excel):

@@ -1,9 +1,9 @@
 import multiprocessing
 import os
 import sys
+from time import perf_counter
 
 import numpy as np
-from time import perf_counter
 from fastdtw import fastdtw
 from scipy.spatial.distance import euclidean, minkowski
 from sklearn import preprocessing
@@ -39,38 +39,38 @@ def run(proc_id, return_dict, counter, dataset, test_index, indices_train_exampl
 
         for array_index, example_index in enumerate(indices_train_examples):
 
-            if relevant_only:
-                if algorithm == 'feature_based':
-                    # feature based data is 2d-structured (examples,features)
-                    test_example = dataset.x_test_TSFresh_features[test_index, :]
-                    test_example, train_example, masking = dataset.reduce_to_relevant_by_ts_fresh(test_example,
-                                                                                                  example_index)
-                else:
-                    # Another approach: Instead of splitting the examples into relevant attributes and calculating
-                    # them separately, we reduce the examples to the relevant attributes and
-                    # input them together into the DTW algorithm
-                    test_example = dataset.x_test[test_index]
-                    test_example, train_example = dataset.reduce_to_relevant(test_example, example_index)
-            else:
-                if algorithm == 'feature_based':
-                    # feature based data is 2d-structured (examples,features)
-                    test_example = dataset.x_test_TSFresh_features[test_index, :]
-                    train_example = dataset.x_train_TSFresh_features[example_index, :]
-                else:
-                    test_example = dataset.x_test[test_index]
-                    train_example = dataset.x_train[example_index]
+            ###
+            # Prepare examples
+            ###
 
+            if algorithm == 'feature_based':
+                # feature based data is 2d-structured (examples,features)
+                test_example = dataset.x_test_TSFresh_features[test_index, :]
+                train_example = dataset.x_train_TSFresh_features[example_index, :]
+            elif relevant_only:
+                test_example = dataset.x_test[test_index]
+                test_example, train_example = dataset.reduce_to_relevant(test_example, example_index)
+            else:
+                test_example = dataset.x_test[test_index]
+                train_example = dataset.x_train[example_index]
+
+            ##
+            # Execute algorithm
+            ##
             if algorithm == 'dtw':
                 distance, _ = fastdtw(test_example, train_example, dist=euclidean)
+
             elif algorithm == 'dtw_weighting_nbr_features':
                 distance, _ = fastdtw(test_example, train_example, dist=euclidean)
                 distance = distance / test_example.shape[1]
+
             elif algorithm == 'feature_based':
                 if relevant_only:
-                    weights = masking / ((np.sum(masking)))
+                    masking = dataset.get_ts_fresh_masking(example_index)
+                    weights = masking / (np.sum(masking))
                     distance = minkowski(test_example, train_example, 2, weights)
                     # Adjustment based on feature amount (improved performance)
-                    small_num_of_attributes_penalty = (1 / ((np.sum(masking))))
+                    small_num_of_attributes_penalty = (1 / (np.sum(masking)))
                     # if small_num_of_attributes_penalty > 1:
                     #    small_num_of_attributes_penalty = 1
                     distance = distance * small_num_of_attributes_penalty
@@ -123,7 +123,7 @@ def execute_baseline_test(dataset: FullDataset, start_index, end_index, nbr_thre
             threads[i].join()
             results[chunk] = return_dict.get(i)
 
-        # if algorithm returns distance instead of similarity
+        # If algorithm returns distance instead of similarity
         if algorithm in ['dtw', 'dtw_weighting_nbr_features', 'feature_based']:
             results = distance_to_sim(results, conversion_method)
 

@@ -37,7 +37,8 @@ class GeneralConfiguration:
 
         # Limit the groups that should be used for a cbs model
         # List content must match the group ids in config.json
-        self.cbs_groups_used = ['g6', 'g7']  #
+        # Use = None or = [] for no restriction
+        self.cbs_groups_used = None  # ['g6', 'g7']
 
 
 class ModelConfiguration:
@@ -93,7 +94,7 @@ class ModelConfiguration:
         self.hyper_file = self.hyper_file_folder + 'snn_testing.json'
 
         ##
-        # Various settings influencing the ssimilarity calculation
+        # Various settings influencing the similarity calculation
         ##
 
         # SNN output is normalized (x = x/|x|) (useful for eucl.?)
@@ -104,9 +105,13 @@ class ModelConfiguration:
         self.useFeatureWeightedSimilarity = False  # default: False
 
         # Weights are based on masking vectors that contain 1 if a feature is selected as relevant for a
-        # label (failure mode) accrodings to features.json and 0 otherwise. If option is set False then features based
+        # label (failure mode) and 0 otherwise. If option is set False then features based
         # on groups are used.
-        self.individual_relevant_feature_selection = True # default: True
+
+        # Select whether the reduction to relevant features should be based on the case itself or the group it belongs
+        # to. Based on case = True, based on group = False
+        # Must be false for CBS!
+        self.individual_relevant_feature_selection = True  # default: True
 
         # Option to simulate a retrieval situation (during training) where only the weights of the
         # example from the case base/training data set are known:
@@ -352,6 +357,7 @@ class StaticConfiguration:
         # mapping for topic name to prefix of sensor streams, relevant to get the same order of streams
         self.prefixes = None
 
+        self.case_to_individual_features = None
         self.case_to_group_id = None
         self.group_id_to_cases = None
         self.group_id_to_features = None
@@ -360,8 +366,6 @@ class StaticConfiguration:
 
         # noinspection PyUnresolvedReferences
         self.load_config_json('../configuration/config.json')
-
-        self.load_features_json('../data/feature_selection/features.json')
 
         ##
         # Folders and file names
@@ -453,6 +457,7 @@ class Configuration(
         def flatten(list_of_lists):
             return [item for sublist in list_of_lists for item in sublist]
 
+        self.case_to_individual_features = data['relevant_features']
         self.case_to_group_id: dict = data['case_to_group_id']
         self.group_id_to_cases: dict = data['group_id_to_cases']
         self.group_id_to_features: dict = data['group_id_to_features']
@@ -465,19 +470,13 @@ class Configuration(
         else:
             raise AttributeError('Unknown feature variant:', self.feature_variant)
 
-    # loads the features.json file
-    def load_features_json(self, file_path):
-        with open(file_path, 'r') as f:
-            data = json.load(f)
-            self.label_to_individual_features: dict = data['relevant_features']
-
     def get_relevant_features_group(self, case):
         group = self.case_to_group_id.get(case)
         return self.group_id_to_features.get(group)
 
     # returns individual defined features (instead of group features)
-    def get_relevant_features_case(self, label):
-        return self.label_to_individual_features.get(label)
+    def get_relevant_features_case(self, case):
+        return self.case_to_individual_features.get(case)
 
     # return the error case description for the passed label
     def get_error_description(self, error_label: str):
