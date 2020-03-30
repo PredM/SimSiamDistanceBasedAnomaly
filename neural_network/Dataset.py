@@ -1,4 +1,3 @@
-import contextlib
 from time import perf_counter
 
 import numpy as np
@@ -155,8 +154,6 @@ class FullDataset(Dataset):
         self.df_label_sim_condition = None
 
     def load_files(self):
-        # dtype conversion necessary because layers use float32 by default
-        # .astype('float32') removed because already included in dataset creation
 
         self.x_train = np.load(self.dataset_folder + 'train_features.npy')  # data training
         self.y_train_strings = np.expand_dims(np.load(self.dataset_folder + 'train_labels.npy'), axis=-1)
@@ -250,26 +247,28 @@ class FullDataset(Dataset):
             # print('Classes in total: ', self.classes_total)
             print()
 
+    # TODO Files shouldn't be hardcoded
     def load_feature_based_representation(self):
-        # Loading TS-Fresh generated features
-        filteredCB_df = (pd.read_pickle(self.config.case_base_folder + 'extractedFeatures_X_caseBase_filtered_4ms4sec.pkl'))
+        # Load TS-Fresh generated features
+        filteredCB_df = (
+            pd.read_pickle(self.config.case_base_folder + 'extractedFeatures_X_caseBase_filtered_4ms4sec.pkl'))
         unfilteredTestExamples_df = (pd.read_pickle(
             self.config.training_data_folder + 'extractedFeatures_X_test_unfiltered_imputed_4ms4sec.pkl'))
         # Attributes selected after TSFresh Significane Test on Case Base
         self.TSFresh_selected_relevantAttributes = filteredCB_df.columns
         filteredTestExamples_df = unfilteredTestExamples_df[self.TSFresh_selected_relevantAttributes]
 
-        #print("unfilteredTestExamples_df: ", unfilteredTestExamples_df.shape)
-        #print("filteredCB_df: ", filteredCB_df.shape)
-        #merged_df = pd.concat([filteredCB_df, unfilteredTestExamples_df])
+        # print("unfilteredTestExamples_df: ", unfilteredTestExamples_df.shape)
+        # print("filteredCB_df: ", filteredCB_df.shape)
+        # merged_df = pd.concat([filteredCB_df, unfilteredTestExamples_df])
 
         # Preprocessing
-        #min_max_scaler = preprocessing.MinMaxScaler()
-        #filteredCB_np_scaled = min_max_scaler.fit_transform(filteredCB_df)
-        #filteredTestExamples_np_scaled = min_max_scaler.transform(filteredTestExamples_df)
+        # min_max_scaler = preprocessing.MinMaxScaler()
+        # filteredCB_np_scaled = min_max_scaler.fit_transform(filteredCB_df)
+        # filteredTestExamples_np_scaled = min_max_scaler.transform(filteredTestExamples_df)
 
-        self.x_test_TSFresh_features = filteredTestExamples_df.values #filteredTestExamples_np_scaled
-        self.x_train_TSFresh_features = filteredCB_df.values #filteredCB_np_scaled
+        self.x_test_TSFresh_features = filteredTestExamples_df.values  # filteredTestExamples_np_scaled
+        self.x_train_TSFresh_features = filteredCB_df.values  # filteredCB_np_scaled
 
     def load_sim_matrices(self):
         # load a matrix with pair-wise similarities between labels in respect
@@ -286,12 +285,13 @@ class FullDataset(Dataset):
 
     def calculate_maskings(self):
         for case in self.classes_total:
-            if self.config.masking_vector_based_on_individual_attributes:
-                relevant_features_for_case = self.config.get_relevant_features_individual_defined(case)
+            if self.config.individual_relevant_feature_selection:
+                relevant_features_for_case = self.config.get_relevant_features_case(case)
             else:
-                relevant_features_for_case = self.config.get_relevant_features(case)
+                relevant_features_for_case = self.config.get_relevant_features_group(case)
+
             masking = np.isin(self.feature_names_all, relevant_features_for_case)
-            #print("Label: ", case, " \t \t relevant features ", relevant_features_for_case , "\n masking: ", masking)
+            # print("Label: ", case, " \t \t relevant features ", relevant_features_for_case , "\n masking: ", masking)
             self.class_label_to_masking_vector[case] = masking
 
         for group_id, features in self.config.group_id_to_features.items():
@@ -318,25 +318,26 @@ class FullDataset(Dataset):
     def get_masking_float(self, class_label):
         return self.get_masking(class_label).astype(float)
 
-    # will return the test example and the train example (of the passed index) reduced to the
+    # Will return the test example and the train example (of the passed index) reduced to the
     # relevant attributes of the case of the train_example
     def reduce_to_relevant(self, test_example, train_example_index):
         class_label_train_example = self.y_train_strings[train_example_index]
         mask = self.get_masking(class_label_train_example)
         return test_example[:, mask], self.x_train[train_example_index][:, mask]
 
-    # will return the test example and the train example (of the passed index) reduced to the
-    # relevant attributes of the case of the train_example
-    def reduce_to_relevant_features(self, test_example, train_example_index):
+    # Will to the same as reduce_to_relevant but selecting the relevant features based on TS Fresh
+    def reduce_to_relevant_by_ts_fresh(self, test_example, train_example_index):
         class_label_train_example = self.y_train_strings[train_example_index]
-        relevant_features_for_case = self.config.get_relevant_features_individual_defined(class_label_train_example)
+        relevant_features_for_case = self.config.get_relevant_features_case(class_label_train_example)
         masking = np.zeros(len(self.TSFresh_selected_relevantAttributes))
-       #print("self.TSFresh_selected_relevantAttributes: ", self.TSFresh_selected_relevantAttributes)
-        idx = [i for i, x in enumerate(self.TSFresh_selected_relevantAttributes) if x.split('__')[0] in relevant_features_for_case]
-        masking[idx]=1
-        #print("failuremode: ",class_label_train_example, "features: ", relevant_features_for_case,"\n masking: ", masking,"\n")
-        #return test_example * masking, self.x_train_TSFresh_features[train_example_index]* masking,masking
-        return test_example, self.x_train_TSFresh_features[train_example_index],masking
+        # print("self.TSFresh_selected_relevantAttributes: ", self.TSFresh_selected_relevantAttributes)
+        idx = [i for i, x in enumerate(self.TSFresh_selected_relevantAttributes) if
+               x.split('__')[0] in relevant_features_for_case]
+        masking[idx] = 1
+        # print("failuremode: ",class_label_train_example, "features: ", relevant_features_for_case,"\n masking: ",
+        # masking,"\n")
+        # return test_example * masking, self.x_train_TSFresh_features[train_example_index]* masking,masking
+        return test_example, self.x_train_TSFresh_features[train_example_index], masking
 
     def get_time_window_str(self, index, dataset_type):
         if dataset_type == 'test':
@@ -355,6 +356,7 @@ class FullDataset(Dataset):
     def get_indices_failures_only_test(self):
         return np.where(self.y_test_strings != 'no_failure')[0]
 
+    # TODO Maybe needs to be reworked
     def encode(self, encoder, encode_test_data=False):
 
         start_time_encoding = perf_counter()
@@ -378,10 +380,10 @@ class FullDataset(Dataset):
         encoding_duration = perf_counter() - start_time_encoding
         print('Encoding of dataset finished. Duration:', encoding_duration)
 
-    # draw a random pair of instances
+    # Draw a random pair of instances
     def draw_pair(self, is_positive, from_test):
 
-        # select dataset depending on parameter
+        # Select dataset depending on parameter
         ds_y = self.y_test if from_test else self.y_train
         num_instances = self.num_test_instances if from_test else self.num_train_instances
 
@@ -395,10 +397,8 @@ class FullDataset(Dataset):
 
         return Dataset.draw_from_ds(self, ds_y, num_instances, is_positive, class_idx)
 
-    def get_sim_label_pair_for_notion(self, label_1, label_2, notion_of_sim):
-        # Input label1, label2, notion_of_sim as string
+    def get_sim_label_pair_for_notion(self, label_1: str, label_2: str, notion_of_sim: str):
         # Output similarity value under consideration of the metric
-        # print("label_1: ", label_1, " label_2: ", label_2, " notion_of_sim: ", notion_of_sim)
 
         if notion_of_sim == 'failuremode':
             pair_label_sim = self.df_label_sim_failuremode.loc[label_1, label_2]
@@ -428,16 +428,6 @@ class FullDataset(Dataset):
                + self.get_sim_label_pair_for_notion(class_label_1, class_label_2, "failuremode")) / 3
         return sim
 
-
-# TODO
-#  - Case must be converted to a list of cases
-#  - All usages of case must be checked and adapted
-#  - Should be renamed to CBSDataset
-#  - Must get a "group_id" variable (Should be a case handler var)
-#  - Loading and saving must be based on group name
-#  - Important: Ensure that sim, label pairs are correct --> Correct matching to the specific case
-#  -  Should be fine because of "# all equal to case but" ..., but check again
-#  - (Update the documentation when finished)
 
 class CBSDataset(FullDataset):
 

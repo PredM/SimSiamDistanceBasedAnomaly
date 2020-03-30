@@ -106,7 +106,7 @@ class ModelConfiguration:
         # Weights are based on masking vectors that contain 1 if a feature is selected as relevant for a
         # label (failure mode) accrodings to features.json and 0 otherwise. If option is set False then features based
         # on groups are used.
-        self.masking_vector_based_on_individual_attributes = True # default: True
+        self.individual_relevant_feature_selection = True # default: True
 
         # Option to simulate a retrieval situation (during training) where only the weights of the
         # example from the case base/training data set are known:
@@ -471,12 +471,12 @@ class Configuration(
             data = json.load(f)
             self.label_to_individual_features: dict = data['relevant_features']
 
-    def get_relevant_features(self, case):
+    def get_relevant_features_group(self, case):
         group = self.case_to_group_id.get(case)
         return self.group_id_to_features.get(group)
 
     # returns individual defined features (instead of group features)
-    def get_relevant_features_individual_defined(self, label):
+    def get_relevant_features_case(self, label):
         return self.label_to_individual_features.get(label)
 
     # return the error case description for the passed label
