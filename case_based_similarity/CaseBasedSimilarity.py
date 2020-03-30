@@ -1,4 +1,3 @@
-import contextlib
 import os
 import sys
 import threading
@@ -6,38 +5,39 @@ import threading
 import numpy as np
 import tensorflow as tf
 
+from neural_network.OptimizerHelper import CBSOptimizerHelper
+
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 
+from multiprocessing import Process, Queue, Manager, Value
 from configuration.Configuration import Configuration
-from neural_network.Dataset import CaseSpecificDataset
-from neural_network.SNN import SimpleSNN, AbstractSimilarityMeasure, SNN, FastSimpleSNN, FastSNN
+from neural_network.Dataset import CBSDataset
+from neural_network.SNN import SimpleSNN, AbstractSimilarityMeasure, initialise_snn
 
 
 class CBS(AbstractSimilarityMeasure):
 
-    def __init__(self, config: Configuration, training, dataset_folder):
+    def __init__(self, config: Configuration, training, dataset):
         super().__init__(training)
 
         self.config: Configuration = config
-        self.dataset_folder = dataset_folder
-        self.case_handlers: [SimpleCaseHandler] = []
-        self.num_instances_total = 0
-        self.number_of_cases = 0
-
-        # with contextlib.redirect_stdout(None):
-        self.initialise_case_handlers()
+        self.dataset = dataset
+        self.group_handlers: [CBSGroupHandler] = []
+        self.number_of_groups = 0
 
         self.gpus = tf.config.experimental.list_logical_devices('GPU')
         self.nbr_gpus_used = config.max_gpus_used if 1 <= config.max_gpus_used < len(self.gpus) else len(self.gpus)
         self.gpus = self.gpus[0:self.nbr_gpus_used]
         self.gpus = [gpu.name for gpu in self.gpus]
+        # self.gpus = ['/job:localhost/replica:0/task:0/device:GPU:0', '/job:localhost/replica:0/task:0/device:GPU:1']
 
-        self.load_model()
+        # with contextlib.redirect_stdout(None):
+        self.initialise_group_handlers()
 
         if not self.training and self.config.architecture_variant in ['fast_simple', 'fast_ffnn']:
             self.encode_datasets()
 
-    def initialise_case_handlers(self):
+    def initialise_group_handlers(self):
 
         if self.training and self.config.architecture_variant in ['fast_simple', 'fast_ffnn']:
             print('WARNING:')
@@ -45,201 +45,192 @@ class CBS(AbstractSimilarityMeasure):
             print('The training routine will use the standard version, otherwise the encoding')
             print('would have to be recalculated after each iteration anyway.\n')
 
-        features_cases: dict = self.config.relevant_features
-        self.number_of_cases = len(features_cases.keys())
+        # Limit used groups for debugging purposes
+        if self.config.cbs_groups_used is None or len(self.config.cbs_groups_used) == 0:
+            id_to_cases = self.config.group_id_to_cases
+        else:
+            id_to_cases = dict((k, self.config.group_id_to_cases[k]) for k in self.config.cbs_groups_used if
+                               k in self.config.group_id_to_cases)
 
-        for case in features_cases.keys():
-            print('Creating case handler for case', case)
+        self.number_of_groups = len(id_to_cases.keys())
 
-            relevant_features = features_cases.get(case)
-            try:
-                dataset = CaseSpecificDataset(self.dataset_folder, self.config, case, relevant_features)
-                dataset.load()
-            except ValueError:
+        # Counts the number of groups already processed, used for gpu distribution
+        counter = 0
+        for group, cases in id_to_cases.items():
+
+            # Check if there is at least one training example of this group,
+            # otherwise a group handler can't be created
+            nbr_examples_for_group = len(self.dataset.group_to_indices_train.get(group))
+            if nbr_examples_for_group <= 0:
                 print('-------------------------------------------------------')
-                print('WARNING: No case handler could be created for', case)
+                print('WARNING: No case handler could be created for', group, cases)
                 print('Reason: No training example of this case in training dataset')
                 print('-------------------------------------------------------')
                 continue
 
-            # add up the total number of examples
-            self.num_instances_total += dataset.num_train_instances
+            else:
+                # Distribute the group handlers equally to the available gpus
+                gpu = self.gpus[counter % len(self.gpus)]
+                counter += 1
 
-            ch: SimpleCaseHandler = self.initialise_case_handler(dataset)
-            self.case_handlers.append(ch)
+                gh: CBSGroupHandler = CBSGroupHandler(group, gpu, self.config, self.dataset, self.training)
+                gh.start()
 
-    # initializes the correct case handler depending on the configured variant
-    def initialise_case_handler(self, dataset):
-        var = self.config.architecture_variant
+                print('Creating group handler', group, ':')
+                print('GPU:', gpu)
+                print('Cases:')
+                for case in cases:
+                    print('\t' + case)
+                print()
 
-        if self.training and var.endswith('simple') or not self.training and var == 'standard_simple':
-            return SimpleCaseHandler(self.config, dataset, self.training)
-        elif self.training and var.endswith('ffnn') or not self.training and var == 'standard_ffnn':
-            return CaseHandler(self.config, dataset, self.training)
-        elif not self.training and var == 'fast_simple':
-            return FastSimpleCaseHandler(self.config, dataset, self.training)
-        elif not self.training and var == 'fast_ffnn':
-            return FastCaseHandler(self.config, dataset, self.training)
-        else:
-            raise AttributeError('Unknown variant specified:' + self.config.architecture_variant)
+                # Wait until initialisation of run finished and the group handler is ready to process input
+                # the group handler will send a message for which we are waiting here
+                _ = gh.output_queue.get()
+                self.group_handlers.append(gh)
 
-    def load_model(self, model_folder=None, training=None):
+    # Is called when a keyboard interruption stops the main thread
+    # Will send a message to each group handler, which leads to the termination of the run function
+    def kill_threads(self):
+        for group_handler in self.group_handlers:
+            group_handler.input_queue.put('stop')
 
-        for case_handler in self.case_handlers:
-            case_handler: CaseHandler = case_handler
-            print('Creating case handler for ', case_handler.dataset.case)
-
-            case_handler.load_model(is_cbs=True, case=case_handler.dataset.case)
-            # case_handler.print_detailed_model_info()
-
-        print()
-
+    # TODO
     def encode_datasets(self):
         print('Encoding of datasets started.')
 
         duration = 0
 
-        for case_handler in self.case_handlers:
-            case_handler: CaseHandler = case_handler
-            duration += case_handler.dataset.encode(case_handler.encoder)
-
         print('Encoding of datasets finished. Duration:', duration)
 
     def print_info(self):
         print()
-        for case_handler in self.case_handlers:
-            case_handler.print_case_handler_info()
+        for group_handler in self.group_handlers:
+            group_handler.print_group_handler_info()
 
     def get_sims(self, example):
-        # used to combine the results of all case handlers
-        # using a numpy array instead of a simple list to ensure index_sims == index_labels
-        sims_cases = np.empty(self.number_of_cases, dtype='object_')
-        labels_cases = np.empty(self.number_of_cases, dtype='object_')
+        # Used to combine the results of all group handlers
+        # Using a numpy array instead of a simple list to ensure index_sims == index_labels
+        sims_groups = np.empty(self.number_of_groups, dtype='object_')
+        labels_groups = np.empty(self.number_of_groups, dtype='object_')
 
-        if self.nbr_gpus_used <= 1:
-            for i in range(self.number_of_cases):
-                sims_cases[i], labels_cases[i] = self.case_handlers[i].get_sims(example)
-        else:
+        # Pass the example to each group handler using it's input queue
+        for group_handler in self.group_handlers:
+            group_handler.input_queue.put(example)
 
-            threads = []
-            ch_index = 0
+        # Get the results via the output queue, will wait until it's available
+        for gh_index, group_handler in enumerate(self.group_handlers):
+            sims_groups[gh_index], labels_groups[gh_index] = group_handler.output_queue.get()
 
-            # Distribute the sim calculation of all threads to the available gpus
-            while ch_index < self.number_of_cases:
-                gpu_index = 0
-
-                while gpu_index < self.nbr_gpus_used and ch_index < self.number_of_cases:
-                    thread = GetSimThread(self.case_handlers[ch_index], self.gpus[gpu_index], example)
-                    thread.start()
-                    threads.append(thread)
-
-                    gpu_index += 1
-                    ch_index += 1
-
-            # Wait until sim calculation is finished and get the results
-            for i in range(self.number_of_cases):
-                threads[i].join()
-                sims_cases[i], labels_cases[i] = threads[i].sims, threads[i].labels
-
-        return np.concatenate(sims_cases), np.concatenate(labels_cases)
+        return np.concatenate(sims_groups), np.concatenate(labels_groups)
 
     def get_sims_batch(self, batch):
         raise NotImplementedError(
-            'Not implemented for this architecture'
-            'The optimizer will use the dedicated function of each case handler')
+            'Not implemented for this architecture. '
+            'The models function will be called directly by each group handler.')
 
 
-# Helper class to be able to get the results of multiple case handlers in parallel
-# using multiple gpus
-class GetSimThread(threading.Thread):
+# Currently threading.Thread is used instead of multiprocessing because of unfixed incompatibility with tf/cuda
+class CBSGroupHandler(threading.Thread):
 
-    def __init__(self, case_handler, gpu, example):
-        super().__init__()
-        self.case_handler: CaseHandler = case_handler
+    def __init__(self, group_id, gpu, config, dataset, training):
+        self.group_id = group_id
         self.gpu = gpu
-        self.example = example
-        self.sims = None
-        self.labels = None
+        self.config = config
+        self.dataset: CBSDataset = dataset
+        self.training = training
+
+        # The transfer and return of data to this process class must take place via these queues
+        # to ensure correct functionality when using the multiprocessing library.
+        # (Alternatively, additional data structures such as Multiprocessing.Manager.dict() would have to be used)
+        self.input_queue = Queue()
+        self.output_queue = Queue()
+
+        # noinspection PyTypeChecker
+        self.model = None
+        self.optimizer_helper = None
+
+        #self.print_group_handler_info()
+
+        # Must be last entry in __init__
+        super(CBSGroupHandler, self).__init__()
 
     def run(self):
         with tf.device(self.gpu):
-            self.sims, self.labels = self.case_handler.get_sims(self.example)
 
+            group_ds = self.dataset.create_group_dataset(self.group_id)
+            self.model: SimpleSNN = initialise_snn(self.config, group_ds, self.training, True, self.group_id)
 
-class CaseHandlerHelper:
+            if self.training:
+                self.optimizer_helper = CBSOptimizerHelper(self.model, self.config, self.dataset, self.group_id)
 
-    # config and training are placeholders for multiple inheritance to work
-    def __init__(self, dataset: CaseSpecificDataset):
-        self.dataset: CaseSpecificDataset = dataset
-        # self.print_case_handler_info()
+            # Change the execution of the process depending on
+            # whether the model is trained or applied
+            # as additional variable so it can't be changed during execution
+            is_training = self.training
 
-    # debugging method, can be removed when implementation is finished
-    def print_case_handler_info(self):
+            # Send message so that the initiator knows that the preparations are complete.
+            self.output_queue.put(str(self.group_id) + ' init finished. ')
+            while True:
+                elem = self.input_queue.get(block=True)
+
+                # Stop the process execution if a stop message was send via the queue
+                if isinstance(elem, str) and elem == 'stop':
+                    break
+
+                if is_training:
+
+                    # Train method must be called by the process itself so that the advantage of parallel execution
+                    # of the training of the individual groups can be exploited.
+                    # Feedback contains loss and additional information using a single string
+                    feedback = self.train(elem)
+                    self.output_queue.put(feedback)
+                else:
+
+                    # Reduce the input example to the features required for this group
+                    # and pass it to the model to calculate the similarities
+                    elem = self.dataset.get_masked_example_group(elem, self.group_id)
+                    output = self.model.get_sims(elem)
+                    self.output_queue.put(output)
+
+    # Debugging method, can be removed when implementation is finished
+    def print_group_handler_info(self):
         np.set_printoptions(threshold=np.inf)
-        print('Case Handler for case', self.dataset.case)
+        print('CBSGroupHandler with ID', self.group_id)
+        print('Cases of group:')
+        print(self.config.group_id_to_cases.get(self.group_id))
         print('Relevant features:')
-        print(self.dataset.features_used)
-        print('Indices of relevant features:')
-        print(self.dataset.indices_features)
+        print(self.config.group_id_to_features.get(self.group_id))
         print('Indices of cases in case base with case:')
-        print(self.dataset.indices_cases)
+        print(self.dataset.group_to_indices_train.get(self.group_id))
         print()
         print()
 
-    # input must be the 'complete' example with all features of a 'full dataset'
-    def get_sims(self, example):
-        # example must be reduced to the features used for this cases
-        # before the super class method can be called to calculate the similarities to the case base
-        example = example[:, self.dataset.indices_features]
+    # Will be executed by  a group handler process so the training can be executed in parallel for each group
+    def train(self, training_interval):
+        group_id = self.group_id
+        losses = []
 
-        # do not change, calls get_sim of corresponding snn version
-        # noinspection PyUnresolvedReferences
-        return super().get_sims(example)
+        for epoch in range(training_interval):
+            epoch_loss_avg = tf.keras.metrics.Mean()
 
+            batch_pairs_indices, true_similarities = self.optimizer_helper.compose_batch()
 
-# Order of super classes very important, do not change
-class SimpleCaseHandler(CaseHandlerHelper, SimpleSNN):
+            # Get the example pairs by the selected indices
+            model_input = np.take(a=self.dataset.x_train, indices=batch_pairs_indices, axis=0)
 
-    def __init__(self, config, dataset: CaseSpecificDataset, training):
-        # Not nice but should work, https://bit.ly/2R7VG3Y
-        # Explicit call of both super class constructors
-        # Order very important, do not change
-        SimpleSNN.__init__(self, config, dataset, training)
-        CaseHandlerHelper.__init__(self, dataset)
+            # Reduce to the features used by this case handler
+            model_input = model_input[:, :, self.dataset.get_masking_group(group_id)]
 
-        # No model loading here, will be done by CBS for all case handlers
+            batch_loss = self.optimizer_helper.update_single_model(model_input, true_similarities)
 
+            # Track progress
+            epoch_loss_avg.update_state(batch_loss)
+            current_loss = epoch_loss_avg.result()
 
-class CaseHandler(CaseHandlerHelper, SNN):
+            losses.append(current_loss)
 
-    def __init__(self, config, dataset, training):
-        # Not nice but should work, https://bit.ly/2R7VG3Y
-        # Explicit call of both super class constructors
-        # Order very important, do not change
-        SNN.__init__(self, config, dataset, training)
-        CaseHandlerHelper.__init__(self, dataset)
+            if self.optimizer_helper.execute_early_stop(current_loss):
+                return losses, 'early_stopping'
 
-        # No model loading here, will be done by CBS for all case handlers
-
-
-class FastSimpleCaseHandler(CaseHandlerHelper, FastSimpleSNN):
-    def __init__(self, config, dataset, training):
-        # Not nice but should work, https://bit.ly/2R7VG3Y
-        # Explicit call of both super class constructors
-        # Order very important, do not change
-        FastSimpleSNN.__init__(self, config, dataset, training)
-        CaseHandlerHelper.__init__(self, dataset)
-
-        # No model loading or encoding here, will be done by CBS for all case handlers
-
-
-class FastCaseHandler(CaseHandlerHelper, FastSNN):
-
-    def __init__(self, config, dataset, training):
-        # Not nice but should work, https://bit.ly/2R7VG3Y
-        # Explicit call of both super class constructors
-        # Order very important, do not change
-        FastSNN.__init__(self, config, dataset, training)
-        CaseHandlerHelper.__init__(self, dataset)
-
-        # No model loading or encoding here, will be done by CBS for all case handlers
+        # Return the losses for all epochs during this training interval
+        return losses, ''

@@ -1,12 +1,9 @@
-import numpy as np
 import pandas as pd
 import json
 
-from configuration.Configuration import Configuration
 
-
-def flatten(l):
-    return [item for sublist in l for item in sublist]
+def flatten(lis):
+    return [item for sublist in lis for item in sublist]
 
 
 def get_cols(df, row_name):

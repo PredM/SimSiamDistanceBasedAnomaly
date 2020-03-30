@@ -1,9 +1,9 @@
-import sys
+import contextlib
+from time import perf_counter
 
 import numpy as np
-from sklearn import preprocessing
-from time import perf_counter
 import pandas as pd
+from sklearn import preprocessing
 
 from configuration.Configuration import Configuration
 
@@ -130,6 +130,8 @@ class FullDataset(Dataset):
         # at this index is relevant for the class described with the label key
         self.class_label_to_masking_vector = {}
 
+        self.group_id_to_masking_vector = {}
+
         #
         # new
         #
@@ -152,7 +154,7 @@ class FullDataset(Dataset):
         self.df_label_sim_failuremode = None
         self.df_label_sim_condition = None
 
-    def load(self):
+    def load_files(self):
         # dtype conversion necessary because layers use float32 by default
         # .astype('float32') removed because already included in dataset creation
 
@@ -166,6 +168,9 @@ class FullDataset(Dataset):
         self.windowTimes_test = np.expand_dims(np.load(self.dataset_folder + 'test_window_times.npy'), axis=-1)
         self.failure_times = np.expand_dims(np.load(self.dataset_folder + 'test_failure_times.npy'), axis=-1)
         self.feature_names_all = np.load(self.dataset_folder + 'feature_names.npy')  # names of the features (3. dim)
+
+    def load(self, print_info=True):
+        self.load_files()
 
         # create a encoder, sparse output must be disabled to get the intended output format
         # added categories='auto' to use future behavior
@@ -206,11 +211,6 @@ class FullDataset(Dataset):
         self.classes_Unique_oneHotEnc = one_hot_encoder.transform(np.expand_dims(self.classes_total, axis=1))
         self.num_classes = self.classes_total.size
 
-        # Create two dictionaries to link/associate each class with all its training examples
-        for i in range(self.num_classes):
-            self.class_idx_to_ex_idxs_train[i] = np.argwhere(self.y_train[:, i] > 0)
-            self.class_idx_to_ex_idxs_test[i] = np.argwhere(self.y_test[:, i] > 0)
-
         # collect number of instances for each class in training and test
         self.y_train_strings_unique, counts = np.unique(self.y_train_strings, return_counts=True)
         self.num_instances_by_class_train = np.asarray((self.y_train_strings_unique, counts)).T
@@ -238,15 +238,17 @@ class FullDataset(Dataset):
         # 1. dimension: example
         # 2. dimension: time index
         # 3. dimension: array of all channels
-        print()
-        print('Dataset loaded:')
-        print('Shape of training set (example, time, channels):', self.x_train.shape)
-        print('Shape of test set (example, time, channels):', self.x_test.shape)
-        print('Num of classes in train and test together:', self.num_classes)
-        # print('Classes used in training: ', len(self.y_train_strings_unique)," :",self.y_train_strings_unique)
-        # print('Classes used in test: ', len(self.y_test_strings_unique)," :", self.y_test_strings_unique)
-        # print('Classes in total: ', self.classes_total)
-        print()
+
+        if print_info:
+            print()
+            print('Dataset loaded:')
+            print('Shape of training set (example, time, channels):', self.x_train.shape)
+            print('Shape of test set (example, time, channels):', self.x_test.shape)
+            print('Num of classes in train and test together:', self.num_classes)
+            # print('Classes used in training: ', len(self.y_train_strings_unique)," :",self.y_train_strings_unique)
+            # print('Classes used in test: ', len(self.y_test_strings_unique)," :", self.y_test_strings_unique)
+            # print('Classes in total: ', self.classes_total)
+            print()
 
     def load_feature_based_representation(self):
         # Loading TS-Fresh generated features
@@ -292,6 +294,10 @@ class FullDataset(Dataset):
             #print("Label: ", case, " \t \t relevant features ", relevant_features_for_case , "\n masking: ", masking)
             self.class_label_to_masking_vector[case] = masking
 
+        for group_id, features in self.config.group_id_to_features.items():
+            masking = np.isin(self.feature_names_all, features)
+            self.group_id_to_masking_vector[group_id] = masking
+
     # returns a boolean array with values depending on whether the attribute at this index is relevant
     # for the class of the passed label
     def get_masking(self, class_label):
@@ -300,6 +306,14 @@ class FullDataset(Dataset):
             raise ValueError('Passed class label', class_label, 'was not found in masking dictionary')
         else:
             return self.class_label_to_masking_vector.get(class_label)
+
+    def get_masked_example_group(self, test_example, group_id):
+
+        if group_id not in self.group_id_to_masking_vector:
+            raise ValueError('Passed group id', group_id, 'was not found in masking dictionary')
+        else:
+            mask = self.group_id_to_masking_vector.get(group_id)
+            return test_example[:, mask]
 
     def get_masking_float(self, class_label):
         return self.get_masking(class_label).astype(float)
@@ -381,25 +395,6 @@ class FullDataset(Dataset):
 
         return Dataset.draw_from_ds(self, ds_y, num_instances, is_positive, class_idx)
 
-    def draw_pair_cbs(self, is_positive, indices_positive):
-
-        while True:
-            first_idx_in_list = np.random.randint(0, len(indices_positive), size=1)[0]
-            first_idx = indices_positive[first_idx_in_list]
-
-            # positive --> both examples' indices need to be in indices_positive
-            if is_positive:
-                second_idx_in_list = np.random.randint(0, len(indices_positive), size=1)[0]
-                second_idx = indices_positive[second_idx_in_list]
-            else:
-                while True:
-                    second_idx = np.random.randint(0, self.num_train_instances, size=1)[0]
-
-                    if second_idx not in indices_positive:
-                        break
-
-            return first_idx, second_idx
-
     def get_sim_label_pair_for_notion(self, label_1, label_2, notion_of_sim):
         # Input label1, label2, notion_of_sim as string
         # Output similarity value under consideration of the metric
@@ -444,105 +439,98 @@ class FullDataset(Dataset):
 #  -  Should be fine because of "# all equal to case but" ..., but check again
 #  - (Update the documentation when finished)
 
-# variation of the dataset class that consists only of examples of the same case
-# does not contain test data because this isn't needed on the level of each case
-class CaseSpecificDataset(Dataset):
+class CBSDataset(FullDataset):
 
-    def __init__(self, dataset_folder, config: Configuration, cases: list, features_used=None):
+    def __init__(self, dataset_folder, config: Configuration, training):
+        super().__init__(dataset_folder, config, training)
+        self.group_to_indices_train = {}
+        self.group_to_indices_test = {}
 
-        # the case all the examples of x_train have
-        super().__init__(dataset_folder, config)
-        self.cases: list = cases
+    # TODO Check if this is working correctly
+    def load(self, print_info=True):
+        super().load(print_info)
 
-        # the features that are relevant for the case of this dataset
-        self.features_used = features_used
+        for group, cases in self.config.group_id_to_cases.items():
+            self.group_to_indices_train[group] = [i for i, case in enumerate(self.y_train_strings) if case in cases]
 
-        # the indices of the used features in the array of all features
-        self.indices_features = None
+        for group, cases in self.config.group_id_to_cases.items():
+            self.group_to_indices_test[group] = [i for i, case in enumerate(self.y_test_strings) if case in cases]
 
-        # the indices of the examples with the case of this dataset in the dataset with all examples
-        self.indices_cases = None
+    def encode(self, encoder, encode_test_data=False):
+        raise NotImplementedError('')
 
-    def load(self):
-        self.x_train = np.load(self.dataset_folder + 'train_features.npy')  # data training
-        self.y_train_strings = np.load(self.dataset_folder + 'train_labels.npy')  # labels training data
-        self.feature_names_all = np.load(self.dataset_folder + 'feature_names.npy')  # names of the features (3. dim)
+    def draw_pair_cbs(self, is_positive, indices_positive):
 
-        # get the indices of the features that should be used for this dataset
-        if self.features_used is None:
-            self.indices_features = np.array([i for i in range(self.x_train.shape[2])])
+        while True:
+            first_idx_in_list = np.random.randint(0, len(indices_positive), size=1)[0]
+            first_idx = indices_positive[first_idx_in_list]
+
+            # positive --> both examples' indices need to be in indices_positive
+            if is_positive:
+                second_idx_in_list = np.random.randint(0, len(indices_positive), size=1)[0]
+                second_idx = indices_positive[second_idx_in_list]
+            else:
+                while True:
+                    second_idx = np.random.randint(0, self.num_train_instances, size=1)[0]
+
+                    if second_idx not in indices_positive:
+                        break
+
+            return first_idx, second_idx
+
+    def get_masking_group(self, group_id):
+
+        if group_id not in self.group_id_to_masking_vector:
+            raise ValueError('Passed group id', group_id, 'was not found in masking dictionary')
         else:
-            # don't change the == condition
-            self.indices_features = np.where(np.isin(self.feature_names_all, self.features_used) == True)[0]
+            mask = self.group_id_to_masking_vector.get(group_id)
+            return mask
 
-        if self.features_used is not None and len(self.indices_features) != len(self.features_used):
-            raise ValueError('Error finding the relevant features in the loaded dataset. '
-                             'Probably at least one feature is missing and the dataset needs to be regenerated.')
+    def create_group_dataset(self, group_id):
+        dataset = GroupDataset(self.dataset_folder, self.config, self.training, self, group_id)
+        dataset.load()
+        return dataset
 
-        # reduce the training data to the features that should be used
-        self.x_train = self.x_train[:, :, self.indices_features]
+    def get_masked_example_group(self, test_example, group_id):
+        mask = self.get_masking_group(group_id)
+        return test_example[:, mask]
 
-        # reduce training data / casebase to those examples that have the right case
-        self.x_train = self.x_train[np.where(self.y_train_strings == self.case)[0], :, :]
 
-        # store the indices of the cases that match case
-        self.indices_cases = [i for i, value in enumerate(self.y_train_strings) if value == self.case]
+class GroupDataset(FullDataset):
 
-        # all equal to case but included to be able to use the same evaluation like the snn
-        self.y_train_strings = self.y_train_strings[self.indices_cases]
-        self.y_train_strings = np.expand_dims(self.y_train_strings, axis=-1)
+    def __init__(self, dataset_folder, config: Configuration, training, main_dataset: CBSDataset, group_id):
+        super().__init__(dataset_folder, config, training)
+        self.main_dataset = main_dataset
+        self.group_id = group_id
 
-        # create a encoder, sparse output must be disabled to get the intended output format
-        # added categories='auto' to use future behavior
-        one_hot_encoder = preprocessing.OneHotEncoder(sparse=False, categories='auto')
+    def load_files(self):
+        self.x_train = self.main_dataset.x_train.copy()  # data training
+        self.y_train_strings = np.expand_dims(self.main_dataset.y_train_strings.copy(), axis=-1)
+        self.windowTimes_train = self.main_dataset.windowTimes_train.copy()
+        self.failureTimes_train = self.main_dataset.failureTimes_train.copy()
 
-        # prepare the encoder with training and test labels to ensure all are present
-        # the fit-function 'learns' the encoding but does not jet transform the data
-        # the axis argument specifies on which the two arrays are joined
-        one_hot_encoder = one_hot_encoder.fit(self.y_train_strings)
+        # Temp solution, x_test only in here so load of full dataset works
+        self.x_test = self.main_dataset.x_test.copy()
+        self.y_test_strings = np.expand_dims(self.main_dataset.y_test_strings.copy(), axis=-1)
+        self.windowTimes_test = self.main_dataset.windowTimes_test
+        self.failure_times = self.main_dataset.failure_times
+        self.feature_names_all = self.main_dataset.feature_names_all
 
-        # transforms the vector of labels into a one hot matrix
-        self.y_train = one_hot_encoder.transform(self.y_train_strings)
+        # Reduce training data to the cases of this group
+        indices = self.main_dataset.group_to_indices_train.get(self.group_id)
+        self.x_train = self.x_train[indices, :, :]
+        self.y_train_strings = self.y_train_strings[indices, :]
 
-        # reduce to 1d array
-        self.y_train_strings = np.squeeze(self.y_train_strings)
+        # Reduce x_train and feature_names_all to the features of this group
+        mask = self.main_dataset.group_id_to_masking_vector.get(self.group_id)
+        self.x_train = self.x_train[:, :, mask]
+        self.feature_names_all = self.feature_names_all[mask]
 
-        ##
-        # safe information about the dataset
-        ##
+        # Reduce metadata to relevant indices, too
+        # (currently not used by SNN, so it wouldn't be necessary but done ensure future correctness, wrong index call,
+        # may not be noticed)
+        self.windowTimes_train = self.windowTimes_train[indices, :]
+        self.failureTimes_train = self.failureTimes_train[indices, :]
 
-        # length of the first array dimension is the number of examples
-        self.num_train_instances = self.x_train.shape[0]
-
-        # the total sum of examples
-        self.num_instances = self.num_train_instances
-
-        # length of the second array dimension is the length of the time series
-        self.time_series_length = self.x_train.shape[1]
-
-        # length of the third array dimension is the number of features = (independent) readings at this point of time
-        self.time_series_depth = self.x_train.shape[2]
-
-        # 1. dimension: example
-        # 2. dimension: time index
-        # 3. dimension: array of all channels
-        print('Casebase for case', self.case, 'loaded')
-        print('\tShape:', self.x_train.shape)
-        print()
-
-    def encode(self, encoder):
-        start_time_encoding = perf_counter()
-
-        x_train_unencoded = np.copy(self.x_train)
-        self.x_train = None
-        x_train_encoded = encoder.model(x_train_unencoded, training=False)
-        x_train_encoded = np.asarray(x_train_encoded)
-        self.x_train = x_train_encoded
-
-        encoding_duration = perf_counter() - start_time_encoding
-
-        return encoding_duration
-
-    # draw a random pair of instances
-    def draw_pair(self, is_positive):
-        return Dataset.draw_from_ds(self, self.y_train, self.num_train_instances, is_positive)
+    def load(self, print_info=False):
+        super().load(print_info)

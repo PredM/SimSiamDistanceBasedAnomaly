@@ -504,7 +504,7 @@ class CNN(NN):
         super().__init__(hyperparameters, input_shape)
 
     def create_model(self):
-        print('Creating CNN encoder \n')
+        print('Creating CNN encoder')
         model = tf.keras.Sequential(name='CNN')
 
         layers = self.hyper.cnn_layers
