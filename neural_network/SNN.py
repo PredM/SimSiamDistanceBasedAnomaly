@@ -208,6 +208,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
         # context_vectors = tf.reshape(context_vectors,[context_vectors.shape[0],context_vectors.shape[1],1])
         a_weights, b_weights = None, None
         a_context, b_context = None, None
+        w = None
 
         # Parsing the input (e.g., two 1d or 2d vectors depending on which encoder is used) to calculate distance / sim
         if self.encoder.hyper.encoder_variant == 'cnnwithclassattention':
@@ -218,8 +219,12 @@ class SimpleSNN(AbstractSimilarityMeasure):
             if self.config.useFeatureWeightedSimilarity:
                 a_weights = context_vectors[1][2 * pair_index, :]
                 b_weights = context_vectors[1][2 * pair_index + 1, :]
+            if self.encoder.hyper.useAddContextForSim == 'True':
                 a_context = context_vectors[2][2 * pair_index, :]
                 b_context = context_vectors[2][2 * pair_index + 1, :]
+                w = context_vectors[3][2 * pair_index, :]
+                #debug output:
+                #tf.print("context_vectors[3][2 * pair_index, :]", context_vectors[4][2 * pair_index, :])
 
         else:
             a = context_vectors[2 * pair_index, :, :]
@@ -238,7 +243,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
         if self.config.use_time_step_matching_simple_similarity:
             a, b, a_weights, b_weights = self.match_time_step_wise(a, b)
 
-        return self.simple_sim.get_sim(a, b, a_weights, b_weights, a_context, b_context)
+        return self.simple_sim.get_sim(a, b, a_weights, b_weights,a_context,b_context,w)
 
     @tf.function
     def transform_to_time_step_wise(self, a, b):
@@ -292,17 +297,19 @@ class SimpleSNN(AbstractSimilarityMeasure):
 
         # FIXME @Niklas
         input = np.array([self.dataset.get_masking_float(case_label) for case_label in self.config.cases_used])
+        #print("Input: \n", input.tostring())
         case_embeddings = self.encoder.intermediate_layer_model(input, training=self.training)
+        print("case_embeddings: ", case_embeddings.shape)
         # Get positions with maximum values
         max_pos = np.argsort(-case_embeddings, axis=1)  # [::-1]  # np.argmax(case_embeddings, axis=1)
         min_pos = np.argsort(case_embeddings, axis=1)  # [::-1]  # np.argmax(case_embeddings, axis=1)
-        for i in self.dataset.classes_total:
+        for case_label in self.config.cases_used:
             with np.printoptions(precision=3, suppress=True):
                 # Get positions with maximum values
                 row = np.array(case_embeddings[cnt, :])
                 maxNPos = max_pos[cnt, :num_of_max_pos]
                 minNPos = min_pos[cnt, :num_of_max_pos]
-                print(i, " ", input[cnt], " | Max Filter: ", max_pos[cnt, :5], " | Min Filter: ", min_pos[cnt, :5],
+                print(case_label, " ", input[cnt], " | Max Filter: ", max_pos[cnt, :5], " | Min Filter: ", min_pos[cnt, :5],
                       " | Max Values: ", row[maxNPos], " | Min Values: ", row[minNPos])
                 cnt = cnt + 1
 

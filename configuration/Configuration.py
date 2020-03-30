@@ -25,10 +25,10 @@ class GeneralConfiguration:
         self.max_parallel_cores = 60
 
         # Folder where the trained models are saved to during learning process
-        self.models_folder = '../data/trained_models/'
+        self.models_folder = '../data/trained_models3/'
 
         # Path and file name to the specific model that should be used for testing and live classification
-        self.filename_model_to_use = 'temp_cbs_model_03-27_14-32-53_epoch-240'
+        self.filename_model_to_use = 'temp_snn_model_03-26_12-51-59_epoch-6500'
         self.directory_model_to_use = self.models_folder + self.filename_model_to_use + '/'
 
         ##
@@ -73,7 +73,7 @@ class ModelConfiguration:
         # Only use euclidean_dis for TRAINING with contrastive loss
         self.simple_measures = ['abs_mean', 'euclidean_sim', 'euclidean_dis', 'dot_product', 'cosine',
                                 'attention_based']
-        self.simple_measure = self.simple_measures[0]
+        self.simple_measure = self.simple_measures[1]
 
         ###
         # Hyperparameters
@@ -103,9 +103,14 @@ class ModelConfiguration:
         # Weighted euclidean similarity based on relevant attributes
         self.useFeatureWeightedSimilarity = False  # default: False
 
+        # Weights are based on masking vectors that contain 1 if a feature is selected as relevant for a
+        # label (failure mode) accrodings to features.json and 0 otherwise. If option is set False then features based
+        # on groups are used.
+        self.masking_vector_based_on_individual_attributes = True # default: True
+
         # Option to simulate a retrieval situation (during training) where only the weights of the
         # example from the case base/training data set are known:
-        self.use_same_feature_weights_for_unsimilar_pairs = False  # default: ?
+        self.use_same_feature_weights_for_unsimilar_pairs = True  # default: True
 
         # Compares each time step of the encoded representation with each other time step
         # (instead of only comparing the ones with the same indices)
@@ -144,7 +149,7 @@ class TrainingConfiguration:
 
         # TODO: TripletLoss, Distance-Based Logistic Loss
         self.loss_function_variants = ['binary_cross_entropy', 'constrative_loss', 'mean_squared_error', 'huber_loss']
-        self.type_of_loss_function = self.loss_function_variants[0]
+        self.type_of_loss_function = self.loss_function_variants[1]
 
         # Settings for constrative_loss
         self.margin_of_loss_function = 2
@@ -170,7 +175,7 @@ class TrainingConfiguration:
         # If equalClassConsideration is true, then this parameter defines the proportion of examples
         # based on class distribution and example distribution.
         # Proportion = BatchSize/2/ThisFactor. E.g., 2 = class distribution only, 4 = half, 6 = 1/3, 8 = 1/4
-        self.upsampling_factor = 2  # default: 4, means half / half
+        self.upsampling_factor = 4  # default: 4, means half / half
 
         # Use a custom similarity values instead of 0 for unequal / negative pairs during batch creation
         # These are based on the similarity matrices loaded in the dataset
@@ -356,6 +361,8 @@ class StaticConfiguration:
         # noinspection PyUnresolvedReferences
         self.load_config_json('../configuration/config.json')
 
+        self.load_features_json('../data/feature_selection/features.json')
+
         ##
         # Folders and file names
         ##
@@ -458,9 +465,19 @@ class Configuration(
         else:
             raise AttributeError('Unknown feature variant:', self.feature_variant)
 
+    # loads the features.json file
+    def load_features_json(self, file_path):
+        with open(file_path, 'r') as f:
+            data = json.load(f)
+            self.label_to_individual_features: dict = data['relevant_features']
+
     def get_relevant_features(self, case):
         group = self.case_to_group_id.get(case)
         return self.group_id_to_features.get(group)
+
+    # returns individual defined features (instead of group features)
+    def get_relevant_features_individual_defined(self, label):
+        return self.label_to_individual_features.get(label)
 
     # return the error case description for the passed label
     def get_error_description(self, error_label: str):

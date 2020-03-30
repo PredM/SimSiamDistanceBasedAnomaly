@@ -12,18 +12,20 @@ class SimpleSimilarityMeasure:
         self.b_weights = None
         self.a_context = None
         self.b_context = None
+        self.w = None
 
         self.implemented = ['abs_mean', 'euclidean_sim', 'euclidean_dis', 'dot_product', 'cosine', 'attention_based']
         assert sim_type in self.implemented
 
     @tf.function
-    def get_sim(self, a, b, a_weights=None, b_weights=None, a_context=None, b_context=None):
+    def get_sim(self, a, b, a_weights=None, b_weights=None, a_context=None, b_context=None, w=None):
 
         # assign to class variables so only common parameters must be passed below
         self.a_weights = a_weights
         self.b_weights = b_weights
         self.a_context = a_context
         self.b_context = b_context
+        self.w = w
 
         switcher = {
             'abs_mean': self.abs_mean,
@@ -55,10 +57,14 @@ class SimpleSimilarityMeasure:
             diff = tf.abs(a - b)
             # feature weighted distance:
             distance = tf.reduce_mean(weight_matrix * diff)
+
             if use_additional_sim:
-                diff2 = tf.abs(self.a_context - self.b_context)
-                distance2 = tf.reduce_mean(diff2)
-                distance = (distance2 + distance) / 2
+                # calculate context distance
+                diff_con = tf.abs(self.a_context - self.b_context)
+                distance_con = tf.reduce_mean(diff_con)
+                #weight both distances
+                distance = self.w * distance + (1-self.w) * distance_con
+                distance=tf.squeeze(distance)
         else:
             diff = tf.abs(a - b)
             distance = tf.reduce_mean(diff)
@@ -71,6 +77,7 @@ class SimpleSimilarityMeasure:
     def euclidean_dis(self, a, b):
         # cnn2d, [T,C]
         use_weighted_sim = self.a_weights is not None and self.b_weights is not None
+        use_additional_sim = self.a_context is not None and self.b_context is not None
 
         if use_weighted_sim:
             # Note: only one weight vector is used (a_weights) to simulate a retrieval situation
@@ -81,8 +88,18 @@ class SimpleSimilarityMeasure:
             q = a - b
             weighted_dist = tf.sqrt(tf.reduce_sum(weight_matrix * q * q))
             diff = weighted_dist
+            if use_additional_sim:
+                # calculate context distance
+                diff_con = tf.norm(self.a_context - self.b_context, ord='euclidean')
+                distance_con = tf.reduce_mean(diff_con)
+                #weight both distances
+                distance = self.w * diff + (1-self.w) * distance_con
+                diff=tf.squeeze(distance)
         else:
+            #tf.print("a: ", a)
+            #tf.print("b: ", b)
             diff = tf.norm(a - b, ord='euclidean')
+            #tf.print("diff: ", diff)
 
         return diff
 

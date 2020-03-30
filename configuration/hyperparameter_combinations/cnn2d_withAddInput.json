@@ -51,5 +51,25 @@
     5,
     5,
     3
+  ],
+  "abcnn1": "weighted",
+  "use1dContext": "False",
+  "learnFeatureWeights": "True",
+  "useChannelWiseAggregation": "True",
+  "useAddContextForSim": "True",
+  "useAddContextForSim_LearnOrFixWeightVale": "True",
+  "cnn2d_channelWiseAggregation": [
+    128,
+    64,
+    32
+  ],
+  "cnn2d_contextModule": [
+    256,
+    128,
+    64
+  ],
+  "cnn2d_learnWeightForContextUsedInSim": [
+    32,
+    16
   ]
 }
