@@ -293,11 +293,6 @@ class FullDataset(Dataset):
         mask = self.get_masking(class_label_train_example)
         return test_example[:, mask], self.x_train[train_example_index][:, mask]
 
-    # def get_reduced_train_example(self, train_example_index):
-    #     class_label_train_example = self.y_train_strings[train_example_index]
-    #     mask = self.get_masking(class_label_train_example)
-    #     return self.x_train[train_example_index][:, mask]
-
     def get_time_window_str(self, index, dataset_type):
         if dataset_type == 'test':
             dataset = self.windowTimes_test
@@ -417,7 +412,6 @@ class CBSDataset(FullDataset):
             self.group_to_indices_test[group] = [i for i, case in enumerate(self.y_test_strings) if case in cases]
 
     def encode(self, encoder, encode_test_data=False):
-        # TODO Handle Copy Problem! --> Pass real copy of CBSDataset-objects to the CBSGroupHandler, then encode this
         raise NotImplementedError('')
 
     def draw_pair_cbs(self, is_positive, indices_positive):
@@ -467,11 +461,10 @@ class GroupDataset(FullDataset):
     def load_files(self):
         self.x_train = self.main_dataset.x_train.copy()  # data training
         self.y_train_strings = np.expand_dims(self.main_dataset.y_train_strings.copy(), axis=-1)
-        self.windowTimes_train = self.main_dataset.windowTimes_train
-        self.failureTimes_train = self.main_dataset.failureTimes_train
+        self.windowTimes_train = self.main_dataset.windowTimes_train.copy()
+        self.failureTimes_train = self.main_dataset.failureTimes_train.copy()
 
         # Temp solution, x_test only in here so load of full dataset works
-        # --> Fix Num of classes in train and test together output
         self.x_test = self.main_dataset.x_test.copy()
         self.y_test_strings = np.expand_dims(self.main_dataset.y_test_strings.copy(), axis=-1)
         self.windowTimes_test = self.main_dataset.windowTimes_test
@@ -483,10 +476,16 @@ class GroupDataset(FullDataset):
         self.x_train = self.x_train[indices, :, :]
         self.y_train_strings = self.y_train_strings[indices, :]
 
-        # Reduce x_train to the features of this group
+        # Reduce x_train and feature_names_all to the features of this group
         mask = self.main_dataset.group_id_to_masking_vector.get(self.group_id)
         self.x_train = self.x_train[:, :, mask]
+        self.feature_names_all = self.feature_names_all[mask]
+
+        # Reduce metadata to relevant indices, too
+        # (currently not used by SNN, so it wouldn't be necessary but done ensure future correctness, wrong index call,
+        # may not be noticed)
+        self.windowTimes_train = self.windowTimes_train[indices, :]
+        self.failureTimes_train = self.failureTimes_train[indices, :]
 
     def load(self, print_info=False):
-        # with contextlib.redirect_stdout(None):
         super().load(print_info)

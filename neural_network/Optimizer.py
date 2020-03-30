@@ -206,8 +206,6 @@ class CBSOptimizer(Optimizer):
 
         self.losses = dict()
         self.goal_epochs = dict()
-        self.best_loss = dict()
-        self.stopping_step_counter = dict()
 
         for group_handler in self.architecture.group_handlers:
             group_handler: CBSGroupHandler = group_handler
@@ -216,8 +214,6 @@ class CBSOptimizer(Optimizer):
 
             self.losses[group_id] = []
             self.goal_epochs[group_id] = group_hyper.epochs
-            self.best_loss[group_id] = 1000
-            self.stopping_step_counter[group_id] = 0
 
         self.max_epoch = max(self.goal_epochs.values())
 
@@ -235,18 +231,23 @@ class CBSOptimizer(Optimizer):
             for group_handler in self.handlers_still_training:
                 training_interval = self.config.output_interval
 
-                # goal epoch for this case handler will be reached during this training step
+                # Goal epoch for this case handler will be reached during this training step
                 if self.goal_epochs.get(group_handler.group_id) <= current_epoch + training_interval:
                     training_interval = self.goal_epochs.get(group_handler.group_id) - current_epoch
 
+                # When training, the only input is the number of epochs that should be trained for
+                # before next output/save
                 group_handler.input_queue.put(training_interval)
 
             for group_handler in self.handlers_still_training:
-                losses_of_training_interval = group_handler.output_queue.get()
-                loss_list, info = self.losses.get(group_handler.group_id)
+                # Wait for the group handlers to finish the training interval
+                losses_of_training_interval, info = group_handler.output_queue.get()
 
+                # Append losses to list with full history
+                loss_list = self.losses.get(group_handler.group_id)
                 loss_list += losses_of_training_interval
 
+                # Evaluate the information provided in addition to the losses
                 if info == 'early_stopping':
                     self.handlers_still_training.remove(group_handler)
                     print('Early stopping group handler', group_handler.group_id)
@@ -283,7 +284,7 @@ class CBSOptimizer(Optimizer):
         if current_epoch <= 0:
             return
 
-        # generate a name and create the directory, where the model files of this epoch should be stored
+        # Generate a name and create the directory, where the model files of this epoch should be stored
         epoch_string = 'epoch-' + str(current_epoch)
         dt_string = datetime.now().strftime("%m-%d_%H-%M-%S")
         dir_name = self.config.models_folder + '_'.join(['temp', 'cbs', 'model', dt_string, epoch_string]) + '/'
@@ -294,12 +295,12 @@ class CBSOptimizer(Optimizer):
             group_id = group_handler.group_id
             group_hyper = group_handler.model.hyper
 
-            # create a subdirectory for the model files of this case handler
+            # Create a subdirectory for the model files of this case handler
             subdirectory = group_id + '_model'
             full_path = os.path.join(dir_name, subdirectory)
             os.mkdir(full_path)
 
-            # write model configuration to file
+            # Write model configuration to file
             group_hyper.epochs_current = current_epoch if current_epoch <= group_hyper.epochs \
                 else group_hyper.epochs
             group_hyper.write_to_file(full_path + '/' + group_id + '.json')

@@ -92,7 +92,7 @@ class OptimizerHelper:
         logloss = -(y_true * K.log(y_pred) + (1 - y_true + (weight / 2)) * K.log(1 - y_pred))
         return K.mean(logloss, axis=-1)
 
-    # wbce = weighted_binary_crossentropy
+    # wbce = weighted_binary_cross_entropy
     def get_similarity_between_two_label_string(self, classes, neg_pair_wbce=False):
         # Returns the similarity between 2 failures (labels) in respect to the location of occurrence,
         # the type of failure (failure mode) and the condition of the data sample.
@@ -221,7 +221,6 @@ class CBSOptimizerHelper(OptimizerHelper):
 
         return batch_pairs_indices, true_similarities
 
-    # TODO Add to cbs optimizer helper
     def execute_early_stop(self, last_loss):
         if self.config.use_early_stopping:
             self.losses.append(last_loss)

@@ -90,7 +90,7 @@ class ModelConfiguration:
         # If !use_individual_hyperparameters interpreted as a single json file, else as a folder
         # which contains json files named after the cases they should be used for
         # If no file with this name is present the 'default.json' Config will be used
-        self.hyper_file = self.hyper_file_folder + 'snn_testing.json' # 'ba_cnn_modified.json'
+        self.hyper_file = self.hyper_file_folder + 'snn_testing.json'
 
         ##
         # Various settings influencing the ssimilarity calculation
@@ -181,10 +181,10 @@ class TrainingConfiguration:
         self.continue_training = False  # default: False
 
         # Defines how often loss is printed and checkpoints are saved during training
-        self.output_interval = 40
+        self.output_interval = 200
 
         # How many model checkpoints are kept
-        self.model_files_stored = 2
+        self.model_files_stored = 100
 
 
 class InferenceConfiguration:

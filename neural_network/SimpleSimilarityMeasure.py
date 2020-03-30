@@ -1,6 +1,7 @@
 import tensorflow as tf
 from scipy.spatial import distance
 
+
 # noinspection PyMethodMayBeStatic
 class SimpleSimilarityMeasure:
 
@@ -57,7 +58,7 @@ class SimpleSimilarityMeasure:
             if use_additional_sim:
                 diff2 = tf.abs(self.a_context - self.b_context)
                 distance2 = tf.reduce_mean(diff2)
-                distance = (distance2+distance)/2
+                distance = (distance2 + distance) / 2
         else:
             diff = tf.abs(a - b)
             distance = tf.reduce_mean(diff)
@@ -77,8 +78,8 @@ class SimpleSimilarityMeasure:
             weight_matrix = tf.reshape(tf.tile(self.a_weights, [a.shape[0]]), [a.shape[0], a.shape[1]])
             a_weights_sum = tf.reduce_sum(weight_matrix)
             weight_matrix = weight_matrix / a_weights_sum
-            q = a-b
-            weighted_dist = tf.sqrt(tf.reduce_sum(weight_matrix*q*q))
+            q = a - b
+            weighted_dist = tf.sqrt(tf.reduce_sum(weight_matrix * q * q))
             diff = weighted_dist
         else:
             diff = tf.norm(a - b, ord='euclidean')
@@ -113,12 +114,12 @@ class SimpleSimilarityMeasure:
             normalize_a = tf.nn.l2_normalize(a, 0) * weight_vec
             normalize_b = tf.nn.l2_normalize(b, 0) * weight_vec
             cos_similarity = tf.reduce_sum(tf.multiply(normalize_a, normalize_b) * weight_vec)
-            #cos_similarity = 1-distance.cosine(a.numpy(),b.numpy(),self.a_weights)
+            # cos_similarity = 1-distance.cosine(a.numpy(),b.numpy(),self.a_weights)
         else:
             normalize_a = tf.nn.l2_normalize(a, 0)
             normalize_b = tf.nn.l2_normalize(b, 0)
             cos_similarity = tf.reduce_sum(tf.multiply(normalize_a, normalize_b))
-            #tf.print(cos_similarity)
+            # tf.print(cos_similarity)
 
         return cos_similarity
 
@@ -140,9 +141,9 @@ class SimpleSimilarityMeasure:
         diff_b = tf.abs(b - self.b_weights)
         distance_a = tf.reduce_mean(diff_a)
         distance_b = tf.reduce_mean(diff_b)
-        distance = (distance_a+ distance_b)/2
+        distance = (distance_a + distance_b) / 2
         sim = tf.exp(-distance)
-        #tf.print("distance_a: ", distance_a, "distance_b: ", distance_b,"distance: ", distance, "sim: ", sim)
+        # tf.print("distance_a: ", distance_a, "distance_b: ", distance_b,"distance: ", distance, "sim: ", sim)
 
         return sim
 
@@ -219,18 +220,17 @@ class SimpleSimilarityMeasure:
           attention_y: NxD float tensor.
         """
         if sim == "euclidean":
-            a = self.pairwise_euclidean_similarity(x,y)
+            a = self.pairwise_euclidean_similarity(x, y)
         elif sim == "dot_product":
             a = self.pairwise_dot_product_similarity(x, y)
         elif sim == "cosine":
             a = self.pairwise_cosine_similarity(x, y)
         else:
-            print("Error: No pairwise similiarity function with name: ",sim," found!")
-
+            print("Error: No pairwise similiarity function with name: ", sim, " found!")
 
         # Compute attention between each time step from x and y based on similarity
         a_x = tf.nn.softmax(a, axis=1)  # i->j
-        #print("a_x shape:", a_x.shape)
+        # print("a_x shape:", a_x.shape)
         a_y = tf.nn.softmax(a, axis=0)  # j->i
         attention_x = tf.matmul(a_x, y)
         attention_y = tf.matmul(a_y, x, transpose_a=True)

@@ -10,7 +10,6 @@ from neural_network.BasicNeuralNetworks import CNN, RNN, FFNN, TCN, CNNWithClass
 import matplotlib.pyplot as plt
 
 
-# TODO Add new parameters to others
 # initialises the correct SNN variant depending on the configuration
 def initialise_snn(config: Configuration, dataset, training, for_cbs=False, group_id=''):
     if training and config.architecture_variant in ['fast_simple', 'fast_ffnn']:
@@ -27,15 +26,15 @@ def initialise_snn(config: Configuration, dataset, training, for_cbs=False, grou
 
     elif training and var.endswith('ffnn') or not training and var == 'standard_ffnn':
         print('Creating standard SNN with FFNN similarity measure')
-        return SNN(config, dataset, training)
+        return SNN(config, dataset, training, for_cbs, group_id)
 
     elif not training and var == 'fast_simple':
         print('Creating fast SNN with simple similarity measure')
-        return FastSimpleSNN(config, dataset, training)
+        return FastSimpleSNN(config, dataset, training, for_cbs, group_id)
 
     elif not training and var == 'fast_ffnn':
         print('Creating fast SNN with FFNN similarity measure')
-        return FastSNN(config, dataset, training)
+        return FastSNN(config, dataset, training, for_cbs, group_id)
 
     else:
         raise AttributeError('Unknown SNN variant specified:' + config.architecture_variant)
@@ -291,7 +290,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
         for i in range(len(self.dataset.feature_names_all)):
             print(i, ": ", self.dataset.feature_names_all[i])
 
-        # FIXME
+        # FIXME @Niklas
         input = np.array([self.dataset.get_masking_float(case_label) for case_label in self.config.cases_used])
         case_embeddings = self.encoder.intermediate_layer_model(input, training=self.training)
         # Get positions with maximum values
@@ -409,8 +408,8 @@ class SimpleSNN(AbstractSimilarityMeasure):
 
 class SNN(SimpleSNN):
 
-    def __init__(self, config, dataset, training):
-        super().__init__(config, dataset, training)
+    def __init__(self, config, dataset, training, for_group_handler=False, group_id=''):
+        super().__init__(config, dataset, training, for_group_handler, group_id)
 
         # in addition to the simple snn version this one uses a feed forward neural net as sim measure
         self.ffnn = None
@@ -471,7 +470,8 @@ class SNN(SimpleSNN):
 
         return tf.exp(-tf.reduce_mean(warped_dists))
 
-    def get_sim_pair(self, context_vectors, pair_index):
+    # FIXME: Renamed this because it wasn't working
+    def get_sim_pair_attention(self, context_vectors, pair_index):
         # print("context_vectors.shape:" , context_vectors.shape)
         # print("pair_index: ", tf.print(pair_index))
         """Compute the warped distance with a neural network with each pair_index value
@@ -563,8 +563,8 @@ class SNN(SimpleSNN):
 
 class FastSimpleSNN(SimpleSNN):
 
-    def __init__(self, config, dataset, training):
-        super().__init__(config, dataset, training)
+    def __init__(self, config, dataset, training, for_group_handler=False, group_id=''):
+        super().__init__(config, dataset, training, for_group_handler, group_id)
 
         # Load model only if init was not called by subclass, would otherwise be executed multiple times
         if type(self) is FastSimpleSNN:
@@ -635,8 +635,8 @@ class FastSimpleSNN(SimpleSNN):
 
 class FastSNN(FastSimpleSNN):
 
-    def __init__(self, config, dataset, training):
-        super().__init__(config, dataset, training)
+    def __init__(self, config, dataset, training, for_group_handler=False, group_id=''):
+        super().__init__(config, dataset, training, for_group_handler, group_id)
 
         # in addition to the simple snn version this one uses a feed forward neural net as sim measure
         self.ffnn = None

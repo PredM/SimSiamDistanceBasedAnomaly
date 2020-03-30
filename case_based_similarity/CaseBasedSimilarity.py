@@ -25,12 +25,10 @@ class CBS(AbstractSimilarityMeasure):
         self.group_handlers: [CBSGroupHandler] = []
         self.number_of_groups = 0
 
-        # TODO Fix so automatic determination works again
         self.gpus = tf.config.experimental.list_logical_devices('GPU')
         self.nbr_gpus_used = config.max_gpus_used if 1 <= config.max_gpus_used < len(self.gpus) else len(self.gpus)
         self.gpus = self.gpus[0:self.nbr_gpus_used]
         self.gpus = [gpu.name for gpu in self.gpus]
-        # print(self.gpus)
         # self.gpus = ['/job:localhost/replica:0/task:0/device:GPU:0', '/job:localhost/replica:0/task:0/device:GPU:1']
 
         # with contextlib.redirect_stdout(None):
@@ -56,20 +54,25 @@ class CBS(AbstractSimilarityMeasure):
 
         self.number_of_groups = len(id_to_cases.keys())
 
+        # Counts the number of groups already processed, used for gpu distribution
         counter = 0
         for group, cases in id_to_cases.items():
 
+            # Check if there is at least one training example of this group,
+            # otherwise a group handler can't be created
             nbr_examples_for_group = len(self.dataset.group_to_indices_train.get(group))
-
             if nbr_examples_for_group <= 0:
                 print('-------------------------------------------------------')
                 print('WARNING: No case handler could be created for', group, cases)
                 print('Reason: No training example of this case in training dataset')
                 print('-------------------------------------------------------')
                 continue
+
             else:
+                # Distribute the group handlers equally to the available gpus
                 gpu = self.gpus[counter % len(self.gpus)]
                 counter += 1
+
                 gh: CBSGroupHandler = CBSGroupHandler(group, gpu, self.config, self.dataset, self.training)
                 gh.start()
 
@@ -78,11 +81,15 @@ class CBS(AbstractSimilarityMeasure):
                 print('Cases:')
                 for case in cases:
                     print('\t' + case)
+                print()
 
-                # wait until initialisation of run finished
-                x = gh.output_queue.get()
+                # Wait until initialisation of run finished and the group handler is ready to process input
+                # the group handler will send a message for which we are waiting here
+                _ = gh.output_queue.get()
                 self.group_handlers.append(gh)
 
+    # Is called when a keyboard interruption stops the main thread
+    # Will send a message to each group handler, which leads to the termination of the run function
     def kill_threads(self):
         for group_handler in self.group_handlers:
             group_handler.input_queue.put('stop')
@@ -101,14 +108,16 @@ class CBS(AbstractSimilarityMeasure):
             group_handler.print_group_handler_info()
 
     def get_sims(self, example):
-        # used to combine the results of all case handlers
-        # using a numpy array instead of a simple list to ensure index_sims == index_labels
+        # Used to combine the results of all group handlers
+        # Using a numpy array instead of a simple list to ensure index_sims == index_labels
         sims_groups = np.empty(self.number_of_groups, dtype='object_')
         labels_groups = np.empty(self.number_of_groups, dtype='object_')
 
+        # Pass the example to each group handler using it's input queue
         for group_handler in self.group_handlers:
             group_handler.input_queue.put(example)
 
+        # Get the results via the output queue, will wait until it's available
         for gh_index, group_handler in enumerate(self.group_handlers):
             sims_groups[gh_index], labels_groups[gh_index] = group_handler.output_queue.get()
 
@@ -116,10 +125,11 @@ class CBS(AbstractSimilarityMeasure):
 
     def get_sims_batch(self, batch):
         raise NotImplementedError(
-            'Not implemented for this architecture'
-            'The optimizer will use the dedicated function of each case handler')
+            'Not implemented for this architecture. '
+            'The models function will be called directly by each group handler.')
 
 
+# Currently threading.Thread is used instead of multiprocessing because of unfixed incompatibility with tf/cuda
 class CBSGroupHandler(threading.Thread):
 
     def __init__(self, group_id, gpu, config, dataset, training):
@@ -129,14 +139,20 @@ class CBSGroupHandler(threading.Thread):
         self.dataset: CBSDataset = dataset
         self.training = training
 
+        # The transfer and return of data to this process class must take place via these queues
+        # to ensure correct functionality when using the multiprocessing library.
+        # (Alternatively, additional data structures such as Multiprocessing.Manager.dict() would have to be used)
         self.input_queue = Queue()
         self.output_queue = Queue()
 
         # noinspection PyTypeChecker
         self.model = None
+        self.optimizer_helper = None
 
+        #self.print_group_handler_info()
+
+        # Must be last entry in __init__
         super(CBSGroupHandler, self).__init__()
-        # self.print_group_handler_info()
 
     def run(self):
         with tf.device(self.gpu):
@@ -147,28 +163,36 @@ class CBSGroupHandler(threading.Thread):
             if self.training:
                 self.optimizer_helper = CBSOptimizerHelper(self.model, self.config, self.dataset, self.group_id)
 
-            self.output_queue.put(str(self.group_id) + ' init finished. ')
-
             # Change the execution of the process depending on
             # whether the model is trained or applied
             # as additional variable so it can't be changed during execution
             is_training = self.training
 
+            # Send message so that the initiator knows that the preparations are complete.
+            self.output_queue.put(str(self.group_id) + ' init finished. ')
             while True:
                 elem = self.input_queue.get(block=True)
 
+                # Stop the process execution if a stop message was send via the queue
                 if isinstance(elem, str) and elem == 'stop':
                     break
 
                 if is_training:
+
+                    # Train method must be called by the process itself so that the advantage of parallel execution
+                    # of the training of the individual groups can be exploited.
+                    # Feedback contains loss and additional information using a single string
                     feedback = self.train(elem)
                     self.output_queue.put(feedback)
                 else:
+
+                    # Reduce the input example to the features required for this group
+                    # and pass it to the model to calculate the similarities
                     elem = self.dataset.get_masked_example_group(elem, self.group_id)
                     output = self.model.get_sims(elem)
                     self.output_queue.put(output)
 
-    # debugging method, can be removed when implementation is finished
+    # Debugging method, can be removed when implementation is finished
     def print_group_handler_info(self):
         np.set_printoptions(threshold=np.inf)
         print('CBSGroupHandler with ID', self.group_id)
@@ -181,7 +205,7 @@ class CBSGroupHandler(threading.Thread):
         print()
         print()
 
-    # will be executed by GroupHandler-Process so that it will be executed in parallel
+    # Will be executed by  a group handler process so the training can be executed in parallel for each group
     def train(self, training_interval):
         group_id = self.group_id
         losses = []
@@ -191,15 +215,15 @@ class CBSGroupHandler(threading.Thread):
 
             batch_pairs_indices, true_similarities = self.optimizer_helper.compose_batch()
 
-            # get the example pairs by the selected indices
+            # Get the example pairs by the selected indices
             model_input = np.take(a=self.dataset.x_train, indices=batch_pairs_indices, axis=0)
 
-            # reduce to the features used by this case handler
+            # Reduce to the features used by this case handler
             model_input = model_input[:, :, self.dataset.get_masking_group(group_id)]
 
             batch_loss = self.optimizer_helper.update_single_model(model_input, true_similarities)
 
-            # track progress
+            # Track progress
             epoch_loss_avg.update_state(batch_loss)
             current_loss = epoch_loss_avg.result()
 
@@ -208,4 +232,5 @@ class CBSGroupHandler(threading.Thread):
             if self.optimizer_helper.execute_early_stop(current_loss):
                 return losses, 'early_stopping'
 
+        # Return the losses for all epochs during this training interval
         return losses, ''
