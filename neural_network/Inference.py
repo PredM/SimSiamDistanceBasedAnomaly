@@ -1,12 +1,12 @@
-import sys
 import os
+import sys
 import time
-import numpy as np
-import pandas as pd
+
 
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 
 from neural_network.Evaluator import Evaluator
+from configuration.ConfigChecker import ConfigChecker
 from configuration.Configuration import Configuration
 from neural_network.Dataset import FullDataset
 from neural_network.SNN import initialise_snn
@@ -44,6 +44,7 @@ class Inference:
         self.evaluator.calculate_results()
         self.evaluator.print_results(elapsed_time)
 
+
 def main():
     # suppress debugging messages of TensorFlow
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
@@ -57,18 +58,15 @@ def main():
 
     dataset.load()
 
-    # print("Classes in training: ", dataset.y_train_classString_numOfInstances)
-    # print("Classes in testing: ", dataset.y_test_classString_numOfInstances)
-    # classesInBoth = np.intersect1d(dataset.y_test_classString_numOfInstances[:, 0],
-    #                                dataset.y_train_classString_numOfInstances[:, 0])
-    # print("Classes in both: ", classesInBoth)
-
     architecture = initialise_snn(config, dataset, False)
 
     inference = Inference(config, architecture, dataset)
 
     print('Ensure right model file is used:')
     print(config.directory_model_to_use, '\n')
+
+    checker = ConfigChecker(config, dataset, 'snn', training=False)
+    checker.check()
 
     inference.infer_test_dataset()
 

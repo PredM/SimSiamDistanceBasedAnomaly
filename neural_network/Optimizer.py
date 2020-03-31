@@ -255,6 +255,8 @@ class CBSOptimizer(Optimizer):
             self.output(current_epoch)
             current_epoch += self.config.output_interval
 
+        self.architecture.kill_threads()
+
     def output(self, current_epoch):
         print("Timestamp: {} ({:.2f} Seconds since last output) - Epoch: {}".format(
             datetime.now().strftime('%d.%m %H:%M:%S'),

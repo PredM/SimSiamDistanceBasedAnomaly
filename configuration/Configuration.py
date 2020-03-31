@@ -25,10 +25,10 @@ class GeneralConfiguration:
         self.max_parallel_cores = 60
 
         # Folder where the trained models are saved to during learning process
-        self.models_folder = '../data/trained_models3/'
+        self.models_folder = '../data/trained_models/'
 
         # Path and file name to the specific model that should be used for testing and live classification
-        self.filename_model_to_use = 'temp_snn_model_03-26_12-51-59_epoch-6500'
+        self.filename_model_to_use = 'last_save_cbs_first_test'
         self.directory_model_to_use = self.models_folder + self.filename_model_to_use + '/'
 
         ##
@@ -38,7 +38,8 @@ class GeneralConfiguration:
         # Limit the groups that should be used for a cbs model
         # List content must match the group ids in config.json
         # Use = None or = [] for no restriction
-        self.cbs_groups_used = None  # ['g6', 'g7']
+
+        self.cbs_groups_used = ['g2', 'g3', 'g4', 'g5', 'g6', 'g7']
 
 
 class ModelConfiguration:
@@ -74,7 +75,7 @@ class ModelConfiguration:
         # Only use euclidean_dis for TRAINING with contrastive loss
         self.simple_measures = ['abs_mean', 'euclidean_sim', 'euclidean_dis', 'dot_product', 'cosine',
                                 'attention_based']
-        self.simple_measure = self.simple_measures[1]
+        self.simple_measure = self.simple_measures[0]
 
         ###
         # Hyperparameters
@@ -91,7 +92,7 @@ class ModelConfiguration:
         # If !use_individual_hyperparameters interpreted as a single json file, else as a folder
         # which contains json files named after the cases they should be used for
         # If no file with this name is present the 'default.json' Config will be used
-        self.hyper_file = self.hyper_file_folder + 'snn_testing.json'
+        self.hyper_file = self.hyper_file_folder + 'cbs_test1.json'
 
         ##
         # Various settings influencing the similarity calculation
@@ -111,7 +112,7 @@ class ModelConfiguration:
         # Select whether the reduction to relevant features should be based on the case itself or the group it belongs
         # to. Based on case = True, based on group = False
         # Must be false for CBS!
-        self.individual_relevant_feature_selection = True  # default: True
+        self.individual_relevant_feature_selection = False  # default: True
 
         # Option to simulate a retrieval situation (during training) where only the weights of the
         # example from the case base/training data set are known:
@@ -154,7 +155,7 @@ class TrainingConfiguration:
 
         # TODO: TripletLoss, Distance-Based Logistic Loss
         self.loss_function_variants = ['binary_cross_entropy', 'constrative_loss', 'mean_squared_error', 'huber_loss']
-        self.type_of_loss_function = self.loss_function_variants[1]
+        self.type_of_loss_function = self.loss_function_variants[0]
 
         # Settings for constrative_loss
         self.margin_of_loss_function = 2

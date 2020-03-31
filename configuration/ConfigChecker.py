@@ -1,17 +1,25 @@
 from configuration.Configuration import Configuration
+from neural_network.Dataset import FullDataset
 
 
 class ConfigChecker:
 
-    def __init__(self, config: Configuration):
+    def __init__(self, config: Configuration, dataset: FullDataset, architecture, training):
         self.config: Configuration = config
+        self.dataset = dataset
+        self.architecture = architecture
+        self.training = training
+
+    @staticmethod
+    def implication(p, q, error):
+        # p --> q == !p or q
+        assert not p or q, error
 
     # Can be used to define forbidden / impossible parameter configurations
     # and to output corresponding error messages if they are set in this way.
     def check(self):
-        assert self.config.simple_measure != 'euclidean_dis' or \
-               self.config.simple_measure == 'euclidean_dis' \
-               and self.config.type_of_loss_function == 'constrative_loss', \
-            'euclidean_dis should only be used for training with constrative loss'
+        assert self.architecture in ['snn', 'cbs'], 'invalid architecture passed to configChecker'
 
-        # TODO Add if cbs then features cbs
+        ConfigChecker.implication(self.config.simple_measure == 'euclidean_dis',
+                                  self.config.type_of_loss_function == 'constrative_loss',
+                                  'euclidean_dis should only be used for training with constrative loss')

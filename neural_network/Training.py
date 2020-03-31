@@ -1,8 +1,10 @@
 import os
 import sys
 
+
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 
+from configuration.ConfigChecker import ConfigChecker
 from configuration.Configuration import Configuration
 from neural_network.Dataset import FullDataset
 from neural_network.Optimizer import SNNOptimizer
@@ -20,6 +22,9 @@ def main():
 
     snn = initialise_snn(config, dataset, True)
     snn.print_detailed_model_info()
+
+    checker = ConfigChecker(config, dataset, 'snn', training=True)
+    checker.check()
 
     print('Training:')
     optimizer = SNNOptimizer(snn, dataset, config)

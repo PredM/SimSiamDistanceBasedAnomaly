@@ -4,6 +4,7 @@ import sys
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 
 from case_based_similarity.CaseBasedSimilarity import CBS
+from configuration.ConfigChecker import ConfigChecker
 from configuration.Configuration import Configuration
 from neural_network.Dataset import CBSDataset
 from neural_network.Inference import Inference
@@ -30,7 +31,12 @@ def main():
         print('Ensure right model file is used:')
         print(config.directory_model_to_use, '\n')
 
+        checker = ConfigChecker(config, dataset, 'cbs', training=False)
+        checker.check()
+
         inference.infer_test_dataset()
+        cbs.kill_threads()
+
     except KeyboardInterrupt:
         cbs.kill_threads()
 
