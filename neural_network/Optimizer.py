@@ -195,6 +195,11 @@ class SNNOptimizer(Optimizer):
             ffnn_file_name = '_'.join(['ffnn', epoch_string]) + '.h5'
             self.architecture.ffnn.model.save_weights(dir_name + ffnn_file_name)
 
+        loss = str(self.train_loss_results[-1].numpy())
+
+        with open(dir_name + 'loss.txt', 'w') as f:
+            f.write(loss)
+
 
 class CBSOptimizer(Optimizer):
 

@@ -110,7 +110,7 @@ def execute_baseline_test(dataset: FullDataset, start_index, end_index, nbr_thre
         return_dict = manager.dict()
 
         for i, chunk in enumerate(chunks):
-            # Important: Passing object instances as args to multiprocessing.Process may leed to problems
+            # Important: Passing object instances as args to multiprocessing.Process may lead to problems
             # Use carefully and ensure correct passing
             # proc_id, return_dict, counter, dataset, test_index, indices_train_examples, algorithm, relevant_only
             # chunk, dataset, test_index, use_relevant_only, counter, algorithm_used, i, return_dict

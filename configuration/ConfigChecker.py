@@ -23,3 +23,10 @@ class ConfigChecker:
         ConfigChecker.implication(self.config.simple_measure == 'euclidean_dis',
                                   self.config.type_of_loss_function == 'constrative_loss',
                                   'euclidean_dis should only be used for training with constrative loss')
+
+        ConfigChecker.implication(self.architecture == 'cbs', self.config.individual_relevant_feature_selection,
+                                  'For the CBS the group based feature selection must be used. '
+                                  'Set individual_relevant_feature_selection to False')
+
+        ConfigChecker.implication(self.architecture == 'cbs', self.config.features_used == 'cbs_features',
+                                  'Please use features_used == \'cbs_features\' for CBS models.')

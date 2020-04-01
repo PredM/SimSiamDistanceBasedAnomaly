@@ -1,13 +1,13 @@
-import tensorflow as tf
+import matplotlib.pyplot as plt
 import numpy as np
+import tensorflow as tf
 
 from configuration.Configuration import Configuration
 from configuration.Hyperparameter import Hyperparameters
-from neural_network.Dataset import Dataset
-from neural_network.SimpleSimilarityMeasure import SimpleSimilarityMeasure
 from neural_network.BasicNeuralNetworks import CNN, RNN, FFNN, TCN, CNNWithClassAttention, CNN1DWithClassAttention, \
     CNN2D
-import matplotlib.pyplot as plt
+from neural_network.Dataset import Dataset
+from neural_network.SimpleSimilarityMeasure import SimpleSimilarityMeasure
 
 
 # initialises the correct SNN variant depending on the configuration
@@ -223,8 +223,8 @@ class SimpleSNN(AbstractSimilarityMeasure):
                 a_context = context_vectors[2][2 * pair_index, :]
                 b_context = context_vectors[2][2 * pair_index + 1, :]
                 w = context_vectors[3][2 * pair_index, :]
-                #debug output:
-                #tf.print("context_vectors[3][2 * pair_index, :]", context_vectors[4][2 * pair_index, :])
+                # debug output:
+                # tf.print("context_vectors[3][2 * pair_index, :]", context_vectors[4][2 * pair_index, :])
 
         else:
             a = context_vectors[2 * pair_index, :, :]
@@ -243,7 +243,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
         if self.config.use_time_step_matching_simple_similarity:
             a, b, a_weights, b_weights = self.match_time_step_wise(a, b)
 
-        return self.simple_sim.get_sim(a, b, a_weights, b_weights,a_context,b_context,w)
+        return self.simple_sim.get_sim(a, b, a_weights, b_weights, a_context, b_context, w)
 
     @tf.function
     def transform_to_time_step_wise(self, a, b):
@@ -298,7 +298,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
 
         # FIXME @Niklas
         input = np.array([self.dataset.get_masking_float(case_label) for case_label in self.config.cases_used])
-        #print("Input: \n", input.tostring())
+        # print("Input: \n", input.tostring())
         case_embeddings = self.encoder.intermediate_layer_model(input, training=self.training)
         print("case_embeddings: ", case_embeddings.shape)
         # Get positions with maximum values
@@ -310,7 +310,8 @@ class SimpleSNN(AbstractSimilarityMeasure):
                 row = np.array(case_embeddings[cnt, :])
                 maxNPos = max_pos[cnt, :num_of_max_pos]
                 minNPos = min_pos[cnt, :num_of_max_pos]
-                print(case_label, " ", input[cnt], " | Max Filter: ", max_pos[cnt, :5], " | Min Filter: ", min_pos[cnt, :5],
+                print(case_label, " ", input[cnt], " | Max Filter: ", max_pos[cnt, :5], " | Min Filter: ",
+                      min_pos[cnt, :5],
                       " | Max Values: ", row[maxNPos], " | Min Values: ", row[minNPos])
                 cnt = cnt + 1
 
@@ -475,89 +476,6 @@ class SNN(SimpleSNN):
         # Scale / Weight (due to multiplication) the absolute distance of each time step combinations
         # with the predicted "weight" for each time step
         warped_dists = tf.multiply(timestepwise_mean_abs_difference, ffnn)
-
-        return tf.exp(-tf.reduce_mean(warped_dists))
-
-    # FIXME: Renamed this because it wasn't working
-    def get_sim_pair_attention(self, context_vectors, pair_index):
-        # print("context_vectors.shape:" , context_vectors.shape)
-        # print("pair_index: ", tf.print(pair_index))
-        """Compute the warped distance with a neural network with each pair_index value
-
-        Args:
-          context_vectors: [2*B, T, C] float tensor, representations for B training pairs resulting in 2*B
-          with length T and channel size C which both are resulting from the previous embedding / encoding.
-          pair_index: [B] contains index integer values from 0 to B
-
-        Returns:
-          similarity: float scalar.  Loss for each pair of representations.
-        """
-        a = context_vectors[2 * pair_index, :, :]
-        b = context_vectors[2 * pair_index + 1, :, :]
-        # a and b shape: [T, C]
-
-        attentionA, attentionB = self.simple_sim.compute_cross_attention(a, b, "euclidiean")
-
-        print("Attention A shape:", attentionA.shape, "Attention B shape:", attentionB.shape)
-
-        # Subtract attention from original input
-        u_a = tf.subtract(a, attentionA)
-        u_b = tf.subtract(b, attentionB)
-
-        # a = tf.concat([a, u_a], axis=1)
-        # a = self.ffnn2.model(a, training=self.training)
-        a = u_a
-        print("a shape: ", a.shape)
-
-        # b = tf.concat([b, u_b], axis=1)
-        # b = self.ffnn2.model(b, training=self.training)
-        b = u_b
-        '''
-        # second input:
-        attentionA, attentionB = self.compute_cross_attention(a, b, "abs-distance")
-        u_a = tf.subtract(a,attentionA)
-        u_b = tf.subtract(b,attentionB)
-        a = tf.concat([a, u_a], axis=1)
-        a = self.ffnn2.model(a, training=self.training)
-        b = tf.concat([b, u_b], axis=1)
-        b = self.ffnn2.model(b, training=self.training)
-
-        # second input:
-        attentionA, attentionB = self.compute_cross_attention(a, b, "abs-distance")
-        u_a = tf.subtract(a,attentionA)
-        u_b = tf.subtract(b,attentionB)
-        a = tf.concat([a, u_a], axis=1)
-        a = self.ffnn2.model(a, training=self.training)
-        b = tf.concat([b, u_b], axis=1)
-        b = self.ffnn2.model(b, training=self.training)
-        '''
-
-        # Aggregator
-        tf.reduce_sum(a)
-
-        # input of FFNN are all time stamp combinations of a and b
-        ffnn_input = tf.concat([a, b], axis=1)
-        print("ffnn_input shape: ", tf.shape(ffnn_input))
-        print("ffnn_input: ", ffnn_input)
-        # b shape: [T*T, 2*C] OR [T*T, 4*C]
-
-        # Predict the "relevance" of similarity between each time step
-        ffnn = self.ffnn.model(ffnn_input, training=self.training)
-        # ffnn shape: [T*T, 1]
-
-        # Calculate absolute distances between each time step
-        abs_distance = tf.abs(tf.subtract(a, b))
-        # abs_distance shape: [T*T, C]
-
-        # Compute the mean of absolute distances across each time step
-        timestepwise_mean_abs_difference = tf.expand_dims(tf.reduce_mean(abs_distance, axis=1), axis=-1)
-        # abs_distance shape: [T*T, 1]
-
-        # Scale / Weight (due to multiplication) the absolute distance of each time step combinations
-        # with the predicted "weight" for each time step
-        warped_dists = tf.multiply(timestepwise_mean_abs_difference, ffnn)
-        # print("warped_dists.shape: ", warped_dists.shape)
-        # print("warped_dists:", tf.print(tf.reduce_mean(warped_dists)))
 
         return tf.exp(-tf.reduce_mean(warped_dists))
 

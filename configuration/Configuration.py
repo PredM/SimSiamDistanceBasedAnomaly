@@ -92,7 +92,7 @@ class ModelConfiguration:
         # If !use_individual_hyperparameters interpreted as a single json file, else as a folder
         # which contains json files named after the cases they should be used for
         # If no file with this name is present the 'default.json' Config will be used
-        self.hyper_file = self.hyper_file_folder + 'cbs_test1.json'
+        self.hyper_file = self.hyper_file_folder + 'snn_testing.json'
 
         ##
         # Various settings influencing the similarity calculation
@@ -212,10 +212,10 @@ class InferenceConfiguration:
         # similarity assessment during inference.
         # Please note that the case base extraction only reduces the training data but fully copies the test data
         # so all test example will still be evaluated even if this is enabled
-        self.case_base_for_inference = True  # default False
+        self.case_base_for_inference = True  # default: False
 
         # Parameter to control the size / number of the queries used for evaluation
-        self.inference_with_failures_only = False  # default False
+        self.inference_with_failures_only = False  # default: False
 
         # TODO: Possible performance optimization: Add extra parameters instead of going down to batch size directly
         # If enabled the similarity assessment of the test dataset to the training datset will be split into
@@ -262,7 +262,7 @@ class ClassificationConfiguration:
         self.random_seed_index_selection = 42
 
         # the number of examples per class the training data set should be reduced to for the live classification
-        self.examples_per_class = 300
+        self.examples_per_class = 150  # default: 150
 
         # the k of the knn classifier used for live classification
         self.k_of_knn = 10

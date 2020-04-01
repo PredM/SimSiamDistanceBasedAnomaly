@@ -1,7 +1,7 @@
 {
   "encoder_variant": "cnn",
   "batch_size": 64,
-  "epochs": 400000,
+  "epochs": 300,
   "epochs_current": 0,
   "learning_rate": 0.0001,
   "gradient_cap": -1,
@@ -57,9 +57,9 @@
     ]
   ],
   "lstm_layers": [
-    256,
     128,
-    64
+    64,
+    32
   ],
   "tcn_layers": [
     1024,

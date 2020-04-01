@@ -327,20 +327,6 @@ class FullDataset(Dataset):
         mask = self.get_masking(class_label_train_example)
         return test_example[:, mask], self.x_train[train_example_index][:, mask]
 
-    # Will to the same as reduce_to_relevant but selecting the relevant features based on TS Fresh
-    # def reduce_to_relevant_by_ts_fresh(self, test_example, train_example_index):
-    #     class_label_train_example = self.y_train_strings[train_example_index]
-    #     relevant_features_for_case = self.config.get_relevant_features_case(class_label_train_example)
-    #     masking = np.zeros(len(self.TSFresh_selected_relevantAttributes))
-    #     # print("self.TSFresh_selected_relevantAttributes: ", self.TSFresh_selected_relevantAttributes)
-    #     idx = [i for i, x in enumerate(self.TSFresh_selected_relevantAttributes) if
-    #            x.split('__')[0] in relevant_features_for_case]
-    #     masking[idx] = 1
-    #     # print("failuremode: ",class_label_train_example, "features: ", relevant_features_for_case,"\n masking: ",
-    #     # masking,"\n")
-    #     # return test_example * masking, self.x_train_TSFresh_features[train_example_index]* masking,masking
-    #     return test_example, self.x_train_TSFresh_features[train_example_index], masking
-
     def get_ts_fresh_masking(self, train_example_index):
         class_label_train_example = self.y_train_strings[train_example_index]
         relevant_features_for_case = self.config.get_relevant_features_case(class_label_train_example)

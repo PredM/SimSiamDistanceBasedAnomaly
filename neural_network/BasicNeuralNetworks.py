@@ -60,6 +60,7 @@ class NN:
     def get_output_shape(self):
         return self.model.output_shape
 
+
 # Used for Neural Warp
 class FFNN(NN):
 
@@ -90,6 +91,7 @@ class FFNN(NN):
         output = tf.keras.layers.Dense(units=1, activation=tf.keras.activations.sigmoid)(x)
 
         self.model = tf.keras.Model(inputs=input, outputs=output)
+
 
 # Used for Time Series (Step) Matching
 class FFNN2(NN):
@@ -224,7 +226,8 @@ class CNNWithClassAttention(NN):
             print("Feature weights are learned based on masking vector")
             # Takes 0-1 input mask of relevant features and learns weights for relevant features (that are not masked as zero)
             caseDependentVectorInput_ = tf.expand_dims(caseDependentVectorInput, -1)
-            caseDependentVectorInput_o = tf.keras.layers.TimeDistributed(tf.keras.layers.Dense(units=1, activation=tf.keras.activations.relu), )(caseDependentVectorInput_)
+            caseDependentVectorInput_o = tf.keras.layers.TimeDistributed(
+                tf.keras.layers.Dense(units=1, activation=tf.keras.activations.relu), )(caseDependentVectorInput_)
             caseDependentVectorInput_o = tf.squeeze(caseDependentVectorInput_o)
         else:
             print("Feature weights are similar to masking vector")
@@ -241,10 +244,9 @@ class CNNWithClassAttention(NN):
                 caseDependentVectorInput_processed = caseDependentVectorInput / tf.reduce_sum(caseDependentVectorInput)
             debug = caseDependentVectorInput_processed
             caseDependentMatrixInput = tf.tile(caseDependentVectorInput_processed, [1, self.input_shape[0][0]])
-            #caseDependentMatrixInput = caseDependentMatrixInput / tf.reduce_sum(caseDependentMatrixInput)
+            # caseDependentMatrixInput = caseDependentMatrixInput / tf.reduce_sum(caseDependentMatrixInput)
             reshape = tf.keras.layers.Reshape((self.input_shape[0][0], self.input_shape[0][1]))
             caseDependentMatrixInput = reshape(caseDependentMatrixInput)
-
 
         if len(layers) < 1:
             print('CNN encoder with less than one layer for 2d kernels is not possible')
@@ -283,7 +285,7 @@ class CNNWithClassAttention(NN):
                     sensorDataInput2 = tf.concat([sensorDataInput2, caseDependentMatrixInput], axis=3)
 
                 x = conv_layer1(sensorDataInput2)
-                #x = tf.keras.layers.SpatialDropout2D(rate=self.hyper.dropout_rate)(x)
+                # x = tf.keras.layers.SpatialDropout2D(rate=self.hyper.dropout_rate)(x)
             else:
                 conv_layer = tf.keras.layers.Conv2D(filters=num_filter, padding='VALID',
                                                     kernel_size=(filter_size),
@@ -292,7 +294,7 @@ class CNNWithClassAttention(NN):
             x = tf.keras.layers.BatchNormalization()(x)
             x = tf.keras.layers.ReLU()(x)
 
-        #x = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(x)
+        # x = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(x)
 
         reshape = tf.keras.layers.Reshape((x.shape[1], x.shape[2]))
         x = reshape(x)
@@ -345,7 +347,8 @@ class CNNWithClassAttention(NN):
                 print('Learn weight value how much context is considered for each failure mode')
                 layers_fc = self.hyper.cnn2d_learnWeightForContextUsedInSim.copy()
                 for num_units in layers_fc:
-                    caseDependentVectorInput_2 = tf.keras.layers.Dense(units=num_units, activation=tf.keras.activations.relu)(
+                    caseDependentVectorInput_2 = tf.keras.layers.Dense(units=num_units,
+                                                                       activation=tf.keras.activations.relu)(
                         caseDependentVectorInput)
                     caseDependentVectorInput_2 = tf.keras.layers.BatchNormalization()(caseDependentVectorInput_2)
                 w = tf.keras.layers.Dense(units=1, activation=tf.keras.activations.sigmoid)(
@@ -363,7 +366,6 @@ class CNNWithClassAttention(NN):
                 w = self.hyper.useAddContextForSim_LearnOrFixWeightVale
                 print('Fixed weight value how much context is considered for each failure mode: ', w)
 
-
             print('Adding FC layers for context merging/aggregation')
             layers_fc = self.hyper.cnn2d_contextModule.copy()
 
@@ -378,7 +380,7 @@ class CNNWithClassAttention(NN):
             for num_units in layers_fc:
                 c = tf.keras.layers.Dense(units=num_units, activation=tf.keras.activations.relu)(c)
                 c = tf.keras.layers.BatchNormalization()(c)
-            c = tf.keras.layers.Reshape([layers_fc[len(layers_fc)-1], 1])(c)
+            c = tf.keras.layers.Reshape([layers_fc[len(layers_fc) - 1], 1])(c)
             '''
             # Context Module: connect only relevant features
             c = tf.keras.layers.BatchNormalization()(x)
@@ -397,9 +399,9 @@ class CNNWithClassAttention(NN):
         else:
             print("No additional context pair for similarity calculation used.")
 
-        #Create Model:
+        # Create Model:
         if self.hyper.useAddContextForSim == "True":
-            #Output:
+            # Output:
             # x: encoded time series as timeSteps x attributes Matrix (if useChannelWiseAggregation==False, else features x attributes Matrix
             # caseDependentVectorInput_o: same as masking vector if learnFeatureWeights==False, else values weights learned (but not for 0s)
             # c: context vector, FC Layer on masked output (only relevant attributes/channels considered)
@@ -414,6 +416,7 @@ class CNNWithClassAttention(NN):
         self.intermediate_layer_model = tf.keras.Model(inputs=caseDependentVectorInput,
                                                       outputs=self.model.get_layer("reshape").output)
         '''
+
 
 # TODO @klein Remove old code that is / will not be used
 class CNN1DWithClassAttention(NN):
@@ -635,8 +638,8 @@ class CNN2D(NN):
             if len(layers) < 1:
                 print('Adding FC with less than one layer is not possible')
                 sys.exit(1)
-            x = tf.keras.layers.Flatten() (x)
-            lastLayerSize=0
+            x = tf.keras.layers.Flatten()(x)
+            lastLayerSize = 0
             for num_units in layers_fc:
                 x = tf.keras.layers.BatchNormalization()(x)
                 x = tf.keras.layers.Dense(units=num_units, activation=tf.keras.activations.relu)(x)
