@@ -208,6 +208,12 @@ class FullDataset(Dataset):
         self.classes_Unique_oneHotEnc = one_hot_encoder.transform(np.expand_dims(self.classes_total, axis=1))
         self.num_classes = self.classes_total.size
 
+        # Create two dictionaries to link/associate each class with all its training examples
+        for i in range(self.num_classes):
+            self.class_idx_to_ex_idxs_train[i] = np.argwhere(self.y_train[:, i] > 0)
+            self.class_idx_to_ex_idxs_test[i] = np.argwhere(self.y_test[:, i] > 0)
+
+
         # collect number of instances for each class in training and test
         self.y_train_strings_unique, counts = np.unique(self.y_train_strings, return_counts=True)
         self.num_instances_by_class_train = np.asarray((self.y_train_strings_unique, counts)).T
