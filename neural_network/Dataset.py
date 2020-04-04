@@ -466,23 +466,6 @@ class CBSDataset(FullDataset):
             i2 = np.random.choice(neg_indices, 1, replace=True)[0]
             return i1, i2
 
-        # while True:
-        #     first_idx_in_list = np.random.randint(0, len(indices_positive), size=1)[0]
-        #     first_idx = indices_positive[first_idx_in_list]
-        #
-        #     # positive --> both examples' indices need to be in indices_positive
-        #     if is_positive:
-        #         second_idx_in_list = np.random.randint(0, len(indices_positive), size=1)[0]
-        #         second_idx = indices_positive[second_idx_in_list]
-        #     else:
-        #         while True:
-        #             second_idx = np.random.randint(0, self.num_train_instances, size=1)[0]
-        #
-        #             if second_idx not in indices_positive:
-        #                 break
-        #
-        #     return first_idx, second_idx
-
     def get_masking_group(self, group_id):
 
         if group_id not in self.group_id_to_masking_vector:
