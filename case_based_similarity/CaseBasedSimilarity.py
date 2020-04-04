@@ -1,6 +1,7 @@
 import os
 import sys
 import threading
+import time
 
 import numpy as np
 import tensorflow as tf
@@ -210,7 +211,10 @@ class CBSGroupHandler(threading.Thread):
         group_id = self.group_id
         losses = []
 
+        #print('started', self.group_id, 'on', self.gpu)
         for epoch in range(training_interval):
+            #print(group_id, epoch)
+
             epoch_loss_avg = tf.keras.metrics.Mean()
 
             batch_pairs_indices, true_similarities = self.optimizer_helper.compose_batch()
@@ -231,6 +235,8 @@ class CBSGroupHandler(threading.Thread):
 
             if self.optimizer_helper.execute_early_stop(current_loss):
                 return losses, 'early_stopping'
+
+        #print('finished', self.group_id, 'on', self.gpu)
 
         # Return the losses for all epochs during this training interval
         return losses, ''

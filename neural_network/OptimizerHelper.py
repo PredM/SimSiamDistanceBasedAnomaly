@@ -1,3 +1,5 @@
+import time
+
 import numpy as np
 import tensorflow as tf
 import tensorflow.keras.backend as K
@@ -132,7 +134,6 @@ class OptimizerHelper:
             #
             # pos pair
             #
-
             if self.config.equalClassConsideration:
                 if i < self.hyper.batch_size // equal_class_part:
                     # print(i,": ", failureClassesToConsider[i-self.architecture.hyper.batch_size // 4])
@@ -193,25 +194,24 @@ class CBSOptimizerHelper(OptimizerHelper):
         batch_true_similarities = []  # similarity label for each pair
         batch_pairs_indices = []  # index number of each example used in the training
         group_hyper = self.model.hyper
-        indices_with_cases_of_group = self.dataset.group_to_indices_train.get(self.group_id)
 
         # Compose batch
         # // 2 because each iteration one similar and one dissimilar pair is added
 
         for i in range(group_hyper.batch_size // 2):
 
-            pos_pair = self.dataset.draw_pair_cbs(True, indices_with_cases_of_group)
-            batch_pairs_indices.append(pos_pair[0])
-            batch_pairs_indices.append(pos_pair[1])
+            i1, i2 = self.dataset.draw_pair_cbs(True, self.group_id)
+            batch_pairs_indices.append(i1)
+            batch_pairs_indices.append(i2)
             batch_true_similarities.append(1.0)
 
-            neg_pair = self.dataset.draw_pair_cbs(False, indices_with_cases_of_group)
-            batch_pairs_indices.append(neg_pair[0])
-            batch_pairs_indices.append(neg_pair[1])
+            i1, i2 = self.dataset.draw_pair_cbs(False, self.group_id)
+            batch_pairs_indices.append(i1)
+            batch_pairs_indices.append(i2)
 
             # If configured a similarity value is used for the negative pair instead of full dissimilarity
             if self.config.use_sim_value_for_neg_pair:
-                sim = self.dataset.get_sim_label_pair(neg_pair[0], neg_pair[1], 'train')
+                sim = self.dataset.get_sim_label_pair(i1, i2, 'train')
                 batch_true_similarities.append(sim)
             else:
                 batch_true_similarities.append(0.0)

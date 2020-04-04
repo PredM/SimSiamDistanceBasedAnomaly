@@ -434,6 +434,7 @@ class CBSDataset(FullDataset):
         super().__init__(dataset_folder, config, training)
         self.group_to_indices_train = {}
         self.group_to_indices_test = {}
+        self.group_to_negative_indices_train = {}
 
     # TODO Check if this is working correctly
     def load(self, print_info=True):
@@ -445,27 +446,42 @@ class CBSDataset(FullDataset):
         for group, cases in self.config.group_id_to_cases.items():
             self.group_to_indices_test[group] = [i for i, case in enumerate(self.y_test_strings) if case in cases]
 
+        all_indices = [i for i in range(self.x_train.shape[0])]
+        for group, pos_indices in self.group_to_indices_train.items():
+            negative_indices = [x for x in all_indices if x not in pos_indices]
+            self.group_to_negative_indices_train[group] = negative_indices
+
     def encode(self, encoder, encode_test_data=False):
         raise NotImplementedError('')
 
-    def draw_pair_cbs(self, is_positive, indices_positive):
+    def draw_pair_cbs(self, is_positive, group_id):
+        pos_indices = self.group_to_indices_train.get(group_id)
+        neg_indices = self.group_to_negative_indices_train.get(group_id)
 
-        while True:
-            first_idx_in_list = np.random.randint(0, len(indices_positive), size=1)[0]
-            first_idx = indices_positive[first_idx_in_list]
+        if is_positive:
+            i1, i2 = np.random.choice(pos_indices, 2, replace=True)
+            return i1, i2
+        else:
+            i1 = np.random.choice(pos_indices, 1, replace=True)[0]
+            i2 = np.random.choice(neg_indices, 1, replace=True)[0]
+            return i1, i2
 
-            # positive --> both examples' indices need to be in indices_positive
-            if is_positive:
-                second_idx_in_list = np.random.randint(0, len(indices_positive), size=1)[0]
-                second_idx = indices_positive[second_idx_in_list]
-            else:
-                while True:
-                    second_idx = np.random.randint(0, self.num_train_instances, size=1)[0]
-
-                    if second_idx not in indices_positive:
-                        break
-
-            return first_idx, second_idx
+        # while True:
+        #     first_idx_in_list = np.random.randint(0, len(indices_positive), size=1)[0]
+        #     first_idx = indices_positive[first_idx_in_list]
+        #
+        #     # positive --> both examples' indices need to be in indices_positive
+        #     if is_positive:
+        #         second_idx_in_list = np.random.randint(0, len(indices_positive), size=1)[0]
+        #         second_idx = indices_positive[second_idx_in_list]
+        #     else:
+        #         while True:
+        #             second_idx = np.random.randint(0, self.num_train_instances, size=1)[0]
+        #
+        #             if second_idx not in indices_positive:
+        #                 break
+        #
+        #     return first_idx, second_idx
 
     def get_masking_group(self, group_id):
 
