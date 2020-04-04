@@ -25,14 +25,14 @@ def main():
 
         dataset.load()
 
+        checker = ConfigChecker(config, dataset, 'cbs', training=False)
+        checker.check()
+
         cbs = CBS(config, False, dataset)
         inference = Inference(config, cbs, dataset)
 
         print('Ensure right model file is used:')
         print(config.directory_model_to_use, '\n')
-
-        checker = ConfigChecker(config, dataset, 'cbs', training=False)
-        checker.check()
 
         inference.infer_test_dataset()
         cbs.kill_threads()

@@ -20,11 +20,11 @@ def main():
         dataset = CBSDataset(config.training_data_folder, config, training=True)
         dataset.load()
 
-        print('Initializing case based similarity measure ...\n')
-        cbs = CBS(config, True, dataset)
-
         checker = ConfigChecker(config, dataset, 'cbs', training=True)
         checker.check()
+
+        print('Initializing case based similarity measure ...\n')
+        cbs = CBS(config, True, dataset)
 
         print('\nTraining:\n')
         optimizer = CBSOptimizer(cbs, dataset, config)
