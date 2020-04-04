@@ -164,18 +164,20 @@ def main():
 
     # select which part of the test dataset to test
     start_index = 0  # dataset.num_test_instances
-    end_index = 3388  # dataset.num_test_instances
+    end_index = dataset.num_test_instances  # dataset.num_test_instances
 
     # Output interval of how many examples have been compared so far. < 0 for no output
     temp_output_interval = -1
-    use_relevant_only = True
+    use_relevant_only = False
     implemented_algorithms = ['dtw', 'dtw_weighting_nbr_features', 'feature_based']
-    algorithm_used = implemented_algorithms[2]
+    algorithm_used = implemented_algorithms[0]
     distance_to_sim_methods = ['1/(1+d)', 'div_max', 'min_max_scaling']
     distance_to_sim_method = distance_to_sim_methods[0]
 
+    relevant_type = 'Individual' if config.individual_relevant_feature_selection else 'Group based'
     print('Algorithm used:', algorithm_used)
     print('Used relevant only:', use_relevant_only)
+    print('Type of feature selection:', relevant_type)
     print('Start index:', start_index)
     print('End index:', end_index)
     print('Number of parallel threads:', config.max_parallel_cores)
