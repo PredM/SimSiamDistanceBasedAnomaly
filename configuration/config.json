@@ -541,8 +541,7 @@
       "a_15_1_y",
       "a_15_1_z"
     ]
-  }
-},
+  },
   "case_to_group_id": {
     "no_failure": "g0",
     "txt15_conveyor_failure_mode_driveshaft_slippage_failure": "g1",
