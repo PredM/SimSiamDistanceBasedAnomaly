@@ -53,6 +53,7 @@ class SimpleSimilarityMeasure:
             # where only weights of the case are known
             weight_matrix = tf.reshape(tf.tile(self.a_weights, [a.shape[0]]), [a.shape[0], a.shape[1]])
             a_weights_sum = tf.reduce_sum(weight_matrix)
+            a_weights_sum = tf.add(a_weights_sum, tf.keras.backend.epsilon())
             weight_matrix = weight_matrix / a_weights_sum
             diff = tf.abs(a - b)
             # feature weighted distance:
@@ -84,6 +85,7 @@ class SimpleSimilarityMeasure:
             # where only weights of the case are known
             weight_matrix = tf.reshape(tf.tile(self.a_weights, [a.shape[0]]), [a.shape[0], a.shape[1]])
             a_weights_sum = tf.reduce_sum(weight_matrix)
+            a_weights_sum = tf.add(a_weights_sum, tf.keras.backend.epsilon())
             weight_matrix = weight_matrix / a_weights_sum
             q = a - b
             weighted_dist = tf.sqrt(tf.reduce_sum(weight_matrix * q * q))
