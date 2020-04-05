@@ -154,7 +154,7 @@ def distance_to_sim(distances, conversion_method):
 
 def main():
     config = Configuration()
-    # os.environ['CUDA_VISIBLE_DEVICES'] = '-1'
+
     if config.case_base_for_inference:
         dataset: FullDataset = FullDataset(config.case_base_folder, config, training=False)
     else:
@@ -168,7 +168,7 @@ def main():
 
     # Output interval of how many examples have been compared so far. < 0 for no output
     temp_output_interval = -1
-    use_relevant_only = False
+    use_relevant_only = True
     implemented_algorithms = ['dtw', 'dtw_weighting_nbr_features', 'feature_based']
     algorithm_used = implemented_algorithms[0]
     distance_to_sim_methods = ['1/(1+d)', 'div_max', 'min_max_scaling']
