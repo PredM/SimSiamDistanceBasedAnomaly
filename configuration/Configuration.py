@@ -28,7 +28,7 @@ class GeneralConfiguration:
         self.models_folder = '../data/trained_models/'
 
         # Path and file name to the specific model that should be used for testing and live classification
-        self.filename_model_to_use = 'last_save_cbs_first_test'
+        self.filename_model_to_use = 'cbs_test_2'
         self.directory_model_to_use = self.models_folder + self.filename_model_to_use + '/'
 
         ##
@@ -39,7 +39,7 @@ class GeneralConfiguration:
         # List content must match the group ids in config.json
         # Use = None or = [] for no restriction
 
-        self.cbs_groups_used = ['g2', 'g3', 'g4', 'g5', 'g6', 'g7']
+        self.cbs_groups_used = []  # ['g2', 'g3', 'g4', 'g5', 'g6', 'g7']
 
 
 class ModelConfiguration:
@@ -89,10 +89,11 @@ class ModelConfiguration:
         # No effect on SNN architecture
         self.use_individual_hyperparameters = False
 
+
         # If !use_individual_hyperparameters interpreted as a single json file, else as a folder
         # which contains json files named after the cases they should be used for
         # If no file with this name is present the 'default.json' Config will be used
-        self.hyper_file = self.hyper_file_folder + 'snn_testing.json'
+        self.hyper_file = self.hyper_file_folder + 'cbs_test1.json'
 
         ##
         # Various settings influencing the similarity calculation
@@ -150,7 +151,7 @@ class TrainingConfiguration:
         # for at least one case
         # self.features_used will be assigned when config.json loading
         self.feature_variants = ['all_features', 'cbs_features']
-        self.feature_variant = self.feature_variants[1]
+        self.feature_variant = self.feature_variants[0]
         self.features_used = None
 
         # TODO: TripletLoss, Distance-Based Logistic Loss
@@ -285,7 +286,7 @@ class PreprocessingConfiguration:
         self.plot_bmx_sensors: bool = False
         self.plot_all_sensors: bool = False
 
-        self.export_plots: bool = False
+        self.export_plots: bool = True
 
         self.print_column_names: bool = False
         self.save_pkl_file: bool = True

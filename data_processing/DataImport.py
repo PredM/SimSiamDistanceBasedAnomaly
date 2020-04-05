@@ -1,8 +1,8 @@
-import sys
-import os
-import json
 import gc
-import matplotlib.pyplot as plt
+import json
+import os
+import sys
+
 import pandas as pd
 from pandas.plotting import register_matplotlib_converters
 
@@ -33,72 +33,14 @@ def import_txt(filename: str, prefix: str):
     df = df.add_prefix(prefix)
     df = df.rename(columns={prefix + 'timestamp': 'timestamp'})
 
-    # Fix wrong data types
-    if '15' in prefix:
-        transformFinishedFromStringToNumeric("txt15_m1.finished", df)
-    elif '16' in prefix:
-        transformFinishedFromStringToNumeric("txt16_m1.finished", df)
-        transformFinishedFromStringToNumeric("txt16_m2.finished", df)
-        transformFinishedFromStringToNumeric("txt16_m3.finished", df)
-    elif '17' in prefix:
-        transformFinishedFromStringToNumeric("txt17_m1.finished", df)
-        transformFinishedFromStringToNumeric("txt17_m2.finished", df)
-    elif '18' in prefix:
-        transformFinishedFromStringToNumeric("txt18_m1.finished", df)
-        transformFinishedFromStringToNumeric("txt18_m2.finished", df)
-        transformFinishedFromStringToNumeric("txt18_m3.finished", df)
-        df["txt18_currentTask"] = (df["txt18_currentTask"]).astype('category').cat.codes
-        df["txt18_currentTask"] = pd.to_numeric(df["txt18_currentTask"])
-        transformFinishedFromStringToNumeric("txt18_isContainerReady", df)
-    elif '19' in prefix:
-        transformFinishedFromStringToNumeric("txt19_m1.finished", df)
-        transformFinishedFromStringToNumeric("txt19_m2.finished", df)
-        transformFinishedFromStringToNumeric("txt19_m3.finished", df)
-        transformFinishedFromStringToNumeric("txt19_m4.finished", df)
-        df["txt19_currentTask"] = (df["txt19_currentTask"]).astype('category').cat.codes
-        df["txt19_currentTask"] = pd.to_numeric(df["txt19_currentTask"])
-        transformFinishedFromStringToNumeric("txt19_getState", df)
-        df["txt19_getSupply"] = (df["txt19_getSupply"]).astype('category').cat.codes
-        df["txt19_getSupply"] = pd.to_numeric(df["txt19_getSupply"])
-        df["txt19_isContainerReady"] = (df["txt19_isContainerReady"]).astype('category').cat.codes
-        df["txt19_isContainerReady"] = pd.to_numeric(df["txt19_isContainerReady"])
-
     # Remove lines with duplicate timestamps, keep first appearance
     df = df.loc[~df['timestamp'].duplicated(keep='first')]
 
     df['timestamp'] = pd.to_datetime(df['timestamp'])
     df = df.set_index('timestamp')
     df = df.sort_index()
-    pd.set_option('display.expand_frame_repr', False)
-    # print(df.describe(include='all'))
-    pd.set_option('display.expand_frame_repr', True)
+
     return df
-
-
-def transformFinishedFromStringToNumeric(attributeToTransofrm, df):
-    try:
-        df[attributeToTransofrm] = df[attributeToTransofrm].replace("True", 1)
-        df[attributeToTransofrm] = df[attributeToTransofrm].replace("False", 0)
-        df[attributeToTransofrm] = pd.to_numeric(df[attributeToTransofrm])
-    except:
-        print("could not convert: ", attributeToTransofrm)
-
-
-def plot_export_txt(df: pd.DataFrame, file_name: str, config: Configuration):
-    if not (config.export_plots or config.plot_txts):
-        return
-
-    print('Creating plot for ', file_name)
-    df = df.query(config.query)
-    df.plot(subplots=True, sharex=True, figsize=(20, 20), title=file_name)
-
-    xmarks = df.index.values[::3000]
-    plt.xticks(xmarks)
-
-    if config.export_plots:
-        plt.savefig(config.pathPrefix + 'plots/' + file_name, dpi=200)
-    if config.plot_txts:
-        plt.show()
 
 
 def import_all_txts(config: Configuration):
@@ -110,15 +52,6 @@ def import_all_txts(config: Configuration):
     df17: pd.DataFrame = import_txt(config.txt17, 'txt17')
     df18: pd.DataFrame = import_txt(config.txt18, 'txt18')
     df19: pd.DataFrame = import_txt(config.txt19, 'txt19')
-
-    # plot the data if enabled
-    plot_export_txt(df15, 'txt_15', config)
-    plot_export_txt(df16, 'txt_16', config)
-    plot_export_txt(df17, 'txt_17', config)
-    plot_export_txt(df18, 'txt_18', config)
-    plot_export_txt(df19, 'txt_19', config)
-
-    # df15 = df15.query(config.query)
 
     # combine into a single dataframe
     df_txt = df15.join(df16, how='outer')
@@ -168,17 +101,6 @@ def import_pressure_sensors(config: Configuration):
     df_sensor_data.query(config.query, inplace=True)
     df_sensor_data.drop('timestamp', 1, inplace=True)
 
-    if config.plot_pressure_sensors or config.export_plots:
-        df_sensor_data.plot(subplots=True, sharex=True, figsize=(20, 20), title="Pressure Sensors")
-
-        xmarks = df_sensor_data.index.values[::7500]
-        plt.xticks(xmarks)
-
-        if config.export_plots:
-            plt.savefig(config.pathPrefix + 'plots/pressure_sensors.png', dpi=200)
-        if config.plot_pressure_sensors:
-            plt.show()
-
     return df_sensor_data
 
 
@@ -193,6 +115,7 @@ def import_acc(filename: str, prefix: str):
 
     # extract single messages and add prefixes to the message entries
     for m in content:
+
         for e in m:
             e[prefix + '_x'] = e.pop('x')
             e[prefix + '_y'] = e.pop('y')
@@ -209,16 +132,6 @@ def import_acc(filename: str, prefix: str):
     return df
 
 
-def plot_export_acc(df: pd.DataFrame, file_name: str, config: Configuration):
-    df = df.set_index('timestamp')
-    df.plot(subplots=True, sharex=True, figsize=(20, 20), title=file_name)
-
-    if config.export_plots:
-        plt.savefig(config.pathPrefix + 'plots/' + file_name, dpi=200)
-    if config.plot_acc_sensors:
-        plt.show()
-
-
 def import_acc_sensors(config: Configuration):
     print('\nImport acceleration sensors')
 
@@ -227,13 +140,6 @@ def import_acc_sensors(config: Configuration):
     acc_txt15_comp = import_acc(config.acc_txt15_comp, 'a_15_c')
     acc_txt16_m3 = import_acc(config.acc_txt16_m3, 'a_16_3')
     acc_txt18_m1 = import_acc(config.acc_txt18_m1, 'a_18_1')
-
-    # plot if enabled
-    if config.plot_acc_sensors or config.export_plots:
-        plot_export_acc(acc_txt15_m1, 'acc_txt15_m1.png', config)
-        plot_export_acc(acc_txt15_comp, 'acc_txt15_comp.png', config)
-        plot_export_acc(acc_txt16_m3, 'acc_txt16_m3.png', config)
-        plot_export_acc(acc_txt18_m1, 'acc_txt18_m1.png', config)
 
     # combine into a single dataframe
     acc_txt15_m1['timestamp'] = pd.to_datetime(acc_txt15_m1['timestamp'])
@@ -297,25 +203,11 @@ def import_bmx_sensors(config: Configuration):
     df_vsg = df_vsg.join(df_vsg_mag.set_index('timestamp'), how='outer')
     df_vsg.query(config.query, inplace=True)
 
-    # plot if enabled
-    if config.plot_bmx_sensors or config.export_plots:
-        df_vsg.plot(subplots=True, sharex=True, figsize=(20, 20), title="BMX VSG")
-        if config.export_plots:
-            plt.savefig(config.pathPrefix + 'plots/bmx_vsg.png', dpi=100)
-        if config.plot_acc_sensors:
-            plt.show()
-
-        df_hrs.plot(subplots=True, sharex=True, figsize=(20, 20), title="BMX HRS")
-        if config.export_plots:
-            plt.savefig(config.pathPrefix + 'plots/bmx_hrs.png', dpi=100)
-        if config.plot_acc_sensors:
-            plt.show()
-
     return df_hrs, df_vsg
 
 
 # debugging method to check dataframe for duplicates
-def check_dupblicates(df):
+def check_duplicates(df):
     # if timestamp not index
     # df = df.loc[df['timestamp'].duplicated(keep=False)]
     # print('Current dublicates:', df.shape)
@@ -325,7 +217,6 @@ def check_dupblicates(df):
 
 
 def import_dataset(dataset_to_import=0):
-    register_matplotlib_converters()
 
     config = Configuration(dataset_to_import=dataset_to_import)
 
@@ -337,9 +228,6 @@ def import_dataset(dataset_to_import=0):
     # bmx sensor are not used because of missing data in some datasets
     df_hrs_combined, df_vsg_combined = import_bmx_sensors(config)
     gc.collect()
-
-    if not (config.save_pkl_file or config.plot_all_sensors or config.print_column_names):
-        sys.exit(0)
 
     print("\nCombine all dataframes...")
     print("Step 1/4")
@@ -361,8 +249,10 @@ def import_dataset(dataset_to_import=0):
     print('Number of streams before:', df_combined.shape)
 
     try:
-        df_combined = df_combined[config.feature_variant]
+        df_combined = df_combined[config.features_used]
     except:
+        # print("Features in dataset:")
+        # print(*list(df_combined.columns.values), sep="\n")
         raise AttributeError('Relevant feature not found in current dataset.')
 
     print('Number of streams after:', df_combined.shape)
@@ -377,22 +267,6 @@ def import_dataset(dataset_to_import=0):
 
     if config.print_column_names:
         print(*list(df_combined.columns.values), sep="\n")
-
-    # not tested, formatting not lucid
-    if config.plot_all_sensors:
-        # Interpolate and add missing data
-        print('Interpolate data for plotting')
-        df_combined = df_combined.apply(pd.Series.interpolate, args=('linear',))
-        # df_combined.plot(subplots=True, sharex=True, figsize=(10,10))
-        df_combined = df_combined.fillna(method='backfill')
-
-        # ax = plt.gca()
-
-        # df_combined.plot(subplots=True, sharex=True, figsize=(10,10), linewidth=0.5, legend=False)
-        print('Creating full plot')
-        df_combined.plot(subplots=True, sharex=True, figsize=(40, 40),
-                         title="All sensors")
-        plt.show()
 
     print('\nImporting of datset', dataset_to_import, 'finished')
 

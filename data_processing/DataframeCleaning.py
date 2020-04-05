@@ -1,6 +1,7 @@
-import sys
-import os
 import gc
+import os
+import sys
+
 import pandas as pd
 
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
@@ -12,16 +13,18 @@ def clean_up_dataframe(df: pd.DataFrame, config: Configuration):
     print('\nCleaning up dataframe with shape: ', df.shape, '...')
     # get list of attributes by type and remove those that aren't in the dataframe
     used = set(config.features_used)
-    bools = list(set(config.categoricalValues).intersection(used))
+    cats = list(set(config.categoricalValues).intersection(used))
     combined = list(set(config.categoricalValues + config.zeroOne + config.intNumbers).intersection(used))
     real_values = list(set(config.realValues).intersection(used))
 
-    print('\tReplace True/False with 1/0 - Already done, now part of DataImport.py with hard coded attribute values')
-    # df[bools] = df[bools].replace({'True': '1', 'False': '0'})
-    # df[bools] = df[bools].apply(pd.to_numeric)
-
-    print('\tFill NA for boolean and integer columns with values')
+    print('\tFill NA for categorical and integer columns with values')
     df[combined] = df[combined].fillna(method='ffill')
+
+    print('\tChange categorical columns to numeric representation')
+    for col in cats:
+        df[col] = pd.Categorical(df[col])
+        df[col] = df[col].cat.codes
+        df[col] = pd.to_numeric(df[col])
 
     print('\tInterpolate NA values for real valued streams')
     df[real_values] = df[real_values].apply(pd.Series.interpolate, args=('linear',))
