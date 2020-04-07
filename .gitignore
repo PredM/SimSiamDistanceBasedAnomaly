@@ -141,3 +141,4 @@ data/case_base/*
 
 #logs/*
 #!logs/.gitkeep
+/logs/temp/
