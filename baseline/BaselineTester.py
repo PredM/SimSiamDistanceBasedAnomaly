@@ -170,7 +170,7 @@ def main():
     temp_output_interval = -1
     use_relevant_only = True
     implemented_algorithms = ['dtw', 'dtw_weighting_nbr_features', 'feature_based']
-    algorithm_used = implemented_algorithms[0]
+    algorithm_used = implemented_algorithms[1]
     distance_to_sim_methods = ['1/(1+d)', 'div_max', 'min_max_scaling']
     distance_to_sim_method = distance_to_sim_methods[0]
 

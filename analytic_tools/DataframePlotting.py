@@ -78,7 +78,7 @@ def plot_pressure_sensors(config: Configuration, df: pd.DataFrame, ):
     if not (config.plot_pressure_sensors or config.export_plots):
         return
 
-    print('Creating pressure censor plot\n')
+    print('Creating pressure sensor plot\n')
 
     df_rel = df[["hPa_15", "hPa_17", "hPa_18"]]
 
