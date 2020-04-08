@@ -28,7 +28,7 @@ class GeneralConfiguration:
         self.models_folder = '../data/trained_models/'
 
         # Path and file name to the specific model that should be used for testing and live classification
-        self.filename_model_to_use = 'cbs_test_2'
+        self.filename_model_to_use = 'cbs_model_05-04'
         self.directory_model_to_use = self.models_folder + self.filename_model_to_use + '/'
 
         ##
@@ -87,13 +87,12 @@ class ModelConfiguration:
 
         # If enabled each case handler of a CBS will use individual hyperparameters
         # No effect on SNN architecture
-        self.use_individual_hyperparameters = False
-
+        self.use_individual_hyperparameters = True
 
         # If !use_individual_hyperparameters interpreted as a single json file, else as a folder
         # which contains json files named after the cases they should be used for
         # If no file with this name is present the 'default.json' Config will be used
-        self.hyper_file = self.hyper_file_folder + 'cbs_test1.json'
+        self.hyper_file = self.hyper_file_folder + 'snn_testing.json'  # 'individual_hyperparameters_test'
 
         ##
         # Various settings influencing the similarity calculation
@@ -166,7 +165,7 @@ class TrainingConfiguration:
         self.use_margin_reduction_based_on_label_sim = False  # default: False
 
         self.use_early_stopping = True
-        self.early_stopping_epochs_limit = 1000
+        self.early_stopping_epochs_limit = 1500
 
         # Parameter to control if and when a test is conducted through training
         self.use_inference_test_during_training = False  # default False

@@ -353,7 +353,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
                     model_folder = self.config.directory_model_to_use + group_id + '_model/'
                     file_name = group_id
         else:
-            if self.training and self.config.use_hyper_file:
+            if self.training:
                 file_name = self.config.hyper_file
             else:
                 # if testing a snn use the json file with default name in the model directory
@@ -361,11 +361,11 @@ class SimpleSNN(AbstractSimilarityMeasure):
                 file_name = 'hyperparameters_used.json'
 
         try:
-            self.hyper.load_from_file(model_folder + file_name)
+            self.hyper.load_from_file(model_folder + file_name, self.config.use_hyper_file)
         except (NotADirectoryError, FileNotFoundError) as e:
             if for_cbs and self.config.use_individual_hyperparameters:
                 print('Using default.json for group ', group_id)
-                self.hyper.load_from_file(model_folder + 'default.json')
+                self.hyper.load_from_file(model_folder + 'default.json', self.config.use_hyper_file)
             else:
                 raise e
 

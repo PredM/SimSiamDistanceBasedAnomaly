@@ -6,8 +6,10 @@ import sys
 import pandas as pd
 from pandas.plotting import register_matplotlib_converters
 
+
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 
+from configuration.ConfigChecker import ConfigChecker
 from configuration.Configuration import Configuration
 
 
@@ -273,8 +275,11 @@ def import_dataset(dataset_to_import=0):
 
 def main():
     config = Configuration()
-    nbr_datasets = len(config.datasets)
 
+    checker = ConfigChecker(config, None, 'preprocessing', training=None)
+    checker.check()
+
+    nbr_datasets = len(config.datasets)
     for i in range(0, nbr_datasets):
         print('-------------------------------')
         print('Importing dataset', i)

@@ -60,7 +60,10 @@ class Hyperparameters:
         self.time_series_depth = dataset.time_series_depth
 
     # Allows the import of a hyper parameter configuration from a json file
-    def load_from_file(self, file_path):
+    def load_from_file(self, file_path, use_hyper_file=True):
+
+        if not use_hyper_file:
+            return
 
         file_path = file_path + '.json' if not file_path.endswith('.json') else file_path
 

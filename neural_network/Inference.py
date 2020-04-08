@@ -2,7 +2,6 @@ import os
 import sys
 import time
 
-
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 
 from neural_network.Evaluator import Evaluator
@@ -58,15 +57,15 @@ def main():
 
     dataset.load()
 
+    checker = ConfigChecker(config, dataset, 'snn', training=False)
+    checker.check()
+
     architecture = initialise_snn(config, dataset, False)
 
     inference = Inference(config, architecture, dataset)
 
     print('Ensure right model file is used:')
     print(config.directory_model_to_use, '\n')
-
-    checker = ConfigChecker(config, dataset, 'snn', training=False)
-    checker.check()
 
     inference.infer_test_dataset()
 

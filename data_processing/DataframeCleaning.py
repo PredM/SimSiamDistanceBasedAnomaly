@@ -4,8 +4,10 @@ import sys
 
 import pandas as pd
 
+
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 
+from configuration.ConfigChecker import ConfigChecker
 from configuration.Configuration import Configuration
 
 
@@ -45,8 +47,10 @@ def clean_up_dataframe(df: pd.DataFrame, config: Configuration):
 def main():
     config = Configuration()  # Get config for data directory
 
-    number_data_sets = len(config.datasets)
+    checker = ConfigChecker(config, None, 'preprocessing', training=None)
+    checker.check()
 
+    number_data_sets = len(config.datasets)
     for i in range(number_data_sets):
         print('\n\nImporting dataframe ' + str(i) + '/' + str(number_data_sets - 1) + ' from file')
 

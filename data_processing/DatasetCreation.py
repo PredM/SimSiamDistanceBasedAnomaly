@@ -1,16 +1,19 @@
-import sys
+import gc
 import os
 import pickle
+import sys
 import threading
-import gc
+
 import joblib
 import numpy as np
 import pandas as pd
-from sklearn.model_selection import train_test_split, GroupKFold, GroupShuffleSplit
-from sklearn.preprocessing import MinMaxScaler, OrdinalEncoder, StandardScaler
+from sklearn.model_selection import train_test_split, GroupShuffleSplit
+from sklearn.preprocessing import MinMaxScaler, OrdinalEncoder
+
 
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 
+from configuration.ConfigChecker import ConfigChecker
 from configuration.Configuration import Configuration
 
 
@@ -224,6 +227,10 @@ def normalise(x_train: np.ndarray, x_test: np.ndarray, config: Configuration):
 
 def main():
     config = Configuration()  # Get config for data directory
+
+    checker = ConfigChecker(config, None, 'preprocessing', training=None)
+    checker.check()
+
     config.import_timestamps()
     number_data_sets = len(config.datasets)
 
@@ -303,11 +310,11 @@ def main():
 
         # TODO Is this working correctly ? train_idx and test_idx only asigned in for loop
         for train_idx, test_idx in gss.split(examples_array, labels_array, failure_times_array_groups):
-           print("TRAIN:", train_idx, "TEST:", test_idx)
-        #split_idx in gss.split(examples_array, labels_array, failure_times_array_groups)
-        #train_idx = split_idx[0]
-        #test_idx = split_idx[1]
-        #print("train_idx:",train_idx)
+            print("TRAIN:", train_idx, "TEST:", test_idx)
+        # split_idx in gss.split(examples_array, labels_array, failure_times_array_groups)
+        # train_idx = split_idx[0]
+        # test_idx = split_idx[1]
+        # print("train_idx:",train_idx)
 
         # TODO split test into validation and test set
 
@@ -322,7 +329,7 @@ def main():
         print("Window_times_train: ", window_times_train.shape, " Window_times_test: ", window_times_test.shape)
         print("Classes in the train set: ", np.unique(y_train))
         print("Classes in the test set: ", np.unique(y_test))
-        #print("Classes in train and test set: ", np.unique(np.concatenate(y_train, y_test)))
+        # print("Classes in train and test set: ", np.unique(np.concatenate(y_train, y_test)))
 
     else:
         # split into train and test data set
