@@ -221,7 +221,6 @@ class CNNWithClassAttention(NN):
         caseDependentVectorInput = tf.keras.Input(self.input_shape[1], name="Input1")
         layers = self.hyper.cnn2d_layers
 
-        #
         if self.hyper.learnFeatureWeights == 'True':
             print("Feature weights are learned based on masking vector")
             # Takes 0-1 input mask of relevant features and learns weights for relevant features (that are not masked as zero)

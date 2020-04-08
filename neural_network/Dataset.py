@@ -361,7 +361,6 @@ class FullDataset(Dataset):
     def get_indices_failures_only_test(self):
         return np.where(self.y_test_strings != 'no_failure')[0]
 
-    # TODO Maybe needs to be reworked
     def encode(self, encoder, encode_test_data=False):
 
         start_time_encoding = perf_counter()

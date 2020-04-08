@@ -140,7 +140,7 @@ class CBS(AbstractSimilarityMeasure):
 
         return np.concatenate(sims_groups), np.concatenate(labels_groups)
 
-    def get_sims_batch(self, batch):
+    def get_sims_for_batch(self, batch):
         raise NotImplementedError(
             'Not implemented for this architecture. '
             'The models function will be called directly by each group handler.')

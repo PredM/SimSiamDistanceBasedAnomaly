@@ -56,12 +56,11 @@ class ModelConfiguration:
         # Architecture (independent of whether a single SNN or the CBS is used)
         ##
 
-        # Due to changes  'fast_simple', 'fast_ffnn'  currently are not supported
         # standard = classic snn behaviour, context vectors calculated each time, also multiple times for the example
         # fast = encoding of case base only once, example also only once
         # ffnn = uses ffnn as distance measure
         # simple = mean absolute difference as distance measure instead of the ffnn
-        self.architecture_variants = ['standard_simple', 'standard_ffnn']
+        self.architecture_variants = ['standard_simple', 'standard_ffnn', 'fast_simple', 'fast_ffnn']
         self.architecture_variant = self.architecture_variants[0]
 
         ##
@@ -150,7 +149,7 @@ class TrainingConfiguration:
         # for at least one case
         # self.features_used will be assigned when config.json loading
         self.feature_variants = ['all_features', 'cbs_features']
-        self.feature_variant = self.feature_variants[0]
+        self.feature_variant = self.feature_variants[1]
         self.features_used = None
 
         # TODO: TripletLoss, Distance-Based Logistic Loss
