@@ -213,7 +213,6 @@ class FullDataset(Dataset):
             self.class_idx_to_ex_idxs_train[i] = np.argwhere(self.y_train[:, i] > 0)
             self.class_idx_to_ex_idxs_test[i] = np.argwhere(self.y_test[:, i] > 0)
 
-
         # collect number of instances for each class in training and test
         self.y_train_strings_unique, counts = np.unique(self.y_train_strings, return_counts=True)
         self.num_instances_by_class_train = np.asarray((self.y_train_strings_unique, counts)).T
@@ -361,14 +360,15 @@ class FullDataset(Dataset):
     def get_indices_failures_only_test(self):
         return np.where(self.y_test_strings != 'no_failure')[0]
 
-    def encode(self, encoder, encode_test_data=False):
+    def encode(self, snn, encode_test_data=False):
 
         start_time_encoding = perf_counter()
         print('Encoding of dataset started')
 
         x_train_unencoded = self.x_train
         self.x_train = None
-        x_train_encoded = encoder.model(x_train_unencoded, training=False)
+        x_train_unencoded = snn.reshape(x_train_unencoded)
+        x_train_encoded = snn.encoder.model(x_train_unencoded, training=False)
         x_train_encoded = np.asarray(x_train_encoded)
         self.x_train = x_train_encoded
 
@@ -377,7 +377,8 @@ class FullDataset(Dataset):
         if encode_test_data:
             x_test_unencoded = self.x_test
             self.x_test = None
-            x_test_encoded = encoder.model(x_test_unencoded, training=False)
+            x_test_unencoded = snn.reshape(x_test_unencoded)
+            x_test_encoded = snn.encoder.model(x_test_unencoded, training=False)
             x_test_encoded = np.asarray(x_test_encoded)
             self.x_test = x_test_encoded
 

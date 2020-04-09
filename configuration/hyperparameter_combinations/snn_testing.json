@@ -1,5 +1,5 @@
 {
-  "encoder_variant": "cnnwithclassattention",
+  "encoder_variant": "tcn",
   "batch_size": 64,
   "epochs": 400000,
   "epochs_current": 0,

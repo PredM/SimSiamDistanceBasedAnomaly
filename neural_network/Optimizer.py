@@ -116,7 +116,7 @@ class SNNOptimizer(Optimizer):
 
         # Reshape (and integrate model_aux_input) if necessary for encoder variant
         # batch_size and index are irrelevant because not used if aux_input is passed
-        model_input = self.architecture.reshape_input(model_input, 0, 0, aux_input=model_aux_input)
+        model_input = self.architecture.reshape_and_add_aux_input(model_input, 0, aux_input=model_aux_input)
 
         batch_loss = self.optimizer_helper.update_single_model(model_input, true_similarities,
                                                                query_classes=model_input_class_strings)

@@ -72,14 +72,16 @@ class SimpleSNN(AbstractSimilarityMeasure):
         if type(self) is SimpleSNN:
             self.load_model(for_cbs=for_group_handler, group_id=group_id)
 
-    # TODO Untested for call from batch version
-    # reshape and add auxiliary input for special encoder variants
-    # outer index must be used if batch wise calculation is used
-    # to access the correct example in the dataset
-    def reshape_input(self, input_pairs, batch_size, outer_index=0, aux_input=None):
-
+    # Reshapes the standard import shape (examples x ts_length x ts_depth) if needed for the used encoder variant
+    def reshape(self, input_pairs):
         if self.hyper.encoder_variant in ['cnnwithclassattention', 'cnn2d']:
             input_pairs = np.reshape(input_pairs, (input_pairs.shape[0], input_pairs.shape[1], input_pairs.shape[2], 1))
+        return input_pairs
+
+    # Reshapes and adds auxiliary input for special encoder variants
+    def reshape_and_add_aux_input(self, input_pairs, batch_size, aux_input=None):
+
+        input_pairs = self.reshape(input_pairs)
 
         if self.hyper.encoder_variant == 'cnn1dwithclassattention':
             raise NotImplementedError('Fix necessary')
@@ -93,10 +95,10 @@ class SimpleSNN(AbstractSimilarityMeasure):
                 for index in range(batch_size):
                     # noinspection PyUnresolvedReferences
                     aux_input[2 * index] = self.dataset.get_masking_float(
-                        self.dataset.y_train_strings[index + outer_index])
+                        self.dataset.y_train_strings[index])
                     # noinspection PyUnresolvedReferences
                     aux_input[2 * index + 1] = self.dataset.get_masking_float(
-                        self.dataset.y_train_strings[index + outer_index])
+                        self.dataset.y_train_strings[index])
             else:
                 # Option to simulate a retrieval situation (during training) where only the weights of the
                 # example from the case base/training data set are known
@@ -110,87 +112,100 @@ class SimpleSNN(AbstractSimilarityMeasure):
 
         return input_pairs
 
-    # Main function used to get similarities
-    # Called during inference
-    # Creates a batch as input used by the get_sims_batch function, which performs the actual calculation
+    # TODO Remove if new one works correctly
+    def create_batch_for_example_old(self, example, batch_size):
+        batch_shape = (2 * batch_size, self.hyper.time_series_length, self.hyper.time_series_depth)
+        input_pairs = np.zeros(batch_shape).astype('float32')
+
+        # create a batch of pairs between the example to test and the examples in the dataset
+        for i in range(batch_size):
+            input_pairs[2 * i] = example
+            input_pairs[2 * i + 1] = self.dataset.x_train[i]
+
+        return input_pairs
+
+    # Creates a batch of examples pairs:
+    # 2*index+0 = example, 2*index+1 = x_train[index] for index in range(len(x_train))
+    def create_batch_for_example(self, example):
+        x_train = self.dataset.x_train
+
+        # get in array that contains example as many times as there are training examples
+        example_repeated = np.repeat(example, x_train.shape[0], axis=0)
+
+        # create an empty array with same shape as x_train but twice as many examples
+        shape_combined = (2 * x_train.shape[0], x_train.shape[1], x_train.shape[2])
+        batch_combined = np.empty(shape_combined, dtype=x_train.dtype)
+
+        # Inserting the examples in alternating order
+        batch_combined[0::2] = example_repeated
+        batch_combined[1::2] = x_train
+
+        return batch_combined
+
+    # Main function used to get similarities, called during inference
+    # Creates a batch from the transferred example and the training data record as input for the similarity measure.
+    # Depending on whether the batch-wise calculation is activated, it is passed directly to get_sims_for_batch,
+    # which performs the actual calculation, or to get_sims_multiple_batches,
+    # which splits it up into multiple queries.
     def get_sims(self, example):
 
-        # TODO Test if tcn still necessary
-        # If configured split the calculation of the similarities into batches
-        # Necessary for TCN due to high memory usage
-        # Otherwise the calculation will be done in a single batch
-        if type(self.encoder) == TCN or self.config.split_sim_calculation:
-            return self.get_sims_multiple_batches(example)
-
-        ### EXTRACT TO FUNCTION START
         batch_size = len(self.dataset.x_train)
-        input_pairs = np.zeros((2 * batch_size, self.hyper.time_series_length,
-                                self.hyper.time_series_depth)).astype('float32')
+        input_pairs = self.create_batch_for_example(example)
+        input_pairs = self.reshape_and_add_aux_input(input_pairs, batch_size)
 
-        for index in range(batch_size):
-            input_pairs[2 * index] = example
-            input_pairs[2 * index + 1] = self.dataset.x_train[index]
-
-        ### EXTRACT TO FUNCTION END
-        input_pairs = self.reshape_input(input_pairs, batch_size)
-
-        sims = self.get_sims_for_batch(input_pairs)
+        if self.config.split_sim_calculation:
+            sims = self.get_sims_multiple_batches(input_pairs)
+        else:
+            sims = self.get_sims_for_batch(input_pairs)
+            # get_sims_for_batch returns a tensor, .numpy can't be called in there because of tf.function annotation
+            sims = sims.numpy()
 
         return sims, self.dataset.y_train_strings
 
-    # Called by get_sims, unless the similarity to the example should/can be calculated in a single large batch
+    # Called by get_sims, if the similarity to the example should/can not be calculated in a single large batch
     # Shouldn't be called directly
-    def get_sims_multiple_batches(self, example):
+    # Assertion errors would mean a faulty calculation, please report.
+    def get_sims_multiple_batches(self, batch):
 
-        num_train = len(self.dataset.x_train)
-        sims_all_examples = np.zeros(num_train)
-        batch_size = self.hyper.batch_size
+        assert batch.shape[0] % 2 == 0, 'Input batch of uneven length not possible'
 
-        # similarities are calculated in batches
-        for index in range(0, num_train, batch_size):
-            # fix batch size if it would exceed the number of train instances
-            if index + batch_size >= num_train:
-                batch_size = num_train - index
+        # pair: index+0: test, index+1: train --> only half as many results
+        num_examples = batch.shape[0]
+        num_pairs = batch.shape[0] // 2
+        sims_all_examples = np.zeros(num_pairs)
+        batch_size = self.config.sim_calculation_batch_size
 
-            ### EXTRACT TO FUNCTION START
-            batch_shape = (2 * batch_size, self.hyper.time_series_length, self.hyper.time_series_depth)
-            input_pairs = np.zeros(batch_shape).astype('float32')
+        for index in range(0, num_examples, batch_size):
 
-            # create a batch of pairs between the example to test and the examples in the dataset
-            for i in range(batch_size):
-                input_pairs[2 * i] = example
-                input_pairs[2 * i + 1] = self.dataset.x_train[index + i]
-            ### EXTRACT TO FUNCTION END
+            # fix batch size if it would exceed the number of examples in the
+            if index + batch_size >= num_examples:
+                batch_size = num_examples - index
 
-            input_pairs = self.reshape_input(input_pairs, batch_size, outer_index=index)
+            assert batch_size % 2 == 0, 'Batch of uneven length not possible'
+            assert index % 2 == 0 and (index + batch_size) % 2 == 0, 'Mapping / splitting is not correct'
 
-            # collect similarities of all badges
-            sims_all_examples[index:index + batch_size] = self.get_sims_for_batch(input_pairs)
+            # Calculation of assignments of pair indices to similarity value indices
+            sim_start = index // 2
+            sim_end = (index + batch_size) // 2
+            subsection_batch = batch[index:index + batch_size]
+            sims_subsection = self.get_sims_for_batch(subsection_batch)
 
-        # returns 2d array [[sim, label], [sim, label], ...]
-        return sims_all_examples, self.dataset.y_train_strings
+            sims_all_examples[sim_start:sim_end] = sims_subsection
 
-    # Called by get_sims or get_sims_multiple_batches for a single example
-    # Or by optimizer directly
+        return sims_all_examples
+
+    # Called by get_sims or get_sims_multiple_batches for a single example or by an optimizer directly
     @tf.function
     def get_sims_for_batch(self, batch):
-        # calculate the output of the subnet for the examples in the batch
+
+        # calculate the output of the encoder for the examples in the batch
         context_vectors = self.encoder.model(batch, training=self.training)
-        # case_embeddings = self.encoder.intermediate_layer_model(batch[1], training=self.training)
-        # tf.print("Case Embedding for this query: ",case_embeddings, output_stream=sys.stderr,summarize = -1)
 
         if self.hyper.encoder_variant in ['cnnwithclassattention', 'cnn1dwithclassattention']:
             input_size = batch[0].shape[0] // 2
         else:
             input_size = batch.shape[0] // 2
-        '''
-        case_embeddings = self.encoder.intermediate_layer_model1(batch, training=self.training)
-        tf.print("Int Mod 1: ",case_embeddings, output_stream=sys.stderr,summarize = -1)
-        gate = self.encoder.intermediate_layer_model(batch[1], training=self.training)
-        tf.print("Gate: ",gate, output_stream=sys.stderr,summarize = -1)
-        case_embeddings2 = self.encoder.intermediate_layer_model2(batch, training=self.training)
-        tf.print("Int Mod 2: ",case_embeddings2, output_stream=sys.stderr,summarize = -1)
-        '''
+
         sims_batch = tf.map_fn(lambda pair_index: self.get_sim_pair(context_vectors, pair_index),
                                tf.range(input_size, dtype=tf.int32), back_prop=True, dtype=tf.float32)
 
@@ -199,6 +214,8 @@ class SimpleSNN(AbstractSimilarityMeasure):
     # TODO @klein shouldn't cnn2d be added to the first if? because the same reshape operation is done in reshape_input
     @tf.function
     def get_sim_pair(self, context_vectors, pair_index):
+        # tf.print(context_vectors.shape, pair_index, 2 * pair_index, 2 * pair_index + 1)
+
         # Reminder if a concat layer is used in the cnn1dclassattention,
         # then context vectors need to be reshaped from 2d to 3d (implement directly in BasicNeuralNetorks)
         # context_vectors = tf.reshape(context_vectors,[context_vectors.shape[0],context_vectors.shape[1],1])
@@ -334,7 +351,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
         self.hyper = Hyperparameters()
 
         model_folder = ''
-        # noinspection PyUnusedLocal
+        # noinspection PyUnusedLocal, this is necessary
         file_name = ''
 
         if for_cbs:
@@ -425,7 +442,7 @@ class SNN(SimpleSNN):
 
         # load model only if init was not called by subclass, would otherwise be executed multiple times
         if type(self) is SNN:
-            self.load_model()
+            self.load_model(for_cbs=for_group_handler, group_id=group_id)
 
     # noinspection DuplicatedCode
     @tf.function
@@ -494,67 +511,47 @@ class FastSimpleSNN(SimpleSNN):
 
         # Load model only if init was not called by subclass, would otherwise be executed multiple times
         if type(self) is FastSimpleSNN:
-            self.load_model()
+            self.load_model(for_cbs=for_group_handler, group_id=group_id)
 
             # noinspection PyUnresolvedReferences
-            self.dataset.encode(self.encoder)
+            self.dataset.encode(self)
 
-    # TODO Check for new encoders
     def encode_example(self, example):
-        ex = np.expand_dims(example, axis=0)  # Model expects array of examples -> add outer dimension
-        context_vector = self.encoder.model(ex, training=self.training)
-        return np.squeeze(context_vector, axis=0)  # Back to a single example
+        # Model expects array of examples -> add outer dimension
+        ex = np.expand_dims(example, axis=0)
 
-    # example must be unencoded
+        # Call reshape method that transforms the example if needed by the encoder
+        ex = self.reshape(ex)
+
+        # Encoder returns tensor, but following batch generation needs np array --> .numpy()
+        encoded_example = self.encoder.model(ex, training=self.training)
+        return encoded_example.numpy()
+
+    # Example must be unencoded
+    # Same functionality as normal snn version but encodes the input example
+    # No support for encoders with additional input currently
     def get_sims(self, unencoded_example):
         encoded_example = self.encode_example(unencoded_example)
-        return self.get_sims_section(self.dataset.x_train, encoded_example), self.dataset.y_train_strings
+        batch_combined = self.create_batch_for_example(encoded_example)
 
+        if self.config.split_sim_calculation:
+            sims = self.get_sims_multiple_batches(batch_combined)
+        else:
+            sims = self.get_sims_for_batch(batch_combined)
+            sims = sims.numpy()
+
+        return sims, self.dataset.y_train_strings
+
+    # Same functionality as normal snn version but without the encoding of the batch
     @tf.function
-    def get_sims_section(self, section_train, encoded_example):
-        # TODO create "fake" context vectors here
-        #  First example only
-        #  Then integrate cnnWithAttention in some way
-        #   ---> Use reshape_input method for that
-
-
-
+    def get_sims_for_batch(self, batch):
 
         # dtype is necessary
-        sims_selection = tf.map_fn(lambda index: self.get_sim_pair(FAKE_CONTEXT_VECTOR, 0),
-                                   tf.range(section_train.shape[0], dtype=tf.int32), back_prop=True, dtype='float32')
+        input_size = batch.shape[0] // 2
+        sims_batch = tf.map_fn(lambda pair_index: self.get_sim_pair(batch, pair_index),
+                               tf.range(input_size, dtype=tf.int32), back_prop=True, dtype=tf.float32)
 
-        return sims_selection
-
-    # TODO Check if changes necessary
-    # example must already be encoded
-    def get_sims_multiple_batches(self, encoded_example):
-        num_train = len(self.dataset.x_train)
-        sims_all_examples = np.zeros(num_train)
-        batch_size = self.hyper.batch_size
-
-        for index in range(0, num_train, batch_size):
-
-            # fix batch size if it would exceed the number of train instances
-            if index + batch_size >= num_train:
-                batch_size = num_train - index
-
-            section_train = self.dataset.x_train[index: index + batch_size].astype('float32')
-
-            # collect similarities of all badges
-            sims_all_examples[index:index + batch_size] = self.get_sims_section(section_train, encoded_example)
-
-        # return the result of the knn classifier using the calculated similarities
-        return sims_all_examples, self.dataset.y_train_strings
-
-    def get_sims_for_batch(self, batch):
-        raise NotImplemented('This method is not supported by this SNN variant by design.')
-
-    # TODO Remove when changes finished
-    # Don't change something here
-    # Design input in a way context vector has only one pair and pair index is always 0
-    def get_sim_pair(self, context_vectors, pair_index):
-        super().get_sim_pair(context_vectors, pair_index)
+        return sims_batch
 
 
 ###
@@ -576,7 +573,7 @@ class FastSNN(FastSimpleSNN):
 
         # load model only if init was not called by subclass, would otherwise be executed multiple times
         if type(self) is FastSNN:
-            self.load_model()
+            self.load_model(for_cbs=for_group_handler, group_id=group_id)
 
             # noinspection PyUnresolvedReferences
             self.dataset.encode(self.encoder)
