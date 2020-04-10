@@ -129,6 +129,12 @@ class SimpleSNN(AbstractSimilarityMeasure):
     def create_batch_for_example(self, example):
         x_train = self.dataset.x_train
 
+        # In order for the following function to work like intended
+        # the example must in a single example in an array
+        # Already the case if used by cbs, so only done if example is only 2d
+        if len(example.shape) == 2:
+            example = np.expand_dims(example, axis=0)
+
         # get in array that contains example as many times as there are training examples
         example_repeated = np.repeat(example, x_train.shape[0], axis=0)
 
@@ -458,6 +464,7 @@ class SNN(SimpleSNN):
         Returns:
           similarity: float scalar.  Similarity between context vector a and b
         """
+
         a = context_vectors[2 * pair_index, :, :]
         b = context_vectors[2 * pair_index + 1, :, :]
         # a and b shape: [T, C]
@@ -545,24 +552,24 @@ class FastSimpleSNN(SimpleSNN):
     # Same functionality as normal snn version but without the encoding of the batch
     @tf.function
     def get_sims_for_batch(self, batch):
-
-        # dtype is necessary
         input_size = batch.shape[0] // 2
-        sims_batch = tf.map_fn(lambda pair_index: self.get_sim_pair(batch, pair_index),
-                               tf.range(input_size, dtype=tf.int32), back_prop=True, dtype=tf.float32)
+
+        # So that the get_sims_pair method of SNN can be used by the FastSNN variant without directly inheriting it,
+        # the self-parameter must also be passed in the call.
+        # But this leads to errors with SimpleFastSNN, therefore case distinction
+        # dtype is necessary
+        if type(self) == FastSimpleSNN:
+            sims_batch = tf.map_fn(lambda pair_index: self.get_sim_pair(batch, pair_index),
+                                   tf.range(input_size, dtype=tf.int32), back_prop=True, dtype=tf.float32)
+        elif type(self) == FastSNN:
+            sims_batch = tf.map_fn(lambda pair_index: self.get_sim_pair(self, batch, pair_index),
+                                   tf.range(input_size, dtype=tf.int32), back_prop=True, dtype=tf.float32)
+        else:
+            raise ValueError('Unknown type')
 
         return sims_batch
 
 
-###
-#
-#
-#   OLD
-#
-#
-##
-
-# TODO Resulting in SNN probably better / easier. Possibly check multiple inheritance
 class FastSNN(FastSimpleSNN):
 
     def __init__(self, config, dataset, training, for_group_handler=False, group_id=''):
@@ -576,58 +583,10 @@ class FastSNN(FastSimpleSNN):
             self.load_model(for_cbs=for_group_handler, group_id=group_id)
 
             # noinspection PyUnresolvedReferences
-            self.dataset.encode(self.encoder)
+            self.dataset.encode(self)
 
-    # TODO Change like FastSimpleSNN --> Fake context vectors with only one entry
-    # noinspection DuplicatedCode
-    # must exactly match get_sim_pair of the class SNN, except that the examples are passed directly
-    # via the parameters and not through passing their index in the context vectors
-    @tf.function
-    def get_sim_pair(self, a, b):
-        """Compute the warped distance between encoded time series a and b
-        with a neural network
-
-        Args:
-          a: context vector of example a
-          b: context vector of example b
-
-        Returns:
-          similarity: float scalar.  Similarity between context vector a and b
-        """
-
-        indices_a = tf.range(a.shape[0])
-        indices_a = tf.tile(indices_a, [a.shape[0]])
-        a = tf.gather(a, indices_a)
-        # a shape: [T*T, C]
-
-        indices_b = tf.range(b.shape[0])
-        indices_b = tf.reshape(indices_b, [-1, 1])
-        indices_b = tf.tile(indices_b, [1, b.shape[0]])
-        indices_b = tf.reshape(indices_b, [-1])
-        b = tf.gather(b, indices_b)
-        # b shape: [T*T, C]
-
-        # input of FFNN are all time stamp combinations of a and b
-        ffnn_input = tf.concat([a, b], axis=1)
-        # b shape: [T*T, 2*C] OR [T*T, 4*C]
-
-        # Predict the "relevance" of similarity between each time step
-        ffnn = self.ffnn.model(ffnn_input, training=self.training)
-        # ffnn shape: [T*T, 1]
-
-        # Calculate absolute distances between each time step
-        abs_distance = tf.abs(tf.subtract(a, b))
-        # abs_distance shape: [T*T, C]
-
-        # Compute the mean of absolute distances across each time step
-        timestepwise_mean_abs_difference = tf.expand_dims(tf.reduce_mean(abs_distance, axis=1), axis=-1)
-        # abs_distance shape: [T*T, 1]
-
-        # Scale / Weight (due to multiplication) the absolute distance of each time step combinations
-        # with the predicted "weight" for each time step
-        warped_dists = tf.multiply(timestepwise_mean_abs_difference, ffnn)
-
-        return tf.exp(-tf.reduce_mean(warped_dists))
+        # TODO https://bit.ly/34pHUOA
+        self.get_sim_pair = SNN.get_sim_pair
 
     def print_detailed_model_info(self):
         print('')

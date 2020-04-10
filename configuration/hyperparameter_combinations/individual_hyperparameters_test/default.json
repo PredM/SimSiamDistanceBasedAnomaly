@@ -1,5 +1,5 @@
 {
-  "encoder_variant": "cnn",
+  "encoder_variant": "cnn2d",
   "batch_size": 64,
   "epochs": 500000,
   "epochs_current": 0,

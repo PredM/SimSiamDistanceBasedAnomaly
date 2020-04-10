@@ -30,7 +30,7 @@ class GeneralConfiguration:
         # Path and file name to the specific model that should be used for testing and live classification
 
         # self.filename_model_to_use = 'temp_snn_model_04-09_08-38-23_epoch-400'  # cnn2d
-        self.filename_model_to_use = 'temp_snn_model_04-09_11-05-53_epoch-200' # cnn
+        self.filename_model_to_use = 'temp_snn_model_04-10_06-32-23_epoch-50'  # cnn
         # self.filename_model_to_use = 'temp_snn_model_04-09_11-49-27_epoch-50' #tcn
 
         self.directory_model_to_use = self.models_folder + self.filename_model_to_use + '/'
@@ -65,7 +65,7 @@ class ModelConfiguration:
         # ffnn = uses ffnn as distance measure
         # simple = mean absolute difference as distance measure instead of the ffnn
         self.architecture_variants = ['standard_simple', 'standard_ffnn', 'fast_simple', 'fast_ffnn']
-        self.architecture_variant = self.architecture_variants[2]
+        self.architecture_variant = self.architecture_variants[3]
 
         ##
         # Determines how the similarity between two embedding vectors is determined (when a simple architecture is used)
@@ -95,7 +95,7 @@ class ModelConfiguration:
         # If !use_individual_hyperparameters interpreted as a single json file, else as a folder
         # which contains json files named after the cases they should be used for
         # If no file with this name is present the 'default.json' Config will be used
-        self.hyper_file = self.hyper_file_folder + 'snn_testing'  #
+        self.hyper_file = self.hyper_file_folder + 'snn_testing'  # 'individual_hyperparameters_test'  #
 
         ##
         # Various settings influencing the similarity calculation
