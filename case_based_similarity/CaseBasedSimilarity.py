@@ -34,9 +34,6 @@ class CBS(AbstractSimilarityMeasure):
         # with contextlib.redirect_stdout(None):
         self.initialise_group_handlers()
 
-        if not self.training and self.config.architecture_variant in ['fast_simple', 'fast_ffnn']:
-            self.encode_datasets()
-
     def initialise_group_handlers(self):
 
         if self.training and self.config.architecture_variant in ['fast_simple', 'fast_ffnn']:
@@ -109,14 +106,6 @@ class CBS(AbstractSimilarityMeasure):
     def kill_threads(self):
         for group_handler in self.group_handlers:
             group_handler.input_queue.put('stop')
-
-    # TODO
-    def encode_datasets(self):
-        print('Encoding of datasets started.')
-
-        duration = 0
-
-        print('Encoding of datasets finished. Duration:', duration)
 
     def print_info(self):
         print()

@@ -112,18 +112,6 @@ class SimpleSNN(AbstractSimilarityMeasure):
 
         return input_pairs
 
-    # TODO Remove if new one works correctly
-    def create_batch_for_example_old(self, example, batch_size):
-        batch_shape = (2 * batch_size, self.hyper.time_series_length, self.hyper.time_series_depth)
-        input_pairs = np.zeros(batch_shape).astype('float32')
-
-        # create a batch of pairs between the example to test and the examples in the dataset
-        for i in range(batch_size):
-            input_pairs[2 * i] = example
-            input_pairs[2 * i + 1] = self.dataset.x_train[i]
-
-        return input_pairs
-
     # Creates a batch of examples pairs:
     # 2*index+0 = example, 2*index+1 = x_train[index] for index in range(len(x_train))
     def create_batch_for_example(self, example):
@@ -172,12 +160,17 @@ class SimpleSNN(AbstractSimilarityMeasure):
     # Shouldn't be called directly
     # Assertion errors would mean a faulty calculation, please report.
     def get_sims_multiple_batches(self, batch):
-
-        assert batch.shape[0] % 2 == 0, 'Input batch of uneven length not possible'
+        # Debugging, will raise error for encoders with additional input because of list structure
+        # assert batch.shape[0] % 2 == 0, 'Input batch of uneven length not possible'
 
         # pair: index+0: test, index+1: train --> only half as many results
-        num_examples = batch.shape[0]
-        num_pairs = batch.shape[0] // 2
+        if self.hyper.encoder_variant in ['cnnwithclassattention', 'cnn1dwithclassattention']:
+            num_examples = batch[0].shape[0]
+            num_pairs = batch[0].shape[0] // 2
+        else:
+            num_examples = batch.shape[0]
+            num_pairs = batch.shape[0] // 2
+
         sims_all_examples = np.zeros(num_pairs)
         batch_size = self.config.sim_calculation_batch_size
 
@@ -187,13 +180,21 @@ class SimpleSNN(AbstractSimilarityMeasure):
             if index + batch_size >= num_examples:
                 batch_size = num_examples - index
 
-            assert batch_size % 2 == 0, 'Batch of uneven length not possible'
-            assert index % 2 == 0 and (index + batch_size) % 2 == 0, 'Mapping / splitting is not correct'
+            # Debugging, will raise error for encoders with additional input because of list structure
+            # assert batch_size % 2 == 0, 'Batch of uneven length not possible'
+            # assert index % 2 == 0 and (index + batch_size) % 2 == 0, 'Mapping / splitting is not correct'
 
             # Calculation of assignments of pair indices to similarity value indices
             sim_start = index // 2
             sim_end = (index + batch_size) // 2
-            subsection_batch = batch[index:index + batch_size]
+
+            if self.hyper.encoder_variant in ['cnnwithclassattention', 'cnn1dwithclassattention']:
+                subsection_examples = batch[0][index:index + batch_size]
+                subsection_aux_input = batch[1][index:index + batch_size]
+                subsection_batch = [subsection_examples, subsection_aux_input]
+            else:
+                subsection_batch = batch[index:index + batch_size]
+
             sims_subsection = self.get_sims_for_batch(subsection_batch)
 
             sims_all_examples[sim_start:sim_end] = sims_subsection
@@ -203,7 +204,6 @@ class SimpleSNN(AbstractSimilarityMeasure):
     # Called by get_sims or get_sims_multiple_batches for a single example or by an optimizer directly
     @tf.function
     def get_sims_for_batch(self, batch):
-
         # calculate the output of the encoder for the examples in the batch
         context_vectors = self.encoder.model(batch, training=self.training)
 
@@ -450,7 +450,6 @@ class SNN(SimpleSNN):
         if type(self) is SNN:
             self.load_model(for_cbs=for_group_handler, group_id=group_id)
 
-    # noinspection DuplicatedCode
     @tf.function
     def get_sim_pair(self, context_vectors, pair_index):
         """Compute the warped distance between encoded time series a and b

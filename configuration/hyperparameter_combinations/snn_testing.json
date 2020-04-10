@@ -1,5 +1,5 @@
 {
-  "encoder_variant": "cnn",
+  "encoder_variant": "cnn2d",
   "batch_size": 64,
   "epochs": 400000,
   "epochs_current": 0,
@@ -62,13 +62,32 @@
     32
   ],
   "tcn_layers": [
-    1024,
-    256,
-    64
+    64,
+    16
   ],
   "tcn_kernel_length": [
     5,
     5,
     3
+  ],
+  "abcnn1": "weighted",
+  "use1dContext": "False",
+  "learnFeatureWeights": "True",
+  "useChannelWiseAggregation": "True",
+  "useAddContextForSim": "True",
+  "useAddContextForSim_LearnOrFixWeightVale": "True",
+  "cnn2d_channelWiseAggregation": [
+    128,
+    64,
+    32
+  ],
+  "cnn2d_contextModule": [
+    256,
+    128,
+    64
+  ],
+  "cnn2d_learnWeightForContextUsedInSim": [
+    32,
+    16
   ]
 }

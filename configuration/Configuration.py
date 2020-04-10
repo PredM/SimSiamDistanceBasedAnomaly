@@ -28,10 +28,7 @@ class GeneralConfiguration:
         self.models_folder = '../data/trained_models/'
 
         # Path and file name to the specific model that should be used for testing and live classification
-
-        # self.filename_model_to_use = 'temp_snn_model_04-09_08-38-23_epoch-400'  # cnn2d
-        self.filename_model_to_use = 'temp_snn_model_04-10_06-32-23_epoch-50'  # cnn
-        # self.filename_model_to_use = 'temp_snn_model_04-09_11-49-27_epoch-50' #tcn
+        self.filename_model_to_use = 'temp_cbs_model_04-10_08-29-50_epoch-100'
 
         self.directory_model_to_use = self.models_folder + self.filename_model_to_use + '/'
 
@@ -43,7 +40,7 @@ class GeneralConfiguration:
         # List content must match the group ids in config.json
         # Use = None or = [] for no restriction
 
-        self.cbs_groups_used = []  # ['g0','g2', 'g3', 'g4', 'g5', 'g6', 'g7']
+        self.cbs_groups_used = ['g6', 'g7']  # ['g0','g2', 'g3', 'g4', 'g5', 'g6', 'g7']
 
 
 class ModelConfiguration:
@@ -65,7 +62,7 @@ class ModelConfiguration:
         # ffnn = uses ffnn as distance measure
         # simple = mean absolute difference as distance measure instead of the ffnn
         self.architecture_variants = ['standard_simple', 'standard_ffnn', 'fast_simple', 'fast_ffnn']
-        self.architecture_variant = self.architecture_variants[3]
+        self.architecture_variant = self.architecture_variants[0]
 
         ##
         # Determines how the similarity between two embedding vectors is determined (when a simple architecture is used)
@@ -90,12 +87,12 @@ class ModelConfiguration:
 
         # If enabled each case handler of a CBS will use individual hyperparameters
         # No effect on SNN architecture
-        self.use_individual_hyperparameters = True
+        self.use_individual_hyperparameters = False
 
         # If !use_individual_hyperparameters interpreted as a single json file, else as a folder
         # which contains json files named after the cases they should be used for
         # If no file with this name is present the 'default.json' Config will be used
-        self.hyper_file = self.hyper_file_folder + 'snn_testing'  # 'individual_hyperparameters_test'  #
+        self.hyper_file = self.hyper_file_folder + 'cnn2d_withAddInput'  # 'individual_hyperparameters_test'  #
 
         ##
         # Various settings influencing the similarity calculation
@@ -153,7 +150,7 @@ class TrainingConfiguration:
         # for at least one case
         # self.features_used will be assigned when config.json loading
         self.feature_variants = ['all_features', 'cbs_features']
-        self.feature_variant = self.feature_variants[1]
+        self.feature_variant = self.feature_variants[0]
         self.features_used = None
 
         # TODO: TripletLoss, Distance-Based Logistic Loss
@@ -195,7 +192,7 @@ class TrainingConfiguration:
         self.continue_training = False  # default: False
 
         # Defines how often loss is printed and checkpoints are saved during training
-        self.output_interval = 50
+        self.output_interval = 200
 
         # How many model checkpoints are kept
         self.model_files_stored = 100

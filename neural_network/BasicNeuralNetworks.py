@@ -416,6 +416,9 @@ class CNNWithClassAttention(NN):
                                                       outputs=self.model.get_layer("reshape").output)
         '''
 
+    def get_output_shape(self):
+        raise NotImplementedError('Must be added in order for ffnn version to work with this encoder')
+
 
 # TODO @klein Remove old code that is / will not be used
 class CNN1DWithClassAttention(NN):
@@ -584,6 +587,13 @@ class CNN2D(NN):
                                                      kernel_size=(filter_size),
                                                      strides=stride, input_shape=sensorDataInput.shape)
                 # Added 1D-Conv Layer to provide information across time steps in the first layer
+
+                # TODO @Klein Fix create_model for cbs
+                # Possible fix: self.input_shape[1], but then new error occurs:
+                #  ValueError: Shape must be rank 3 but is rank 4 for 'model/tf_op_layer_concat/concat'
+                #  (op: 'ConcatV2') with input shapes: [128,1000,6], [128,1000,6,1], [].
+                # print(self.input_shape)
+
                 conv_layer1d = tf.keras.layers.Conv1D(filters=61, padding='VALID', kernel_size=1,
                                                       strides=1)
                 # inp = tf.squeeze(sensorDataInput)
