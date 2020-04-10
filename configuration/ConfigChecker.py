@@ -50,7 +50,7 @@ class ConfigChecker:
     @staticmethod
     def print_warnings(warnings):
         print('##########################################')
-        print('WARNING:')
+        print('WARNINGS:')
         for warning in warnings:
             print('- ', warning)
         print('##########################################')
@@ -60,9 +60,18 @@ class ConfigChecker:
     def warnings(self):
         warnings = []
 
+        # Add new entries below this line
+
         if not self.config.use_hyper_file:
             warnings.append('Hyperparameters shouldn\'t be read from file. '
                             'Ensure entries in Hyperparameters.py are correct.')
+
+        if not self.config.split_sim_calculation and not self.training:
+            warnings.append('Batchwise similarity calculation is disabled. '
+                            'If any errors occur, the first step should be to try '
+                            'and activate split_sim_calculation or lower sim_calculation_batch_size.')
+
+        # Add new entries before this line
 
         if len(warnings) > 0:
             self.print_warnings(warnings)

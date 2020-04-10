@@ -1,7 +1,6 @@
 import os
 import sys
 import threading
-import time
 
 import numpy as np
 import tensorflow as tf
@@ -10,7 +9,7 @@ from neural_network.OptimizerHelper import CBSOptimizerHelper
 
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 
-from multiprocessing import Process, Queue, Manager, Value
+from multiprocessing import Queue
 from configuration.Configuration import Configuration
 from neural_network.Dataset import CBSDataset
 from neural_network.SNN import SimpleSNN, AbstractSimilarityMeasure, initialise_snn
@@ -34,9 +33,6 @@ class CBS(AbstractSimilarityMeasure):
 
         # with contextlib.redirect_stdout(None):
         self.initialise_group_handlers()
-
-        if not self.training and self.config.architecture_variant in ['fast_simple', 'fast_ffnn']:
-            self.encode_datasets()
 
     def initialise_group_handlers(self):
 
@@ -111,14 +107,6 @@ class CBS(AbstractSimilarityMeasure):
         for group_handler in self.group_handlers:
             group_handler.input_queue.put('stop')
 
-    # TODO
-    def encode_datasets(self):
-        print('Encoding of datasets started.')
-
-        duration = 0
-
-        print('Encoding of datasets finished. Duration:', duration)
-
     def print_info(self):
         print()
         for group_handler in self.group_handlers:
@@ -140,7 +128,7 @@ class CBS(AbstractSimilarityMeasure):
 
         return np.concatenate(sims_groups), np.concatenate(labels_groups)
 
-    def get_sims_batch(self, batch):
+    def get_sims_for_batch(self, batch):
         raise NotImplementedError(
             'Not implemented for this architecture. '
             'The models function will be called directly by each group handler.')
@@ -166,7 +154,7 @@ class CBSGroupHandler(threading.Thread):
         self.model = None
         self.optimizer_helper = None
 
-        #self.print_group_handler_info()
+        # self.print_group_handler_info()
 
         # Must be last entry in __init__
         super(CBSGroupHandler, self).__init__()
@@ -227,9 +215,9 @@ class CBSGroupHandler(threading.Thread):
         group_id = self.group_id
         losses = []
 
-        #print('started', self.group_id, 'on', self.gpu)
+        # print('started', self.group_id, 'on', self.gpu)
         for epoch in range(training_interval):
-            #print(group_id, epoch)
+            # print(group_id, epoch)
 
             epoch_loss_avg = tf.keras.metrics.Mean()
 
@@ -240,6 +228,9 @@ class CBSGroupHandler(threading.Thread):
 
             # Reduce to the features used by this case handler
             model_input = model_input[:, :, self.dataset.get_masking_group(group_id)]
+
+            # Untested
+            # model_input = self.model.reshape(model_input)
 
             batch_loss = self.optimizer_helper.update_single_model(model_input, true_similarities)
 
@@ -252,7 +243,7 @@ class CBSGroupHandler(threading.Thread):
             if self.optimizer_helper.execute_early_stop(current_loss):
                 return losses, 'early_stopping'
 
-        #print('finished', self.group_id, 'on', self.gpu)
+        # print('finished', self.group_id, 'on', self.gpu)
 
         # Return the losses for all epochs during this training interval
         return losses, ''

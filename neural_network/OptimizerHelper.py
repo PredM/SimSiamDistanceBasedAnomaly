@@ -22,7 +22,7 @@ class OptimizerHelper:
 
     def update_single_model(self, model_input, true_similarities, query_classes=None):
         with tf.GradientTape() as tape:
-            pred_similarities = self.model.get_sims_batch(model_input)
+            pred_similarities = self.model.get_sims_for_batch(model_input)
 
             # Get parameters of subnet and ffnn (if complex sim measure)
             if self.config.architecture_variant in ['standard_ffnn', 'fast_ffnn']:

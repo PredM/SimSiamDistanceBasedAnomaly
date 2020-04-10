@@ -1,5 +1,4 @@
 import tensorflow as tf
-from scipy.spatial import distance
 
 
 # noinspection PyMethodMayBeStatic
@@ -63,9 +62,9 @@ class SimpleSimilarityMeasure:
                 # calculate context distance
                 diff_con = tf.abs(self.a_context - self.b_context)
                 distance_con = tf.reduce_mean(diff_con)
-                #weight both distances
-                distance = self.w * distance + (1-self.w) * distance_con
-                distance=tf.squeeze(distance)
+                # weight both distances
+                distance = self.w * distance + (1 - self.w) * distance_con
+                distance = tf.squeeze(distance)
         else:
             diff = tf.abs(a - b)
             distance = tf.reduce_mean(diff)
@@ -94,14 +93,14 @@ class SimpleSimilarityMeasure:
                 # calculate context distance
                 diff_con = tf.norm(self.a_context - self.b_context, ord='euclidean')
                 distance_con = tf.reduce_mean(diff_con)
-                #weight both distances
-                distance = self.w * diff + (1-self.w) * distance_con
-                diff=tf.squeeze(distance)
+                # weight both distances
+                distance = self.w * diff + (1 - self.w) * distance_con
+                diff = tf.squeeze(distance)
         else:
-            #tf.print("a: ", a)
-            #tf.print("b: ", b)
+            # tf.print("a: ", a)
+            # tf.print("b: ", b)
             diff = tf.norm(a - b, ord='euclidean')
-            #tf.print("diff: ", diff)
+            # tf.print("diff: ", diff)
 
         return diff
 
@@ -151,8 +150,6 @@ class SimpleSimilarityMeasure:
         fp = tf.reduce_sum(tf.multiply(a, b), 1)
         return 1 - (tp / (tp + fn + fp))
 
-    #
-    #
     @tf.function
     def attention_based(self, a, b):
 
@@ -166,7 +163,7 @@ class SimpleSimilarityMeasure:
 
         return sim
 
-    ### Pairwise similiarity functions
+    # Pairwise similarity functions
     def pairwise_euclidean_similarity(self, x, y):
         """Compute the pairwise Euclidean similarity between x and y.
 
@@ -217,7 +214,7 @@ class SimpleSimilarityMeasure:
         y = tf.nn.l2_normalize(y, axis=-1)
         return tf.matmul(x, y, transpose_b=True)
 
-    ### Computes attention between each time step of two multivariate time series
+    # Computes attention between each time step of two multivariate time series
     def compute_cross_attention(self, x, y, sim):
         """Compute cross attention.
 
@@ -245,7 +242,7 @@ class SimpleSimilarityMeasure:
         elif sim == "cosine":
             a = self.pairwise_cosine_similarity(x, y)
         else:
-            print("Error: No pairwise similiarity function with name: ", sim, " found!")
+            raise ValueError("Error: No pairwise similiarity function with name: ", sim, " found!")
 
         # Compute attention between each time step from x and y based on similarity
         a_x = tf.nn.softmax(a, axis=1)  # i->j

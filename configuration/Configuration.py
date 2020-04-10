@@ -28,7 +28,8 @@ class GeneralConfiguration:
         self.models_folder = '../data/trained_models/'
 
         # Path and file name to the specific model that should be used for testing and live classification
-        self.filename_model_to_use = 'cbs_model_05-04'
+        self.filename_model_to_use = 'temp_cbs_model_04-10_08-29-50_epoch-100'
+
         self.directory_model_to_use = self.models_folder + self.filename_model_to_use + '/'
 
         ##
@@ -39,7 +40,7 @@ class GeneralConfiguration:
         # List content must match the group ids in config.json
         # Use = None or = [] for no restriction
 
-        self.cbs_groups_used = []  # ['g2', 'g3', 'g4', 'g5', 'g6', 'g7']
+        self.cbs_groups_used = ['g6', 'g7']  # ['g0','g2', 'g3', 'g4', 'g5', 'g6', 'g7']
 
 
 class ModelConfiguration:
@@ -56,12 +57,11 @@ class ModelConfiguration:
         # Architecture (independent of whether a single SNN or the CBS is used)
         ##
 
-        # Due to changes  'fast_simple', 'fast_ffnn'  currently are not supported
         # standard = classic snn behaviour, context vectors calculated each time, also multiple times for the example
         # fast = encoding of case base only once, example also only once
         # ffnn = uses ffnn as distance measure
         # simple = mean absolute difference as distance measure instead of the ffnn
-        self.architecture_variants = ['standard_simple', 'standard_ffnn']
+        self.architecture_variants = ['standard_simple', 'standard_ffnn', 'fast_simple', 'fast_ffnn']
         self.architecture_variant = self.architecture_variants[0]
 
         ##
@@ -87,12 +87,12 @@ class ModelConfiguration:
 
         # If enabled each case handler of a CBS will use individual hyperparameters
         # No effect on SNN architecture
-        self.use_individual_hyperparameters = True
+        self.use_individual_hyperparameters = False
 
         # If !use_individual_hyperparameters interpreted as a single json file, else as a folder
         # which contains json files named after the cases they should be used for
         # If no file with this name is present the 'default.json' Config will be used
-        self.hyper_file = self.hyper_file_folder + 'snn_testing.json'  # 'individual_hyperparameters_test'
+        self.hyper_file = self.hyper_file_folder + 'cnn2d_withAddInput'  # 'individual_hyperparameters_test'  #
 
         ##
         # Various settings influencing the similarity calculation
@@ -165,7 +165,7 @@ class TrainingConfiguration:
         self.use_margin_reduction_based_on_label_sim = False  # default: False
 
         self.use_early_stopping = True
-        self.early_stopping_epochs_limit = 1500
+        self.early_stopping_epochs_limit = 2000
 
         # Parameter to control if and when a test is conducted through training
         self.use_inference_test_during_training = False  # default False
@@ -217,11 +217,10 @@ class InferenceConfiguration:
         # Parameter to control the size / number of the queries used for evaluation
         self.inference_with_failures_only = False  # default: False
 
-        # TODO: Possible performance optimization: Add extra parameters instead of going down to batch size directly
-        # If enabled the similarity assessment of the test dataset to the training datset will be split into
-        # chunks with batchsize many example.
+        # If enabled the similarity assessment of the test dataset to the training datset will be split into chunks
         # Possibly necessary due to VRam limitation
-        self.split_sim_calculation = True  # default False
+        self.split_sim_calculation = False  # default False
+        self.sim_calculation_batch_size = 512
 
 
 class ClassificationConfiguration:
