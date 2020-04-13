@@ -58,9 +58,11 @@ def main():
     dataset.load()
 
     checker = ConfigChecker(config, dataset, 'snn', training=False)
-    checker.check()
+    checker.pre_init_checks()
 
     architecture = initialise_snn(config, dataset, False)
+
+    checker.post_init_checks(architecture)
 
     inference = Inference(config, architecture, dataset)
 

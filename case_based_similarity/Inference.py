@@ -26,10 +26,12 @@ def main():
         dataset.load()
 
         checker = ConfigChecker(config, dataset, 'cbs', training=False)
-        checker.check()
+        checker.pre_init_checks()
 
         cbs = CBS(config, False, dataset)
         inference = Inference(config, cbs, dataset)
+
+        checker.post_init_checks(cbs)
 
         print('Ensure right model file is used:')
         print(config.directory_model_to_use, '\n')
@@ -38,7 +40,10 @@ def main():
         cbs.kill_threads()
 
     except KeyboardInterrupt:
-        cbs.kill_threads()
+        try:
+            cbs.kill_threads()
+        except:
+            pass
 
 
 if __name__ == '__main__':

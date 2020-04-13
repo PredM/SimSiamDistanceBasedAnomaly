@@ -21,16 +21,22 @@ def main():
         dataset.load()
 
         checker = ConfigChecker(config, dataset, 'cbs', training=True)
-        checker.check()
+        checker.pre_init_checks()
 
         print('Initializing case based similarity measure ...\n')
         cbs = CBS(config, True, dataset)
 
+        checker.post_init_checks(cbs)
+
         print('\nTraining:\n')
         optimizer = CBSOptimizer(cbs, dataset, config)
         optimizer.optimize()
+
     except KeyboardInterrupt:
-        cbs.kill_threads()
+        try:
+            cbs.kill_threads()
+        except:
+            pass
 
 
 if __name__ == '__main__':

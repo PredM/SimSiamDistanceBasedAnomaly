@@ -25,6 +25,11 @@ class CBS(AbstractSimilarityMeasure):
         self.group_handlers: [CBSGroupHandler] = []
         self.number_of_groups = 0
 
+        # if True:
+        #     physical_devices = tf.config.experimental.list_physical_devices('GPU')
+        #     for device in physical_devices:
+        #         tf.config.experimental.set_memory_growth(device, True)
+
         self.gpus = tf.config.experimental.list_logical_devices('GPU')
         self.nbr_gpus_used = config.max_gpus_used if 1 <= config.max_gpus_used < len(self.gpus) else len(self.gpus)
         self.gpus = self.gpus[0:self.nbr_gpus_used]
@@ -35,12 +40,6 @@ class CBS(AbstractSimilarityMeasure):
         self.initialise_group_handlers()
 
     def initialise_group_handlers(self):
-
-        if self.training and self.config.architecture_variant in ['fast_simple', 'fast_ffnn']:
-            print('WARNING:')
-            print('The fast version can only be used for inference.')
-            print('The training routine will use the standard version, otherwise the encoding')
-            print('would have to be recalculated after each iteration anyway.\n')
 
         # Limit used groups for debugging purposes
         if self.config.cbs_groups_used is None or len(self.config.cbs_groups_used) == 0:
@@ -79,6 +78,7 @@ class CBS(AbstractSimilarityMeasure):
                 print('WARNING: No case handler could be created for', group, cases)
                 print('Reason: No training example of this case in training dataset')
                 print('-------------------------------------------------------')
+                print()
                 continue
 
             else:
@@ -93,13 +93,13 @@ class CBS(AbstractSimilarityMeasure):
                 print('GPU:', gpu)
                 print('Cases:')
                 for case in cases:
-                    print('\t' + case)
-                print()
+                    print('   ' + case)
 
                 # Wait until initialisation of run finished and the group handler is ready to process input
                 # the group handler will send a message for which we are waiting here
                 _ = gh.output_queue.get()
                 self.group_handlers.append(gh)
+                print()
 
     # Is called when a keyboard interruption stops the main thread
     # Will send a message to each group handler, which leads to the termination of the run function
@@ -175,6 +175,7 @@ class CBSGroupHandler(threading.Thread):
 
             # Send message so that the initiator knows that the preparations are complete.
             self.output_queue.put(str(self.group_id) + ' init finished. ')
+
             while True:
                 elem = self.input_queue.get(block=True)
 

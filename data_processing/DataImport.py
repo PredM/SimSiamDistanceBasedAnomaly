@@ -277,7 +277,7 @@ def main():
     config = Configuration()
 
     checker = ConfigChecker(config, None, 'preprocessing', training=None)
-    checker.check()
+    checker.pre_init_checks()
 
     nbr_datasets = len(config.datasets)
     for i in range(0, nbr_datasets):

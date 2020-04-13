@@ -12,12 +12,6 @@ from neural_network.SimpleSimilarityMeasure import SimpleSimilarityMeasure
 
 # initialises the correct SNN variant depending on the configuration
 def initialise_snn(config: Configuration, dataset, training, for_cbs=False, group_id=''):
-    if training and config.architecture_variant in ['fast_simple', 'fast_ffnn']:
-        print('WARNING:')
-        print('The fast version can only be used for inference.')
-        print('The training routine will use the standard version, otherwise the encoding')
-        print('would have to be recalculated after each iteration anyway.\n')
-
     var = config.architecture_variant
 
     if training and var.endswith('simple') or not training and var == 'standard_simple':

@@ -229,7 +229,7 @@ def main():
     config = Configuration()  # Get config for data directory
 
     checker = ConfigChecker(config, None, 'preprocessing', training=None)
-    checker.check()
+    checker.pre_init_checks()
 
     config.import_timestamps()
     number_data_sets = len(config.datasets)

@@ -28,7 +28,7 @@ class GeneralConfiguration:
         self.models_folder = '../data/trained_models/'
 
         # Path and file name to the specific model that should be used for testing and live classification
-        self.filename_model_to_use = 'temp_cbs_model_04-10_08-29-50_epoch-100'
+        self.filename_model_to_use = ''
 
         self.directory_model_to_use = self.models_folder + self.filename_model_to_use + '/'
 
@@ -40,7 +40,7 @@ class GeneralConfiguration:
         # List content must match the group ids in config.json
         # Use = None or = [] for no restriction
 
-        self.cbs_groups_used = ['g6', 'g7']  # ['g0','g2', 'g3', 'g4', 'g5', 'g6', 'g7']
+        self.cbs_groups_used = []  # ['g0','g2', 'g3', 'g4', 'g5', 'g6', 'g7']
 
 
 class ModelConfiguration:
@@ -75,7 +75,7 @@ class ModelConfiguration:
         # Only use euclidean_dis for TRAINING with contrastive loss
         self.simple_measures = ['abs_mean', 'euclidean_sim', 'euclidean_dis', 'dot_product', 'cosine',
                                 'attention_based']
-        self.simple_measure = self.simple_measures[0]
+        self.simple_measure = self.simple_measures[4]
 
         ###
         # Hyperparameters
@@ -92,7 +92,7 @@ class ModelConfiguration:
         # If !use_individual_hyperparameters interpreted as a single json file, else as a folder
         # which contains json files named after the cases they should be used for
         # If no file with this name is present the 'default.json' Config will be used
-        self.hyper_file = self.hyper_file_folder + 'cnn2d_withAddInput'  # 'individual_hyperparameters_test'  #
+        self.hyper_file = self.hyper_file_folder + 'cbs_test_13-04'  # 'individual_hyperparameters_test'  #
 
         ##
         # Various settings influencing the similarity calculation
@@ -150,7 +150,7 @@ class TrainingConfiguration:
         # for at least one case
         # self.features_used will be assigned when config.json loading
         self.feature_variants = ['all_features', 'cbs_features']
-        self.feature_variant = self.feature_variants[0]
+        self.feature_variant = self.feature_variants[1]
         self.features_used = None
 
         # TODO: TripletLoss, Distance-Based Logistic Loss

@@ -21,10 +21,12 @@ def main():
     dataset.load()
 
     checker = ConfigChecker(config, dataset, 'snn', training=True)
-    checker.check()
+    checker.pre_init_checks()
 
     snn = initialise_snn(config, dataset, True)
     snn.print_detailed_model_info()
+
+    checker.post_init_checks(snn)
 
     print('Training:')
     optimizer = SNNOptimizer(snn, dataset, config)
