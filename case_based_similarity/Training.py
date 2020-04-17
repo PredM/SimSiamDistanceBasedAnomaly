@@ -14,7 +14,7 @@ def main():
     try:
         # suppress debugging messages of TensorFlow
         os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
-
+        # os.environ['report_tensor_allocations_upon_oom'] = '1'
         config = Configuration()
 
         dataset = CBSDataset(config.training_data_folder, config, training=True)

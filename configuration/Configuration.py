@@ -42,6 +42,13 @@ class GeneralConfiguration:
 
         self.cbs_groups_used = []  # ['g0','g2', 'g3', 'g4', 'g5', 'g6', 'g7']
 
+        # Select whether the group handlers of a cbs will will be executed in batches, so a single gpu is only used
+        # by a single group handler during training and inference. Enabling this can be used if the models are to big
+        # which would result in out of memory errors.
+        # If using small models (which dont have oom problems) it is recommended to disable this function,
+        # since this should result in performance improvements
+        self.batch_wise_handler_execution = True  # Default: False
+
 
 class ModelConfiguration:
 
@@ -62,7 +69,7 @@ class ModelConfiguration:
         # ffnn = uses ffnn as distance measure
         # simple = mean absolute difference as distance measure instead of the ffnn
         self.architecture_variants = ['standard_simple', 'standard_ffnn', 'fast_simple', 'fast_ffnn']
-        self.architecture_variant = self.architecture_variants[0]
+        self.architecture_variant = self.architecture_variants[1]
 
         ##
         # Determines how the similarity between two embedding vectors is determined (when a simple architecture is used)
@@ -75,7 +82,7 @@ class ModelConfiguration:
         # Only use euclidean_dis for TRAINING with contrastive loss
         self.simple_measures = ['abs_mean', 'euclidean_sim', 'euclidean_dis', 'dot_product', 'cosine',
                                 'attention_based']
-        self.simple_measure = self.simple_measures[4]
+        self.simple_measure = self.simple_measures[0]
 
         ###
         # Hyperparameters
@@ -92,7 +99,7 @@ class ModelConfiguration:
         # If !use_individual_hyperparameters interpreted as a single json file, else as a folder
         # which contains json files named after the cases they should be used for
         # If no file with this name is present the 'default.json' Config will be used
-        self.hyper_file = self.hyper_file_folder + 'cbs_test_13-04'  # 'individual_hyperparameters_test'  #
+        self.hyper_file = self.hyper_file_folder + 'cbs_17-04'  # 'individual_hyperparameters_test'  #
 
         ##
         # Various settings influencing the similarity calculation
@@ -116,7 +123,7 @@ class ModelConfiguration:
 
         # Option to simulate a retrieval situation (during training) where only the weights of the
         # example from the case base/training data set are known:
-        self.use_same_feature_weights_for_unsimilar_pairs = True  # default: True
+        self.use_same_feature_weights_for_unsimilar_pairs = False  # default: True
 
         # Compares each time step of the encoded representation with each other time step
         # (instead of only comparing the ones with the same indices)
@@ -165,7 +172,7 @@ class TrainingConfiguration:
         self.use_margin_reduction_based_on_label_sim = False  # default: False
 
         self.use_early_stopping = True
-        self.early_stopping_epochs_limit = 2000
+        self.early_stopping_epochs_limit = 3000
 
         # Parameter to control if and when a test is conducted through training
         self.use_inference_test_during_training = False  # default False
@@ -185,7 +192,7 @@ class TrainingConfiguration:
 
         # Use a custom similarity values instead of 0 for unequal / negative pairs during batch creation
         # These are based on the similarity matrices loaded in the dataset
-        self.use_sim_value_for_neg_pair = True  # default: False
+        self.use_sim_value_for_neg_pair = False  # default: False
 
         # Select whether the training should be continued from the checkpoint defined as 'filename_model_to_use'
         # Currently only working for SNNs, not CBS
@@ -195,7 +202,7 @@ class TrainingConfiguration:
         self.output_interval = 200
 
         # How many model checkpoints are kept
-        self.model_files_stored = 100
+        self.model_files_stored = 50
 
 
 class InferenceConfiguration:

@@ -25,16 +25,10 @@ class CBS(AbstractSimilarityMeasure):
         self.group_handlers: [CBSGroupHandler] = []
         self.number_of_groups = 0
 
-        # if True:
-        #     physical_devices = tf.config.experimental.list_physical_devices('GPU')
-        #     for device in physical_devices:
-        #         tf.config.experimental.set_memory_growth(device, True)
-
         self.gpus = tf.config.experimental.list_logical_devices('GPU')
         self.nbr_gpus_used = config.max_gpus_used if 1 <= config.max_gpus_used < len(self.gpus) else len(self.gpus)
         self.gpus = self.gpus[0:self.nbr_gpus_used]
         self.gpus = [gpu.name for gpu in self.gpus]
-        # self.gpus = ['/job:localhost/replica:0/task:0/device:GPU:0', '/job:localhost/replica:0/task:0/device:GPU:1']
 
         # with contextlib.redirect_stdout(None):
         self.initialise_group_handlers()
@@ -50,24 +44,7 @@ class CBS(AbstractSimilarityMeasure):
 
         self.number_of_groups = len(id_to_cases.keys())
 
-        # groups = list(id_to_cases.keys())
-        # gpus = tf.config.experimental.list_physical_devices('GPU')
-        # groups_per_gpu = np.array_split(groups, len(gpus))
-        #
-        # for gpu, groups_of_gpu in zip(gpus, groups_per_gpu):
-        #     print(gpu, groups_of_gpu)
-        #     memory_per_group = 30000 / len(groups_of_gpu)
-        #
-        #     VDCs = [tf.config.experimental.VirtualDeviceConfiguration(memory_limit=memory_per_group) for _ in
-        #             range(len(groups_of_gpu))]
-        #
-        #     tf.config.experimental.set_virtual_device_configuration(gpu, VDCs)
-        #
-        # logical_gpus = tf.config.experimental.list_logical_devices('GPU')
-        # self.gpus = [gpu.name for gpu in logical_gpus]
-
         # Counts the number of groups already processed, used for gpu distribution
-        counter = 0
         for group, cases in id_to_cases.items():
 
             # Check if there is at least one training example of this group,
@@ -82,15 +59,11 @@ class CBS(AbstractSimilarityMeasure):
                 continue
 
             else:
-                # Distribute the group handlers equally to the available gpus
-                gpu = self.gpus[counter % len(self.gpus)]
-                counter += 1
-
-                gh: CBSGroupHandler = CBSGroupHandler(group, gpu, self.config, self.dataset, self.training)
+                gh: CBSGroupHandler = CBSGroupHandler(group, self.config, self.dataset, self.training)
                 gh.start()
 
                 print('Creating group handler', group, ':')
-                print('GPU:', gpu)
+                print('GPU:', 'Dynamically assigned')
                 print('Cases:')
                 for case in cases:
                     print('   ' + case)
@@ -118,13 +91,34 @@ class CBS(AbstractSimilarityMeasure):
         sims_groups = np.empty(self.number_of_groups, dtype='object_')
         labels_groups = np.empty(self.number_of_groups, dtype='object_')
 
-        # Pass the example to each group handler using it's input queue
-        for group_handler in self.group_handlers:
-            group_handler.input_queue.put(example)
+        if self.config.batch_wise_handler_execution:
+            num_gpus = len(self.gpus)
 
-        # Get the results via the output queue, will wait until it's available
-        for gh_index, group_handler in enumerate(self.group_handlers):
-            sims_groups[gh_index], labels_groups[gh_index] = group_handler.output_queue.get()
+            for i in range(0, self.number_of_groups, num_gpus):
+
+                # Creation of a batch of group handlers that are called up simultaneously,
+                # so that only one is running at a time on a GPU
+                ghs_batch = [(i + j, j) for j in range(num_gpus) if
+                             i + j < self.number_of_groups]
+
+                # Pass the example to each group handler using it's input queue
+                for gh_index, gpu_index in ghs_batch:
+                    self.group_handlers[gh_index].input_queue.put((example, self.gpus[gpu_index]))
+
+                # Get the results via the output queue, will wait until it's available
+                for gh_index, gpu_index in ghs_batch:
+                    sims_groups[gh_index], labels_groups[gh_index] = self.group_handlers[gh_index].output_queue.get()
+
+        else:
+            # Pass the example to each group handler using it's input queue
+            for index, group_handler in enumerate(self.group_handlers):
+                # Distribute the group handlers equally to the available gpus
+                gpu = self.gpus[index % len(self.gpus)]
+                group_handler.input_queue.put((example, gpu))
+
+            # Get the results via the output queue, will wait until it's available
+            for gh_index, group_handler in enumerate(self.group_handlers):
+                sims_groups[gh_index], labels_groups[gh_index] = group_handler.output_queue.get()
 
         return np.concatenate(sims_groups), np.concatenate(labels_groups)
 
@@ -137,9 +131,8 @@ class CBS(AbstractSimilarityMeasure):
 # Currently threading.Thread is used instead of multiprocessing because of unfixed incompatibility with tf/cuda
 class CBSGroupHandler(threading.Thread):
 
-    def __init__(self, group_id, gpu, config, dataset, training):
+    def __init__(self, group_id, config, dataset, training):
         self.group_id = group_id
-        self.gpu = gpu
         self.config = config
         self.dataset: CBSDataset = dataset
         self.training = training
@@ -160,29 +153,30 @@ class CBSGroupHandler(threading.Thread):
         super(CBSGroupHandler, self).__init__()
 
     def run(self):
-        with tf.device(self.gpu):
+        group_ds = self.dataset.create_group_dataset(self.group_id)
+        self.model: SimpleSNN = initialise_snn(self.config, group_ds, self.training, True, self.group_id)
 
-            group_ds = self.dataset.create_group_dataset(self.group_id)
-            self.model: SimpleSNN = initialise_snn(self.config, group_ds, self.training, True, self.group_id)
+        if self.training:
+            self.optimizer_helper = CBSOptimizerHelper(self.model, self.config, self.dataset, self.group_id)
 
-            if self.training:
-                self.optimizer_helper = CBSOptimizerHelper(self.model, self.config, self.dataset, self.group_id)
+        # Change the execution of the process depending on
+        # whether the model is trained or applied
+        # as additional variable so it can't be changed during execution
+        is_training = self.training
 
-            # Change the execution of the process depending on
-            # whether the model is trained or applied
-            # as additional variable so it can't be changed during execution
-            is_training = self.training
+        # Send message so that the initiator knows that the preparations are complete.
+        self.output_queue.put(str(self.group_id) + ' init finished. ')
 
-            # Send message so that the initiator knows that the preparations are complete.
-            self.output_queue.put(str(self.group_id) + ' init finished. ')
+        while True:
+            elem = self.input_queue.get(block=True)
 
-            while True:
-                elem = self.input_queue.get(block=True)
+            # Stop the process execution if a stop message was send via the queue
+            if isinstance(elem, str) and elem == 'stop':
+                break
 
-                # Stop the process execution if a stop message was send via the queue
-                if isinstance(elem, str) and elem == 'stop':
-                    break
+            elem, gpu = elem
 
+            with tf.device(gpu):
                 if is_training:
 
                     # Train method must be called by the process itself so that the advantage of parallel execution

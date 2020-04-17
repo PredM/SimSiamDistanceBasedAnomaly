@@ -209,6 +209,11 @@ class CBSOptimizer(Optimizer):
         self.dataset: CBSDataset = self.dataset
         self.handlers_still_training = self.architecture.group_handlers.copy()
 
+        self.gpus = tf.config.experimental.list_logical_devices('GPU')
+        self.nbr_gpus_used = config.max_gpus_used if 1 <= config.max_gpus_used < len(self.gpus) else len(self.gpus)
+        self.gpus = self.gpus[0:self.nbr_gpus_used]
+        self.gpus = [gpu.name for gpu in self.gpus]
+
         self.losses = dict()
         self.goal_epochs = dict()
 
@@ -233,29 +238,63 @@ class CBSOptimizer(Optimizer):
 
         while len(self.handlers_still_training) > 0:
 
-            for group_handler in self.handlers_still_training:
-                training_interval = self.config.output_interval
+            if self.config.batch_wise_handler_execution:
+                num_gpus = len(self.architecture.gpus)
 
-                # Goal epoch for this case handler will be reached during this training step
-                if self.goal_epochs.get(group_handler.group_id) <= current_epoch + training_interval:
-                    training_interval = self.goal_epochs.get(group_handler.group_id) - current_epoch
+                for i in range(0, len(self.handlers_still_training), num_gpus):
+                    ghs_batch = [(self.handlers_still_training[i + j], j) for j in range(num_gpus) if
+                                 i + j < len(self.handlers_still_training)]
 
-                # When training, the only input is the number of epochs that should be trained for
-                # before next output/save
-                group_handler.input_queue.put(training_interval)
+                    for group_handler, gpu_index in ghs_batch:
+                        training_interval = self.config.output_interval
 
-            for group_handler in self.handlers_still_training:
-                # Wait for the group handlers to finish the training interval
-                losses_of_training_interval, info = group_handler.output_queue.get()
+                        # Goal epoch for this case handler will be reached during this training step
+                        if self.goal_epochs.get(group_handler.group_id) <= current_epoch + training_interval:
+                            training_interval = self.goal_epochs.get(group_handler.group_id) - current_epoch
 
-                # Append losses to list with full history
-                loss_list = self.losses.get(group_handler.group_id)
-                loss_list += losses_of_training_interval
+                        # When training, the only input is the number of epochs that should be trained for
+                        # before next output/save
+                        group_handler.input_queue.put((training_interval, self.architecture.gpus[gpu_index]))
 
-                # Evaluate the information provided in addition to the losses
-                if info == 'early_stopping':
-                    self.handlers_still_training.remove(group_handler)
-                    print('Early stopping group handler', group_handler.group_id)
+                    for group_handler, _ in ghs_batch:
+                        # Wait for the group handlers to finish the training interval
+                        losses_of_training_interval, info = group_handler.output_queue.get()
+
+                        # Append losses to list with full history
+                        loss_list = self.losses.get(group_handler.group_id)
+                        loss_list += losses_of_training_interval
+
+                        # Evaluate the information provided in addition to the losses
+                        if info == 'early_stopping':
+                            self.handlers_still_training.remove(group_handler)
+                            print('Early stopping group handler', group_handler.group_id)
+            else:
+
+                for index, group_handler in enumerate(self.handlers_still_training):
+                    gpu = self.gpus[index % len(self.gpus)]
+
+                    training_interval = self.config.output_interval
+
+                    # Goal epoch for this case handler will be reached during this training step
+                    if self.goal_epochs.get(group_handler.group_id) <= current_epoch + training_interval:
+                        training_interval = self.goal_epochs.get(group_handler.group_id) - current_epoch
+
+                    # When training, the only input is the number of epochs that should be trained for
+                    # before next output/save
+                    group_handler.input_queue.put((training_interval, gpu))
+
+                for group_handler in self.handlers_still_training:
+                    # Wait for the group handlers to finish the training interval
+                    losses_of_training_interval, info = group_handler.output_queue.get()
+
+                    # Append losses to list with full history
+                    loss_list = self.losses.get(group_handler.group_id)
+                    loss_list += losses_of_training_interval
+
+                    # Evaluate the information provided in addition to the losses
+                    if info == 'early_stopping':
+                        self.handlers_still_training.remove(group_handler)
+                        print('Early stopping group handler', group_handler.group_id)
 
             self.output(current_epoch)
             current_epoch += self.config.output_interval
