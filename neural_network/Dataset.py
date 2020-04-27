@@ -366,12 +366,72 @@ class FullDataset(Dataset):
         print('Encoding of dataset started')
 
         x_train_unencoded = self.x_train
+        '''
+        x_train_masking = np.zeros((self.x_train.shape[0],self.x_train.shape[2]))
+        for i,label in enumerate(self.y_train_strings):
+            #print(i,label)
+            x_train_masking[i,:] = self.get_masking(label)
+        print("x_train_masking: ", x_train_masking.shape)
+        '''
         self.x_train = None
-        x_train_unencoded = snn.reshape(x_train_unencoded)
-        x_train_encoded = snn.encoder.model(x_train_unencoded, training=False)
-        x_train_encoded = np.asarray(x_train_encoded)
-        self.x_train = x_train_encoded
+        batchsize = self.config.sim_calculation_batch_size
+        '''
+        for example in range(x_train_unencoded.shape[0]//batchsize):
+            start = example * batchsize
+            end = (example +1) * batchsize
+            #print("x_train_unencoded: ", x_train_unencoded.shape)
+            print("batch: ", example, "start: ", start, "end: ", end)
+            batch = x_train_unencoded[:132,:,:]
+            batch = snn.reshape(batch)
+            x_train_unencoded = snn.reshape_and_add_aux_input(x_train_unencoded, batch_size=66)
+        '''
 
+        x_train_unencoded_reshaped = snn.reshape_and_add_aux_input(x_train_unencoded,batch_size=(x_train_unencoded.shape[0]//2))
+        encoded = snn.get_encodedData_multiple_batches(x_train_unencoded_reshaped)
+        if snn.hyper.encoder_variant in ['cnnwithclassattention', 'cnn1dwithclassattention']:
+            #encoded output is a list with each entry has an encoded batchjob with the number of outputs
+            x_train_encoded_0 = encoded[0][0]
+            x_train_encoded_1 = encoded[0][1]
+            x_train_encoded_2 = encoded[0][2]
+            x_train_encoded_3 = encoded[0][3]
+            for encoded_batch in encoded:
+                x_train_encoded_0 = np.append(x_train_encoded_0, encoded_batch[0], axis=0)
+                x_train_encoded_1 = np.append(x_train_encoded_1, encoded_batch[1], axis=0)
+                x_train_encoded_2 = np.append(x_train_encoded_2, encoded_batch[2], axis=0)
+                x_train_encoded_3 = np.append(x_train_encoded_3, encoded_batch[3], axis=0)
+            '''
+            print("x_train_encoded_0: ", x_train_encoded_0.shape)
+            print("x_train_encoded_1: ", x_train_encoded_1.shape)
+            print("x_train_encoded_2: ", x_train_encoded_2.shape)
+            print("x_train_encoded_3: ", x_train_encoded_3.shape)
+            '''
+            x_train_encoded_0 = x_train_encoded_0[batchsize:,:,:]
+            x_train_encoded_1 = x_train_encoded_1[batchsize:,:]
+            x_train_encoded_2 = x_train_encoded_2[batchsize:,:,:]
+            x_train_encoded_3 = x_train_encoded_3[batchsize:,:]
+            '''
+            print("x_train_encoded_0: ", x_train_encoded_0.shape)
+            print("x_train_encoded_1: ", x_train_encoded_1.shape)
+            print("x_train_encoded_2: ", x_train_encoded_2.shape)
+            print("x_train_encoded_3: ", x_train_encoded_3.shape)
+            '''
+            '''
+            x_train_unencoded = snn.reshape(x_train_unencoded[:132,:,:])
+            print("x_train_unencoded: ", x_train_unencoded.shape)
+            x_train_unencoded = snn.reshape_and_add_aux_input(x_train_unencoded, batch_size=66)
+            print("x_train_unencoded: ", x_train_unencoded[0].shape, x_train_unencoded[1].shape)
+            x_train_encoded = snn.encoder.model(x_train_unencoded, training=False)
+            x_train_encoded = np.asarray(x_train_encoded)
+            self.x_train = x_train_encoded
+            '''
+            self.x_train = [x_train_encoded_0, x_train_encoded_1,x_train_encoded_2,x_train_encoded_3]
+        else:
+            print("shape. ", encoded[0].shape)
+            x_train_encoded_0 = encoded[0]
+            for encoded_batch in encoded:
+                x_train_encoded_0 = np.append(x_train_encoded_0, encoded_batch, axis=0)
+            x_train_encoded_0 = x_train_encoded_0[batchsize:, :, :]
+            self.x_train = x_train_encoded_0
         # x_test will not be encoded by default because examples should simulate "new data" --> encoded at runtime
         # but can be done for visualisation purposes
         if encode_test_data:
@@ -384,6 +444,25 @@ class FullDataset(Dataset):
 
         encoding_duration = perf_counter() - start_time_encoding
         print('Encoding of dataset finished. Duration:', encoding_duration)
+        #return [x_train_encoded_0, x_train_encoded_1,x_train_encoded_2,x_train_encoded_3]
+
+    # Returns a pairwise similarity matrix (NumTrainExamples,NumTrainExamples) of all training examples
+    def get_similarity_matrix(self, snn, encode_test_data=False):
+
+        start_time_encoding = perf_counter()
+        print('Producing similarity matrix of dataset started')
+
+        x_train_unencoded = self.x_train
+        batchsize = self.config.sim_calculation_batch_size
+
+        sim_matrix = np.zeros((x_train_unencoded.shape[0],x_train_unencoded.shape[0]))
+        for example_id in range(x_train_unencoded.shape[0]):
+            example = x_train_unencoded[example_id,:,:]
+            sims_4_example = snn.get_sims(example)
+            #print("example_id:", example_id)
+            sim_matrix[example_id,:] = sims_4_example[0]
+
+        return sim_matrix
 
     # Draw a random pair of instances
     def draw_pair(self, is_positive, from_test):

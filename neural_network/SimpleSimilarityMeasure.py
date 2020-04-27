@@ -1,5 +1,5 @@
 import tensorflow as tf
-
+import sys
 
 # noinspection PyMethodMayBeStatic
 class SimpleSimilarityMeasure:
@@ -50,6 +50,9 @@ class SimpleSimilarityMeasure:
         if use_weighted_sim:
             # Note: only one weight vector is used (a_weights) to simulate a retrieval situation
             # where only weights of the case are known
+            #tf.print(self.a_weights)
+            #tf.print(self.w, output_stream=sys.stdout)
+
             weight_matrix = tf.reshape(tf.tile(self.a_weights, [a.shape[0]]), [a.shape[0], a.shape[1]])
             a_weights_sum = tf.reduce_sum(weight_matrix)
             a_weights_sum = tf.add(a_weights_sum, tf.keras.backend.epsilon())
@@ -57,14 +60,20 @@ class SimpleSimilarityMeasure:
             diff = tf.abs(a - b)
             # feature weighted distance:
             distance = tf.reduce_mean(weight_matrix * diff)
+            #tf. print("self.a_weights: ", tf.reduce_sum(self.a_weights))
 
             if use_additional_sim:
                 # calculate context distance
                 diff_con = tf.abs(self.a_context - self.b_context)
                 distance_con = tf.reduce_mean(diff_con)
-                # weight both distances
-                distance = self.w * distance + (1 - self.w) * distance_con
-                distance = tf.squeeze(distance)
+                if self.w is None:
+                    self.w = 0.5
+                    distance = self.w * distance + (1 - self.w) * distance_con
+                    distance = tf.squeeze(distance)
+                else:
+                    # weight both distances
+                    distance = self.w * distance + (1 - self.w) * distance_con
+                    distance = tf.squeeze(distance)
         else:
             diff = tf.abs(a - b)
             distance = tf.reduce_mean(diff)

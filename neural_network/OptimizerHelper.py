@@ -130,7 +130,7 @@ class OptimizerHelper:
         # Compose batch
         # // 2 because each iteration one similar and one dissimilar pair is added
         for i in range(self.hyper.batch_size // 2):
-
+            #print("i: ", i)
             #
             # pos pair
             #
@@ -139,6 +139,7 @@ class OptimizerHelper:
                     # print(i,": ", failureClassesToConsider[i-self.architecture.hyper.batch_size // 4])
 
                     idx = (failureClassesToConsider[i - self.hyper.batch_size // equal_class_part])
+                    #print(i, "idx: ", idx)
                     pos_pair = self.dataset.draw_pair_by_class_idx(True, from_test=False, class_idx=idx)
                     # class_idx=(i % self.dataset.num_classes))
                 else:
@@ -147,6 +148,7 @@ class OptimizerHelper:
                 pos_pair = self.dataset.draw_pair(True, from_test=False)
             batch_pairs_indices.append(pos_pair[0])
             batch_pairs_indices.append(pos_pair[1])
+            #print("PosPair: ", self.dataset.y_train_strings[pos_pair[0]]," - ", self.dataset.y_train_strings[pos_pair[1]])
             batch_true_similarities.append(1.0)
 
             #
@@ -165,6 +167,7 @@ class OptimizerHelper:
                 neg_pair = self.dataset.draw_pair(False, from_test=False)
             batch_pairs_indices.append(neg_pair[0])
             batch_pairs_indices.append(neg_pair[1])
+            #print("NegPair: ", self.dataset.y_train_strings[neg_pair[0]], " - ",self.dataset.y_train_strings[neg_pair[1]])
 
             # If configured a similarity value is used for the negative pair instead of full dissimilarity
             if self.config.use_sim_value_for_neg_pair:

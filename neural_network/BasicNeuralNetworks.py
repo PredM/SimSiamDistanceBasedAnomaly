@@ -93,47 +93,63 @@ class FFNN(NN):
         self.model = tf.keras.Model(inputs=input, outputs=output)
 
 
-# Used for Time Series (Step) Matching
+# Used for Taigman 2014 approach
 class FFNN2(NN):
 
     def __init__(self, hyperparameters, input_shape):
         super().__init__(hyperparameters, input_shape)
 
     def create_model(self):
-        print('Creating FFNN2 for input shape: ', self.input_shape)
+        print('Creating FFNN2 with a single sigmoid neurorn for input shape: ', self.input_shape)
 
-        input = tf.keras.Input(shape=(64,), name="Input")
-
-        x = tf.keras.layers.Dense(units=32, activation=tf.keras.activations.relu,
-                                  input_shape=(self.input_shape))(input)
-        output = tf.keras.layers.BatchNormalization()(x)
+        input = tf.keras.Input(shape=(1952 + 64,), name="Input")
         '''
-        output = tf.keras.layers.Dense(units=64, activation=tf.keras.activations.relu)(x)
-        x = tf.keras.layers.BatchNormalization()(x)
-        output = tf.keras.layers.Dense(units=32, activation=tf.keras.activations.relu)(x)
-        '''
-        '''
-        layers = self.hyper.ffnn_layers.copy()
-
-        if len(layers) < 1:
-            print('FFNN with less than one layer is not possible')
-            sys.exit(1)
-
-        # first layer must be handled separately because the input shape parameter must be set
-
-        num_units_first = layers.pop(0)
-        input = tf.keras.Input(shape=self.input_shape, name="Input")
-
         x = tf.keras.layers.Dense(units=num_units_first, activation=tf.keras.activations.relu,
-                                        input_shape=(self.input_shape))(input)
+                                  input_shape=self.input_shape)(input)
 
         for num_units in layers:
             x = tf.keras.layers.Dense(units=num_units, activation=tf.keras.activations.relu)(x)
 
-        # regardless of the configured number of layers, add a layer with
+        # regardless of the configured number of layers, add a layer withd
         # a single neuron that provides the indicator function output.
         output = tf.keras.layers.Dense(units=1, activation=tf.keras.activations.sigmoid)(x)
         '''
+        '''
+        i1 = tf.keras.layers.Lambda(lambda x: x[:,0:1951])(input)
+        i2 = tf.keras.layers.Lambda(lambda x: x[:, 1952:1952+64])(input)
+        o1 = tf.keras.layers.Dense(1, activation='sigmoid', )(i1)
+        o2 = tf.keras.layers.Dense(1, activation='sigmoid', )(i2)
+        output = (o1+o2)/3
+        '''
+
+        output = tf.keras.layers.Dense(1, activation='sigmoid', )(input)
+        '''
+        x = tf.keras.layers.Dense(units=128, activation=tf.keras.activations.relu)(input)
+        x = tf.keras.layers.BatchNormalization()(x)
+        x = tf.keras.layers.Dense(units=64, activation=tf.keras.activations.relu)(x)
+        x = tf.keras.layers.BatchNormalization()(x)
+        x = tf.keras.layers.Dense(units=32, activation=tf.keras.activations.relu)(x)
+        x = tf.keras.layers.BatchNormalization()(x)
+        output = tf.keras.layers.Dense(1, activation='sigmoid', )(x)
+        '''
+        '''
+        x = tf.reshape(input,(32,61))
+        x = tf.transpose(x)
+        x = tf.reshape(x, (1, 61, 32))
+        x = tf.keras.layers.TimeDistributed(
+            tf.keras.layers.Dense(units=32, activation=tf.keras.activations.relu), )(x)
+        x = tf.keras.layers.BatchNormalization()(x)
+        x = tf.keras.layers.TimeDistributed(
+            tf.keras.layers.Dense(units=16, activation=tf.keras.activations.relu), )(x)
+        x = tf.keras.layers.BatchNormalization()(x)
+        x = tf.keras.layers.TimeDistributed(
+            tf.keras.layers.Dense(units=1, activation=tf.keras.activations.tanh), )(x)
+        x = tf.keras.layers.BatchNormalization()(x)
+        x = tf.squeeze(x)
+        x = tf.reshape(x,(1,61))
+        output = tf.keras.layers.Dense(1, activation='sigmoid',)(x)
+        '''
+        # use_bias=False, kernel_constraint= tf.keras.constraints.NonNeg()
         self.model = tf.keras.Model(inputs=input, outputs=output)
 
 
@@ -212,6 +228,7 @@ class CNNWithClassAttention(NN):
 
     def __init__(self, hyperparameters, input_shape):
         super().__init__(hyperparameters, input_shape)
+        self.output_shape = None
 
     def create_model(self):
 
@@ -222,12 +239,61 @@ class CNNWithClassAttention(NN):
         layers = self.hyper.cnn2d_layers
 
         if self.hyper.learnFeatureWeights == 'True':
-            print("Feature weights are learned based on masking vector")
+            print("Feature weights are learned based on masking vector (original/best)")
             # Takes 0-1 input mask of relevant features and learns weights for relevant features (that are not masked as zero)
+
             caseDependentVectorInput_ = tf.expand_dims(caseDependentVectorInput, -1)
             caseDependentVectorInput_o = tf.keras.layers.TimeDistributed(
                 tf.keras.layers.Dense(units=1, activation=tf.keras.activations.relu), )(caseDependentVectorInput_)
             caseDependentVectorInput_o = tf.squeeze(caseDependentVectorInput_o)
+            '''
+            #reshape = tf.keras.layers.Reshape((61, 1))
+            #caseDependentVectorInput_ = reshape(caseDependentVectorInput)
+            caseDependentVectorInput_o = tf.keras.layers.Dense(units=1, activation=tf.keras.activations.relu)(caseDependentVectorInput)
+            caseDependentVectorInput_o = tf.keras.backend.repeat_elements(caseDependentVectorInput_o, rep=61, axis=1)
+            caseDependentVectorInput_o = tf.multiply(caseDependentVectorInput_o,caseDependentVectorInput)
+            '''
+
+        elif self.hyper.learnFeatureWeights == 'OneWeight':
+            print("Feature weights are learned based on masking vector (scaling factor learned)")
+            caseDependentVectorInput_o = WeightScalingLayer()(caseDependentVectorInput)
+
+        elif self.hyper.learnFeatureWeights == 'OneWeightPredicted':
+            print("Feature weights are learned based on masking vector (scaling factor predicted based on masking vector)")
+            scaler = tf.keras.layers.Dense(units=32, activation=tf.keras.activations.relu)(caseDependentVectorInput)
+            scaler = tf.keras.layers.BatchNormalization()(scaler)
+            scaler = tf.keras.layers.Dense(units=1, activation=tf.keras.activations.linear, kernel_constraint= tf.keras.constraints.UnitNorm(axis=1))(scaler)
+            #caseDependentVectorInput_o = tf.add(caseDependentVectorInput, scaler)
+            caseDependentVectorInput_o = tf.multiply(caseDependentVectorInput, scaler)
+
+        elif self.hyper.learnFeatureWeights == 'OneIndividualWeight':
+            print("Feature weights are learned based on masking vector and one hot sensor encoding (scaling factor predicted based on masking vector and one-hot-encoding)")
+            caseDependentMatrixInput_ = tf.tile(caseDependentVectorInput, [1, 61])
+            # caseDependentMatrixInput = caseDependentMatrixInput / tf.reduce_sum(caseDependentMatrixInput)
+            reshape = tf.keras.layers.Reshape((61, 61))
+            caseDependentMatrixInput_ = reshape(caseDependentMatrixInput_)
+            kvar = tf.keras.backend.eye(61)
+            one_hot_sensor = tf.keras.backend.eval(kvar)
+            one_hot_sensor = tf.expand_dims(one_hot_sensor, 0)
+            # TRAINING: bei batchsize 64 zu 128, bei training batchsize auf 4 ändern und dann zu 8
+            # TODO 132 durch doppelten Batchsizewert (aktuell 66) ersetzen, Problem das bei Initalisierung nicht bekannt
+            one_hot_sensor = tf.keras.backend.tile(one_hot_sensor, [132, 1, 1])
+
+            # one_hot_sensor = tf.tile(one_hot_sensor, [1, 8])
+            # one_hot_sensor = tf.keras.backend.reshape(one_hot_sensor, [8, 61,61])
+            case_with_sensor_concatenated = tf.keras.backend.concatenate((caseDependentMatrixInput_, one_hot_sensor))
+            x = tf.keras.layers.TimeDistributed(
+                tf.keras.layers.Dense(units=32, activation=tf.keras.activations.relu), )(case_with_sensor_concatenated)
+            x = tf.keras.layers.BatchNormalization()(x)
+            x = tf.keras.layers.TimeDistributed(
+                tf.keras.layers.Dense(units=16, activation=tf.keras.activations.relu), )(x)
+            x = tf.keras.layers.BatchNormalization()(x)
+            x = tf.keras.layers.TimeDistributed(
+                tf.keras.layers.Dense(units=1, activation=tf.keras.activations.sigmoid), )(x)
+            caseDependentVectorInput_o = tf.multiply(tf.squeeze(x), caseDependentVectorInput)
+            caseDependentVectorInput_o = tf.add(caseDependentVectorInput_o, caseDependentVectorInput)
+            debug = caseDependentVectorInput_o
+
         else:
             print("Feature weights are similar to masking vector")
             caseDependentVectorInput_o = caseDependentVectorInput
@@ -320,6 +386,7 @@ class CNNWithClassAttention(NN):
         if self.hyper.useChannelWiseAggregation:
             print('Adding FC layers for channcel wise feature mergingin/aggregation')
             layers_fc = self.hyper.cnn2d_channelWiseAggregation.copy()
+            #x = tf.keras.layers.Multiply()([x, caseDependentVectorInput])
             x = tf.keras.layers.Permute((2, 1))(x)  # transpose
             for num_units in layers_fc:
                 x = tf.keras.layers.BatchNormalization()(x)
@@ -361,9 +428,12 @@ class CNNWithClassAttention(NN):
                 w = tf.keras.layers.Dense(units=1, activation=tf.keras.activations.sigmoid)(
                     caseDependentVectorInput_2)
                 '''
+
             else:
-                w = self.hyper.useAddContextForSim_LearnOrFixWeightVale
-                print('Fixed weight value how much context is considered for each failure mode: ', w)
+                #w = 0.5 #tf.Variable(0.5)#tf.convert_to_tensor(0.5)#float(self.hyper.useAddContextForSim_LearnOrFixWeightVale)
+                #w = tf.convert_to_tensor(tf.keras.backend.var(0.5))
+                #w = float(self.hyper.useAddContextForSim_LearnOrFixWeightVale)
+                print('Fixed weight value how much context is considered for each failure mode: ', self.hyper.useAddContextForSim_LearnOrFixWeightVale)
 
             print('Adding FC layers for context merging/aggregation')
             layers_fc = self.hyper.cnn2d_contextModule.copy()
@@ -397,6 +467,14 @@ class CNNWithClassAttention(NN):
             '''
         else:
             print("No additional context pair for similarity calculation used.")
+        #x = tf.keras.layers.Multiply()([x, caseDependentVectorInput_o])
+
+        if self.hyper.use_weighted_distance_as_standard_ffnn_hyper == "True":
+            print("Taigman Approach for learning weighted distance")
+            x = tf.keras.layers.Multiply()([x, caseDependentVectorInput])
+            x = tf.keras.layers.Flatten()(x)
+            c = tf.squeeze(c)
+            x = tf.concat([x, c], 1)
 
         # Create Model:
         if self.hyper.useAddContextForSim == "True":
@@ -406,8 +484,12 @@ class CNNWithClassAttention(NN):
             # c: context vector, FC Layer on masked output (only relevant attributes/channels considered)
             # w: weight value (scalar) how much the similiarity for each failuremode should be based on invidivual features (x) or context (c)
             # debug: used for debugging
-            self.model = tf.keras.Model(inputs=[sensorDataInput, caseDependentVectorInput],
+            if self.hyper.useAddContextForSim_LearnOrFixWeightVale == "True":
+                self.model = tf.keras.Model(inputs=[sensorDataInput, caseDependentVectorInput],
                                         outputs=[x, caseDependentVectorInput_o, c, w, debug])
+            else:
+                self.model = tf.keras.Model(inputs=[sensorDataInput, caseDependentVectorInput],
+                                        outputs=[x, caseDependentVectorInput_o, c, debug])
         else:
             self.model = tf.keras.Model(inputs=[sensorDataInput, caseDependentVectorInput],
                                         outputs=[x, caseDependentVectorInput_o])
@@ -416,8 +498,11 @@ class CNNWithClassAttention(NN):
                                                       outputs=self.model.get_layer("reshape").output)
         '''
 
+
     def get_output_shape(self):
-        raise NotImplementedError('Must be added in order for ffnn version to work with this encoder')
+        #output shape onyl from first output x
+        return self.model.output_shape[0]
+        #raise NotImplementedError('Must be added in order for ffnn version to work with this encoder')
 
 
 # TODO @klein Remove old code that is / will not be used
@@ -773,3 +858,27 @@ class TCN(NN):
             print('Layer', i, self.layers[i].name)
             self.layers[i].print_layer_info()
         print('_________________________________________________________________')
+
+# This layer learns only one parameter to scale predifined values
+class WeightScalingLayer(tf.keras.layers.Layer):
+    def __init__(self, **kwargs):
+        super(WeightScalingLayer, self).__init__()
+        #self.num_outputs = num_outputs
+    def build(self, input_shape):
+        def initializer(*args, **kwargs):
+            # not used, not working
+            w = tf.keras.backend.variable(1.0)
+            return w
+        self.scalingWeight = self.add_weight(name='scalingWeight',
+                                    shape=(1,),
+                                    initializer=tf.keras.initializers.RandomNormal(mean=1, stddev=0.05, seed=42),
+                                    trainable=True)
+        super(WeightScalingLayer, self).build(input_shape)
+
+    def call(self, input_):
+        #Add weight
+        weight_vector = tf.multiply(input_, self.scalingWeight)
+        return weight_vector
+
+    def compute_output_shape(self, input_shape):
+        return input_shape

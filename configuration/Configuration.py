@@ -25,11 +25,10 @@ class GeneralConfiguration:
         self.max_parallel_cores = 60
 
         # Folder where the trained models are saved to during learning process
-        self.models_folder = '../data/trained_models/'
+        self.models_folder = '../data/trained_models6/'
 
         # Path and file name to the specific model that should be used for testing and live classification
-        self.filename_model_to_use = ''
-
+        self.filename_model_to_use = 'temp_snn_model_04-21_10-19-55_epoch-1950'
         self.directory_model_to_use = self.models_folder + self.filename_model_to_use + '/'
 
         ##
@@ -71,6 +70,9 @@ class ModelConfiguration:
         self.architecture_variants = ['standard_simple', 'standard_ffnn', 'fast_simple', 'fast_ffnn']
         self.architecture_variant = self.architecture_variants[1]
 
+        #For test purpose before implementing a further architecture variant:
+        self.use_weighted_distance_as_standard_ffnn = False # default False
+
         ##
         # Determines how the similarity between two embedding vectors is determined (when a simple architecture is used)
         ##
@@ -99,7 +101,7 @@ class ModelConfiguration:
         # If !use_individual_hyperparameters interpreted as a single json file, else as a folder
         # which contains json files named after the cases they should be used for
         # If no file with this name is present the 'default.json' Config will be used
-        self.hyper_file = self.hyper_file_folder + 'cbs_17-04'  # 'individual_hyperparameters_test'  #
+        self.hyper_file = self.hyper_file_folder + 'cnn2d_withAddInput'  # 'individual_hyperparameters_test'  #
 
         ##
         # Various settings influencing the similarity calculation
@@ -110,7 +112,7 @@ class ModelConfiguration:
 
         # Additional option for encoder variant cnnwithclassattention and the euclidean distance:
         # Weighted euclidean similarity based on relevant attributes
-        self.useFeatureWeightedSimilarity = False  # default: False
+        self.useFeatureWeightedSimilarity = True  # default: False
 
         # Weights are based on masking vectors that contain 1 if a feature is selected as relevant for a
         # label (failure mode) and 0 otherwise. If option is set False then features based
@@ -119,11 +121,11 @@ class ModelConfiguration:
         # Select whether the reduction to relevant features should be based on the case itself or the group it belongs
         # to. Based on case = True, based on group = False
         # Must be false for CBS!
-        self.individual_relevant_feature_selection = False  # default: True
+        self.individual_relevant_feature_selection = True  # default: True
 
         # Option to simulate a retrieval situation (during training) where only the weights of the
         # example from the case base/training data set are known:
-        self.use_same_feature_weights_for_unsimilar_pairs = False  # default: True
+        self.use_same_feature_weights_for_unsimilar_pairs = True  # default: True
 
         # Compares each time step of the encoded representation with each other time step
         # (instead of only comparing the ones with the same indices)
@@ -162,7 +164,7 @@ class TrainingConfiguration:
 
         # TODO: TripletLoss, Distance-Based Logistic Loss
         self.loss_function_variants = ['binary_cross_entropy', 'constrative_loss', 'mean_squared_error', 'huber_loss']
-        self.type_of_loss_function = self.loss_function_variants[0]
+        self.type_of_loss_function = self.loss_function_variants[2]
 
         # Settings for constrative_loss
         self.margin_of_loss_function = 2
@@ -172,7 +174,7 @@ class TrainingConfiguration:
         self.use_margin_reduction_based_on_label_sim = False  # default: False
 
         self.use_early_stopping = True
-        self.early_stopping_epochs_limit = 3000
+        self.early_stopping_epochs_limit = 500
 
         # Parameter to control if and when a test is conducted through training
         self.use_inference_test_during_training = False  # default False
@@ -183,7 +185,7 @@ class TrainingConfiguration:
         # This means that each training batch contains almost examples from each class (practically
         # upsampling of minority classes). Based on recommendation of lessons learned from successful siamese models:
         # http://openaccess.thecvf.com/content_ICCV_2019/papers/Roy_Siamese_Networks_The_Tale_of_Two_Manifolds_ICCV_2019_paper.pdf
-        self.equalClassConsideration = False  # default: False
+        self.equalClassConsideration = True  # default: False
 
         # If equalClassConsideration is true, then this parameter defines the proportion of examples
         # based on class distribution and example distribution.
@@ -192,17 +194,17 @@ class TrainingConfiguration:
 
         # Use a custom similarity values instead of 0 for unequal / negative pairs during batch creation
         # These are based on the similarity matrices loaded in the dataset
-        self.use_sim_value_for_neg_pair = False  # default: False
+        self.use_sim_value_for_neg_pair = True  # default: False
 
         # Select whether the training should be continued from the checkpoint defined as 'filename_model_to_use'
         # Currently only working for SNNs, not CBS
         self.continue_training = False  # default: False
 
         # Defines how often loss is printed and checkpoints are saved during training
-        self.output_interval = 200
+        self.output_interval = 10
 
         # How many model checkpoints are kept
-        self.model_files_stored = 50
+        self.model_files_stored = 520
 
 
 class InferenceConfiguration:
@@ -226,8 +228,8 @@ class InferenceConfiguration:
 
         # If enabled the similarity assessment of the test dataset to the training datset will be split into chunks
         # Possibly necessary due to VRam limitation
-        self.split_sim_calculation = False  # default False
-        self.sim_calculation_batch_size = 512
+        self.split_sim_calculation = True  # default False
+        self.sim_calculation_batch_size = 132
 
 
 class ClassificationConfiguration:
