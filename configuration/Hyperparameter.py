@@ -56,6 +56,7 @@ class Hyperparameters:
         self.cnn2d_learnWeightForContextUsedInSim = None
         self.learnFeatureWeights = None
         self.use_weighted_distance_as_standard_ffnn_hyper = None
+        self.use_additional_strict_masking = None
 
     def set_time_series_properties(self, dataset):
         self.time_series_length = dataset.time_series_length
@@ -122,6 +123,7 @@ class Hyperparameters:
             self.cnn2d_learnWeightForContextUsedInSim = data['cnn2d_learnWeightForContextUsedInSim']
             self.learnFeatureWeights = data['learnFeatureWeights']
             self.use_weighted_distance_as_standard_ffnn_hyper = data['use_weighted_distance_as_standard_ffnn_hyper']
+            self.use_additional_strict_masking = data['use_additional_strict_masking']
 
             if data['use1dContext'] == 'True':
                 self.use1dContext = 'True'

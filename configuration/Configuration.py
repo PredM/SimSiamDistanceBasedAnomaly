@@ -25,10 +25,10 @@ class GeneralConfiguration:
         self.max_parallel_cores = 60
 
         # Folder where the trained models are saved to during learning process
-        self.models_folder = '../data/trained_models6/'
+        self.models_folder = '../data/trained_models/'
 
         # Path and file name to the specific model that should be used for testing and live classification
-        self.filename_model_to_use = 'temp_snn_model_04-21_10-19-55_epoch-1950'
+        self.filename_model_to_use = 'temp_snn_model_05-03_07-55-18_epoch-1660/'
         self.directory_model_to_use = self.models_folder + self.filename_model_to_use + '/'
 
         ##
@@ -68,10 +68,10 @@ class ModelConfiguration:
         # ffnn = uses ffnn as distance measure
         # simple = mean absolute difference as distance measure instead of the ffnn
         self.architecture_variants = ['standard_simple', 'standard_ffnn', 'fast_simple', 'fast_ffnn']
-        self.architecture_variant = self.architecture_variants[1]
+        self.architecture_variant = self.architecture_variants[0]
 
         #For test purpose before implementing a further architecture variant:
-        self.use_weighted_distance_as_standard_ffnn = False # default False
+        self.use_weighted_distance_as_standard_ffnn = False # default False, means Neural Warp Approach is used
 
         ##
         # Determines how the similarity between two embedding vectors is determined (when a simple architecture is used)
@@ -123,13 +123,17 @@ class ModelConfiguration:
         # Must be false for CBS!
         self.individual_relevant_feature_selection = True  # default: True
 
+        # Using the more restrictive features as additional masking vector for feature sim calculation
+        # in cnn_with_add_input
+        self.use_additional_strict_masking_for_attribute_sim = False  # default: False
+
         # Option to simulate a retrieval situation (during training) where only the weights of the
         # example from the case base/training data set are known:
         self.use_same_feature_weights_for_unsimilar_pairs = True  # default: True
 
         # Compares each time step of the encoded representation with each other time step
         # (instead of only comparing the ones with the same indices)
-        # Implantation is based on NeuralWarp FFNN but used for simple similarity measures
+        # Implementation is based on NeuralWarp FFNN but used for simple similarity measures
         self.use_time_step_wise_simple_similarity = False  # default: False
 
         # Matches each time step with each time step from the other encoding which is implemented as a subtraction
@@ -230,6 +234,9 @@ class InferenceConfiguration:
         # Possibly necessary due to VRam limitation
         self.split_sim_calculation = True  # default False
         self.sim_calculation_batch_size = 132
+
+        # If enabled the model is printed as model.png
+        self.print_model = True
 
 
 class ClassificationConfiguration:
@@ -367,6 +374,7 @@ class StaticConfiguration:
         self.prefixes = None
 
         self.case_to_individual_features = None
+        self.case_to_individual_features_strict = None
         self.case_to_group_id = None
         self.group_id_to_cases = None
         self.group_id_to_features = None
@@ -467,6 +475,8 @@ class Configuration(
             return [item for sublist in list_of_lists for item in sublist]
 
         self.case_to_individual_features = data['relevant_features']
+        if self.use_additional_strict_masking_for_attribute_sim:
+            self.case_to_individual_features_strict = data['relevant_features_strict']
         self.case_to_group_id: dict = data['case_to_group_id']
         self.group_id_to_cases: dict = data['group_id_to_cases']
         self.group_id_to_features: dict = data['group_id_to_features']
@@ -485,7 +495,10 @@ class Configuration(
 
     # returns individual defined features (instead of group features)
     def get_relevant_features_case(self, case):
-        return self.case_to_individual_features.get(case)
+        if self.use_additional_strict_masking_for_attribute_sim:
+            return [self.case_to_individual_features.get(case), self.case_to_individual_features_strict.get(case)]
+        else:
+            return self.case_to_individual_features.get(case)
 
     # return the error case description for the passed label
     def get_error_description(self, error_label: str):
@@ -523,6 +536,41 @@ class Configuration(
             datasets.append(number_to_array.get(key))
 
         self.cases_datasets = datasets
+
+    def print_detailed_config_used_for_training(self):
+        print("--- Current Configuration ---")
+        print("General related:")
+        print("- use_weighted_distance_as_standard_ffnn: ", self.use_weighted_distance_as_standard_ffnn)
+        print("- simple_measure: ", self.simple_measure)
+        print("- hyper_file: ", self.hyper_file)
+        print("")
+        print("Masking related:")
+        print("- individual_relevant_feature_selection: ", self.individual_relevant_feature_selection)
+        print("- use_additional_strict_masking_for_attribute_sim: ", self.use_additional_strict_masking_for_attribute_sim)
+        print("- use_same_feature_weights_for_unsimilar_pairs: ", self.use_same_feature_weights_for_unsimilar_pairs)
+        print("")
+        print("Similarity Measure related:")
+        print("- useFeatureWeightedSimilarity: ", self.useFeatureWeightedSimilarity)
+        print("- use_time_step_wise_simple_similarity: ", self.use_time_step_wise_simple_similarity)
+        print("- use_time_step_matching_simple_similarity: ", self.use_time_step_matching_simple_similarity)
+        print("- feature_variant: ", self.feature_variant)
+        print("")
+        print("Training related:")
+        print("- type_of_loss_function: ", self.type_of_loss_function)
+        print("- margin_of_loss_function: ", self.margin_of_loss_function)
+        print("- use_margin_reduction_based_on_label_sim: ", self.use_margin_reduction_based_on_label_sim)
+        print("- use_sim_value_for_neg_pair: ", self.use_sim_value_for_neg_pair)
+        print("- use_early_stopping: ", self.use_early_stopping)
+        print("- early_stopping_epochs_limit: ", self.early_stopping_epochs_limit)
+        print("- equalClassConsideration: ", self.equalClassConsideration)
+        print("- upsampling_factor: ", self.upsampling_factor)
+        print("- model_files_stored: ", self.model_files_stored)
+        print("")
+        print("Inference related:")
+        print("- case_base_for_inference: ", self.case_base_for_inference)
+        print("- split_sim_calculation: ", self.split_sim_calculation)
+        print("- sim_calculation_batch_size: ", self.sim_calculation_batch_size)
+        print("--- ---")
 
 
 def gen_timestamp(label: str, start: str, end: str, failure_time: str):

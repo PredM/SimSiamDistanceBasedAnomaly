@@ -85,7 +85,10 @@ class SimpleSNN(AbstractSimilarityMeasure):
             # aux_input will always be none except when called by the optimizer (during training)
             #print("aux_input: ", aux_input)
             if aux_input is None:
-                aux_input = np.zeros((2 * batch_size, self.hyper.time_series_depth), dtype='float32')
+                if self.config.use_additional_strict_masking_for_attribute_sim:
+                    aux_input = np.zeros((2 * batch_size, self.hyper.time_series_depth*2), dtype='float32')
+                else:
+                    aux_input = np.zeros((2 * batch_size, self.hyper.time_series_depth), dtype='float32')
 
                 for index in range(batch_size):
                     # noinspection PyUnresolvedReferences
@@ -444,7 +447,10 @@ class SimpleSNN(AbstractSimilarityMeasure):
             self.encoder = CNN2D(self.hyper, input_shape_encoder)
         elif self.hyper.encoder_variant == 'cnnwithclassattention':
             # Consideration of an encoder with multiple inputs
-            self.encoder = CNNWithClassAttention(self.hyper, [input_shape_encoder, self.hyper.time_series_depth])
+            if self.config.use_additional_strict_masking_for_attribute_sim:
+                self.encoder = CNNWithClassAttention(self.hyper, [input_shape_encoder, self.hyper.time_series_depth*2])
+            else:
+                self.encoder = CNNWithClassAttention(self.hyper, [input_shape_encoder, self.hyper.time_series_depth])
         elif self.hyper.encoder_variant == 'cnn1dwithclassattention':
             # Consideration of an encoder with multiple inputs
             self.encoder = CNN1DWithClassAttention(self.hyper, [input_shape_encoder, self.dataset.y_train.shape[1]])
@@ -464,14 +470,12 @@ class SimpleSNN(AbstractSimilarityMeasure):
         # These variants also need a ffnn
         if self.config.architecture_variant in ['standard_ffnn', 'fast_ffnn']:
             encoder_output_shape = self.encoder.get_output_shape()
-            print("encoder_output_shape: ", encoder_output_shape)
             if self.config.use_weighted_distance_as_standard_ffnn == False:
                 # Neural Warp
                 input_shape_ffnn = (encoder_output_shape[1] ** 2, encoder_output_shape[2] * 2)
-                print("SHAPE: ", input_shape_ffnn)
                 self.ffnn = FFNN(self.hyper, input_shape_ffnn)
             else:
-                input_shape_ffnn = (1952 + 64,)
+                input_shape_ffnn = (1952 + 64 + 61,)
                 self.ffnn = FFNN2(self.hyper, input_shape_ffnn)
             self.ffnn.create_model()
 
@@ -512,6 +516,7 @@ class SNN(SimpleSNN):
         if self.hyper.encoder_variant == 'cnnwithclassattention':
             a = context_vectors[0][2 * pair_index, :]
             b = context_vectors[0][2 * pair_index + 1, :]
+            #w = context_vectors[1][2 * pair_index, :]
         else:
             a = context_vectors[2 * pair_index, :, :]
             b = context_vectors[2 * pair_index + 1, :, :]
@@ -560,6 +565,8 @@ class SNN(SimpleSNN):
             abs_distance_flattened = tf.keras.layers.Flatten()(abs_distance)
             abs_distance_flattened = tf.transpose(abs_distance_flattened)
             input = abs_distance_flattened
+            #w = tf.reshape (w,(1,w.shape[0]))
+            #input = tf.concat([abs_distance_flattened, w], 1)
             '''
             # taigman https://www.cs.toronto.edu/~ranzato/publications/taigman_cvpr14.pdf
             p = tf.square(tf.subtract(a, b))

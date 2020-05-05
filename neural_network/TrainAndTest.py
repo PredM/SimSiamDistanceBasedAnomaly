@@ -63,6 +63,7 @@ def main():
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
     config = Configuration()
+    config.print_detailed_config_used_for_training()
 
     dataset = FullDataset(config.training_data_folder, config, training=True)
     dataset.load()

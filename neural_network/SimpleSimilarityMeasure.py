@@ -72,6 +72,7 @@ class SimpleSimilarityMeasure:
                     distance = tf.squeeze(distance)
                 else:
                     # weight both distances
+                    #tf.print("w: ",self.w)
                     distance = self.w * distance + (1 - self.w) * distance_con
                     distance = tf.squeeze(distance)
         else:

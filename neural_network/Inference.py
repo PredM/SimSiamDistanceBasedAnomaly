@@ -1,6 +1,7 @@
 import os
 import sys
 import time
+import tensorflow as tf
 
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 
@@ -65,6 +66,8 @@ def main():
     checker.post_init_checks(architecture)
 
     inference = Inference(config, architecture, dataset)
+
+    if config.print_model: tf.keras.utils.plot_model(architecture.encoder.model, to_file='model.png', show_shapes=True, expand_nested=True)
 
     print('Ensure right model file is used:')
     print(config.directory_model_to_use, '\n')

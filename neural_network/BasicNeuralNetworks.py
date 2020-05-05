@@ -42,6 +42,8 @@ class NN:
             prefix = 'encoder'
         elif type(self) == FFNN:
             prefix = 'ffnn'
+        elif type(self) == FFNN2:
+            prefix = 'ffnn'
         else:
             raise AttributeError('Can not import models of type', type(self))
 
@@ -102,7 +104,7 @@ class FFNN2(NN):
     def create_model(self):
         print('Creating FFNN2 with a single sigmoid neurorn for input shape: ', self.input_shape)
 
-        input = tf.keras.Input(shape=(1952 + 64,), name="Input")
+        input = tf.keras.Input(shape=(1952 + 64+61,), name="Input")
         '''
         x = tf.keras.layers.Dense(units=num_units_first, activation=tf.keras.activations.relu,
                                   input_shape=self.input_shape)(input)
@@ -121,8 +123,8 @@ class FFNN2(NN):
         o2 = tf.keras.layers.Dense(1, activation='sigmoid', )(i2)
         output = (o1+o2)/3
         '''
-
-        output = tf.keras.layers.Dense(1, activation='sigmoid', )(input)
+        output = tf.keras.layers.Dense(1952+64, activation='sigmoid', )(input)
+        output = tf.keras.layers.Dense(1, activation='sigmoid', )(output)
         '''
         x = tf.keras.layers.Dense(units=128, activation=tf.keras.activations.relu)(input)
         x = tf.keras.layers.BatchNormalization()(x)
@@ -234,40 +236,55 @@ class CNNWithClassAttention(NN):
 
         print('Creating CNN with 2d kernel encoder with a sensor data input shape: ', self.input_shape[0],
               " and additional input shape: ", self.input_shape[1])
-        sensorDataInput = tf.keras.Input(shape=(self.input_shape[0][0], self.input_shape[0][1], 1), name="Input0")
-        caseDependentVectorInput = tf.keras.Input(self.input_shape[1], name="Input1")
+
+        # Input definition of sensor data and masking
+        sensorDataInput = tf.keras.Input(shape=(self.input_shape[0][0], self.input_shape[0][1], 1), name="SensorDataInput")
+        caseDependentVectorInput_i = tf.keras.Input(self.input_shape[1], name="MaskingVectorInput")
+        maskingVecLen = self.input_shape[1]
+
+        # Splitting masking vectors in normal and strict
+        if self.hyper.use_additional_strict_masking == 'True':
+            print("Masking: normal + strict")
+            half = int(maskingVecLen/2)
+            caseDependentVectorInput = tf.keras.layers.Lambda(lambda x: x[:,:half], name="SplitMaskVec_Context")(caseDependentVectorInput_i)
+            caseDependentVectorInput_strict = tf.keras.layers.Lambda(lambda x: x[:,half:maskingVecLen], name="SplitMaskVec_Strict")(caseDependentVectorInput_i)
+        else:
+            print("Masking: normal + strict")
+            caseDependentVectorInput = caseDependentVectorInput_i
+            caseDependentVectorInput_strict = caseDependentVectorInput_i
+
         layers = self.hyper.cnn2d_layers
 
+        # Different options to learn the weights that are used for the distance measure
         if self.hyper.learnFeatureWeights == 'True':
-            print("Feature weights are learned based on masking vector (original/best)")
+            print("learnFeatureWeights:True - Feature weights are learned based on masking vector (original/best)")
             # Takes 0-1 input mask of relevant features and learns weights for relevant features (that are not masked as zero)
 
-            caseDependentVectorInput_ = tf.expand_dims(caseDependentVectorInput, -1)
+            caseDependentVectorInput_ = tf.expand_dims(caseDependentVectorInput_strict, -1, name="PrepareInputDim")
             caseDependentVectorInput_o = tf.keras.layers.TimeDistributed(
-                tf.keras.layers.Dense(units=1, activation=tf.keras.activations.relu), )(caseDependentVectorInput_)
-            caseDependentVectorInput_o = tf.squeeze(caseDependentVectorInput_o)
-            '''
-            #reshape = tf.keras.layers.Reshape((61, 1))
-            #caseDependentVectorInput_ = reshape(caseDependentVectorInput)
-            caseDependentVectorInput_o = tf.keras.layers.Dense(units=1, activation=tf.keras.activations.relu)(caseDependentVectorInput)
-            caseDependentVectorInput_o = tf.keras.backend.repeat_elements(caseDependentVectorInput_o, rep=61, axis=1)
-            caseDependentVectorInput_o = tf.multiply(caseDependentVectorInput_o,caseDependentVectorInput)
-            '''
+                tf.keras.layers.Dense(units=1, activation=tf.keras.activations.relu, ), name="distance_weight_adjustment")(caseDependentVectorInput_)
+            caseDependentVectorInput_o = tf.squeeze(caseDependentVectorInput_o, name="PrepareOutputDim")
 
         elif self.hyper.learnFeatureWeights == 'OneWeight':
-            print("Feature weights are learned based on masking vector (scaling factor learned)")
-            caseDependentVectorInput_o = WeightScalingLayer()(caseDependentVectorInput)
+            print("learnFeatureWeights:OneWeight - One weight is learned for all features")
+            #caseDependentVectorInput_o = WeightScalingLayer()(caseDependentVectorInput)
+
+            kvar = tf.keras.backend.ones((1, 1))
+            one = tf.keras.backend.eval(kvar)
+            caseDependentVectorInput_o = tf.keras.layers.Dense(units=1, activation=tf.keras.activations.relu, name="distance_weight_adjustment")(one)
+            caseDependentVectorInput_o = tf.keras.backend.repeat_elements(caseDependentVectorInput_o, rep=61, axis=1)
+            caseDependentVectorInput_o = tf.multiply(caseDependentVectorInput_o,caseDependentVectorInput_strict)
 
         elif self.hyper.learnFeatureWeights == 'OneWeightPredicted':
-            print("Feature weights are learned based on masking vector (scaling factor predicted based on masking vector)")
-            scaler = tf.keras.layers.Dense(units=32, activation=tf.keras.activations.relu)(caseDependentVectorInput)
-            scaler = tf.keras.layers.BatchNormalization()(scaler)
-            scaler = tf.keras.layers.Dense(units=1, activation=tf.keras.activations.linear, kernel_constraint= tf.keras.constraints.UnitNorm(axis=1))(scaler)
+            print("learnFeatureWeights:OneWeightPredicted - Feature weights are learned based on masking vector (scaling factor predicted based on masking vector)")
+            #scaler = tf.keras.layers.Dense(units=32, activation=tf.keras.activations.relu)(caseDependentVectorInput)
+            #scaler = tf.keras.layers.BatchNormalization()(scaler)
+            scaler = tf.keras.layers.Dense(units=1, activation=tf.keras.activations.relu, name="distance_weight_adjustment")(caseDependentVectorInput)
             #caseDependentVectorInput_o = tf.add(caseDependentVectorInput, scaler)
-            caseDependentVectorInput_o = tf.multiply(caseDependentVectorInput, scaler)
+            caseDependentVectorInput_o = tf.multiply(caseDependentVectorInput_strict, scaler)
 
         elif self.hyper.learnFeatureWeights == 'OneIndividualWeight':
-            print("Feature weights are learned based on masking vector and one hot sensor encoding (scaling factor predicted based on masking vector and one-hot-encoding)")
+            print("learnFeatureWeights:OneIndividualWeight - Feature weights are learned based on masking vector and one hot sensor encoding (scaling factor predicted based on masking vector and one-hot-encoding)")
             caseDependentMatrixInput_ = tf.tile(caseDependentVectorInput, [1, 61])
             # caseDependentMatrixInput = caseDependentMatrixInput / tf.reduce_sum(caseDependentMatrixInput)
             reshape = tf.keras.layers.Reshape((61, 61))
@@ -290,16 +307,18 @@ class CNNWithClassAttention(NN):
             x = tf.keras.layers.BatchNormalization()(x)
             x = tf.keras.layers.TimeDistributed(
                 tf.keras.layers.Dense(units=1, activation=tf.keras.activations.sigmoid), )(x)
-            caseDependentVectorInput_o = tf.multiply(tf.squeeze(x), caseDependentVectorInput)
-            caseDependentVectorInput_o = tf.add(caseDependentVectorInput_o, caseDependentVectorInput)
-            debug = caseDependentVectorInput_o
+            caseDependentVectorInput_o = tf.multiply(tf.squeeze(x), caseDependentVectorInput_strict)
+            caseDependentVectorInput_o = tf.add(caseDependentVectorInput_o, caseDependentVectorInput_strict)
+            #debug = caseDependentVectorInput_o
 
         else:
-            print("Feature weights are similar to masking vector")
-            caseDependentVectorInput_o = caseDependentVectorInput
+            print("learnFeatureWeights:False Feature weights are similar to masking vector")
+            #caseDependentVectorInput_o = tf.keras.layers.GaussianNoise(0.3)(caseDependentVectorInput_strict)
+            #caseDependentVectorInput_o = tf.multiply(caseDependentVectorInput_o, caseDependentVectorInput_strict)
+            caseDependentVectorInput_o = caseDependentVectorInput_strict
 
         # Create a matrix based on masking vectors for using it as "attention"-like in ABCNN-1 (https://arxiv.org/abs/1512.05193)
-        if self.hyper.abcnn1 != None:
+        if self.hyper.abcnn1 == 'softmax' or self.hyper.abcnn1 == 'weighted':
             if self.hyper.abcnn1 == 'softmax':
                 print("ABCNN1 softmax variant used")
                 caseDependentVectorInput_processed = tf.keras.layers.Softmax()(caseDependentVectorInput)
@@ -307,11 +326,13 @@ class CNNWithClassAttention(NN):
             elif self.hyper.abcnn1 == 'weighted':
                 print("ABCNN1 masking-vector weighted variant used")
                 caseDependentVectorInput_processed = caseDependentVectorInput / tf.reduce_sum(caseDependentVectorInput)
-            debug = caseDependentVectorInput_processed
             caseDependentMatrixInput = tf.tile(caseDependentVectorInput_processed, [1, self.input_shape[0][0]])
             # caseDependentMatrixInput = caseDependentMatrixInput / tf.reduce_sum(caseDependentMatrixInput)
             reshape = tf.keras.layers.Reshape((self.input_shape[0][0], self.input_shape[0][1]))
             caseDependentMatrixInput = reshape(caseDependentMatrixInput)
+        else:
+            print("ABCNN1 not used")
+            self.hyper.abcnn1 = None
 
         if len(layers) < 1:
             print('CNN encoder with less than one layer for 2d kernels is not possible')
@@ -319,43 +340,47 @@ class CNNWithClassAttention(NN):
 
         layer_properties = list(zip(self.hyper.cnn2d_layers, self.hyper.cnn2d_kernel_length, self.hyper.cnn2d_strides))
 
-        # creating CNN encoder for sensor data
+        # Creating 2d-CNN encoder for sensor data
         for i in range(len(layer_properties)):
             num_filter, filter_size, stride = layer_properties[i][0], layer_properties[i][1], layer_properties[i][2]
 
             # first layer must be handled separately because the input shape parameter must be set
             if i == 0:
-                conv_layer1 = tf.keras.layers.Conv2D(filters=num_filter, padding='VALID',
+                conv2d_layer1 = tf.keras.layers.Conv2D(filters=num_filter, padding='VALID',
                                                      kernel_size=(filter_size),
                                                      strides=stride, input_shape=sensorDataInput.shape)
 
                 # Add 1D-Conv Layer to provide information across time steps in the first layer
                 if self.hyper.use1dContext == 'True':
                     print('1d Conv as add. Input used to get context across time series')
-                    conv_layer1d = tf.keras.layers.Conv1D(filters=self.input_shape[1], padding='VALID', kernel_size=1,
+                    conv1d_layer = tf.keras.layers.Conv1D(filters=self.input_shape[0][1], padding='VALID', kernel_size=1,
                                                           strides=1)
                     # inp = tf.squeeze(sensorDataInput)
                     reshape = tf.keras.layers.Reshape((self.input_shape[0][0], self.input_shape[0][1]))
                     inp = reshape(sensorDataInput)
-                    temp = conv_layer1d(inp)
+                    temp = conv1d_layer(inp)
+                    #temp = tf.keras.layers.BatchNormalization()(temp)
+                    #temp = tf.keras.activations.sigmoid(temp)
                     temp = tf.expand_dims(temp, -1)
+                    #Add 1d contextual information as input
                     sensorDataInput2 = tf.concat([sensorDataInput, temp], axis=3)
 
                 else:
+                    print('1d Conv as add. Input NOT used to get context across time series')
                     sensorDataInput2 = sensorDataInput
 
                 # Add ABCNN matrix from beginning
                 if self.hyper.abcnn1 != None:
                     caseDependentMatrixInput = tf.expand_dims(caseDependentMatrixInput, -1)
-                    sensorDataInput2 = tf.concat([sensorDataInput2, caseDependentMatrixInput], axis=3)
+                    sensorDataInput2 = tf.concat([sensorDataInput2, caseDependentMatrixInput], axis=3, name="Final_Sensor_Data_Input")
 
-                x = conv_layer1(sensorDataInput2)
+                x = conv2d_layer1(sensorDataInput2)
                 # x = tf.keras.layers.SpatialDropout2D(rate=self.hyper.dropout_rate)(x)
             else:
-                conv_layer = tf.keras.layers.Conv2D(filters=num_filter, padding='VALID',
+                conv2d_layer = tf.keras.layers.Conv2D(filters=num_filter, padding='VALID',
                                                     kernel_size=(filter_size),
                                                     strides=stride)
-                x = conv_layer(x)
+                x = conv2d_layer(x)
             x = tf.keras.layers.BatchNormalization()(x)
             x = tf.keras.layers.ReLU()(x)
 
@@ -364,9 +389,11 @@ class CNNWithClassAttention(NN):
         reshape = tf.keras.layers.Reshape((x.shape[1], x.shape[2]))
         x = reshape(x)
 
-        if len(layers) < 1:
-            print('Attention: no one 1d conv on top of 2d conv is used!')
-            sys.exit(1)
+        # use of 1d CNN after 2d CNN
+        if len(self.hyper.cnn_layers) < 1:
+            print('No 1d conv on top of 2d conv is used.')
+        else:
+            print('1d conv on top of 2d conv is used.')
 
         layer_properties = list(zip(self.hyper.cnn_layers, self.hyper.cnn_kernel_length, self.hyper.cnn_strides))
 
@@ -382,54 +409,39 @@ class CNNWithClassAttention(NN):
 
         x = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(x)
 
-        # Chancelwise feature aggregation via FFNNs
+        # Attribute-wise feature aggregation via (time-distributed) fully-connected layers
+        #TODO PK change naming of channels to features
         if self.hyper.useChannelWiseAggregation:
-            print('Adding FC layers for channcel wise feature mergingin/aggregation')
+            print('Adding FC layers for attribute wise feature merging/aggregation')
             layers_fc = self.hyper.cnn2d_channelWiseAggregation.copy()
             #x = tf.keras.layers.Multiply()([x, caseDependentVectorInput])
             x = tf.keras.layers.Permute((2, 1))(x)  # transpose
             for num_units in layers_fc:
                 x = tf.keras.layers.BatchNormalization()(x)
                 x = tf.keras.layers.TimeDistributed(
-                    tf.keras.layers.Dense(units=num_units, activation=tf.keras.activations.relu), )(x)
+                    tf.keras.layers.Dense(units=num_units, activation=tf.keras.activations.relu),name="FC_FeatureWise_Aggreg_Layer_"+str(num_units)+"U")(x)
             x = tf.keras.layers.Permute((2, 1))(x)  # transpose
-            '''ALTE VERSION:
-            x = tf.keras.layers.Permute((2, 1))(x) # transpose
-            x = tf.keras.layers.BatchNormalization()(x)
-            x = tf.keras.layers.TimeDistributed(tf.keras.layers.Dense(units=128, activation=tf.keras.activations.relu),)(x)
-            #x = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(x)
-            x = tf.keras.layers.BatchNormalization()(x)
-            x = tf.keras.layers.TimeDistributed(tf.keras.layers.Dense(units=64, activation=tf.keras.activations.relu), )(x)
-            #x = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(x)
-            x = tf.keras.layers.BatchNormalization()(x)
-            x = tf.keras.layers.TimeDistributed(tf.keras.layers.Dense(units=32, activation=tf.keras.activations.relu), )(x)
-            x = tf.keras.layers.Permute((2, 1))(x)  # transpose
-            '''
-        # Learn a weight value how much the context should be considered in later sim against single feature weighted
+        # Output 1, used for weighted distance measure
+        o1 = tf.keras.layers.Multiply()([x, caseDependentVectorInput_strict])
+
+        # Using an additional context vector that is calculated on the previously defined output
         if self.hyper.useAddContextForSim == "True":
             print('Additional feature restricted content vector is used')
 
+            # Learn a weight value how much the context should be considered in later sim against single feature weighted
             if self.hyper.useAddContextForSim_LearnOrFixWeightVale == "True":
                 print('Learn weight value how much context is considered for each failure mode')
                 layers_fc = self.hyper.cnn2d_learnWeightForContextUsedInSim.copy()
                 for num_units in layers_fc:
                     caseDependentVectorInput_2 = tf.keras.layers.Dense(units=num_units,
-                                                                       activation=tf.keras.activations.relu)(
+                                                                       activation=tf.keras.activations.relu, name="Weight_Betw_Distances_"+str(num_units)+"U")(
                         caseDependentVectorInput)
                     caseDependentVectorInput_2 = tf.keras.layers.BatchNormalization()(caseDependentVectorInput_2)
-                w = tf.keras.layers.Dense(units=1, activation=tf.keras.activations.sigmoid)(
+                w = tf.keras.layers.Dense(units=1, activation=tf.keras.activations.sigmoid, name="Weight_Betw_Distances")(
                     caseDependentVectorInput_2)
-                ''' Alt:   
-                caseDependentVectorInput_2 = tf.keras.layers.Dense(units=32, activation=tf.keras.activations.relu)(caseDependentVectorInput)
-                caseDependentVectorInput_2 = tf.keras.layers.BatchNormalization()(caseDependentVectorInput_2)
-                caseDependentVectorInput_2 = tf.keras.layers.Dense(units=16, activation=tf.keras.activations.relu)(
-                    caseDependentVectorInput_2)
-                caseDependentVectorInput_2 = tf.keras.layers.BatchNormalization()(caseDependentVectorInput_2)
-                w = tf.keras.layers.Dense(units=1, activation=tf.keras.activations.sigmoid)(
-                    caseDependentVectorInput_2)
-                '''
 
             else:
+                # using a fixed value as output does not work. fix defined in simple similarity measure
                 #w = 0.5 #tf.Variable(0.5)#tf.convert_to_tensor(0.5)#float(self.hyper.useAddContextForSim_LearnOrFixWeightVale)
                 #w = tf.convert_to_tensor(tf.keras.backend.var(0.5))
                 #w = float(self.hyper.useAddContextForSim_LearnOrFixWeightVale)
@@ -438,8 +450,8 @@ class CNNWithClassAttention(NN):
             print('Adding FC layers for context merging/aggregation')
             layers_fc = self.hyper.cnn2d_contextModule.copy()
 
-            # Context Module: connect only relevant features
-            c = tf.keras.layers.BatchNormalization()(x)
+            # Context Module: connect only features from relevant attributes
+
             # gate: only values from relevant sensors:
             # gates = tf.nn.sigmoid(caseDependentVectorInput)
             c = tf.keras.layers.Multiply()([x, caseDependentVectorInput])
@@ -447,52 +459,38 @@ class CNNWithClassAttention(NN):
             c = tf.keras.layers.Flatten()(c)
 
             for num_units in layers_fc:
-                c = tf.keras.layers.Dense(units=num_units, activation=tf.keras.activations.relu)(c)
+                c = tf.keras.layers.Dense(units=num_units, activation=tf.keras.activations.relu,name="FC_Layer_Context_"+str(num_units)+"U" )(c)
                 c = tf.keras.layers.BatchNormalization()(c)
-            c = tf.keras.layers.Reshape([layers_fc[len(layers_fc) - 1], 1])(c)
-            '''
-            # Context Module: connect only relevant features
-            c = tf.keras.layers.BatchNormalization()(x)
-            #gate: only values from relevant sensors:
-            #gates = tf.nn.sigmoid(caseDependentVectorInput)
-            c = tf.keras.layers.Multiply()([x, caseDependentVectorInput])
-            #build context module:
-            c = tf.keras.layers.Flatten()(c)
-            c = tf.keras.layers.Dense(units=256, activation=tf.keras.activations.relu)(c)
-            c = tf.keras.layers.BatchNormalization()(c)
-            c = tf.keras.layers.Dense(units=128, activation=tf.keras.activations.relu)(c)
-            c = tf.keras.layers.BatchNormalization()(c)
-            c = tf.keras.layers.Dense(units=64, activation=tf.keras.activations.relu)(c)
-            c = tf.keras.layers.Reshape([64, 1])(c)
-            '''
+            o2 = tf.keras.layers.Reshape([layers_fc[len(layers_fc) - 1], 1])(c)
+
         else:
             print("No additional context pair for similarity calculation used.")
-        #x = tf.keras.layers.Multiply()([x, caseDependentVectorInput_o])
+
 
         if self.hyper.use_weighted_distance_as_standard_ffnn_hyper == "True":
             print("Taigman Approach for learning weighted distance")
             x = tf.keras.layers.Multiply()([x, caseDependentVectorInput])
             x = tf.keras.layers.Flatten()(x)
-            c = tf.squeeze(c)
-            x = tf.concat([x, c], 1)
+            c = tf.squeeze(o2)
+            o1 = tf.concat([x, c], 1)
 
         # Create Model:
         if self.hyper.useAddContextForSim == "True":
             # Output:
-            # x: encoded time series as timeSteps x attributes Matrix (if useChannelWiseAggregation==False, else features x attributes Matrix
+            # o1: encoded time series as timeSteps x attributes Matrix (if useChannelWiseAggregation==False, else features x attributes Matrix
             # caseDependentVectorInput_o: same as masking vector if learnFeatureWeights==False, else values weights learned (but not for 0s)
-            # c: context vector, FC Layer on masked output (only relevant attributes/channels considered)
+            # o2: context vector, FC Layer on masked output (only relevant attributes considered)
             # w: weight value (scalar) how much the similiarity for each failuremode should be based on invidivual features (x) or context (c)
             # debug: used for debugging
             if self.hyper.useAddContextForSim_LearnOrFixWeightVale == "True":
-                self.model = tf.keras.Model(inputs=[sensorDataInput, caseDependentVectorInput],
-                                        outputs=[x, caseDependentVectorInput_o, c, w, debug])
+                self.model = tf.keras.Model(inputs=[sensorDataInput, caseDependentVectorInput_i],
+                                        outputs=[o1, caseDependentVectorInput_o, o2, w])
             else:
-                self.model = tf.keras.Model(inputs=[sensorDataInput, caseDependentVectorInput],
-                                        outputs=[x, caseDependentVectorInput_o, c, debug])
+                self.model = tf.keras.Model(inputs=[sensorDataInput, caseDependentVectorInput_i],
+                                        outputs=[o1, caseDependentVectorInput_o, o2])
         else:
-            self.model = tf.keras.Model(inputs=[sensorDataInput, caseDependentVectorInput],
-                                        outputs=[x, caseDependentVectorInput_o])
+            self.model = tf.keras.Model(inputs=[sensorDataInput, caseDependentVectorInput_i],
+                                        outputs=[o1, caseDependentVectorInput_o])
         '''
         self.intermediate_layer_model = tf.keras.Model(inputs=caseDependentVectorInput,
                                                       outputs=self.model.get_layer("reshape").output)

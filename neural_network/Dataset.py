@@ -298,8 +298,13 @@ class FullDataset(Dataset):
             else:
                 relevant_features_for_case = self.config.get_relevant_features_group(case)
 
-            masking = np.isin(self.feature_names_all, relevant_features_for_case)
-            self.class_label_to_masking_vector[case] = masking
+            if self.config.use_additional_strict_masking_for_attribute_sim:
+                masking1 = np.isin(self.feature_names_all, relevant_features_for_case[0])
+                masking2 = np.isin(self.feature_names_all, relevant_features_for_case[1])
+                self.class_label_to_masking_vector[case] = [masking1,masking2]
+            else:
+                masking = np.isin(self.feature_names_all, relevant_features_for_case)
+                self.class_label_to_masking_vector[case] = masking
 
         for group_id, features in self.config.group_id_to_features.items():
             masking = np.isin(self.feature_names_all, features)
@@ -312,7 +317,12 @@ class FullDataset(Dataset):
         if class_label not in self.class_label_to_masking_vector:
             raise ValueError('Passed class label', class_label, 'was not found in masking dictionary')
         else:
-            return self.class_label_to_masking_vector.get(class_label)
+            if self.config.use_additional_strict_masking_for_attribute_sim:
+                masking = self.class_label_to_masking_vector.get(class_label)
+                masking_vec = np.concatenate((masking[0],masking[1]))
+                return masking_vec
+            else:
+                return self.class_label_to_masking_vector.get(class_label)
 
     def get_masked_example_group(self, test_example, group_id):
 
