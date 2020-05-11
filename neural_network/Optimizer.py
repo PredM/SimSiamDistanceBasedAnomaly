@@ -149,7 +149,7 @@ class SNNOptimizer(Optimizer):
                 self.stopping_step_counter += 1
 
             # Check if the limit was reached
-            if self.stopping_step_counter >= self.config.early_stopping_epochs_limit:
+            if self.stopping_step_counter >= self.config.early_stopping_epochs_limit or self.train_loss_results[-1] <= self.config.early_stopping_loss_minimum:
                 return True
             else:
                 return False

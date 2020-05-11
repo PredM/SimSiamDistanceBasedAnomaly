@@ -1,11 +1,11 @@
 {
   "encoder_variant": "cnnwithclassattention",
-  "batch_size": 66,
+  "batch_size": 64,
   "epochs": 2500,
   "epochs_current": 0,
   "learning_rate": 0.001,
   "gradient_cap": -1,
-  "dropout_rate": 0.05,
+  "dropout_rate": 0.1,
   "ffnn_layers": [
     256,
     64,
@@ -52,9 +52,9 @@
     5,
     3
   ],
-  "abcnn1": "weighted",
+  "abcnn1": "Flase",
   "use1dContext": "False",
-  "learnFeatureWeights": "OneWeight",
+  "learnFeatureWeights": "False",
   "useChannelWiseAggregation": "True",
   "useAddContextForSim": "True",
   "useAddContextForSim_LearnOrFixWeightVale": "True",
@@ -73,5 +73,5 @@
     16
   ],
   "use_weighted_distance_as_standard_ffnn_hyper": "False",
-  "use_additional_strict_masking": "False"
+  "use_additional_strict_masking": "True"
 }

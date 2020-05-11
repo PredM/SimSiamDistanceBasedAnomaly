@@ -407,6 +407,20 @@ class CNNWithClassAttention(NN):
             x = tf.keras.layers.BatchNormalization()(x)
             x = tf.keras.layers.ReLU()(x)
 
+        #Skip Connection / Shortcut
+        '''
+        shortcut = tf.keras.layers.Conv2D(1, (8, 1), strides=(8,1),
+                                 kernel_initializer='he_normal',
+                                 name="Shortcut" + '1')(sensorDataInput2)
+        shortcut = tf.keras.layers.BatchNormalization( name="BN" + '1')(shortcut)
+        shortcut = tf.keras.layers.Lambda(lambda x: x[:, :-2], name='slice')(shortcut)
+        reshape = tf.keras.layers.Reshape((123, 61))
+        shortcut = reshape(shortcut)
+        #shortcut = tf.squeeze(shortcut)
+
+        x = tf.keras.layers.Add()([x, shortcut])
+        #x = tf.keras.layers.add()([x, shortcut])
+        '''
         x = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(x)
 
         # Attribute-wise feature aggregation via (time-distributed) fully-connected layers

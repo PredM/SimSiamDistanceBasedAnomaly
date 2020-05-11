@@ -25,10 +25,10 @@ class GeneralConfiguration:
         self.max_parallel_cores = 60
 
         # Folder where the trained models are saved to during learning process
-        self.models_folder = '../data/trained_models/'
+        self.models_folder = '../data/trained_models9/'
 
         # Path and file name to the specific model that should be used for testing and live classification
-        self.filename_model_to_use = 'temp_snn_model_05-03_07-55-18_epoch-1660/'
+        self.filename_model_to_use = 'temp_snn_model_05-09_15-44-15_epoch-212/'
         self.directory_model_to_use = self.models_folder + self.filename_model_to_use + '/'
 
         ##
@@ -125,7 +125,7 @@ class ModelConfiguration:
 
         # Using the more restrictive features as additional masking vector for feature sim calculation
         # in cnn_with_add_input
-        self.use_additional_strict_masking_for_attribute_sim = False  # default: False
+        self.use_additional_strict_masking_for_attribute_sim = True  # default: False
 
         # Option to simulate a retrieval situation (during training) where only the weights of the
         # example from the case base/training data set are known:
@@ -178,7 +178,8 @@ class TrainingConfiguration:
         self.use_margin_reduction_based_on_label_sim = False  # default: False
 
         self.use_early_stopping = True
-        self.early_stopping_epochs_limit = 500
+        self.early_stopping_epochs_limit = 1000
+        self.early_stopping_loss_minimum = 0.0 #Default: 0.0 means no effect, CNN2D_with_add_Input: BCE:0.03 #MSE:0.01
 
         # Parameter to control if and when a test is conducted through training
         self.use_inference_test_during_training = False  # default False
@@ -205,10 +206,10 @@ class TrainingConfiguration:
         self.continue_training = False  # default: False
 
         # Defines how often loss is printed and checkpoints are saved during training
-        self.output_interval = 10
+        self.output_interval = 1
 
         # How many model checkpoints are kept
-        self.model_files_stored = 520
+        self.model_files_stored = 2500
 
 
 class InferenceConfiguration:
@@ -233,7 +234,7 @@ class InferenceConfiguration:
         # If enabled the similarity assessment of the test dataset to the training datset will be split into chunks
         # Possibly necessary due to VRam limitation
         self.split_sim_calculation = True  # default False
-        self.sim_calculation_batch_size = 132
+        self.sim_calculation_batch_size = 128
 
         # If enabled the model is printed as model.png
         self.print_model = True
@@ -562,6 +563,7 @@ class Configuration(
         print("- use_sim_value_for_neg_pair: ", self.use_sim_value_for_neg_pair)
         print("- use_early_stopping: ", self.use_early_stopping)
         print("- early_stopping_epochs_limit: ", self.early_stopping_epochs_limit)
+        print("- early_stopping_loss_minimum: ", self.early_stopping_loss_minimum)
         print("- equalClassConsideration: ", self.equalClassConsideration)
         print("- upsampling_factor: ", self.upsampling_factor)
         print("- model_files_stored: ", self.model_files_stored)

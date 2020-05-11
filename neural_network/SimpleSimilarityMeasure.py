@@ -67,7 +67,7 @@ class SimpleSimilarityMeasure:
                 diff_con = tf.abs(self.a_context - self.b_context)
                 distance_con = tf.reduce_mean(diff_con)
                 if self.w is None:
-                    self.w = 0.5
+                    self.w = 0.3
                     distance = self.w * distance + (1 - self.w) * distance_con
                     distance = tf.squeeze(distance)
                 else:
