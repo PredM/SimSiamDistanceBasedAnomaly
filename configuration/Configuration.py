@@ -179,7 +179,7 @@ class TrainingConfiguration:
 
         self.use_early_stopping = True
         self.early_stopping_epochs_limit = 1000
-        self.early_stopping_loss_minimum = 0.0 #Default: 0.0 means no effect, CNN2D_with_add_Input: BCE:0.03 #MSE:0.01
+        self.early_stopping_loss_minimum = 0.013 #Default: 0.0 means no effect, CNN2D_with_add_Input: BCE:0.03 #MSE:0.01
 
         # Parameter to control if and when a test is conducted through training
         self.use_inference_test_during_training = False  # default False
