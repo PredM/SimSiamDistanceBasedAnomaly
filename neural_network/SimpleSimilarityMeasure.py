@@ -1,5 +1,5 @@
 import tensorflow as tf
-import sys
+
 
 # noinspection PyMethodMayBeStatic
 class SimpleSimilarityMeasure:
@@ -39,6 +39,14 @@ class SimpleSimilarityMeasure:
         func = switcher.get(self.sim_type)
         return func(a, b)
 
+    def get_weight_matrix(self, a):
+        weight_matrix = tf.reshape(tf.tile(self.a_weights, [a.shape[0]]), [a.shape[0], a.shape[1]])
+        a_weights_sum = tf.reduce_sum(weight_matrix)
+        a_weights_sum = tf.add(a_weights_sum, tf.keras.backend.epsilon())
+        weight_matrix = weight_matrix / a_weights_sum
+
+        return weight_matrix
+
     # Siamese Deep Similarity as defined in NeuralWarp
     # Mean absolute difference of all time stamp combinations
     @tf.function
@@ -50,17 +58,14 @@ class SimpleSimilarityMeasure:
         if use_weighted_sim:
             # Note: only one weight vector is used (a_weights) to simulate a retrieval situation
             # where only weights of the case are known
-            #tf.print(self.a_weights)
-            #tf.print(self.w, output_stream=sys.stdout)
+            # tf.print(self.a_weights)
+            # tf.print(self.w, output_stream=sys.stdout)
+            weight_matrix = self.get_weight_matrix(a)
 
-            weight_matrix = tf.reshape(tf.tile(self.a_weights, [a.shape[0]]), [a.shape[0], a.shape[1]])
-            a_weights_sum = tf.reduce_sum(weight_matrix)
-            a_weights_sum = tf.add(a_weights_sum, tf.keras.backend.epsilon())
-            weight_matrix = weight_matrix / a_weights_sum
             diff = tf.abs(a - b)
             # feature weighted distance:
             distance = tf.reduce_mean(weight_matrix * diff)
-            #tf. print("self.a_weights: ", tf.reduce_sum(self.a_weights))
+            # tf. print("self.a_weights: ", tf.reduce_sum(self.a_weights))
 
             if use_additional_sim:
                 # calculate context distance
@@ -72,7 +77,7 @@ class SimpleSimilarityMeasure:
                     distance = tf.squeeze(distance)
                 else:
                     # weight both distances
-                    #tf.print("w: ",self.w)
+                    # tf.print("w: ",self.w)
                     distance = self.w * distance + (1 - self.w) * distance_con
                     distance = tf.squeeze(distance)
         else:
@@ -92,10 +97,7 @@ class SimpleSimilarityMeasure:
         if use_weighted_sim:
             # Note: only one weight vector is used (a_weights) to simulate a retrieval situation
             # where only weights of the case are known
-            weight_matrix = tf.reshape(tf.tile(self.a_weights, [a.shape[0]]), [a.shape[0], a.shape[1]])
-            a_weights_sum = tf.reduce_sum(weight_matrix)
-            a_weights_sum = tf.add(a_weights_sum, tf.keras.backend.epsilon())
-            weight_matrix = weight_matrix / a_weights_sum
+            weight_matrix = self.get_weight_matrix(a)
             q = a - b
             weighted_dist = tf.sqrt(tf.reduce_sum(weight_matrix * q * q))
             diff = weighted_dist
@@ -131,7 +133,7 @@ class SimpleSimilarityMeasure:
 
     # TODO Doesn't work with binary cross entropy loss, always leads to same loss
     #  Reason might be that this doesn't return a sim in [0,1]
-    #  possiblly this could be used: https://www.tensorflow.org/api_docs/python/tf/keras/losses/CosineSimilarity
+    #  possibly this could be used: https://www.tensorflow.org/api_docs/python/tf/keras/losses/CosineSimilarity
     # source: https://bit.ly/390bDPQ
     @tf.function
     def cosine(self, a, b):

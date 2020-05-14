@@ -1,7 +1,8 @@
-import sys
 import os
-import pandas as pd
+import sys
+
 import matplotlib.pyplot as plt
+import pandas as pd
 
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 
@@ -28,10 +29,10 @@ def plot_export_txt(df: pd.DataFrame, file_name: str, config, timestamps):
 
     # specify date format and tick interval
     date_format = '%H:%M:%S'
-    tick_intervall = 1500
+    tick_interval = 1500
 
     # select ticks from index
-    ticks_to_use = df.index[::tick_intervall]
+    ticks_to_use = df.index[::tick_interval]
 
     # create labels by reformatting the selected indices
     labels = [i.strftime(date_format) for i in ticks_to_use]

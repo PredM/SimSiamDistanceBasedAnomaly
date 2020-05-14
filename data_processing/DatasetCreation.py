@@ -10,7 +10,6 @@ import pandas as pd
 from sklearn.model_selection import train_test_split, GroupShuffleSplit
 from sklearn.preprocessing import MinMaxScaler, OrdinalEncoder
 
-
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 
 from configuration.ConfigChecker import ConfigChecker
@@ -308,15 +307,13 @@ def main():
 
         gss = GroupShuffleSplit(n_splits=1, test_size=config.test_split_size, random_state=config.random_seed)
 
-        # TODO Is this working correctly ? train_idx and test_idx only asigned in for loop
+        # TODO Is this working correctly ? train_idx and test_idx only assigned in for loop
         for train_idx, test_idx in gss.split(examples_array, labels_array, failure_times_array_groups):
             print("TRAIN:", train_idx, "TEST:", test_idx)
         # split_idx in gss.split(examples_array, labels_array, failure_times_array_groups)
         # train_idx = split_idx[0]
         # test_idx = split_idx[1]
         # print("train_idx:",train_idx)
-
-        # TODO split test into validation and test set
 
         x_train, x_test = examples_array[train_idx], examples_array[test_idx]
         y_train, y_test = labels_array[train_idx], labels_array[test_idx]
@@ -346,6 +343,7 @@ def main():
     x_test = x_test[y_test.argsort()]
     y_test = np.sort(y_test)
     '''
+
     print('Training data set shape: ', x_train.shape)
     print('Training label set shape: ', y_train.shape)
     print('Test data set shape: ', x_test.shape)
@@ -359,28 +357,31 @@ def main():
     # save the np arrays
     print('\nSave to np arrays in ' + config.training_data_folder)
 
-    print('Step 1/7')
+    print('Step 1/5')
     np.save(config.training_data_folder + 'train_features_4_.npy', x_train)
-    print('Step 2/7')
+    print('Step 2/5')
     np.save(config.training_data_folder + 'test_features_4_.npy', x_test)
-    print('Step 3/7')
+    print('Step 3/5')
     np.save(config.training_data_folder + 'train_labels_4_.npy', y_train)
-    print('Step 4/7')
+    print('Step 4/5')
     np.save(config.training_data_folder + 'test_labels_4_.npy', y_test)
-    print('Step 5/7')
+    print('Step 5/5')
     np.save(config.training_data_folder + 'feature_names_4_.npy', attributes)
-    print('Step 6/6')
-    np.save(config.training_data_folder + 'train_failure_times_4_.npy',
-            failure_times_train)  # Contains the associated time of a failure (if not no failure) for each example
-    print('Step 7/7')
-    np.save(config.training_data_folder + 'test_failure_times_4_.npy',
-            failure_times_test)
-    print('Step 7/7')
-    np.save(config.training_data_folder + 'train_window_times_4_.npy',
-            window_times_train)  # Contains the start and end time stamp for each training example
-    print('Step 7/7')
-    np.save(config.training_data_folder + 'test_window_times_4_.npy',
-            window_times_test)
+    print()
+
+    if config.use_over_lapping_windows:
+        print('Saving additional data if overlapping windows are used')
+
+        # Contains the associated time of a failure (if not no failure) for each example
+        print('Step 1/4')
+        np.save(config.training_data_folder + 'train_failure_times_4_.npy', failure_times_train)
+        print('Step 2/4')
+        np.save(config.training_data_folder + 'test_failure_times_4_.npy', failure_times_test)
+        print('Step 3/4')
+        # Contains the start and end time stamp for each training example
+        np.save(config.training_data_folder + 'train_window_times_4_.npy', window_times_train)
+        print('Step 4/4')
+        np.save(config.training_data_folder + 'test_window_times_4_.npy', window_times_test)
 
 
 if __name__ == '__main__':

@@ -1,8 +1,9 @@
-import sys
 import os
+import sys
+from shutil import copyfile
+
 import numpy as np
 from numpy.random.mtrand import RandomState
-from shutil import copyfile
 
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 
@@ -15,13 +16,13 @@ def main():
     y_train = np.load(config.training_data_folder + 'train_labels.npy')  # labels of the training data
     x_train = np.load(config.training_data_folder + 'train_features.npy')  # labels of the training data
     feature_names = np.load(config.training_data_folder + 'feature_names.npy')
-    failureTimes_train = np.load(config.training_data_folder + 'train_failure_times.npy')
-    windowTimes_train = np.load(config.training_data_folder + 'train_window_times.npy')
+    failure_times_train = np.load(config.training_data_folder + 'train_failure_times.npy')
+    window_times_train = np.load(config.training_data_folder + 'train_window_times.npy')
 
     # get unique classes
     classes = np.unique(y_train)
 
-    print('Number of exaples in training data set:', x_train.shape[0])
+    print('Number of examples in training data set:', x_train.shape[0])
     print('Reducing to', config.examples_per_class, 'examples per class with', len(classes), 'classes')
 
     # for each class get the indices of all examples with this class
@@ -52,8 +53,8 @@ def main():
     for i in range(len(classes)):
         casebase_labels_list.extend(y_train[new_indices[i]])
         casebase_features_list.extend(x_train[new_indices[i]])
-        casebase_failures_list.extend(failureTimes_train[new_indices[i]])
-        casebase_window_times_list.extend(windowTimes_train[new_indices[i]])
+        casebase_failures_list.extend(failure_times_train[new_indices[i]])
+        casebase_window_times_list.extend(window_times_train[new_indices[i]])
 
     # transform list of values back into an array and safe to file
     casebase_labels = np.stack(casebase_labels_list, axis=0)

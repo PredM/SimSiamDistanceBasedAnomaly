@@ -1,15 +1,13 @@
-import sys
 import os
+import sys
 
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 
 import matplotlib.pyplot as plt
 import numpy as np
 
-from datetime import datetime
 from sklearn import preprocessing
 from sklearn.manifold import TSNE
-from sklearn.decomposition import PCA
 from neural_network.Dataset import FullDataset
 from neural_network.SNN import initialise_snn
 
@@ -19,17 +17,16 @@ from configuration.Configuration import Configuration
 if __name__ == '__main__':
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
-    #Config relevant for cnnwithclassattention
-    use_channelwiseEncoded_for_cnnwithclassattention= True
-    use_each_sensor_as_single_example = True                # default: false
+    # Config relevant for cnnwithclassattention
+    use_channelwiseEncoded_for_cnnwithclassattention = True
+    use_each_sensor_as_single_example = True  # default: false
 
     use_channelcontextEncoded_for_cnnwithclassattention = True
 
     # TSNE Embeddings are learned on a sim matrix, not on embeddings itself
-    use_sim_matrix = False # default false
+    use_sim_matrix = False  # default false
 
     encode_test_data = False
-
 
     config = Configuration()
     config.architecture_variant = config.architecture_variants[0]
@@ -37,7 +34,7 @@ if __name__ == '__main__':
         dataset = FullDataset(config.case_base_folder, config, training=False)
     else:
         dataset = FullDataset(config.training_data_folder, config, training=False)
-    #config.case_base_folder
+    # config.case_base_folder
     dataset.load()
     print("130:", dataset.y_train_strings[130])
     print("200:", dataset.y_train_strings[200])
@@ -57,7 +54,7 @@ if __name__ == '__main__':
     # As TSNE Input either a distance matrix or
     if use_sim_matrix == True:
         sim_matrix = dataset.get_similarity_matrix(architecture, encode_test_data=encode_test_data)
-        distance_matrix = 1 -sim_matrix
+        distance_matrix = 1 - sim_matrix
     else:
         encoded_data = dataset.encode(architecture, encode_test_data=encode_test_data)
     if architecture.hyper.encoder_variant in ['cnnwithclassattention', 'cnn1dwithclassattention']:
@@ -91,7 +88,7 @@ if __name__ == '__main__':
                                              axis=0)
         le.fit(x_test_train_labels)
         numOfClasses = le.classes_.size
-        #print("Number of classes detected: ", numOfClasses, ". \nAll classes: ", le.classes_)
+        # print("Number of classes detected: ", numOfClasses, ". \nAll classes: ", le.classes_)
         unique_labels_EncodedAsNumber = le.transform(le.classes_)  # each label encoded as number
         x_trainTest_labels_EncodedAsNumber = le.transform(x_train_labels)
 
@@ -100,35 +97,36 @@ if __name__ == '__main__':
     if architecture.hyper.encoder_variant in ['cnnwithclassattention', 'cnn1dwithclassattention']:
         if use_sim_matrix == False:
             if use_channelwiseEncoded_for_cnnwithclassattention:
-                num_of_flatten_features = x_train_encoded.shape[1]*x_train_encoded.shape[2]
+                num_of_flatten_features = x_train_encoded.shape[1] * x_train_encoded.shape[2]
             if use_channelcontextEncoded_for_cnnwithclassattention:
                 num_of_flatten_features = x_train_encoded_context.shape[1]
             if use_channelcontextEncoded_for_cnnwithclassattention & use_channelwiseEncoded_for_cnnwithclassattention:
-                num_of_flatten_features = x_train_encoded.shape[1]*x_train_encoded.shape[2]+x_train_encoded_context.shape[1]
+                num_of_flatten_features = x_train_encoded.shape[1] * x_train_encoded.shape[2] + \
+                                          x_train_encoded_context.shape[1]
 
             if use_each_sensor_as_single_example:
-                data4TSNE = np.zeros((x_train_encoded.shape[0]*x_train_encoded.shape[2], x_train_encoded.shape[1]))
+                data4TSNE = np.zeros((x_train_encoded.shape[0] * x_train_encoded.shape[2], x_train_encoded.shape[1]))
             else:
                 data4TSNE = np.zeros((x_train_encoded.shape[0], num_of_flatten_features))
 
             for i in range(x_train_encoded.shape[0]):
                 if use_channelwiseEncoded_for_cnnwithclassattention:
-                    x = np.reshape(x_train_encoded[i, :, :], (x_train_encoded.shape[1] * x_train_encoded.shape[2]),1)
-                    #print("x: ", x.shape)
+                    x = np.reshape(x_train_encoded[i, :, :], (x_train_encoded.shape[1] * x_train_encoded.shape[2]), 1)
+                    # print("x: ", x.shape)
                 if use_channelcontextEncoded_for_cnnwithclassattention:
-                    y = np.squeeze(np.reshape(x_train_encoded_context[i,:], x_train_encoded_context.shape[1]))
-                #print("x_train_encoded[2][i]: ", x_train_encoded_context[2][i].shape)
+                    y = np.squeeze(np.reshape(x_train_encoded_context[i, :], x_train_encoded_context.shape[1]))
+                # print("x_train_encoded[2][i]: ", x_train_encoded_context[2][i].shape)
                 if use_channelcontextEncoded_for_cnnwithclassattention & use_channelwiseEncoded_for_cnnwithclassattention:
-                    x = np.concatenate((x,  y))
+                    x = np.concatenate((x, y))
                 elif use_channelcontextEncoded_for_cnnwithclassattention:
                     x = y
-                #print("x: ", x.shape)
+                # print("x: ", x.shape)
                 if use_each_sensor_as_single_example:
                     for s in range(x_train_encoded.shape[2]):
-                        x = np.reshape(x_train_encoded[i, :, s], (x_train_encoded.shape[1]),1)
-                        data4TSNE[((i-1)*61+s), :] = x
+                        x = np.reshape(x_train_encoded[i, :, s], (x_train_encoded.shape[1]), 1)
+                        data4TSNE[((i - 1) * 61 + s), :] = x
                 else:
-                    data4TSNE[i,:] = x
+                    data4TSNE[i, :] = x
         else:
             data4TSNE = distance_matrix
         print("data4TSNE:", data4TSNE.shape)
@@ -147,7 +145,7 @@ if __name__ == '__main__':
           x_test_encoded_reshapedAs2d.shape)
     '''
     # Concatenate train and test data into one matrix
-    #x_testTrain_encoded_reshapedAs2d = np.concatenate((x_train_encoded_reshapedAs2d, x_test_encoded_reshapedAs2d),
+    # x_testTrain_encoded_reshapedAs2d = np.concatenate((x_train_encoded_reshapedAs2d, x_test_encoded_reshapedAs2d),
     #                                                  axis=0)
 
     # Reducing dimensionality with TSNE or PCA
@@ -155,15 +153,15 @@ if __name__ == '__main__':
     if architecture.hyper.encoder_variant in ['cnnwithclassattention', 'cnn1dwithclassattention']:
         if use_sim_matrix:
             X_embedded = TSNE(n_components=2, perplexity=50.0, learning_rate=10, early_exaggeration=30, n_iter=10000,
-                          random_state=123, metric="precomputed").fit_transform(data4TSNE)
+                              random_state=123, metric="precomputed").fit_transform(data4TSNE)
         else:
             X_embedded = TSNE(n_components=2, perplexity=50.0, learning_rate=10, early_exaggeration=30, n_iter=10000,
                               random_state=123, metric='manhattan').fit_transform(data4TSNE)
     else:
         X_embedded = TSNE(n_components=2, perplexity=50.0, learning_rate=10, early_exaggeration=10, n_iter=10000,
                           random_state=123, metric='manhattan').fit_transform(data4TSNE)
-    #X_embedded = TSNE(n_components=2, random_state=123).fit_transform(data4TSNE)
-    #X_embedded = PCA(n_components=2, random_state=123).fit_transform(data4TSNE)
+    # X_embedded = TSNE(n_components=2, random_state=123).fit_transform(data4TSNE)
+    # X_embedded = PCA(n_components=2, random_state=123).fit_transform(data4TSNE)
 
     # dt_string = datetime.now().strftime("%m-%d_%H-%M-%S")
     # file_name = '../data/visualizations/' + "reducedTestFeaturesViz.npy"
@@ -173,9 +171,9 @@ if __name__ == '__main__':
     # print("X_embedded:", X_embedded[0:10,:])
     # Defining the color for each class
 
-    colors =  [plt.cm.jet(float(i)/max(unique_labels_EncodedAsNumber)) for i in range(numOfClasses)]
+    colors = [plt.cm.jet(float(i) / max(unique_labels_EncodedAsNumber)) for i in range(numOfClasses)]
     # Color maps: https://matplotlib.org/examples/color/colormaps_reference.html
-    #colors_ = colors(np.array(unique_labels_EncodedAsNumber))
+    # colors_ = colors(np.array(unique_labels_EncodedAsNumber))
     # Overriding color map with own colors
     colors[0] = np.array([0 / 256, 128 / 256, 0 / 256, 1])  # no failure
     '''
@@ -194,24 +192,25 @@ if __name__ == '__main__':
     rowCounter = 0
 
     for i, u in enumerate(unique_labels_EncodedAsNumber):
-        #print("i: ",i,"u: ",u)
+        # print("i: ",i,"u: ",u)
         for j in range(X_embedded.shape[0]):
             if x_trainTest_labels_EncodedAsNumber[j] == u:
                 xi = X_embedded[j, 0]
                 yi = X_embedded[j, 1]
-                #print("i: ", i, " u:", u, "j:",j,"xi: ", xi, "yi: ", yi)
+                # print("i: ", i, " u:", u, "j:",j,"xi: ", xi, "yi: ", yi)
                 plt.scatter(xi, yi, color=colors[i], label=unique_labels_EncodedAsNumber[i], marker='.')
 
-    #print("X_embedded:", X_embedded.shape)
-    #print(X_embedded)
-    #print("x_trainTest_labels_EncodedAsNumber: ", x_trainTest_labels_EncodedAsNumber)
+    # print("X_embedded:", X_embedded.shape)
+    # print(X_embedded)
+    # print("x_trainTest_labels_EncodedAsNumber: ", x_trainTest_labels_EncodedAsNumber)
     plt.title("Visualization Train(.) and Test (x) data (T-SNE-Reduced)")
     lgd = plt.legend(labels=le.classes_, loc='upper center', bbox_to_anchor=(0.5, -0.05),
-          fancybox=True, shadow=True, ncol=3)
-    #plt.legend(labels=x_test_train_labels, bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
-    #lgd = plt.legend(labels=le.classes_)
+                     fancybox=True, shadow=True, ncol=3)
+    # plt.legend(labels=x_test_train_labels, bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
+    # lgd = plt.legend(labels=le.classes_)
     for i, u in enumerate(le.classes_):
         lgd.legendHandles[i].set_color(colors[i])
         lgd.legendHandles[i].set_label(le.classes_[i])
-    #plt.show()
-    plt.savefig(architecture.hyper.encoder_variant +'_'+ config.filename_model_to_use + '_730.png',bbox_extra_artists=(lgd,), bbox_inches='tight')
+    # plt.show()
+    plt.savefig(architecture.hyper.encoder_variant + '_' + config.filename_model_to_use + '_730.png',
+                bbox_extra_artists=(lgd,), bbox_inches='tight')

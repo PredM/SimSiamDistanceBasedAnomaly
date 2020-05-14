@@ -1,6 +1,7 @@
-import sys
-import os
 import json
+import os
+import sys
+
 import pandas as pd
 
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
@@ -73,6 +74,8 @@ def main():
     elif selection == 2:
         post = '18'
         df_sensor_data = import_single_pressure_sensor(content, 'VSG', post)
+    else:
+        raise ValueError()
 
     # change format of timestamp, set it as index and reduce the time interval
     df_sensor_data['timestamp'] = pd.to_datetime(df_sensor_data['timestamp'])
@@ -106,6 +109,8 @@ def main():
         timestamps = [
 
         ]
+    else:
+        raise ValueError()
 
     timestamps = transform(timestamps)
 

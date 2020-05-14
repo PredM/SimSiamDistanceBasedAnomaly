@@ -1,8 +1,8 @@
 import json
+import os
+import sys
 import threading
 import time
-import sys
-import os
 
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 

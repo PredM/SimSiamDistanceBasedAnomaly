@@ -1,5 +1,3 @@
-import time
-
 import numpy as np
 import tensorflow as tf
 import tensorflow.keras.backend as K
@@ -26,7 +24,8 @@ class OptimizerHelper:
 
             # Get parameters of subnet and ffnn (if complex sim measure)
             if self.config.architecture_variant in ['standard_ffnn', 'fast_ffnn']:
-                trainable_params = self.model.ffnn.model.trainable_variables + self.model.encoder.model.trainable_variables
+                trainable_params = self.model.ffnn.model.trainable_variables + \
+                                   self.model.encoder.model.trainable_variables
             else:
                 trainable_params = self.model.encoder.model.trainable_variables
 
@@ -123,23 +122,23 @@ class OptimizerHelper:
         # Generate a random vector that contains the number of classes that should be considered in the current batch
         # 4 means approx. half of the batch contains no-failure, 1 and 2 uniform
         equal_class_part = self.config.upsampling_factor
-        failureClassesToConsider = np.random.randint(low=0, high=len(self.dataset.y_train_strings_unique),
-                                                     size=self.hyper.batch_size // equal_class_part)
-        # print("failureClassesToConsider: ", failureClassesToConsider)
+        failure_classes_considered = np.random.randint(low=0, high=len(self.dataset.y_train_strings_unique),
+                                                       size=self.hyper.batch_size // equal_class_part)
+        # print("failure_classes_considered: ", failure_classes_considered)
 
         # Compose batch
         # // 2 because each iteration one similar and one dissimilar pair is added
         for i in range(self.hyper.batch_size // 2):
-            #print("i: ", i)
+            # print("i: ", i)
             #
             # pos pair
             #
             if self.config.equalClassConsideration:
                 if i < self.hyper.batch_size // equal_class_part:
-                    # print(i,": ", failureClassesToConsider[i-self.architecture.hyper.batch_size // 4])
+                    # print(i,": ", failure_classes_considered[i-self.architecture.hyper.batch_size // 4])
 
-                    idx = (failureClassesToConsider[i - self.hyper.batch_size // equal_class_part])
-                    #print(i, "idx: ", idx)
+                    idx = (failure_classes_considered[i - self.hyper.batch_size // equal_class_part])
+                    # print(i, "idx: ", idx)
                     pos_pair = self.dataset.draw_pair_by_class_idx(True, from_test=False, class_idx=idx)
                     # class_idx=(i % self.dataset.num_classes))
                 else:
@@ -148,7 +147,8 @@ class OptimizerHelper:
                 pos_pair = self.dataset.draw_pair(True, from_test=False)
             batch_pairs_indices.append(pos_pair[0])
             batch_pairs_indices.append(pos_pair[1])
-            #print("PosPair: ", self.dataset.y_train_strings[pos_pair[0]]," - ", self.dataset.y_train_strings[pos_pair[1]])
+            # print("PosPair: ", self.dataset.y_train_strings[pos_pair[0]]," - ", #
+            # self.dataset.y_train_strings[pos_pair[1]])
             batch_true_similarities.append(1.0)
 
             #
@@ -159,7 +159,7 @@ class OptimizerHelper:
             if self.config.equalClassConsideration:
                 if i < self.hyper.batch_size // equal_class_part:
 
-                    idx = (failureClassesToConsider[i - self.hyper.batch_size // equal_class_part])
+                    idx = (failure_classes_considered[i - self.hyper.batch_size // equal_class_part])
                     neg_pair = self.dataset.draw_pair_by_class_idx(False, from_test=False, class_idx=idx)
                 else:
                     neg_pair = self.dataset.draw_pair(False, from_test=False)
@@ -167,7 +167,8 @@ class OptimizerHelper:
                 neg_pair = self.dataset.draw_pair(False, from_test=False)
             batch_pairs_indices.append(neg_pair[0])
             batch_pairs_indices.append(neg_pair[1])
-            #print("NegPair: ", self.dataset.y_train_strings[neg_pair[0]], " - ",self.dataset.y_train_strings[neg_pair[1]])
+            # print("NegPair: ", self.dataset.y_train_strings[neg_pair[0]], " - ",
+            # self.dataset.y_train_strings[neg_pair[1]])
 
             # If configured a similarity value is used for the negative pair instead of full dissimilarity
             if self.config.use_sim_value_for_neg_pair:

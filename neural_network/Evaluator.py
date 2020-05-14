@@ -1,10 +1,7 @@
-import sys
-import warnings
-
 import numpy as np
 import pandas as pd
 import sklearn
-from sklearn import metrics, preprocessing
+from sklearn import metrics
 
 from neural_network.Dataset import FullDataset
 
@@ -326,7 +323,8 @@ class Evaluator:
         y_score = np.array(scores)
         return y_true_one_hot, y_score, labels
 
-    def rate_calculation(self, numerator, denominator_part2):
+    @staticmethod
+    def rate_calculation(numerator, denominator_part2):
         if numerator + denominator_part2 == 0:
             return np.NaN
         else:
@@ -340,14 +338,14 @@ class Evaluator:
 
         failure_detected_correct_sum = self.failure_results['Correct'].sum()
         failure_detected_chances_sum = self.failure_results['Chances'].sum()
-        failure_detected_asHealth_sum = self.failure_results['AsHealth'].sum()
-        failure_detected_AsOtherFailure_sum = self.failure_results['AsOtherFailure'].sum()
+        failure_detected_as_health_sum = self.failure_results['AsHealth'].sum()
+        failure_detected_as_other_failure_sum = self.failure_results['AsOtherFailure'].sum()
 
         self.failure_results.loc[-1] = ["Combined", "Sum: ",
                                         failure_detected_chances_sum,
                                         failure_detected_correct_sum,
-                                        failure_detected_AsOtherFailure_sum,
-                                        failure_detected_asHealth_sum]
+                                        failure_detected_as_other_failure_sum,
+                                        failure_detected_as_health_sum]
 
         # Local copy because using label as index would break the result adding function
         failure_results_local = self.failure_results.set_index('Label')

@@ -1,8 +1,9 @@
-import sys
 import os
-import pandas as pd
-import numpy as np
+import sys
+
 import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 

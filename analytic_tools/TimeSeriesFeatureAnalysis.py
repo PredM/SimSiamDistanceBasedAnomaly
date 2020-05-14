@@ -1,11 +1,9 @@
-import sys
-import os
-import numpy as np
-from tsfresh import extract_features
-import pandas as pd
 import datetime
-from numpy.random.mtrand import RandomState
-from sklearn import preprocessing
+import os
+import sys
+
+import numpy as np
+import pandas as pd
 from sklearn.feature_selection import mutual_info_classif
 
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
@@ -104,15 +102,16 @@ def main():
 
     X = pd.read_pickle(config.case_base_folder + '2ms_3sec/extractedFeatures_X_caseBase_unfiltered.pkl')
 
-    df_informationGainOfFeature = pd.DataFrame(data=feature_names)
-    # print(df_informationGainOfFeature)
-    df_informationGainOfFeature.columns = ['Attribut']
-    df_informationGainOfFeature["InfoGainSum"] = 0
-    df_informationGainOfFeature = df_informationGainOfFeature.set_index('Attribut')
-    # df_informationGainOfFeature.loc['a_16_3_x', "InfoGainSum"] = 2
-    # df_informationGainOfFeature.loc['a_16_3_x', "InfoGainSum"] += 2
-    # df_informationGainOfFeature.loc['a_16_3_x', "InfoGainSum"] += 1
-    # print("df_informationGainOfFeature.loc[a_16_3_x, InfoGainSum]_", df_informationGainOfFeature.loc['a_16_3_x', "InfoGainSum"])
+    df_information_gain_of_feature = pd.DataFrame(data=feature_names)
+    # print(df_information_gain_of_feature)
+    df_information_gain_of_feature.columns = ['Attribut']
+    df_information_gain_of_feature["InfoGainSum"] = 0
+    df_information_gain_of_feature = df_information_gain_of_feature.set_index('Attribut')
+    # df_information_gain_of_feature.loc['a_16_3_x', "InfoGainSum"] = 2
+    # df_information_gain_of_feature.loc['a_16_3_x', "InfoGainSum"] += 2
+    # df_information_gain_of_feature.loc['a_16_3_x', "InfoGainSum"] += 1
+    # print("df_information_gain_of_feature.loc[a_16_3_x, InfoGainSum]_",
+    # df_information_gain_of_feature.loc['a_16_3_x', "InfoGainSum"])
     # print(dsd)
 
     from tsfresh.utilities.dataframe_functions import impute
@@ -128,13 +127,13 @@ def main():
     for i, failureLabel in enumerate(labels_to_analyze):
         # Get indexes to delete:
         if i == 0:
-            indexesToUse = np.where(y_train_strings == failureLabel)
+            indexes_to_use = np.where(y_train_strings == failureLabel)
         else:
-            indexesToUse = np.append(indexesToUse, np.where(y_train_strings == failureLabel))
+            indexes_to_use = np.append(indexes_to_use, np.where(y_train_strings == failureLabel))
 
-    print("Indexes to use: ", indexesToUse, "used: ", len(indexesToUse))
-    X_npy = X.values[indexesToUse, :]  # np.delete(features, indexesToExtract, 0)
-    y_train_strings = y_train_strings[indexesToUse]  # np.delete(labels, indexesToExtract, 0)
+    print("Indexes to use: ", indexes_to_use, "used: ", len(indexes_to_use))
+    X_npy = X.values[indexes_to_use, :]  # np.delete(features, indexesToExtract, 0)
+    y_train_strings = y_train_strings[indexes_to_use]  # np.delete(labels, indexesToExtract, 0)
 
     print("X shape: ", X_npy.shape, " Labels shape: ", y_train_strings.shape)
     headers = X.dtypes.index
@@ -150,17 +149,17 @@ def main():
     # for score, fname in sorted(zip(feature_scores, dv.get_feature_names()), reverse=True)[:10]:
     print('Feature Scores: ', feature_scores)
 
-    resultlist = zip(feature_scores, headers)
+    result_list = zip(feature_scores, headers)
     file = open(config.case_base_folder + 'score_feature_file_2.txt', 'w')
     for score, featureName in sorted(zip(feature_scores, headers), key=lambda x: x[0], reverse=True):
         print(score, featureName)
         file.write(str(score) + ' - ' + featureName + '\n')
-        df_informationGainOfFeature.loc[featureName.split('__')[0], "InfoGainSum"] += score
-        # print('resultlist unsorted: ', set(resultlist))
-    # sorted(resultlist)
-    # print('sorted: ', sorted(resultlist, key=lambda x: x[0],reverse=True))
-    # print(df_informationGainOfFeature.to_string())
-    print(df_informationGainOfFeature.sort_values(by=['InfoGainSum']).to_string())
+        df_information_gain_of_feature.loc[featureName.split('__')[0], "InfoGainSum"] += score
+        # print('result_list unsorted: ', set(result_list))
+    # sorted(result_list)
+    # print('sorted: ', sorted(result_list, key=lambda x: x[0],reverse=True))
+    # print(df_information_gain_of_feature.to_string())
+    print(df_information_gain_of_feature.sort_values(by=['InfoGainSum']).to_string())
     file.close()
 
     # print('Number of exaples in training data set:', x_train.shape[0])

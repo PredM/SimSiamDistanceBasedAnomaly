@@ -70,8 +70,8 @@ class ModelConfiguration:
         self.architecture_variants = ['standard_simple', 'standard_ffnn', 'fast_simple', 'fast_ffnn']
         self.architecture_variant = self.architecture_variants[0]
 
-        #For test purpose before implementing a further architecture variant:
-        self.use_weighted_distance_as_standard_ffnn = False # default False, means Neural Warp Approach is used
+        # For test purpose before implementing a further architecture variant:
+        self.use_weighted_distance_as_standard_ffnn = False  # default False, means Neural Warp Approach is used
 
         ##
         # Determines how the similarity between two embedding vectors is determined (when a simple architecture is used)
@@ -179,7 +179,7 @@ class TrainingConfiguration:
 
         self.use_early_stopping = True
         self.early_stopping_epochs_limit = 1000
-        self.early_stopping_loss_minimum = 0.013 #Default: 0.0 means no effect, CNN2D_with_add_Input: BCE:0.03 #MSE:0.01
+        self.early_stopping_loss_minimum = 0.013  # Default: 0.0 (no effect), CNN2D_with_add_Input: BCE:0.03, MSE:0.01
 
         # Parameter to control if and when a test is conducted through training
         self.use_inference_test_during_training = False  # default False
@@ -547,7 +547,8 @@ class Configuration(
         print("")
         print("Masking related:")
         print("- individual_relevant_feature_selection: ", self.individual_relevant_feature_selection)
-        print("- use_additional_strict_masking_for_attribute_sim: ", self.use_additional_strict_masking_for_attribute_sim)
+        print("- use_additional_strict_masking_for_attribute_sim: ",
+              self.use_additional_strict_masking_for_attribute_sim)
         print("- use_same_feature_weights_for_unsimilar_pairs: ", self.use_same_feature_weights_for_unsimilar_pairs)
         print("")
         print("Similarity Measure related:")

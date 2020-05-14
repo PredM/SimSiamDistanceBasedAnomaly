@@ -1,5 +1,6 @@
-import sys
 import os
+import sys
+
 import numpy as np
 import pandas as pd
 
@@ -46,18 +47,18 @@ def main():
     print("Failure cases from Test: ")
     print(concat.groupby([0])[1].nunique())
 
-    failure_Labes_to_remove = ['txt16_failuremode_conveyorbelt_operation_without_a_workpiece',
-                               'txt16_failuremode_oven_door_blocked',
-                               'txt16_failuremode_turntable_broken_bigh_gear_tooth_2',
-                               'txt18_WorkpieceDroppedCrosswiseIntoOven', 'txt19_hrs_position_switch_not_reached',
-                               'txt19_failuremode_tansport_without_bucket_box', 'txt19_failure_mode_crashed_into_HRS',
-                               'txt18_failuremode1_Workpiecelost_white_1', 'txt18_failuremode1_Workpiecelost_white_2',
-                               'txt18_WorkpieceLostDuringTransport_diagnosis', 'txt16_i4_lightbarrier_failuremode2',
-                               'txt18_WorkpieceLostDuringTransport_diagnosis',
-                               'txt19_failuremode_bucket_box_fallen_down', 'txt16_i7_lightbarrier_failuremode1',
-                               'txt17_pneumatic_leakage_failure_mode_1_1']
+    failure_labels_to_remove = ['txt16_failuremode_conveyorbelt_operation_without_a_workpiece',
+                                'txt16_failuremode_oven_door_blocked',
+                                'txt16_failuremode_turntable_broken_bigh_gear_tooth_2',
+                                'txt18_WorkpieceDroppedCrosswiseIntoOven', 'txt19_hrs_position_switch_not_reached',
+                                'txt19_failuremode_tansport_without_bucket_box', 'txt19_failure_mode_crashed_into_HRS',
+                                'txt18_failuremode1_Workpiecelost_white_1', 'txt18_failuremode1_Workpiecelost_white_2',
+                                'txt18_WorkpieceLostDuringTransport_diagnosis', 'txt16_i4_lightbarrier_failuremode2',
+                                'txt18_WorkpieceLostDuringTransport_diagnosis',
+                                'txt19_failuremode_bucket_box_fallen_down', 'txt16_i7_lightbarrier_failuremode1',
+                                'txt17_pneumatic_leakage_failure_mode_1_1']
 
-    failure_Labes_to_remove_2 = ['txt15_i3_lightbarrier_failure_mode_1',
+    failure_label_to_remove_2 = ['txt15_i3_lightbarrier_failure_mode_1',
                                  'txt16_pneumatic_leakage_failure_mode_1',
                                  'txt18_pneumatic_leakage_failure_mode_3_faulty']
 
@@ -75,40 +76,40 @@ def main():
     # removeExamplesBasedOnFailureTimes(features=y_train_features, labels= y_train, window_times= y_train_failure_times, failure_times = y_train_failure_times, failuresToRemove = ["2019-06-08 13:25:05", "2019-06-08 13:31:51"])
 
     # print(" Before y_train_features shape: ", y_train_features.shape, "y_train shape: ", y_train.shape)
-    y_train_features, feature_names_ = removeAttributes(features=y_train_features, feature_list_names=feature_names,
-                                                        features_to_remove_list=features_to_remove)
-    y_test_features, feature_names = removeAttributes(features=y_test_features, feature_list_names=feature_names,
-                                                      features_to_remove_list=features_to_remove)
+    y_train_features, feature_names_ = remove_attributes(features=y_train_features, feature_list_names=feature_names,
+                                                         features_to_remove_list=features_to_remove)
+    y_test_features, feature_names = remove_attributes(features=y_test_features, feature_list_names=feature_names,
+                                                       features_to_remove_list=features_to_remove)
     # print("After: y_train_features shape: ", y_train_features.shape, "y_train shape: ", y_train.shape)
 
-    ### Remove specific types of failure from the test and training data ###
+    # Remove specific types of failure from the test and training data ###
     print(" Before y_train_features shape: ", y_train_features.shape, "y_train_window_times shape: ",
           y_train_window_times.shape)
-    y_train_features, y_train, y_train_window_times, y_train_failure_times = removeExamplesBasedOnFailureLabels(
+    y_train_features, y_train, y_train_window_times, y_train_failure_times = remove_examples_based_on_failure_labels(
         features=y_train_features, labels=y_train, window_times=y_train_window_times,
-        failure_times=y_train_failure_times, failureLabelsToRemove=failure_Labes_to_remove)
+        failure_times=y_train_failure_times, failureLabelsToRemove=failure_labels_to_remove)
     print(" After: y_train_features shape: ", y_train_features.shape, "y_train_window_times shape: ",
           y_train_window_times.shape)
 
     print(" Before y_test_features shape: ", y_test_features.shape, "y_test shape: ", y_test.shape)
-    y_test_features, y_test, y_test_window_times, y_test_failure_times = removeExamplesBasedOnFailureLabels(
+    y_test_features, y_test, y_test_window_times, y_test_failure_times = remove_examples_based_on_failure_labels(
         features=y_test_features, labels=y_test, window_times=y_test_window_times,
-        failure_times=y_test_failure_times, failureLabelsToRemove=failure_Labes_to_remove)
+        failure_times=y_test_failure_times, failureLabelsToRemove=failure_labels_to_remove)
     print(" After y_test_features shape: ", y_test_features.shape, "y_test shape: ", y_test.shape)
 
     ### Extract failure cases from the training data and move it to the test data ###
-    features_ext, labels_ext, window_times_ext, failure_times_ext = extractExamplesBasedOnFailureTimes(
+    features_ext, labels_ext, window_times_ext, failure_times_ext = extract_examples_based_on_failure_times(
         features=y_train_features, labels=y_train, window_times=y_train_window_times,
         failure_times=y_train_failure_times, failuresToExtract=failure_to_extract_from_train_to_test)
 
     ### Append previous extracted failure cases from the training data and move it to the test data ###
-    y_test_features, y_test, y_test_window_times, y_test_failure_times = appendExtractedExamples(
+    y_test_features, y_test, y_test_window_times, y_test_failure_times = append_extracted_examples(
         features=y_test_features, labels=y_test, window_times=y_test_window_times,
         failure_times=y_test_failure_times, features_ext=features_ext, labels_ext=labels_ext,
         window_times_ext=window_times_ext, failure_times_ext=failure_times_ext)
 
     ### Remove extracted failure cases from the training data ###
-    y_train_features, y_train, y_train_window_times, y_train_failure_times = removeExamplesBasedOnFailureTimes(
+    y_train_features, y_train, y_train_window_times, y_train_failure_times = remove_examples_based_on_failure_times(
         features=y_train_features, labels=y_train, window_times=y_train_window_times,
         failure_times=y_train_failure_times, failuresToRemove=failure_to_extract_from_train_to_test)
 
@@ -198,19 +199,19 @@ def main():
     y_test = np.char.replace(y_test, "mode2", "mode_2")
     y_test = np.char.replace(y_test, "mode3", "mode_3")
 
-    ### Remove specific types of failure from the test and training data ###
+    # Remove specific types of failure from the test and training data ###
     print(" Before y_train_features shape: ", y_train_features.shape, "y_train_window_times shape: ",
           y_train_window_times.shape)
-    y_train_features, y_train, y_train_window_times, y_train_failure_times = removeExamplesBasedOnFailureLabels(
+    y_train_features, y_train, y_train_window_times, y_train_failure_times = remove_examples_based_on_failure_labels(
         features=y_train_features, labels=y_train, window_times=y_train_window_times,
-        failure_times=y_train_failure_times, failureLabelsToRemove=failure_Labes_to_remove_2)
+        failure_times=y_train_failure_times, failureLabelsToRemove=failure_label_to_remove_2)
     print(" After: y_train_features shape: ", y_train_features.shape, "y_train_window_times shape: ",
           y_train_window_times.shape)
 
     print(" Before y_test_features shape: ", y_test_features.shape, "y_test shape: ", y_test.shape)
-    y_test_features, y_test, y_test_window_times, y_test_failure_times = removeExamplesBasedOnFailureLabels(
+    y_test_features, y_test, y_test_window_times, y_test_failure_times = remove_examples_based_on_failure_labels(
         features=y_test_features, labels=y_test, window_times=y_test_window_times,
-        failure_times=y_test_failure_times, failureLabelsToRemove=failure_Labes_to_remove_2)
+        failure_times=y_test_failure_times, failureLabelsToRemove=failure_label_to_remove_2)
     print(" After y_test_features shape: ", y_test_features.shape, "y_test shape: ", y_test.shape)
 
     # get unqiue classes and the number of examples in each
@@ -291,7 +292,7 @@ def main():
     '''
 
 
-def removeExamplesBasedOnFailureTimes(features, labels, window_times, failure_times, failuresToRemove):
+def remove_examples_based_on_failure_times(features, labels, window_times, failure_times, failuresToRemove):
     # delete examples based on the failure time from training or test data
 
     # features: the matrix (examples,timestamp,channels) of the train_features.npy or test_features.npy
@@ -316,7 +317,7 @@ def removeExamplesBasedOnFailureTimes(features, labels, window_times, failure_ti
     return features_del, labels_del, window_times_del, failure_times_del
 
 
-def removeExamplesBasedOnFailureLabels(features, labels, window_times, failure_times, failureLabelsToRemove):
+def remove_examples_based_on_failure_labels(features, labels, window_times, failure_times, failureLabelsToRemove):
     # delete examples based on the failure label (e.g., txt17_i1_switch_failuremode3_1) from training or test data
 
     # features: the matrix (examples,timestamp,channels) of the train_features.npy or test_features.npy
@@ -341,7 +342,7 @@ def removeExamplesBasedOnFailureLabels(features, labels, window_times, failure_t
     return features_del, labels_del, window_times_del, failure_times_del
 
 
-def removeAttributes(features, feature_list_names, features_to_remove_list):
+def remove_attributes(features, feature_list_names, features_to_remove_list):
     # delete examples based on the failure label (e.g., txt17_i1_switch_failuremode3_1) from training or test data
 
     # features: the matrix (examples,timestamp,channels) of the train_features.npy or test_features.npy
@@ -363,7 +364,7 @@ def removeAttributes(features, feature_list_names, features_to_remove_list):
     return features_del, feature_list_names_del
 
 
-def extractExamplesBasedOnFailureTimes(features, labels, window_times, failure_times, failuresToExtract):
+def extract_examples_based_on_failure_times(features, labels, window_times, failure_times, failuresToExtract):
     # extract examples based on the failure time from training or test data
 
     # features: the matrix (examples,timestamp,channels) of the train_features.npy or test_features.npy
@@ -391,8 +392,8 @@ def extractExamplesBasedOnFailureTimes(features, labels, window_times, failure_t
     return features_ext, labels_ext, window_times_ext, failure_times_ext
 
 
-def appendExtractedExamples(features, labels, window_times, failure_times, features_ext, labels_ext, window_times_ext,
-                            failure_times_ext):
+def append_extracted_examples(features, labels, window_times, failure_times, features_ext, labels_ext, window_times_ext,
+                              failure_times_ext):
     # print("features shape before appending extraction: ", features.shape)
     features = np.concatenate((features, features_ext))
     labels = np.concatenate((labels, labels_ext))
@@ -403,6 +404,5 @@ def appendExtractedExamples(features, labels, window_times, failure_times, featu
     return features, labels, window_times, failure_times
 
 
-# display the example distribution of the train and test dataset as well as the case case
 if __name__ == '__main__':
     main()

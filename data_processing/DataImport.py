@@ -4,8 +4,6 @@ import os
 import sys
 
 import pandas as pd
-from pandas.plotting import register_matplotlib_converters
-
 
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 
@@ -219,7 +217,6 @@ def check_duplicates(df):
 
 
 def import_dataset(dataset_to_import=0):
-
     config = Configuration(dataset_to_import=dataset_to_import)
 
     # import each senor type

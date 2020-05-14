@@ -58,19 +58,19 @@ class Dataset:
         else:
             # examples are drawn by a given class index
             # contains idx values of examples from the given class
-            classIdxArr = self.class_idx_to_ex_idxs_train[class_idx]
+            class_idx_arr = self.class_idx_to_ex_idxs_train[class_idx]
 
-            # print("class_idx:", class_idx, " classIdxArr: ", classIdxArr, "self.class_idx_to_class_string: ",
+            # print("class_idx:", class_idx, " class_idx_arr: ", class_idx_arr, "self.class_idx_to_class_string: ",
             #      self.class_idx_to_class_string[class_idx])
 
             # Get a random idx of an example that is part of this class
-            first_rand_idx = np.random.randint(0, len(classIdxArr), size=1)[0]
-            first_idx = classIdxArr[first_rand_idx]
+            first_rand_idx = np.random.randint(0, len(class_idx_arr), size=1)[0]
+            first_idx = class_idx_arr[first_rand_idx]
 
             if is_positive:
                 while True:
-                    second_rand_idx = np.random.randint(0, len(classIdxArr), size=1)[0]
-                    second_idx = classIdxArr[second_rand_idx]
+                    second_rand_idx = np.random.randint(0, len(class_idx_arr), size=1)[0]
+                    second_idx = class_idx_arr[second_rand_idx]
                     if first_idx != second_idx:
                         return first_idx[0], second_idx[0]
             else:
@@ -78,16 +78,17 @@ class Dataset:
                     uniform_sampled_class = np.random.randint(low=0,
                                                               high=len(self.y_train_strings_unique),
                                                               size=1)
-                    classIdxArr_neg = self.class_idx_to_ex_idxs_train[uniform_sampled_class[0]]
-                    second_rand_idx_neg = np.random.randint(0, len(classIdxArr_neg), size=1)[0]
-                    # print("uniform_sampled_class: ", uniform_sampled_class, "classIdxArr_neg: ", classIdxArr_neg,
+                    class_idx_arr_neg = self.class_idx_to_ex_idxs_train[uniform_sampled_class[0]]
+                    second_rand_idx_neg = np.random.randint(0, len(class_idx_arr_neg), size=1)[0]
+                    # print("uniform_sampled_class: ", uniform_sampled_class, "class_idx_arr_neg: ", class_idx_arr_neg,
                     #       "second_rand_idx_neg: ", second_rand_idx_neg)
 
-                    second_idx = classIdxArr_neg[second_rand_idx_neg]
+                    second_idx = class_idx_arr_neg[second_rand_idx_neg]
                     # second_idx = np.random.randint(0, num_instances, size=1)[0]
 
-                    if second_idx not in classIdxArr[:, 0]:
-                        # print("classIdxArr: ", classIdxArr, " - uniform_sampled_class: ", uniform_sampled_class[0])
+                    if second_idx not in class_idx_arr[:, 0]:
+                        # print("class_idx_arr: ", class_idx_arr, " - uniform_sampled_class: ",
+                        # uniform_sampled_class[0])
                         return first_idx[0], second_idx[0]
 
 
@@ -252,14 +253,13 @@ class FullDataset(Dataset):
             # print('Classes in total: ', self.classes_total)
             print()
 
-    # TODO Use passed folder
     def load_feature_based_representation(self):
 
         # Load TS-Fresh generated features
         filtered_file = 'extractedFeatures_X_caseBase_filtered_4ms4sec.pkl'
         unfiltered_file = 'extractedFeatures_X_test_unfiltered_imputed_4ms4sec.pkl'
-        filtered_cb_df = (pd.read_pickle(self.config.case_base_folder + filtered_file))
-        unfiltered_test_examples_df = (pd.read_pickle(self.config.training_data_folder + unfiltered_file))
+        filtered_cb_df = (pd.read_pickle(self.dataset_folder + filtered_file))
+        unfiltered_test_examples_df = (pd.read_pickle(self.dataset_folder + unfiltered_file))
 
         # Attributes selected after TSFresh significance test on case base
         self.relevant_features_by_TSFresh = filtered_cb_df.columns
@@ -301,7 +301,7 @@ class FullDataset(Dataset):
             if self.config.use_additional_strict_masking_for_attribute_sim:
                 masking1 = np.isin(self.feature_names_all, relevant_features_for_case[0])
                 masking2 = np.isin(self.feature_names_all, relevant_features_for_case[1])
-                self.class_label_to_masking_vector[case] = [masking1,masking2]
+                self.class_label_to_masking_vector[case] = [masking1, masking2]
             else:
                 masking = np.isin(self.feature_names_all, relevant_features_for_case)
                 self.class_label_to_masking_vector[case] = masking
@@ -319,7 +319,7 @@ class FullDataset(Dataset):
         else:
             if self.config.use_additional_strict_masking_for_attribute_sim:
                 masking = self.class_label_to_masking_vector.get(class_label)
-                masking_vec = np.concatenate((masking[0],masking[1]))
+                masking_vec = np.concatenate((masking[0], masking[1]))
                 return masking_vec
             else:
                 return self.class_label_to_masking_vector.get(class_label)
@@ -359,7 +359,7 @@ class FullDataset(Dataset):
         elif dataset_type == 'train':
             dataset = self.window_times_train
         else:
-            raise ValueError('Unkown dataset type')
+            raise ValueError('Unknown dataset type')
 
         rep = lambda x: str(x).replace("['YYYYMMDD HH:mm:ss (", "").replace(")']", "")
 
@@ -396,10 +396,12 @@ class FullDataset(Dataset):
             x_train_unencoded = snn.reshape_and_add_aux_input(x_train_unencoded, batch_size=66)
         '''
 
-        x_train_unencoded_reshaped = snn.reshape_and_add_aux_input(x_train_unencoded,batch_size=(x_train_unencoded.shape[0]//2))
-        encoded = snn.get_encodedData_multiple_batches(x_train_unencoded_reshaped)
+        x_train_unencoded_reshaped = snn.reshape_and_add_aux_input(x_train_unencoded,
+                                                                   batch_size=(x_train_unencoded.shape[0] // 2))
+        encoded = snn.encode_in_batches(x_train_unencoded_reshaped)
+
         if snn.hyper.encoder_variant in ['cnnwithclassattention', 'cnn1dwithclassattention']:
-            #encoded output is a list with each entry has an encoded batchjob with the number of outputs
+            # encoded output is a list with each entry has an encoded batchjob with the number of outputs
             x_train_encoded_0 = encoded[0][0]
             x_train_encoded_1 = encoded[0][1]
             x_train_encoded_2 = encoded[0][2]
@@ -415,10 +417,10 @@ class FullDataset(Dataset):
             print("x_train_encoded_2: ", x_train_encoded_2.shape)
             print("x_train_encoded_3: ", x_train_encoded_3.shape)
             '''
-            x_train_encoded_0 = x_train_encoded_0[batchsize:,:,:]
-            x_train_encoded_1 = x_train_encoded_1[batchsize:,:]
-            x_train_encoded_2 = x_train_encoded_2[batchsize:,:,:]
-            x_train_encoded_3 = x_train_encoded_3[batchsize:,:]
+            x_train_encoded_0 = x_train_encoded_0[batchsize:, :, :]
+            x_train_encoded_1 = x_train_encoded_1[batchsize:, :]
+            x_train_encoded_2 = x_train_encoded_2[batchsize:, :, :]
+            x_train_encoded_3 = x_train_encoded_3[batchsize:, :]
             '''
             print("x_train_encoded_0: ", x_train_encoded_0.shape)
             print("x_train_encoded_1: ", x_train_encoded_1.shape)
@@ -434,7 +436,7 @@ class FullDataset(Dataset):
             x_train_encoded = np.asarray(x_train_encoded)
             self.x_train = x_train_encoded
             '''
-            self.x_train = [x_train_encoded_0, x_train_encoded_1,x_train_encoded_2,x_train_encoded_3]
+            self.x_train = [x_train_encoded_0, x_train_encoded_1, x_train_encoded_2, x_train_encoded_3]
         else:
             print("shape. ", encoded[0].shape)
             x_train_encoded_0 = encoded[0]
@@ -454,23 +456,21 @@ class FullDataset(Dataset):
 
         encoding_duration = perf_counter() - start_time_encoding
         print('Encoding of dataset finished. Duration:', encoding_duration)
-        #return [x_train_encoded_0, x_train_encoded_1,x_train_encoded_2,x_train_encoded_3]
+        # return [x_train_encoded_0, x_train_encoded_1,x_train_encoded_2,x_train_encoded_3]
 
     # Returns a pairwise similarity matrix (NumTrainExamples,NumTrainExamples) of all training examples
     def get_similarity_matrix(self, snn, encode_test_data=False):
 
-        start_time_encoding = perf_counter()
         print('Producing similarity matrix of dataset started')
 
         x_train_unencoded = self.x_train
-        batchsize = self.config.sim_calculation_batch_size
 
-        sim_matrix = np.zeros((x_train_unencoded.shape[0],x_train_unencoded.shape[0]))
+        sim_matrix = np.zeros((x_train_unencoded.shape[0], x_train_unencoded.shape[0]))
         for example_id in range(x_train_unencoded.shape[0]):
-            example = x_train_unencoded[example_id,:,:]
+            example = x_train_unencoded[example_id, :, :]
             sims_4_example = snn.get_sims(example)
-            #print("example_id:", example_id)
-            sim_matrix[example_id,:] = sims_4_example[0]
+            # print("example_id:", example_id)
+            sim_matrix[example_id, :] = sims_4_example[0]
 
         return sim_matrix
 

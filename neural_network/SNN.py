@@ -83,10 +83,10 @@ class SimpleSNN(AbstractSimilarityMeasure):
         if self.hyper.encoder_variant in ['cnnwithclassattention', 'cnn1dwithclassattention']:
 
             # aux_input will always be none except when called by the optimizer (during training)
-            #print("aux_input: ", aux_input)
+            # print("aux_input: ", aux_input)
             if aux_input is None:
                 if self.config.use_additional_strict_masking_for_attribute_sim:
-                    aux_input = np.zeros((2 * batch_size, self.hyper.time_series_depth*2), dtype='float32')
+                    aux_input = np.zeros((2 * batch_size, self.hyper.time_series_depth * 2), dtype='float32')
                 else:
                     aux_input = np.zeros((2 * batch_size, self.hyper.time_series_depth), dtype='float32')
 
@@ -97,9 +97,9 @@ class SimpleSNN(AbstractSimilarityMeasure):
                     # noinspection PyUnresolvedReferences
                     aux_input[2 * index + 1] = self.dataset.get_masking_float(
                         self.dataset.y_train_strings[index])
-                    #print("self.dataset.y_train_strings")
-                    #print("index: ", index, )
-                #print("aux_input: ", aux_input.shape)
+                    # print("self.dataset.y_train_strings")
+                    # print("index: ", index, )
+                # print("aux_input: ", aux_input.shape)
             else:
                 # Option to simulate a retrieval situation (during training) where only the weights of the
                 # example from the case base/training data set are known
@@ -108,7 +108,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
                         # noinspection PyUnboundLocalVariable, PyUnresolvedReferences
                         aux_input[2 * index] = aux_input[2 * index]
                         aux_input[2 * index + 1] = aux_input[2 * index]
-                        #print("index: ", index, )
+                        # print("index: ", index, )
             input_pairs = [input_pairs, aux_input]
 
         return input_pairs
@@ -203,7 +203,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
         return sims_all_examples
 
     # Called by Dataset encode() to output encoded data of the input data in size of batches
-    def get_encodedData_multiple_batches(self, raw_data):
+    def encode_in_batches(self, raw_data):
         # Debugging, will raise error for encoders with additional input because of list structure
         # assert batch.shape[0] % 2 == 0, 'Input batch of uneven length not possible'
 
@@ -236,9 +236,11 @@ class SimpleSNN(AbstractSimilarityMeasure):
             else:
                 subsection_batch = raw_data[index:index + batch_size]
 
-            #sims_subsection = self.get_sims_for_batch(subsection_batch)
+            # sims_subsection = self.get_sims_for_batch(subsection_batch)
             examples_encoded_subsection = self.encoder.model(subsection_batch, training=False)
-            #print("sims_subsection: ", examples_encoded_subsection[0].shape, examples_encoded_subsection[1].shape, examples_encoded_subsection[2].shape, examples_encoded_subsection[2].shape)
+            # print("sims_subsection: ", examples_encoded_subsection[0].shape,
+            # examples_encoded_subsection[1].shape, examples_encoded_subsection[2].shape,
+            # examples_encoded_subsection[2].shape)
 
             all_examples_encoded.append(examples_encoded_subsection)
 
@@ -362,8 +364,8 @@ class SimpleSNN(AbstractSimilarityMeasure):
         for i in range(len(self.dataset.feature_names_all)):
             print(i, ": ", self.dataset.feature_names_all[i])
 
-        input = np.array([self.dataset.get_masking_float(case_label) for case_label in self.dataset.classes_total])
-        case_embeddings = self.encoder.intermediate_layer_model(input, training=self.training)
+        input_arr = np.array([self.dataset.get_masking_float(case_label) for case_label in self.dataset.classes_total])
+        case_embeddings = self.encoder.intermediate_layer_model(input_arr, training=self.training)
         print("case_embeddings: ", case_embeddings.shape)
 
         # Get positions with maximum values
@@ -374,11 +376,11 @@ class SimpleSNN(AbstractSimilarityMeasure):
             with np.printoptions(precision=3, suppress=True):
                 # Get positions with maximum values
                 row = np.array(case_embeddings[cnt, :])
-                maxNPos = max_pos[cnt, :num_of_max_pos]
-                minNPos = min_pos[cnt, :num_of_max_pos]
-                print(case_label, " ", input[cnt], " | Max Filter: ", max_pos[cnt, :5], " | Min Filter: ",
+                max_n_pos = max_pos[cnt, :num_of_max_pos]
+                min_n_pos = min_pos[cnt, :num_of_max_pos]
+                print(case_label, " ", input_arr[cnt], " | Max Filter: ", max_pos[cnt, :5], " | Min Filter: ",
                       min_pos[cnt, :5],
-                      " | Max Values: ", row[maxNPos], " | Min Values: ", row[minNPos])
+                      " | Max Values: ", row[max_n_pos], " | Min Values: ", row[min_n_pos])
                 cnt = cnt + 1
 
     def print_learned_case_matrix(self):
@@ -401,7 +403,9 @@ class SimpleSNN(AbstractSimilarityMeasure):
         self.hyper = Hyperparameters()
 
         model_folder = ''
-        # noinspection PyUnusedLocal, this is necessary
+
+        # var is necessary
+        # noinspection PyUnusedLocal
         file_name = ''
 
         if for_cbs:
@@ -448,7 +452,8 @@ class SimpleSNN(AbstractSimilarityMeasure):
         elif self.hyper.encoder_variant == 'cnnwithclassattention':
             # Consideration of an encoder with multiple inputs
             if self.config.use_additional_strict_masking_for_attribute_sim:
-                self.encoder = CNNWithClassAttention(self.hyper, [input_shape_encoder, self.hyper.time_series_depth*2])
+                self.encoder = CNNWithClassAttention(self.hyper,
+                                                     [input_shape_encoder, self.hyper.time_series_depth * 2])
             else:
                 self.encoder = CNNWithClassAttention(self.hyper, [input_shape_encoder, self.hyper.time_series_depth])
         elif self.hyper.encoder_variant == 'cnn1dwithclassattention':
@@ -470,7 +475,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
         # These variants also need a ffnn
         if self.config.architecture_variant in ['standard_ffnn', 'fast_ffnn']:
             encoder_output_shape = self.encoder.get_output_shape()
-            if self.config.use_weighted_distance_as_standard_ffnn == False:
+            if not self.config.use_weighted_distance_as_standard_ffnn:
                 # Neural Warp
                 input_shape_ffnn = (encoder_output_shape[1] ** 2, encoder_output_shape[2] * 2)
                 self.ffnn = FFNN(self.hyper, input_shape_ffnn)
@@ -516,28 +521,17 @@ class SNN(SimpleSNN):
         if self.hyper.encoder_variant == 'cnnwithclassattention':
             a = context_vectors[0][2 * pair_index, :]
             b = context_vectors[0][2 * pair_index + 1, :]
-            #w = context_vectors[1][2 * pair_index, :]
+            # w = context_vectors[1][2 * pair_index, :]
         else:
             a = context_vectors[2 * pair_index, :, :]
             b = context_vectors[2 * pair_index + 1, :, :]
         # a and b shape: [T, C]
 
-        if self.config.use_weighted_distance_as_standard_ffnn == False:
+        if not self.config.use_weighted_distance_as_standard_ffnn:
             # Neural Warp:
+            a, b = self.transform_to_time_step_wise(a, b)
 
-            indices_a = tf.range(a.shape[0])
-            indices_a = tf.tile(indices_a, [a.shape[0]])
-            a = tf.gather(a, indices_a)
-            # a shape: [T*T, C]
-
-            indices_b = tf.range(b.shape[0])
-            indices_b = tf.reshape(indices_b, [-1, 1])
-            indices_b = tf.tile(indices_b, [1, b.shape[0]])
-            indices_b = tf.reshape(indices_b, [-1])
-            b = tf.gather(b, indices_b)
-            # b shape: [T*T, C]
-
-            # input of FFNN are all time stamp combinations of a and b
+            # ffnn_input of FFNN are all time stamp combinations of a and b
             ffnn_input = tf.concat([a, b], axis=1)
             # b shape: [T*T, 2*C] OR [T*T, 4*C]
 
@@ -564,28 +558,28 @@ class SNN(SimpleSNN):
             abs_distance = tf.abs(tf.subtract(a, b))
             abs_distance_flattened = tf.keras.layers.Flatten()(abs_distance)
             abs_distance_flattened = tf.transpose(abs_distance_flattened)
-            input = abs_distance_flattened
-            #w = tf.reshape (w,(1,w.shape[0]))
-            #input = tf.concat([abs_distance_flattened, w], 1)
+            ffnn_input = abs_distance_flattened
+            # w = tf.reshape (w,(1,w.shape[0]))
+            # ffnn_input = tf.concat([abs_distance_flattened, w], 1)
             '''
             # taigman https://www.cs.toronto.edu/~ranzato/publications/taigman_cvpr14.pdf
             p = tf.square(tf.subtract(a, b))
             q = tf.add(a,b)
             e = tf.keras.backend.epsilon()
             q = tf.add(q, e)
-            input = tf.divide(p,q)
-            input = tf.reshape(input,(1,1952))
-            #tf.print(input)
+            ffnn_input = tf.divide(p,q)
+            ffnn_input = tf.reshape(ffnn_input,(1,1952))
+            #tf.print(ffnn_input)
             #tf.shape(abs_distance_flattened)
             
             '''
-            ffnn = self.ffnn.model(input, training=self.training)
-            #tf.print(ffnn, "shape: ",tf.shape(ffnn))
+            ffnn = self.ffnn.model(ffnn_input, training=self.training)
+            # tf.print(ffnn, "shape: ",tf.shape(ffnn))
             ffnn = tf.squeeze(ffnn)
-            #tf.print(abs_distance_flattened)
-            #sim = 1/(1+ffnn)
-            sim =ffnn
-            #tf.print(sim)
+            # tf.print(abs_distance_flattened)
+            # sim = 1/(1+ffnn)
+            sim = ffnn
+            # tf.print(sim)
         return sim
 
     def print_detailed_model_info(self):
@@ -670,7 +664,7 @@ class FastSNN(FastSimpleSNN):
             # noinspection PyUnresolvedReferences
             self.dataset.encode(self)
 
-        # TODO https://bit.ly/34pHUOA
+        # Inherit only single method https://bit.ly/34pHUOA
         self.get_sim_pair = SNN.get_sim_pair
 
     def print_detailed_model_info(self):

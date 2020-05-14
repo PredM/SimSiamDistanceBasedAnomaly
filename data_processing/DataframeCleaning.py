@@ -4,7 +4,6 @@ import sys
 
 import pandas as pd
 
-
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 
 from configuration.ConfigChecker import ConfigChecker
@@ -35,7 +34,7 @@ def clean_up_dataframe(df: pd.DataFrame, config: Configuration):
     df = df.dropna(axis=0)
 
     print('\tResampling (depending on freq: Downsampling) the data at a constant frequency'
-          ' using nearst neighbor to forward fill NAN values')
+          ' using nearest neighbor to forward fill NAN values')
     # print(df.head(10))
     df = df.resample(config.resample_frequency).pad()  # .nearest
     # print(df.head(10))

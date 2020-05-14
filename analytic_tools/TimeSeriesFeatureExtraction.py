@@ -1,12 +1,10 @@
-import sys
-import os
-import numpy as np
-from tsfresh import extract_features
-import pandas as pd
 import datetime
-from numpy.random.mtrand import RandomState
-from sklearn import preprocessing  # http://scikit-learn.org/stable/
-from sklearn.feature_selection import mutual_info_classif
+import os
+import sys
+
+import numpy as np
+import pandas as pd
+from tsfresh import extract_features
 
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 
@@ -87,7 +85,6 @@ def main():
 
     print("X shape: ", X.shape)
 
-    from tsfresh.utilities.dataframe_functions import impute
     print(X.head())
     # Remove NANs
     # X = impute(X)

@@ -188,7 +188,7 @@ def main():
                           temp_output_interval, use_relevant_only, distance_to_sim_method)
 
 
-# this script is used to execute the dtw test for comparision with the neural network
+# this script is used to execute the dtw and other baseline methods for comparision with the neural network
 if __name__ == '__main__':
     try:
         main()
