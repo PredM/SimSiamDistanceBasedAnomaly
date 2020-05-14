@@ -107,3 +107,112 @@ Used to store the outputs/logs of inference/test runs for future evaluation.
 
 ### notebooks
 Contains jupyter notebooks for easier execution of training, inference and real time processing in a docker environment.
+
+## Compatibility
+Due to the high amount of different models and configuration options, not all components can be used together. 
+The following table shows the current compatibility status of the different models with the execution variants.
+Also please note that the real time classification is still under development and may not work currently.
+
+<table>
+    <tbody>
+      <tr>
+        <td></td>
+        <td>SNN</td>
+        <td></td>
+        <td></td>
+        <td></td>
+        <td>CBS</td>
+        <td></td>
+        <td></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td></td>
+        <td>Standard</td>
+        <td></td>
+        <td>Fast</td>
+        <td></td>
+        <td>Standard</td>
+        <td></td>
+        <td>Fast</td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>Encoder</td>
+        <td>Simple</td>
+        <td>FFNN</td>
+        <td>Simple</td>
+        <td>FFNN</td>
+        <td>Simple</td>
+        <td>FFNN</td>
+        <td>Simple</td>
+        <td>FFNN</td>
+      </tr>
+      <tr>
+        <td>CNN</td>
+        <td>Working</td>
+        <td>Working</td>
+        <td>Working</td>
+        <td>Working</td>
+        <td>Working</td>
+        <td>Working</td>
+        <td>Working</td>
+        <td>Working</td>
+      </tr>
+      <tr>
+        <td >RNN</td>
+        <td >Working</td>
+        <td >Working</td>
+        <td>Working</td>
+        <td >Working</td>
+        <td >Working</td>
+        <td >Working</td>
+        <td>Working</td>
+        <td>Working</td>
+      </tr>
+      <tr>
+        <td>TCN</td>
+        <td>Working</td>
+        <td>Working</td>
+        <td>Working</td>
+        <td>Working</td>
+        <td>Working</td>
+        <td>Working</td>
+        <td>Working</td>
+        <td>Working</td>
+      </tr>
+      <tr >
+        <td>cnnwithclassattention</td>
+        <td>Working</td>
+        <td>Not working / Error</td>
+        <td>Not implemented yet</td>
+        <td>Not implemented yet</td>
+        <td >Not planned / necessary</td>
+        <td >Not planned / necessary</td>
+        <td >Not planned / necessary</td>
+        <td >Not planned / necessary</td>
+      </tr>
+      <tr>
+        <td>cnn1dwithclassattention</td>
+        <td>Not working / Error</td>
+        <td>Not working / Error</td>
+        <td >Not implemented yet</td>
+        <td >Not implemented yet</td>
+        <td >Not planned / necessary</td>
+        <td>Not planned / necessary</td>
+        <td >Not planned / necessary</td>
+        <td >Not planned / necessary</td>
+      </tr>
+      <tr>
+        <td >cnn2d</td>
+        <td>Working</td>
+        <td>Working</td>
+        <td>Working</td>
+        <td >Working</td>
+        <td>Not working / Error</td>
+        <td >Not working / Error</td>
+        <td >Not working / Error</td>
+        <td >Not working / Error</td>
+      </tr>
+    </tbody>
+</table>
