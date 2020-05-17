@@ -1,6 +1,6 @@
 # PredM
 Predicting failures through similarity. \
-Architecture based on [NeuralWarp](https://arxiv.org/abs/1812.08306).
+The implementation of some components is based the one presented in [NeuralWarp](https://arxiv.org/abs/1812.08306).
 
 ## Requirements
 Used python version: 3.6.X \
