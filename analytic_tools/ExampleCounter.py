@@ -28,13 +28,13 @@ def main():
     y = pd.DataFrame.from_records(y)
 
     x = x.merge(y, how='outer', on=0)
-    x = x.rename(index=str, columns={0: 'Class', '1_x': 'Train', '1_y': 'Test'})
+    x = x.rename(index=str, columns={0: 'Failure mode', '1_x': 'Train', '1_y': 'Test'})
 
     # convert column types in order to be able to sum the values
     x['Train'] = pd.to_numeric(x['Train']).fillna(value=0).astype(int)
     x['Test'] = pd.to_numeric(x['Test']).fillna(value=0).astype(int)
     x['Total'] = x[['Test', 'Train']].sum(axis=1)
-    x = x.set_index('Class')
+    x = x.set_index('Failure mode')
 
     # print the information to console
     print('----------------------------------------------')
@@ -42,8 +42,8 @@ def main():
     print('----------------------------------------------')
     print(x)
     print('\nTotal sum in train:', x['Train'].sum(axis=0))
-    print('\nTotal sum in test:', x['Test'].sum(axis=0))
-    print('\nTotal sum examples:', x['Total'].sum(axis=0))
+    print('Total sum in test:', x['Test'].sum(axis=0))
+    print('Total sum examples:', x['Total'].sum(axis=0))
     print('----------------------------------------------')
 
     print('\n\n')
@@ -54,15 +54,15 @@ def main():
 
     x = np.stack((y_train_single, y_train_counts)).transpose()
     x = pd.DataFrame.from_records(x)
-    x = x.rename(index=str, columns={0: 'Class', 1: 'Number of cases'})
-    x['Number of cases'] = pd.to_numeric(x['Number of cases']).fillna(value=0).astype(int)
-    x = x.set_index('Class')
+    x = x.rename(index=str, columns={0: 'Failure mode', 1: 'Number of examples'})
+    x['Number of examples'] = pd.to_numeric(x['Number of examples']).fillna(value=0).astype(int)
+    x = x.set_index('Failure mode')
 
     print('----------------------------------------------')
     print('Case base:')
     print('----------------------------------------------')
     print(x)
-    print('\nTotal sum examples:', x['Number of cases'].sum(axis=0))
+    print('\nTotal sum examples:', x['Number of examples'].sum(axis=0))
     print('----------------------------------------------\n')
 
 
