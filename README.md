@@ -17,10 +17,12 @@ To do this, the folder which contains the model files, must first be specified i
 * The data/ directory contains all required data. Central are the pre-processed training data in data/training_data/ and the trained models in data/trained_models/. 
 A detailed description of what each directory contains is given in corresponding parts of the configuration file. 
 
-## Data
-The data used in this project was generated using the fischertechnik physical model described in [this paper](http://ceur-ws.org/Vol-2191/paper22.pdf).
-Due to the high storage requirements, the raw and preprocessed data cannot be made available here. 
-These data can be downloaded [here](https://seafile.rlp.net/d/0da47f572ab747f4b2e0/) separately. 
+## Supplementary Resources
+* The sub directory [supplementary\_resources](https://PLACEHOLDER.com) of this repository contains additional information about the datasets used and the architecture of the CNN2D + MAR model.
+* An [overview](https://seafile.rlp.net/f/fa6624358ff04627b9a8/) of all relevant conducted experiments
+* The [raw data](https://PLACEHOLDER.com) used to generate the training and evaluation datasets.
+* The [preprocessed data sets as well as the trained models](https://PLACEHOLDER.com) we used for the evaluation.
+
 
 ## Hardware
 <table>
