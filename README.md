@@ -1,21 +1,7 @@
 # PredM
-Predicting failures through similarity. \
-The implementation of some components is based the one presented in [NeuralWarp](https://arxiv.org/abs/1812.08306).
-
-## Requirements
-Used python version: 3.6.X \
-Used packages: See requirements.txt
-
-## General instructions for use
-* All settings can be adjusted in the script Configuration.py, 
-whereby some rarely changed variables are stored in the file config.json, which is read in during the initialization.
-* The hyperparameters of the neural networks can be defined in the script Hyperparameter.py or can be imported from a file in configuration/hyperparameter_combinations/ (this can also be changed in the configuration).
-* For training, the desired adjustments should first be made at the parts mentioned above and then the training can be started by running Training.py.
-* The evaluation of a trained model on the test dataset can be done via Inference.py. 
-To do this, the folder which contains the model files, must first be specified in the configuration. 
-* For executing the real-time data processing using RealTimeClassification.py first a kafka server must be configured and running. Also the topic names and mappings to prefixes must be set correctly.
-* The data/ directory contains all required data. Central are the pre-processed training data in data/training_data/ and the trained models in data/trained_models/. 
-A detailed description of what each directory contains is given in corresponding parts of the configuration file. 
+Companion repository to the paper [Enhancing Siamese Neural Networks through Expert Knowledge for Predictive Maintenance](https://PLACEHOLDER.com). \
+Please note, that the MS-SNNs approach is here referred to as CaseBasedSimilarity (CBS).
+The implementation of some components is based on the one presented in [NeuralWarp](https://arxiv.org/abs/1812.08306).
 
 ## Supplementary Resources
 * The sub directory [supplementary\_resources](https://PLACEHOLDER.com) of this repository contains additional information about the datasets used and the architecture of the CNN2D + MAR model.
@@ -23,6 +9,10 @@ A detailed description of what each directory contains is given in corresponding
 * The [raw data](https://PLACEHOLDER.com) used to generate the training and evaluation datasets.
 * The [preprocessed data sets as well as the trained models](https://PLACEHOLDER.com) we used for the evaluation.
 
+
+## Requirements
+Used python version: 3.6.X \
+Used packages: See requirements.txt
 
 ## Hardware
 <table>
@@ -39,6 +29,17 @@ A detailed description of what each directory contains is given in corresponding
         <td>8 x NVIDIA Tesla V100 32 GB GPUs</td>
     </tr>
 </table>
+
+## General instructions for use
+* All settings can be adjusted in the script Configuration.py, 
+whereby some rarely changed variables are stored in the file config.json, which is read in during the initialization.
+* The hyperparameters of the neural networks can be defined in the script Hyperparameter.py or can be imported from a file in configuration/hyperparameter_combinations/ (this can also be changed in the configuration).
+* For training, the desired adjustments should first be made at the parts mentioned above and then the training can be started by running Training.py.
+* The evaluation of a trained model on the test dataset can be done via Inference.py. 
+To do this, the folder which contains the model files, must first be specified in the configuration. 
+* For executing the real-time data processing using RealTimeClassification.py first a kafka server must be configured and running. Also the topic names and mappings to prefixes must be set correctly.
+* The data/ directory contains all required data. Central are the pre-processed training data in data/training_data/ and the trained models in data/trained_models/. 
+A detailed description of what each directory contains is given in corresponding parts of the configuration file. 
 
 ## Software components
 The following section gives an overview of the packages, directories and included Python scripts in this repository. 
@@ -105,10 +106,8 @@ Used to store the outputs/logs of inference/test runs for future evaluation.
 |Optimizer.py|Contains the optimizer routine for updating the parameters during training. Used for optimizing SNNs as well as the CBS.|
 |SimpleSimilarityMeasure.py|Several simple similarity measures for calculating the similarity between the enbedding vectors are implemented here.|
 |SNN.py|Includes all four variants of the siamese neural network (classic architecture or optimized variant, simple or FFNN similiarty measure).|
+|TrainAndTest.py| Execution of a training followed by automatic evaluation of the model with best loss.|
 |Training.py| Used to execute the training process.|
-
-### notebooks
-Contains jupyter notebooks for easier execution of training, inference and real time processing in a docker environment.
 
 ## Compatibility
 Due to the high amount of different models and configuration options, not all components can be used together. 

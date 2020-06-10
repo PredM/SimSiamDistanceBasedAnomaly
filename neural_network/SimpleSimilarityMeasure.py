@@ -139,7 +139,7 @@ class SimpleSimilarityMeasure:
     def cosine(self, a, b):
         use_weighted_sim = self.a_weights is not None and self.b_weights is not None
         if use_weighted_sim:
-            # source: https: // stats.stackexchange.com / questions / 384419 / weighted - cosine - similarity
+            # source: https://stats.stackexchange.com/questions/384419/weighted-cosine-similarity
             weight_vec = self.a_weights / tf.reduce_sum(self.a_weights)
             normalize_a = tf.nn.l2_normalize(a, 0) * weight_vec
             normalize_b = tf.nn.l2_normalize(b, 0) * weight_vec

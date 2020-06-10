@@ -38,7 +38,6 @@ class GeneralConfiguration:
         # Limit the groups that should be used for a cbs model
         # List content must match the group ids in config.json
         # Use = None or = [] for no restriction
-
         self.cbs_groups_used = []  # ['g0','g2', 'g3', 'g4', 'g5', 'g6', 'g7']
 
         # Select whether the group handlers of a cbs will will be executed in batches, so a single gpu is only used
