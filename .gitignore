@@ -126,19 +126,17 @@ dmypy.json
 # Additional directorys 
 .idea
 /testing
+/archive
+!/archive/__init__.py
+!/archive/readme.txt
+
+/logs/temp/
+
+data/case_base/*
+!data/case_base/.gitkeep
 
 data/datasets/*
 !data/datasets/.gitkeep
 
 data/trained_models/temp_*
 !data/trained_models/.gitkeep
-
-data/training_data_encoded/*
-!data/training_data_encoded/.gitkeep
-
-data/case_base/*
-!data/case_base/.gitkeep
-
-#logs/*
-#!logs/.gitkeep
-/logs/temp/
