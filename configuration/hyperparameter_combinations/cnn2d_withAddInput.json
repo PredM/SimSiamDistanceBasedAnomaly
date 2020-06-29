@@ -1,5 +1,5 @@
 {
-  "encoder_variant": "cnnwithclassattention",
+  "encoder_variant": "cnn2dwithaddinput",
   "batch_size": 64,
   "epochs": 2500,
   "epochs_current": 0,
@@ -72,6 +72,5 @@
     32,
     16
   ],
-  "use_weighted_distance_as_standard_ffnn_hyper": "False",
   "use_additional_strict_masking": "True"
 }

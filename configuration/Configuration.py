@@ -25,7 +25,7 @@ class GeneralConfiguration:
         self.max_parallel_cores = 60
 
         # Folder where the trained models are saved to during learning process
-        self.models_folder = '../data/trained_models9/'
+        self.models_folder = '../data/trained_models/'
 
         # Path and file name to the specific model that should be used for testing and live classification
         self.filename_model_to_use = 'temp_snn_model_05-09_15-44-15_epoch-212/'
@@ -69,9 +69,6 @@ class ModelConfiguration:
         self.architecture_variants = ['standard_simple', 'standard_ffnn', 'fast_simple', 'fast_ffnn']
         self.architecture_variant = self.architecture_variants[0]
 
-        # For test purpose before implementing a further architecture variant:
-        self.use_weighted_distance_as_standard_ffnn = False  # default False, means Neural Warp Approach is used
-
         ##
         # Determines how the similarity between two embedding vectors is determined (when a simple architecture is used)
         ##
@@ -81,8 +78,7 @@ class ModelConfiguration:
 
         # Attention: Implementation expects a simple measure to return a similarity in the interval of [0,1]!
         # Only use euclidean_dis for TRAINING with contrastive loss
-        self.simple_measures = ['abs_mean', 'euclidean_sim', 'euclidean_dis', 'dot_product', 'cosine',
-                                'attention_based']
+        self.simple_measures = ['abs_mean', 'euclidean_sim', 'euclidean_dis', 'dot_product', 'cosine']
         self.simple_measure = self.simple_measures[0]
 
         ###
@@ -109,7 +105,7 @@ class ModelConfiguration:
         # SNN output is normalized (x = x/|x|) (useful for eucl.?)
         self.normalize_snn_encoder_output = False  # default: False
 
-        # Additional option for encoder variant cnnwithclassattention and the euclidean distance:
+        # Additional option for encoder variant cnn2dWithAddInput and the euclidean distance:
         # Weighted euclidean similarity based on relevant attributes
         self.useFeatureWeightedSimilarity = True  # default: False
 
@@ -135,21 +131,6 @@ class ModelConfiguration:
         # Implementation is based on NeuralWarp FFNN but used for simple similarity measures
         self.use_time_step_wise_simple_similarity = False  # default: False
 
-        # Matches each time step with each time step from the other encoding which is implemented as a subtraction
-        # of the attention weights multiplied with the other time series
-        self.use_time_step_matching_simple_similarity = False
-        self.simple_measures_matching = ['euclidean', 'dot_product', 'cosine']
-        self.simple_measure_matching = self.simple_measures_matching[0]
-
-        # how often should the pairwise matching occur:
-        self.num_of_matching_iterations = 1
-
-        # Aggregator affects output for previous layers
-        # none = 2d output [T,C] , sum or mean = 1d vector with channel length
-        self.simple_matching_aggregators = ['none_attention_only', 'none', 'sum', 'mean']
-        self.simple_matching_aggregator = self.simple_matching_aggregators[2]
-
-
 class TrainingConfiguration:
 
     def __init__(self):
@@ -167,7 +148,7 @@ class TrainingConfiguration:
 
         # TODO: TripletLoss, Distance-Based Logistic Loss
         self.loss_function_variants = ['binary_cross_entropy', 'constrative_loss', 'mean_squared_error', 'huber_loss']
-        self.type_of_loss_function = self.loss_function_variants[2]
+        self.type_of_loss_function = self.loss_function_variants[0]
 
         # Settings for constrative_loss
         self.margin_of_loss_function = 2
@@ -178,7 +159,7 @@ class TrainingConfiguration:
 
         self.use_early_stopping = True
         self.early_stopping_epochs_limit = 1000
-        self.early_stopping_loss_minimum = 0.013  # Default: 0.0 (no effect), CNN2D_with_add_Input: BCE:0.03, MSE:0.01
+        self.early_stopping_loss_minimum = 0.03  # Default: 0.0 (no effect), CNN2D_with_add_Input: BCE:0.03, MSE:0.01
 
         # Parameter to control if and when a test is conducted through training
         self.use_inference_test_during_training = False  # default False
@@ -198,7 +179,7 @@ class TrainingConfiguration:
 
         # Use a custom similarity values instead of 0 for unequal / negative pairs during batch creation
         # These are based on the similarity matrices loaded in the dataset
-        self.use_sim_value_for_neg_pair = True  # default: False
+        self.use_sim_value_for_neg_pair = False  # default: False
 
         # Select whether the training should be continued from the checkpoint defined as 'filename_model_to_use'
         # Currently only working for SNNs, not CBS
@@ -390,7 +371,7 @@ class StaticConfiguration:
         # Note: Folder of used model specified in GeneralConfiguration
 
         # Folder where the preprocessed training and test data for the neural network should be stored
-        self.training_data_folder = '../data/training_data/'
+        self.training_data_folder = '../../PredMSiamNN2/data/training_data/'
 
         # Folder where the normalisation models should be stored
         self.scaler_folder = '../data/scaler/'
@@ -540,7 +521,6 @@ class Configuration(
     def print_detailed_config_used_for_training(self):
         print("--- Current Configuration ---")
         print("General related:")
-        print("- use_weighted_distance_as_standard_ffnn: ", self.use_weighted_distance_as_standard_ffnn)
         print("- simple_measure: ", self.simple_measure)
         print("- hyper_file: ", self.hyper_file)
         print("")
@@ -553,7 +533,6 @@ class Configuration(
         print("Similarity Measure related:")
         print("- useFeatureWeightedSimilarity: ", self.useFeatureWeightedSimilarity)
         print("- use_time_step_wise_simple_similarity: ", self.use_time_step_wise_simple_similarity)
-        print("- use_time_step_matching_simple_similarity: ", self.use_time_step_matching_simple_similarity)
         print("- feature_variant: ", self.feature_variant)
         print("")
         print("Training related:")

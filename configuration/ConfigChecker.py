@@ -89,8 +89,7 @@ class ConfigChecker:
                                          'and activate split_sim_calculation or lower sim_calculation_batch_size.')
 
         ignored_by_ffnn = [self.config.normalize_snn_encoder_output,
-                           self.config.use_time_step_wise_simple_similarity,
-                           self.config.use_time_step_matching_simple_similarity, ]
+                           self.config.use_time_step_wise_simple_similarity, ]
 
         if 'ffnn' in self.config.architecture_variant and any(ignored_by_ffnn):
             self.list_of_warnings.append([

@@ -1,11 +1,12 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf
+import sys
 
 from configuration.Configuration import Configuration
 from configuration.Hyperparameter import Hyperparameters
-from neural_network.BasicNeuralNetworks import CNN, RNN, FFNN, TCN, CNNWithClassAttention, CNN1DWithClassAttention, \
-    CNN2D, FFNN2
+from neural_network.BasicNeuralNetworks import CNN, RNN, FFNN, CNNWithAddInput, \
+    CNN2D
 from neural_network.Dataset import FullDataset
 from neural_network.SimpleSimilarityMeasure import SimpleSimilarityMeasure
 
@@ -68,7 +69,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
 
     # Reshapes the standard import shape (examples x ts_length x ts_depth) if needed for the used encoder variant
     def reshape(self, input_pairs):
-        if self.hyper.encoder_variant in ['cnnwithclassattention', 'cnn2d']:
+        if self.hyper.encoder_variant in ['cnn2dwithaddinput', 'cnn2d']:
             input_pairs = np.reshape(input_pairs, (input_pairs.shape[0], input_pairs.shape[1], input_pairs.shape[2], 1))
         return input_pairs
 
@@ -77,10 +78,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
 
         input_pairs = self.reshape(input_pairs)
 
-        if self.hyper.encoder_variant == 'cnn1dwithclassattention':
-            raise NotImplementedError('Fix necessary')
-
-        if self.hyper.encoder_variant in ['cnnwithclassattention', 'cnn1dwithclassattention']:
+        if self.hyper.encoder_variant == 'cnn2dwithaddinput':
 
             # aux_input will always be none except when called by the optimizer (during training)
             # print("aux_input: ", aux_input)
@@ -165,7 +163,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
         # assert batch.shape[0] % 2 == 0, 'Input batch of uneven length not possible'
 
         # pair: index+0: test, index+1: train --> only half as many results
-        if self.hyper.encoder_variant in ['cnnwithclassattention', 'cnn1dwithclassattention']:
+        if self.hyper.encoder_variant == 'cnn2dwithaddinput':
             num_examples = batch[0].shape[0]
             num_pairs = batch[0].shape[0] // 2
         else:
@@ -189,7 +187,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
             sim_start = index // 2
             sim_end = (index + batch_size) // 2
 
-            if self.hyper.encoder_variant in ['cnnwithclassattention', 'cnn1dwithclassattention']:
+            if self.hyper.encoder_variant == 'cnn2dwithaddinput':
                 subsection_examples = batch[0][index:index + batch_size]
                 subsection_aux_input = batch[1][index:index + batch_size]
                 subsection_batch = [subsection_examples, subsection_aux_input]
@@ -208,7 +206,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
         # assert batch.shape[0] % 2 == 0, 'Input batch of uneven length not possible'
 
         # pair: index+0: test, index+1: train --> only half as many results
-        if self.hyper.encoder_variant in ['cnnwithclassattention', 'cnn1dwithclassattention']:
+        if self.hyper.encoder_variant == 'cnn2dwithaddinput':
             num_examples = raw_data[0].shape[0]
 
         else:
@@ -229,7 +227,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
 
             # Calculation of assignments of pair indices to similarity value indices
 
-            if self.hyper.encoder_variant in ['cnnwithclassattention', 'cnn1dwithclassattention']:
+            if self.hyper.encoder_variant == 'cnn2dwithaddinput':
                 subsection_examples = raw_data[0][index:index + batch_size]
                 subsection_aux_input = raw_data[1][index:index + batch_size]
                 subsection_batch = [subsection_examples, subsection_aux_input]
@@ -250,21 +248,23 @@ class SimpleSNN(AbstractSimilarityMeasure):
     @tf.function
     def get_sims_for_batch(self, batch):
         # calculate the output of the encoder for the examples in the batch
+        tf.print("get_sims_for_batch1", batch[0].shape)
         context_vectors = self.encoder.model(batch, training=self.training)
-
-        if self.hyper.encoder_variant in ['cnnwithclassattention', 'cnn1dwithclassattention']:
+        tf.print("get_sims_for_batch2", context_vectors[0].shape)
+        if self.hyper.encoder_variant == 'cnn2dwithaddinput':
             input_size = batch[0].shape[0] // 2
         else:
             input_size = batch.shape[0] // 2
-
+        tf.print("get_sims_for_batch3")
         sims_batch = tf.map_fn(lambda pair_index: self.get_sim_pair(context_vectors, pair_index),
                                tf.range(input_size, dtype=tf.int32), back_prop=True, dtype=tf.float32)
-
+        tf.print("get_sims_for_batch4")
         return sims_batch
 
     # TODO @klein shouldn't cnn2d be added to the first if? because the same reshape operation is done in reshape_input
     @tf.function
     def get_sim_pair(self, context_vectors, pair_index):
+        tf.print("get_sim_pair", context_vectors[0].shape)
         # tf.print(context_vectors.shape, pair_index, 2 * pair_index, 2 * pair_index + 1)
 
         # Reminder if a concat layer is used in the cnn1dclassattention,
@@ -275,7 +275,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
         w = None
 
         # Parsing the input (e.g., two 1d or 2d vectors depending on which encoder is used) to calculate distance / sim
-        if self.encoder.hyper.encoder_variant == 'cnnwithclassattention':
+        if self.encoder.hyper.encoder_variant == 'cnn2dwithaddinput':
             # Output of encoder are encoded time series and additional things e.g., weights vectors
             a = context_vectors[0][2 * pair_index, :, :]
             b = context_vectors[0][2 * pair_index + 1, :, :]
@@ -289,12 +289,16 @@ class SimpleSNN(AbstractSimilarityMeasure):
             if self.encoder.hyper.useAddContextForSim_LearnOrFixWeightVale == 'True':
                 w = context_vectors[3][2 * pair_index, :]
                 # debug output:
-                # tf.print("context_vectors[3][2 * pair_index, :]", context_vectors[4][2 * pair_index, :])
+                #tf.print("context_vectors[3][2 * pair_index, :]", context_vectors[4][2 * pair_index, :])
+            tf.print("get_sim_pair2")
+            tf.print("context_vectors[0][2 * pair_index, :, :]: ", a.shape)
+            tf.print(a, output_stream=sys.stderr)
 
+            tf.print("get_sim_pair3")
         else:
             a = context_vectors[2 * pair_index, :, :]
             b = context_vectors[2 * pair_index + 1, :, :]
-
+        tf.print("a: ", a)
         # Normalization
         if self.config.normalize_snn_encoder_output:
             a = a / tf.norm(a)
@@ -304,11 +308,9 @@ class SimpleSNN(AbstractSimilarityMeasure):
         if self.config.use_time_step_wise_simple_similarity:
             a, b = self.transform_to_time_step_wise(a, b)
 
-        # Time-step matching
-        if self.config.use_time_step_matching_simple_similarity:
-            a, b, a_weights, b_weights = self.match_time_step_wise(a, b)
+        sim = self.simple_sim.get_sim(a, b, a_weights, b_weights, a_context, b_context, w)
 
-        return self.simple_sim.get_sim(a, b, a_weights, b_weights, a_context, b_context, w)
+        return sim
 
     @tf.function
     def transform_to_time_step_wise(self, a, b):
@@ -324,79 +326,6 @@ class SimpleSNN(AbstractSimilarityMeasure):
         b = tf.gather(b, indices_b)
 
         return a, b
-
-    @tf.function
-    def match_time_step_wise(self, a, b):
-        # a and b shape: [T, C]
-
-        attention_a, attention_b = None, None
-        for num_of_matching in range(self.config.num_of_matching_iterations):
-            attention_a, attention_b = self.simple_sim.compute_cross_attention(a, b,
-                                                                               self.config.simple_measure_matching)
-            # print("Attention A shape:", attention_a.shape, "Attention B shape:", attention_b.shape)
-
-        # Subtract attention from original input
-        u_a = tf.subtract(a, attention_a)
-        u_b = tf.subtract(b, attention_b)
-
-        if self.config.simple_matching_aggregator == "none_attention_only":
-            input_a = a
-            input_b = b
-        if self.config.simple_matching_aggregator == "none":
-            input_a = u_a
-            input_b = u_b
-        elif self.config.simple_matching_aggregator == "sum":
-            input_a = tf.reduce_sum(u_a, axis=0, keepdims=True)
-            input_b = tf.reduce_sum(u_b, axis=0, keepdims=True)
-        elif self.config.simple_matching_aggregator == "mean":
-            input_a = tf.reduce_mean(u_a, axis=0, keepdims=True)
-            input_b = tf.reduce_mean(u_b, axis=0, keepdims=True)
-        else:
-            raise ValueError("Error: No aggregator function with name: ", self.config.simple_matching_aggregator,
-                             " found!")
-
-        return input_a, input_b, attention_a, attention_b
-
-    def print_learned_case_vectors(self, num_of_max_pos=5):
-        # this methods prints the learned case embeddings for each class and its values
-        cnt = 0
-        # print(self.dataset.masking_unique.shape)
-        for i in range(len(self.dataset.feature_names_all)):
-            print(i, ": ", self.dataset.feature_names_all[i])
-
-        input_arr = np.array([self.dataset.get_masking_float(case_label) for case_label in self.dataset.classes_total])
-        case_embeddings = self.encoder.intermediate_layer_model(input_arr, training=self.training)
-        print("case_embeddings: ", case_embeddings.shape)
-
-        # Get positions with maximum values
-        max_pos = np.argsort(-case_embeddings, axis=1)  # [::-1]  # np.argmax(case_embeddings, axis=1)
-        min_pos = np.argsort(case_embeddings, axis=1)  # [::-1]  # np.argmax(case_embeddings, axis=1)
-
-        for case_label in self.dataset.classes_total:
-            with np.printoptions(precision=3, suppress=True):
-                # Get positions with maximum values
-                row = np.array(case_embeddings[cnt, :])
-                max_n_pos = max_pos[cnt, :num_of_max_pos]
-                min_n_pos = min_pos[cnt, :num_of_max_pos]
-                print(case_label, " ", input_arr[cnt], " | Max Filter: ", max_pos[cnt, :5], " | Min Filter: ",
-                      min_pos[cnt, :5],
-                      " | Max Values: ", row[max_n_pos], " | Min Values: ", row[min_n_pos])
-                cnt = cnt + 1
-
-    def print_learned_case_matrix(self):
-        # this methods prints the learned case embeddings for each class and its values
-        cnt = 0
-        case_matrix = self.encoder.intermediate_layer_model(self.dataset.classes_Unique_oneHotEnc,
-                                                            training=self.training)
-        print(case_matrix)
-        # Get positions with maximum values
-        for i in self.dataset.classes_total:
-            with np.printoptions(precision=3, suppress=True):
-                # Get positions with maximum values
-                matrix = np.array(case_matrix[cnt, :, :])
-                plt.imshow(matrix, cmap='hot', interpolation='nearest')
-                plt.savefig(i + '_matrix.png')
-                cnt = cnt + 1
 
     def load_model(self, for_cbs=False, group_id='', cont=False):
 
@@ -449,20 +378,15 @@ class SimpleSNN(AbstractSimilarityMeasure):
             self.encoder = CNN(self.hyper, input_shape_encoder)
         elif self.hyper.encoder_variant == 'cnn2d':
             self.encoder = CNN2D(self.hyper, input_shape_encoder)
-        elif self.hyper.encoder_variant == 'cnnwithclassattention':
+        elif self.hyper.encoder_variant == 'cnn2dwithaddinput':
             # Consideration of an encoder with multiple inputs
             if self.config.use_additional_strict_masking_for_attribute_sim:
-                self.encoder = CNNWithClassAttention(self.hyper,
-                                                     [input_shape_encoder, self.hyper.time_series_depth * 2])
+                self.encoder = CNNWithAddInput(self.hyper,
+                                               [input_shape_encoder, self.hyper.time_series_depth * 2])
             else:
-                self.encoder = CNNWithClassAttention(self.hyper, [input_shape_encoder, self.hyper.time_series_depth])
-        elif self.hyper.encoder_variant == 'cnn1dwithclassattention':
-            # Consideration of an encoder with multiple inputs
-            self.encoder = CNN1DWithClassAttention(self.hyper, [input_shape_encoder, self.dataset.y_train.shape[1]])
+                self.encoder = CNNWithAddInput(self.hyper, [input_shape_encoder, self.hyper.time_series_depth])
         elif self.hyper.encoder_variant == 'rnn':
             self.encoder = RNN(self.hyper, input_shape_encoder)
-        elif self.hyper.encoder_variant == 'tcn':
-            self.encoder = TCN(self.hyper, input_shape_encoder)
         else:
             raise AttributeError('Unknown encoder variant:', self.hyper.encoder_variant)
 
@@ -475,13 +399,9 @@ class SimpleSNN(AbstractSimilarityMeasure):
         # These variants also need a ffnn
         if self.config.architecture_variant in ['standard_ffnn', 'fast_ffnn']:
             encoder_output_shape = self.encoder.get_output_shape()
-            if not self.config.use_weighted_distance_as_standard_ffnn:
-                # Neural Warp
-                input_shape_ffnn = (encoder_output_shape[1] ** 2, encoder_output_shape[2] * 2)
-                self.ffnn = FFNN(self.hyper, input_shape_ffnn)
-            else:
-                input_shape_ffnn = (1952 + 64 + 61,)
-                self.ffnn = FFNN2(self.hyper, input_shape_ffnn)
+            # Neural Warp
+            input_shape_ffnn = (encoder_output_shape[1] ** 2, encoder_output_shape[2] * 2)
+            self.ffnn = FFNN(self.hyper, input_shape_ffnn)
             self.ffnn.create_model()
 
             if cont or (not self.training and not for_cbs):
@@ -518,7 +438,7 @@ class SNN(SimpleSNN):
         Returns:
           similarity: float scalar.  Similarity between context vector a and b
         """
-        if self.hyper.encoder_variant == 'cnnwithclassattention':
+        if self.hyper.encoder_variant == 'cnn2dwithaddinput':
             a = context_vectors[0][2 * pair_index, :]
             b = context_vectors[0][2 * pair_index + 1, :]
             # w = context_vectors[1][2 * pair_index, :]
@@ -527,59 +447,31 @@ class SNN(SimpleSNN):
             b = context_vectors[2 * pair_index + 1, :, :]
         # a and b shape: [T, C]
 
-        if not self.config.use_weighted_distance_as_standard_ffnn:
-            # Neural Warp:
-            a, b = self.transform_to_time_step_wise(a, b)
+        # Neural Warp:
+        a, b = self.transform_to_time_step_wise(a, b)
 
-            # ffnn_input of FFNN are all time stamp combinations of a and b
-            ffnn_input = tf.concat([a, b], axis=1)
-            # b shape: [T*T, 2*C] OR [T*T, 4*C]
+        # ffnn_input of FFNN are all time stamp combinations of a and b
+        ffnn_input = tf.concat([a, b], axis=1)
+        # b shape: [T*T, 2*C] OR [T*T, 4*C]
 
-            # Predict the "relevance" of similarity between each time step
-            ffnn = self.ffnn.model(ffnn_input, training=self.training)
-            # ffnn shape: [T*T, 1]
+        # Predict the "relevance" of similarity between each time step
+        ffnn = self.ffnn.model(ffnn_input, training=self.training)
+        # ffnn shape: [T*T, 1]
 
-            # Calculate absolute distances between each time step
-            abs_distance = tf.abs(tf.subtract(a, b))
-            # abs_distance shape: [T*T, C]
+        # Calculate absolute distances between each time step
+        abs_distance = tf.abs(tf.subtract(a, b))
+        # abs_distance shape: [T*T, C]
 
-            # Compute the mean of absolute distances across each time step
-            timestepwise_mean_abs_difference = tf.expand_dims(tf.reduce_mean(abs_distance, axis=1), axis=-1)
-            # abs_distance shape: [T*T, 1]
+        # Compute the mean of absolute distances across each time step
+        timestepwise_mean_abs_difference = tf.expand_dims(tf.reduce_mean(abs_distance, axis=1), axis=-1)
+        # abs_distance shape: [T*T, 1]
 
-            # Scale / Weight (due to multiplication) the absolute distance of each time step combinations
-            # with the predicted "weight" for each time step
-            warped_dists = tf.multiply(timestepwise_mean_abs_difference, ffnn)
+        # Scale / Weight (due to multiplication) the absolute distance of each time step combinations
+        # with the predicted "weight" for each time step
+        warped_dists = tf.multiply(timestepwise_mean_abs_difference, ffnn)
 
-            sim = tf.exp(-tf.reduce_mean(warped_dists))
+        sim = tf.exp(-tf.reduce_mean(warped_dists))
 
-        else:
-            # Calculate absolute distances between each time step
-            abs_distance = tf.abs(tf.subtract(a, b))
-            abs_distance_flattened = tf.keras.layers.Flatten()(abs_distance)
-            abs_distance_flattened = tf.transpose(abs_distance_flattened)
-            ffnn_input = abs_distance_flattened
-            # w = tf.reshape (w,(1,w.shape[0]))
-            # ffnn_input = tf.concat([abs_distance_flattened, w], 1)
-            '''
-            # taigman https://www.cs.toronto.edu/~ranzato/publications/taigman_cvpr14.pdf
-            p = tf.square(tf.subtract(a, b))
-            q = tf.add(a,b)
-            e = tf.keras.backend.epsilon()
-            q = tf.add(q, e)
-            ffnn_input = tf.divide(p,q)
-            ffnn_input = tf.reshape(ffnn_input,(1,1952))
-            #tf.print(ffnn_input)
-            #tf.shape(abs_distance_flattened)
-            
-            '''
-            ffnn = self.ffnn.model(ffnn_input, training=self.training)
-            # tf.print(ffnn, "shape: ",tf.shape(ffnn))
-            ffnn = tf.squeeze(ffnn)
-            # tf.print(abs_distance_flattened)
-            # sim = 1/(1+ffnn)
-            sim = ffnn
-            # tf.print(sim)
         return sim
 
     def print_detailed_model_info(self):

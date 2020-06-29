@@ -110,7 +110,7 @@ class SNNOptimizer(Optimizer):
         # Create auxiliary inputs if necessary for encoder variant
         model_input_class_strings = np.take(a=self.dataset.y_train_strings, indices=batch_pairs_indices, axis=0)
         model_aux_input = None
-        if self.architecture.hyper.encoder_variant in ['cnnwithclassattention', 'cnn1dwithclassattention']:
+        if self.architecture.hyper.encoder_variant == 'cnn2dWithAddInput':
             model_aux_input = np.array([self.dataset.get_masking_float(label) for label in model_input_class_strings],
                                        dtype='float32')
 

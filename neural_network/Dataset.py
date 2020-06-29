@@ -400,7 +400,7 @@ class FullDataset(Dataset):
                                                                    batch_size=(x_train_unencoded.shape[0] // 2))
         encoded = snn.encode_in_batches(x_train_unencoded_reshaped)
 
-        if snn.hyper.encoder_variant in ['cnnwithclassattention', 'cnn1dwithclassattention']:
+        if snn.hyper.encoder_variant == 'cnn2dwithaddinput':
             # encoded output is a list with each entry has an encoded batchjob with the number of outputs
             x_train_encoded_0 = encoded[0][0]
             x_train_encoded_1 = encoded[0][1]

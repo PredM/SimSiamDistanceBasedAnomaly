@@ -9,7 +9,7 @@ class Hyperparameters:
         # Important: Variable names must match json file entries
         ##
 
-        self.encoder_variants = ['cnn', 'rnn', 'tcn', 'cnnwithclassattention', 'cnn1dwithclassattention', 'cnn2d']
+        self.encoder_variants = ['cnn', 'rnn', 'tcn', 'cnn2dwithaddinput', 'cnn2d']
         self.encoder_variant = None
 
         # Need to be changed after dataset was loaded
@@ -55,7 +55,6 @@ class Hyperparameters:
         self.cnn2d_contextModule = None
         self.cnn2d_learnWeightForContextUsedInSim = None
         self.learnFeatureWeights = None
-        self.use_weighted_distance_as_standard_ffnn_hyper = None
         self.use_additional_strict_masking = None
 
     def set_time_series_properties(self, dataset):
@@ -110,19 +109,18 @@ class Hyperparameters:
             if fc_layer is not None and len(fc_layer) > 0:
                 self.fc_after_cnn1d_layers = fc_layer
 
-        if self.encoder_variant in ["cnn2d", "cnnwithclassattention"]:
+        if self.encoder_variant in ["cnn2d", "cnn2dwithaddinput"]:
             self.cnn2d_layers = data['cnn2d_layers']
             self.cnn2d_kernel_length = data['cnn2d_kernel_length']
             self.cnn2d_strides = data['cnn2d_strides']
 
-        if self.encoder_variant in ["cnnwithclassattention"]:
+        if self.encoder_variant in ["cnn2dwithaddinput"]:
             self.abcnn1 = data['abcnn1']
             self.useChannelWiseAggregation = data['useChannelWiseAggregation']
             self.cnn2d_channelWiseAggregation = data['cnn2d_channelWiseAggregation']
             self.cnn2d_contextModule = data['cnn2d_contextModule']
             self.cnn2d_learnWeightForContextUsedInSim = data['cnn2d_learnWeightForContextUsedInSim']
             self.learnFeatureWeights = data['learnFeatureWeights']
-            self.use_weighted_distance_as_standard_ffnn_hyper = data['use_weighted_distance_as_standard_ffnn_hyper']
             self.use_additional_strict_masking = data['use_additional_strict_masking']
 
             if data['use1dContext'] == 'True':
