@@ -52,13 +52,7 @@
     5,
     3
   ],
-  "abcnn1": "Flase",
-  "use1dContext": "False",
-  "learnFeatureWeights": "False",
-  "useChannelWiseAggregation": "True",
-  "useAddContextForSim": "True",
-  "useAddContextForSim_LearnOrFixWeightVale": "True",
-  "cnn2d_channelWiseAggregation": [
+  "cnn2d_AttributeWiseAggregation": [
     128,
     64,
     32
@@ -72,5 +66,8 @@
     32,
     16
   ],
+  "useAttributeWiseAggregation": "True",
+  "useAddContextForSim": "True",
+  "useAddContextForSim_LearnOrFixWeightVale": "True",
   "use_additional_strict_masking": "True"
 }

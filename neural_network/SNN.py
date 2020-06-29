@@ -1,11 +1,10 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import tensorflow as tf
-import sys
 
 from configuration.Configuration import Configuration
 from configuration.Hyperparameter import Hyperparameters
-from neural_network.BasicNeuralNetworks import CNN, RNN, FFNN, CNNWithAddInput, \
+from neural_network.BasicNeuralNetworks import CNN, RNN, FFNN, CNN2dWithAddInput, \
     CNN2D
 from neural_network.Dataset import FullDataset
 from neural_network.SimpleSimilarityMeasure import SimpleSimilarityMeasure
@@ -248,23 +247,21 @@ class SimpleSNN(AbstractSimilarityMeasure):
     @tf.function
     def get_sims_for_batch(self, batch):
         # calculate the output of the encoder for the examples in the batch
-        tf.print("get_sims_for_batch1", batch[0].shape)
         context_vectors = self.encoder.model(batch, training=self.training)
-        tf.print("get_sims_for_batch2", context_vectors[0].shape)
+
         if self.hyper.encoder_variant == 'cnn2dwithaddinput':
             input_size = batch[0].shape[0] // 2
         else:
             input_size = batch.shape[0] // 2
-        tf.print("get_sims_for_batch3")
+
         sims_batch = tf.map_fn(lambda pair_index: self.get_sim_pair(context_vectors, pair_index),
                                tf.range(input_size, dtype=tf.int32), back_prop=True, dtype=tf.float32)
-        tf.print("get_sims_for_batch4")
+
         return sims_batch
 
     # TODO @klein shouldn't cnn2d be added to the first if? because the same reshape operation is done in reshape_input
     @tf.function
     def get_sim_pair(self, context_vectors, pair_index):
-        tf.print("get_sim_pair", context_vectors[0].shape)
         # tf.print(context_vectors.shape, pair_index, 2 * pair_index, 2 * pair_index + 1)
 
         # Reminder if a concat layer is used in the cnn1dclassattention,
@@ -289,16 +286,12 @@ class SimpleSNN(AbstractSimilarityMeasure):
             if self.encoder.hyper.useAddContextForSim_LearnOrFixWeightVale == 'True':
                 w = context_vectors[3][2 * pair_index, :]
                 # debug output:
-                #tf.print("context_vectors[3][2 * pair_index, :]", context_vectors[4][2 * pair_index, :])
-            tf.print("get_sim_pair2")
-            tf.print("context_vectors[0][2 * pair_index, :, :]: ", a.shape)
-            tf.print(a, output_stream=sys.stderr)
+                # tf.print("context_vectors[3][2 * pair_index, :]", context_vectors[4][2 * pair_index, :])
 
-            tf.print("get_sim_pair3")
         else:
             a = context_vectors[2 * pair_index, :, :]
             b = context_vectors[2 * pair_index + 1, :, :]
-        tf.print("a: ", a)
+
         # Normalization
         if self.config.normalize_snn_encoder_output:
             a = a / tf.norm(a)
@@ -308,9 +301,8 @@ class SimpleSNN(AbstractSimilarityMeasure):
         if self.config.use_time_step_wise_simple_similarity:
             a, b = self.transform_to_time_step_wise(a, b)
 
-        sim = self.simple_sim.get_sim(a, b, a_weights, b_weights, a_context, b_context, w)
 
-        return sim
+        return self.simple_sim.get_sim(a, b, a_weights, b_weights, a_context, b_context, w)
 
     @tf.function
     def transform_to_time_step_wise(self, a, b):
@@ -381,10 +373,10 @@ class SimpleSNN(AbstractSimilarityMeasure):
         elif self.hyper.encoder_variant == 'cnn2dwithaddinput':
             # Consideration of an encoder with multiple inputs
             if self.config.use_additional_strict_masking_for_attribute_sim:
-                self.encoder = CNNWithAddInput(self.hyper,
-                                               [input_shape_encoder, self.hyper.time_series_depth * 2])
+                self.encoder = CNN2dWithAddInput(self.hyper,
+                                                 [input_shape_encoder, self.hyper.time_series_depth * 2])
             else:
-                self.encoder = CNNWithAddInput(self.hyper, [input_shape_encoder, self.hyper.time_series_depth])
+                self.encoder = CNN2dWithAddInput(self.hyper, [input_shape_encoder, self.hyper.time_series_depth])
         elif self.hyper.encoder_variant == 'rnn':
             self.encoder = RNN(self.hyper, input_shape_encoder)
         else:
@@ -399,9 +391,13 @@ class SimpleSNN(AbstractSimilarityMeasure):
         # These variants also need a ffnn
         if self.config.architecture_variant in ['standard_ffnn', 'fast_ffnn']:
             encoder_output_shape = self.encoder.get_output_shape()
-            # Neural Warp
-            input_shape_ffnn = (encoder_output_shape[1] ** 2, encoder_output_shape[2] * 2)
-            self.ffnn = FFNN(self.hyper, input_shape_ffnn)
+            if not self.config.use_weighted_distance_as_standard_ffnn:
+                # Neural Warp
+                input_shape_ffnn = (encoder_output_shape[1] ** 2, encoder_output_shape[2] * 2)
+                self.ffnn = FFNN(self.hyper, input_shape_ffnn)
+            else:
+                input_shape_ffnn = (1952 + 64 + 61,)
+                self.ffnn = FFNN2(self.hyper, input_shape_ffnn)
             self.ffnn.create_model()
 
             if cont or (not self.training and not for_cbs):
@@ -431,8 +427,8 @@ class SNN(SimpleSNN):
         with a neural network with each pair_index value
 
         Args:
-          context_vectors: [2*B, T, C] float tensor, representations for B training pairs resulting in 2*B 
-          with length T and channel size C which both are resulting from the previous embedding / encoding. 
+          context_vectors: [2*B, T, C] float tensor, representations for B training pairs resulting in 2*B
+          with length T and channel size C which both are resulting from the previous embedding / encoding.
           pair_index: [B] contains index integer values from 0 to B
 
         Returns:
@@ -471,8 +467,6 @@ class SNN(SimpleSNN):
         warped_dists = tf.multiply(timestepwise_mean_abs_difference, ffnn)
 
         sim = tf.exp(-tf.reduce_mean(warped_dists))
-
-        return sim
 
     def print_detailed_model_info(self):
         print('')

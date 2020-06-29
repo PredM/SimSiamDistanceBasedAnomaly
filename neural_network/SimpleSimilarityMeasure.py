@@ -18,7 +18,7 @@ class SimpleSimilarityMeasure:
 
     @tf.function
     def get_sim(self, a, b, a_weights=None, b_weights=None, a_context=None, b_context=None, w=None):
-        tf.print("get_sim")
+
         # assign to class variables so only common parameters must be passed below
         self.a_weights = a_weights
         self.b_weights = b_weights
@@ -50,32 +50,26 @@ class SimpleSimilarityMeasure:
     # Mean absolute difference of all time stamp combinations
     @tf.function
     def abs_mean(self, a, b):
-        tf.print("abs_mean")
+
         use_weighted_sim = self.a_weights is not None and self.b_weights is not None
         use_additional_sim = self.a_context is not None and self.b_context is not None
 
         if use_weighted_sim:
             # Note: only one weight vector is used (a_weights) to simulate a retrieval situation
             # where only weights of the case are known
-            # used for cnn2dWithAddInput
+            # tf.print(self.a_weights)
+            # tf.print(self.w, output_stream=sys.stdout)
             weight_matrix = self.get_weight_matrix(a)
 
             diff = tf.abs(a - b)
-            tf.print("diff:", diff)
             # feature weighted distance:
             distance = tf.reduce_mean(weight_matrix * diff)
-            #tf.print("self.a_weights: ", tf.reduce_sum(self.a_weights))
-            #tf.print("a: ", a)
+            # tf. print("self.a_weights: ", tf.reduce_sum(self.a_weights))
 
             if use_additional_sim:
-                tf.print("use_additional_sim:", use_additional_sim)
-                # calculate context distance for cnn2dwithAddInput
-                tf.print("self.a_context:", a)
-                tf.shape(a)
-                tf.print("self.a_context:", self.a_context)
+                # calculate context distance
                 diff_con = tf.abs(self.a_context - self.b_context)
                 distance_con = tf.reduce_mean(diff_con)
-                tf.print("distance_con:",distance_con)
                 if self.w is None:
                     self.w = 0.3
                     distance = self.w * distance + (1 - self.w) * distance_con
@@ -89,7 +83,7 @@ class SimpleSimilarityMeasure:
             diff = tf.abs(a - b)
             distance = tf.reduce_mean(diff)
         sim = tf.exp(-distance)
-        tf.print("sim: ", sim)
+
         return sim
 
     # Euclidean distance (required in contrastive loss function and converted sim)
@@ -157,4 +151,3 @@ class SimpleSimilarityMeasure:
             # tf.print(cos_similarity)
 
         return cos_similarity
-

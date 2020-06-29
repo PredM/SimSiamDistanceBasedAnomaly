@@ -28,7 +28,7 @@ class GeneralConfiguration:
         self.models_folder = '../data/trained_models/'
 
         # Path and file name to the specific model that should be used for testing and live classification
-        self.filename_model_to_use = 'temp_snn_model_05-09_15-44-15_epoch-212/'
+        self.filename_model_to_use = 'temp_snn_model_06-29_17-44-52_epoch-2256/'
         self.directory_model_to_use = self.models_folder + self.filename_model_to_use + '/'
 
         ##
@@ -105,7 +105,7 @@ class ModelConfiguration:
         # SNN output is normalized (x = x/|x|) (useful for eucl.?)
         self.normalize_snn_encoder_output = False  # default: False
 
-        # Additional option for encoder variant cnn2dWithAddInput and the euclidean distance:
+        # Additional option for encoder variant cnnwithclassattention and the euclidean distance:
         # Weighted euclidean similarity based on relevant attributes
         self.useFeatureWeightedSimilarity = True  # default: False
 
@@ -381,7 +381,7 @@ class StaticConfiguration:
         self.filename_pkl_cleaned = 'cleaned_data.pkl'
 
         # Folder where the reduced training data set aka. case base is saved to
-        self.case_base_folder = '../data/case_base/'
+        self.case_base_folder = '../../PredMSiamNN2/data/case_base/'
 
         # Folder where text files with extracted cases are saved to, for export
         self.cases_folder = '../data/cases/'

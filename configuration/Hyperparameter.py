@@ -9,7 +9,7 @@ class Hyperparameters:
         # Important: Variable names must match json file entries
         ##
 
-        self.encoder_variants = ['cnn', 'rnn', 'tcn', 'cnn2dwithaddinput', 'cnn2d']
+        self.encoder_variants = ['cnn', 'rnn', 'cnn2dwithaddinput', 'cnn2d']
         self.encoder_variant = None
 
         # Need to be changed after dataset was loaded
@@ -48,13 +48,14 @@ class Hyperparameters:
 
         self.abcnn1 = None
         self.use1dContext = None
-        self.useChannelWiseAggregation = None
-        self.cnn2d_channelWiseAggregation = None
+        self.useAttributeWiseAggregation = None
+        self.cnn2d_AttributeWiseAggregation = None
         self.useAddContextForSim = None
         self.useAddContextForSim_LearnOrFixWeightVale = None
         self.cnn2d_contextModule = None
         self.cnn2d_learnWeightForContextUsedInSim = None
         self.learnFeatureWeights = None
+        self.use_weighted_distance_as_standard_ffnn_hyper = None
         self.use_additional_strict_masking = None
 
     def set_time_series_properties(self, dataset):
@@ -115,18 +116,12 @@ class Hyperparameters:
             self.cnn2d_strides = data['cnn2d_strides']
 
         if self.encoder_variant in ["cnn2dwithaddinput"]:
-            self.abcnn1 = data['abcnn1']
-            self.useChannelWiseAggregation = data['useChannelWiseAggregation']
-            self.cnn2d_channelWiseAggregation = data['cnn2d_channelWiseAggregation']
+            self.useAttributeWiseAggregation = data['useAttributeWiseAggregation']
+            self.cnn2d_AttributeWiseAggregation = data['cnn2d_AttributeWiseAggregation']
             self.cnn2d_contextModule = data['cnn2d_contextModule']
             self.cnn2d_learnWeightForContextUsedInSim = data['cnn2d_learnWeightForContextUsedInSim']
-            self.learnFeatureWeights = data['learnFeatureWeights']
             self.use_additional_strict_masking = data['use_additional_strict_masking']
 
-            if data['use1dContext'] == 'True':
-                self.use1dContext = 'True'
-            else:
-                self.use1dContext = 'False'
             if data['useAddContextForSim'] == 'True':
                 self.useAddContextForSim = 'True'
             else:
