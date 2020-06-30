@@ -192,3 +192,8 @@ Also please note that the real time classification is still under development an
       </tr>
     </tbody>
 </table>
+
+## How to start the model?
+1. Clone the repository
+2. Download the [preprocessed data set](https://seafile.rlp.net/d/69434c0df2c3493aac7f/) and move it to the _data_ folder
+3. Navigate to the _neural_network_ folder and start the training and test procedure via _python TrainAndTest.py > Log.txt_

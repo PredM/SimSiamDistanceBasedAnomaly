@@ -259,7 +259,6 @@ class SimpleSNN(AbstractSimilarityMeasure):
 
         return sims_batch
 
-    # TODO @klein shouldn't cnn2d be added to the first if? because the same reshape operation is done in reshape_input
     @tf.function
     def get_sim_pair(self, context_vectors, pair_index):
         # tf.print(context_vectors.shape, pair_index, 2 * pair_index, 2 * pair_index + 1)
