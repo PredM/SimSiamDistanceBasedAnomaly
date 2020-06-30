@@ -9,6 +9,10 @@ The implementation of some components is based on the one presented in [NeuralWa
 * The [raw data](https://seafile.rlp.net/d/cd5590e4e9d249b2847e/) recorded with this [simulation factory model](https://iot.uni-trier.de) used to generate the training and evaluation data sets.
 * The [preprocessed data set](https://seafile.rlp.net/d/69434c0df2c3493aac7f/) we used for the evaluation.
 
+## Quick start guide: How to start the model?
+1. Clone the repository
+2. Download the [preprocessed data set](https://seafile.rlp.net/d/69434c0df2c3493aac7f/) and move it to the _data_ folder
+3. Navigate to the _neural_network_ folder and start the training and test procedure via _python TrainAndTest.py > Log.txt_
 
 ## Requirements
 Used python version: 3.6.X \
@@ -192,8 +196,3 @@ Also please note that the real time classification is still under development an
       </tr>
     </tbody>
 </table>
-
-## How to start the model?
-1. Clone the repository
-2. Download the [preprocessed data set](https://seafile.rlp.net/d/69434c0df2c3493aac7f/) and move it to the _data_ folder
-3. Navigate to the _neural_network_ folder and start the training and test procedure via _python TrainAndTest.py > Log.txt_
