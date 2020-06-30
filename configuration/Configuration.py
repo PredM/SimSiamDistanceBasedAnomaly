@@ -67,7 +67,7 @@ class ModelConfiguration:
         # ffnn = uses ffnn as distance measure
         # simple = mean absolute difference as distance measure instead of the ffnn
         self.architecture_variants = ['standard_simple', 'standard_ffnn', 'fast_simple', 'fast_ffnn']
-        self.architecture_variant = self.architecture_variants[1]
+        self.architecture_variant = self.architecture_variants[0]
 
         ##
         # Determines how the similarity between two embedding vectors is determined (when a simple architecture is used)
