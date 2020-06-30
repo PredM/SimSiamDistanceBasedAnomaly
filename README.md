@@ -1,13 +1,13 @@
 # PredM
 Companion repository to the paper [Enhancing Siamese Neural Networks through Expert Knowledge for Predictive Maintenance](https://PLACEHOLDER.com). \
-Please note, that the MS-SNNs approach is here referred to as CaseBasedSimilarity (CBS).
-The implementation of some components is based on the one presented in [NeuralWarp](https://arxiv.org/abs/1812.08306).
+Please note, that the MS-SNNs approach is here referred to as CaseBasedSimilarity (CBS) and CNN2D + MAR is called cnn2dWithAddInput.
+The implementation of some components is based on the one presented in [NeuralWarp](https://arxiv.org/abs/1812.08306) ([GitHub](https://github.com/josifgrabocka/neuralwarp)).
 
 ## Supplementary Resources
-* The sub directory [supplementary\_resources](https://PLACEHOLDER.com) of this repository contains additional information about the datasets used and the architecture of the CNN2D + MAR model.
+* The sub directory [supplementary\_resources](https://PLACEHOLDER.com) of this repository contains additional information about the data sets used and the architecture of the CNN2D + MAR model.
 * An [overview](https://seafile.rlp.net/f/fa6624358ff04627b9a8/) of all relevant conducted experiments
-* The [raw data](https://PLACEHOLDER.com) used to generate the training and evaluation datasets.
-* The [preprocessed data sets as well as the trained models](https://PLACEHOLDER.com) we used for the evaluation.
+* The [raw data](https://seafile.rlp.net/d/cd5590e4e9d249b2847e/) recorded with this [simulation factory model](https://iot.uni-trier.de) used to generate the training and evaluation data sets.
+* The [preprocessed data set](https://seafile.rlp.net/d/69434c0df2c3493aac7f/) we used for the evaluation.
 
 
 ## Requirements
@@ -52,9 +52,6 @@ The following section gives an overview of the packages, directories and include
 |ExtractCases.py|Automatically determines the time intervals at which simulated wear is present on one of the motors and exports these into to a text file.|
 |LightBarrierAnalysis.py| Used for manual determination of error case intervals for data sets with light barrier errors.|
 |PressureAnalysis.py|Used for manual determination of error case intervals for data sets with simulated pressure drops.|
-|TimeSeriesFeatureAnalysis.py| |
-|TimeSeriesFeatureExtraction.py| |
-|VisualizeEncodedDataWithTSNEPCA.py | Can be used to create a visualisation of the training data using TSNE or PCA. |
 |CaseGrouping.py| Is used to generate an overview of the features used for each error case and to create a grouping of cases based on this.|
 
 ### archive
@@ -171,36 +168,14 @@ Also please note that the real time classification is still under development an
         <td>Working</td>
         <td>Working</td>
       </tr>
-      <tr>
-        <td>TCN</td>
-        <td>Working</td>
-        <td>Working</td>
-        <td>Working</td>
-        <td>Working</td>
-        <td>Working</td>
-        <td>Working</td>
-        <td>Working</td>
-        <td>Working</td>
-      </tr>
       <tr >
-        <td>cnnwithclassattention</td>
+        <td>cnn2dwithaddinput</td>
         <td>Working</td>
         <td>Not working / Error</td>
         <td>Not implemented yet</td>
         <td>Not implemented yet</td>
         <td >Not planned / necessary</td>
         <td >Not planned / necessary</td>
-        <td >Not planned / necessary</td>
-        <td >Not planned / necessary</td>
-      </tr>
-      <tr>
-        <td>cnn1dwithclassattention</td>
-        <td>Not working / Error</td>
-        <td>Not working / Error</td>
-        <td >Not implemented yet</td>
-        <td >Not implemented yet</td>
-        <td >Not planned / necessary</td>
-        <td>Not planned / necessary</td>
         <td >Not planned / necessary</td>
         <td >Not planned / necessary</td>
       </tr>

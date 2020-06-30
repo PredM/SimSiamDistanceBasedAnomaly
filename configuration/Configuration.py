@@ -371,7 +371,7 @@ class StaticConfiguration:
         # Note: Folder of used model specified in GeneralConfiguration
 
         # Folder where the preprocessed training and test data for the neural network should be stored
-        self.training_data_folder = '../../PredMSiamNN2/data/training_data/'
+        self.training_data_folder = '../training_data/'
 
         # Folder where the normalisation models should be stored
         self.scaler_folder = '../data/scaler/'
@@ -381,7 +381,7 @@ class StaticConfiguration:
         self.filename_pkl_cleaned = 'cleaned_data.pkl'
 
         # Folder where the reduced training data set aka. case base is saved to
-        self.case_base_folder = '../../PredMSiamNN2/data/case_base/'
+        self.case_base_folder = '../data/case_base/'
 
         # Folder where text files with extracted cases are saved to, for export
         self.cases_folder = '../data/cases/'
