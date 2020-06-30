@@ -131,6 +131,7 @@ class ModelConfiguration:
         # Implementation is based on NeuralWarp FFNN but used for simple similarity measures
         self.use_time_step_wise_simple_similarity = False  # default: False
 
+
 class TrainingConfiguration:
 
     def __init__(self):
@@ -146,7 +147,7 @@ class TrainingConfiguration:
         self.feature_variant = self.feature_variants[1]
         self.features_used = None
 
-        # TODO: TripletLoss, Distance-Based Logistic Loss
+        # TODO Add TripletLoss, Distance-Based Logistic Loss
         self.loss_function_variants = ['binary_cross_entropy', 'constrative_loss', 'mean_squared_error', 'huber_loss']
         self.type_of_loss_function = self.loss_function_variants[0]
 

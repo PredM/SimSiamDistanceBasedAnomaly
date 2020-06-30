@@ -232,10 +232,6 @@ class Evaluator:
         self.results['ACC'] = (self.results['TP'] + self.results['TN']) / self.num_test_examples
         self.results['ACC'] = self.results['ACC'].fillna(0) * 100
 
-        # Undefined !
-        # self.roc_auc_class_wise()
-
-        # FIXME Check calculation
         all_classes = list(self.results.index.values)
         all_classes.remove('combined')
         y_true_one_hot, y_score, labels = self.get_auc_score_input(all_classes)
@@ -253,25 +249,6 @@ class Evaluator:
         self.results.loc['combined', 'FNR'] = self.rate_calculation(fnc, tpc)
         self.results.loc['combined', 'FPR'] = self.rate_calculation(fpc, tnc)
         self.results.loc['combined', 'FDR'] = self.rate_calculation(fpc, tpc)
-
-    # TODO Archive this because undefined
-    def roc_auc_class_wise(self):
-        for c in self.results.index.values:
-
-            if c == 'combined':
-                continue
-
-            y_true_one_hot, y_score, labels = self.get_auc_score_input([c])
-
-            if y_true_one_hot is None:
-                self.results.loc[c, 'ROC_AUC'] = np.NaN
-            else:
-                self.results.loc[c, 'ROC_AUC'] = np.NaN
-                print(y_true_one_hot)
-                #  Only one class present in y_true. ROC AUC score is not defined in that case.
-                # auc_score = metrics.roc_auc_score(y_true=y_true_one_hot, y_score=y_score, labels=labels,
-                #                                   multi_class='ovr')
-                # self.results.loc[c, 'ROC_AUC'] = auc_score
 
     def get_auc_score_input(self, classes: list):
         # df = pd.dataframe(columns=labels)

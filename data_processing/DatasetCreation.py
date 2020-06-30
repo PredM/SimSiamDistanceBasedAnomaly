@@ -307,7 +307,6 @@ def main():
 
         gss = GroupShuffleSplit(n_splits=1, test_size=config.test_split_size, random_state=config.random_seed)
 
-        # TODO Is this working correctly ? train_idx and test_idx only assigned in for loop
         for train_idx, test_idx in gss.split(examples_array, labels_array, failure_times_array_groups):
             print("TRAIN:", train_idx, "TEST:", test_idx)
         # split_idx in gss.split(examples_array, labels_array, failure_times_array_groups)

@@ -300,7 +300,6 @@ class SimpleSNN(AbstractSimilarityMeasure):
         if self.config.use_time_step_wise_simple_similarity:
             a, b = self.transform_to_time_step_wise(a, b)
 
-
         return self.simple_sim.get_sim(a, b, a_weights, b_weights, a_context, b_context, w)
 
     @tf.function

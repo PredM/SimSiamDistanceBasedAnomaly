@@ -531,7 +531,6 @@ class CBSDataset(FullDataset):
         self.group_to_indices_test = {}
         self.group_to_negative_indices_train = {}
 
-    # TODO Check if this is working correctly
     def load(self, print_info=True):
         super().load(print_info)
 

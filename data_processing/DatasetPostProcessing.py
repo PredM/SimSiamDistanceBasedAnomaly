@@ -27,17 +27,16 @@ def main():
     # print("y_train_window_times[0:]", y_train_window_times[0,:])
     # print("y_train_window_times[1:]", y_train_window_times[1,:])
 
-    '''
-    print("y_train_features shape: ", y_train_features.shape)
-    print("y_train shape: ", y_train.shape)
-    indexesToDelete = np.where(y_train_failure_times == "2019-06-08 13:31:51")
-    print("np.argwhere(x>1): ", np.where(y_train_failure_times == "2019-06-08 13:31:51"))
-    print("y_train y_train_failure_times: ", y_train_failure_times.shape)
+    # print("y_train_features shape: ", y_train_features.shape)
+    # print("y_train shape: ", y_train.shape)
+    # indexesToDelete = np.where(y_train_failure_times == "2019-06-08 13:31:51")
+    # print("np.argwhere(x>1): ", np.where(y_train_failure_times == "2019-06-08 13:31:51"))
+    # print("y_train y_train_failure_times: ", y_train_failure_times.shape)
+    #
+    # example_to_delete = 1
+    # y_train_features = np.delete(y_train_features, indexesToDelete, 0)
+    # print("y_train_features shape: ", y_train_features.shape)
 
-    example_to_delete = 1
-    y_train_features = np.delete(y_train_features, indexesToDelete, 0)
-    print("y_train_features shape: ", y_train_features.shape)
-    '''
     concat = np.stack((y_train, y_train_failure_times), axis=-1)
     concat = pd.DataFrame.from_records(concat)
     print("Failure cases from Train: ")

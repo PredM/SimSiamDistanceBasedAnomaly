@@ -5,6 +5,7 @@ import tensorflow as tf
 
 from configuration.Hyperparameter import Hyperparameters
 
+
 class NN:
 
     def __init__(self, hyperparameters, input_shape):
@@ -36,7 +37,7 @@ class NN:
         if self.model is None:
             raise AttributeError('Model not initialised. Can not load weights.')
 
-        if type(self) == CNN or type(self) == RNN or type(self) == CNN2dWithAddInput  or type(self) == CNN2D:
+        if type(self) == CNN or type(self) == RNN or type(self) == CNN2dWithAddInput or type(self) == CNN2D:
             prefix = 'encoder'
         elif type(self) == FFNN:
             prefix = 'ffnn'
@@ -58,6 +59,7 @@ class NN:
     def get_output_shape(self):
         return self.model.output_shape
 
+
 class FFNN(NN):
 
     def __init__(self, hyperparameters, input_shape):
@@ -74,19 +76,20 @@ class FFNN(NN):
 
         # first layer must be handled separately because the input shape parameter must be set
         num_units_first = layers.pop(0)
-        input = tf.keras.Input(shape=self.input_shape, name="Input")
+        layer_input = tf.keras.Input(shape=self.input_shape, name="Input")
 
         x = tf.keras.layers.Dense(units=num_units_first, activation=tf.keras.activations.relu,
-                                  input_shape=self.input_shape)(input)
+                                  input_shape=self.input_shape)(layer_input)
 
         for num_units in layers:
             x = tf.keras.layers.Dense(units=num_units, activation=tf.keras.activations.relu)(x)
 
         # regardless of the configured number of layers, add a layer with
         # a single neuron that provides the indicator function output.
-        output =  tf.keras.layers.Dense(units=1, activation=tf.keras.activations.sigmoid)(x)
+        output = tf.keras.layers.Dense(units=1, activation=tf.keras.activations.sigmoid)(x)
 
-        self.model = tf.keras.Model(inputs=input, outputs=output)
+        self.model = tf.keras.Model(inputs=layer_input, outputs=output)
+
 
 class RNN(NN):
 
@@ -157,6 +160,7 @@ class RNN(NN):
         model.add(tf.keras.layers.Dropout(rate=self.hyper.dropout_rate))
 
         self.model = model
+
 
 class CNN2dWithAddInput(NN):
 
@@ -319,6 +323,7 @@ class CNN2dWithAddInput(NN):
         return self.model.output_shape[0]
         # raise NotImplementedError('Must be added in order for ffnn version to work with this encoder')
 
+
 class CNN(NN):
 
     def __init__(self, hyperparameters, input_shape):
@@ -371,6 +376,7 @@ class CNN(NN):
 
         self.model = model
 
+
 class CNN2D(NN):
 
     def __init__(self, hyperparameters, input_shape):
@@ -400,14 +406,8 @@ class CNN2D(NN):
                 conv_layer1 = tf.keras.layers.Conv2D(filters=num_filter, padding='VALID',
                                                      kernel_size=(filter_size),
                                                      strides=stride, input_shape=sensorDataInput.shape)
+
                 # Added 1D-Conv Layer to provide information across time steps in the first layer
-
-                # TODO @Klein Fix create_model for cbs
-                # Possible fix: self.input_shape[1], but then new error occurs:
-                #  ValueError: Shape must be rank 3 but is rank 4 for 'model/tf_op_layer_concat/concat'
-                #  (op: 'ConcatV2') with input shapes: [128,1000,6], [128,1000,6,1], [].
-                # print(self.input_shape)
-
                 conv_layer1d = tf.keras.layers.Conv1D(filters=61, padding='VALID', kernel_size=1,
                                                       strides=1)
                 # inp = tf.squeeze(sensorDataInput)
