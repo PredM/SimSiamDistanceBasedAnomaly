@@ -391,13 +391,10 @@ class SimpleSNN(AbstractSimilarityMeasure):
         # These variants also need a ffnn
         if self.config.architecture_variant in ['standard_ffnn', 'fast_ffnn']:
             encoder_output_shape = self.encoder.get_output_shape()
-            if not self.config.use_weighted_distance_as_standard_ffnn:
-                # Neural Warp
-                input_shape_ffnn = (encoder_output_shape[1] ** 2, encoder_output_shape[2] * 2)
-                self.ffnn = FFNN(self.hyper, input_shape_ffnn)
-            else:
-                input_shape_ffnn = (1952 + 64 + 61,)
-                self.ffnn = FFNN2(self.hyper, input_shape_ffnn)
+            # Neural Warp
+            input_shape_ffnn = (encoder_output_shape[1] ** 2, encoder_output_shape[2] * 2)
+            self.ffnn = FFNN(self.hyper, input_shape_ffnn)
+
             self.ffnn.create_model()
 
             if cont or (not self.training and not for_cbs):
@@ -467,6 +464,7 @@ class SNN(SimpleSNN):
         warped_dists = tf.multiply(timestepwise_mean_abs_difference, ffnn)
 
         sim = tf.exp(-tf.reduce_mean(warped_dists))
+        return sim
 
     def print_detailed_model_info(self):
         print('')

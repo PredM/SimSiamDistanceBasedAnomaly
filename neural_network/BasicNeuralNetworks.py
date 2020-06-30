@@ -84,7 +84,7 @@ class FFNN(NN):
 
         # regardless of the configured number of layers, add a layer with
         # a single neuron that provides the indicator function output.
-        output = tf.keras.layers.Dense(units=1, activation=tf.keras.activations.sigmoid)(x)
+        output =  tf.keras.layers.Dense(units=1, activation=tf.keras.activations.sigmoid)(x)
 
         self.model = tf.keras.Model(inputs=input, outputs=output)
 

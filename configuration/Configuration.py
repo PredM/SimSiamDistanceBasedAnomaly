@@ -67,7 +67,7 @@ class ModelConfiguration:
         # ffnn = uses ffnn as distance measure
         # simple = mean absolute difference as distance measure instead of the ffnn
         self.architecture_variants = ['standard_simple', 'standard_ffnn', 'fast_simple', 'fast_ffnn']
-        self.architecture_variant = self.architecture_variants[0]
+        self.architecture_variant = self.architecture_variants[1]
 
         ##
         # Determines how the similarity between two embedding vectors is determined (when a simple architecture is used)
@@ -105,7 +105,7 @@ class ModelConfiguration:
         # SNN output is normalized (x = x/|x|) (useful for eucl.?)
         self.normalize_snn_encoder_output = False  # default: False
 
-        # Additional option for encoder variant cnnwithclassattention and the euclidean distance:
+        # Additional option for encoder variant cnn2dwithaddinput and the euclidean distance:
         # Weighted euclidean similarity based on relevant attributes
         self.useFeatureWeightedSimilarity = True  # default: False
 
