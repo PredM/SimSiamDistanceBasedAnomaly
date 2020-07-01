@@ -123,7 +123,7 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-# Additional directorys 
+# Additional directorys
 .idea
 /testing
 /archive
@@ -140,3 +140,5 @@ data/datasets/*
 
 data/trained_models/temp_*
 !data/trained_models/.gitkeep
+
+/logs/
