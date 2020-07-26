@@ -22,7 +22,7 @@ class GeneralConfiguration:
         self.max_gpus_used = 4
 
         # Specifies the maximum number of cores to be used
-        self.max_parallel_cores = 60
+        self.max_parallel_cores = 40
 
         # Folder where the trained models are saved to during learning process
         self.models_folder = '../data/trained_models/'
