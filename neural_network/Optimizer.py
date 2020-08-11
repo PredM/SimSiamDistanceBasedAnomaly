@@ -102,7 +102,7 @@ class SNNOptimizer(Optimizer):
         """
         epoch_loss_avg = tf.keras.metrics.Mean()
 
-        batch_pairs_indices, true_similarities = self.optimizer_helper.compose_batch()
+        batch_pairs_indices, true_similarities = self.optimizer_helper.batch_composer.compose_batch()
 
         # Get the example pairs by the selected indices
         model_input = np.take(a=self.dataset.x_train, indices=batch_pairs_indices, axis=0)
@@ -159,7 +159,6 @@ class SNNOptimizer(Optimizer):
             return False
 
     def inference_during_training(self, epoch):
-        # TODO Maybe add this to cbs
         if self.config.use_inference_test_during_training and epoch != 0:
             if epoch % self.config.inference_during_training_epoch_interval == 0:
                 print("Inference at epoch: ", epoch)

@@ -30,6 +30,11 @@ class ConfigChecker:
                                   self.config.type_of_loss_function == 'constrative_loss',
                                   'euclidean_dis should only be used for training with constrative loss.')
 
+        sum_percentages = sum(self.config.batch_distribution.values())
+        ConfigChecker.implication(True,
+                                  sum_percentages == 1.0,
+                                  'Percentages for batch subsets must add up to 1.0')
+
         ##
         # CBS
         ##

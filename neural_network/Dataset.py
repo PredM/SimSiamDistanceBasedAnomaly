@@ -37,60 +37,6 @@ class Dataset:
     def load(self):
         raise NotImplemented('Not implemented for abstract class')
 
-    @staticmethod
-    def draw_from_ds(self, dataset, num_instances, is_positive, class_idx=None):
-        # dataset: vector with one-hot encoded label of the data set
-
-        # draw as long as is_positive criterion is not satisfied
-
-        # draw two random examples index
-        if class_idx is None:
-            while True:
-                first_idx = np.random.randint(0, num_instances, size=1)[0]
-                second_idx = np.random.randint(0, num_instances, size=1)[0]
-                # return the two indexes if they match the is_positive criterion
-                if is_positive:
-                    if np.array_equal(dataset[first_idx], dataset[second_idx]):
-                        return first_idx, second_idx
-                else:
-                    if not np.array_equal(dataset[first_idx], dataset[second_idx]):
-                        return first_idx, second_idx
-        else:
-            # examples are drawn by a given class index
-            # contains idx values of examples from the given class
-            class_idx_arr = self.class_idx_to_ex_idxs_train[class_idx]
-
-            # print("class_idx:", class_idx, " class_idx_arr: ", class_idx_arr, "self.class_idx_to_class_string: ",
-            #      self.class_idx_to_class_string[class_idx])
-
-            # Get a random idx of an example that is part of this class
-            first_rand_idx = np.random.randint(0, len(class_idx_arr), size=1)[0]
-            first_idx = class_idx_arr[first_rand_idx]
-
-            if is_positive:
-                while True:
-                    second_rand_idx = np.random.randint(0, len(class_idx_arr), size=1)[0]
-                    second_idx = class_idx_arr[second_rand_idx]
-                    if first_idx != second_idx:
-                        return first_idx[0], second_idx[0]
-            else:
-                while True:
-                    uniform_sampled_class = np.random.randint(low=0,
-                                                              high=len(self.y_train_strings_unique),
-                                                              size=1)
-                    class_idx_arr_neg = self.class_idx_to_ex_idxs_train[uniform_sampled_class[0]]
-                    second_rand_idx_neg = np.random.randint(0, len(class_idx_arr_neg), size=1)[0]
-                    # print("uniform_sampled_class: ", uniform_sampled_class, "class_idx_arr_neg: ", class_idx_arr_neg,
-                    #       "second_rand_idx_neg: ", second_rand_idx_neg)
-
-                    second_idx = class_idx_arr_neg[second_rand_idx_neg]
-                    # second_idx = np.random.randint(0, num_instances, size=1)[0]
-
-                    if second_idx not in class_idx_arr[:, 0]:
-                        # print("class_idx_arr: ", class_idx_arr, " - uniform_sampled_class: ",
-                        # uniform_sampled_class[0])
-                        return first_idx[0], second_idx[0]
-
 
 class FullDataset(Dataset):
 
@@ -370,6 +316,7 @@ class FullDataset(Dataset):
     def get_indices_failures_only_test(self):
         return np.where(self.y_test_strings != 'no_failure')[0]
 
+    # TODO @Klein wird das auskommentierte noch benötigt?
     def encode(self, snn, encode_test_data=False):
 
         start_time_encoding = perf_counter()
@@ -474,23 +421,6 @@ class FullDataset(Dataset):
 
         return sim_matrix
 
-    # Draw a random pair of instances
-    def draw_pair(self, is_positive, from_test):
-
-        # Select dataset depending on parameter
-        ds_y = self.y_test if from_test else self.y_train
-        num_instances = self.num_test_instances if from_test else self.num_train_instances
-
-        return Dataset.draw_from_ds(self, ds_y, num_instances, is_positive)
-
-    def draw_pair_by_class_idx(self, is_positive, from_test, class_idx):
-
-        # select dataset depending on parameter
-        ds_y = self.y_test if from_test else self.y_train
-        num_instances = self.num_test_instances if from_test else self.num_train_instances
-
-        return Dataset.draw_from_ds(self, ds_y, num_instances, is_positive, class_idx)
-
     def get_sim_label_pair_for_notion(self, label_1: str, label_2: str, notion_of_sim: str):
         # Output similarity value under consideration of the metric
 
@@ -547,18 +477,6 @@ class CBSDataset(FullDataset):
 
     def encode(self, encoder, encode_test_data=False):
         raise NotImplementedError('')
-
-    def draw_pair_cbs(self, is_positive, group_id):
-        pos_indices = self.group_to_indices_train.get(group_id)
-        neg_indices = self.group_to_negative_indices_train.get(group_id)
-
-        if is_positive:
-            i1, i2 = np.random.choice(pos_indices, 2, replace=True)
-            return i1, i2
-        else:
-            i1 = np.random.choice(pos_indices, 1, replace=True)[0]
-            i2 = np.random.choice(neg_indices, 1, replace=True)[0]
-            return i1, i2
 
     def get_masking_group(self, group_id):
 

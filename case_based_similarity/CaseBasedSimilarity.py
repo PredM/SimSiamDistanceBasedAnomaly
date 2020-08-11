@@ -216,7 +216,7 @@ class CBSGroupHandler(threading.Thread):
 
             epoch_loss_avg = tf.keras.metrics.Mean()
 
-            batch_pairs_indices, true_similarities = self.optimizer_helper.compose_batch()
+            batch_pairs_indices, true_similarities = self.optimizer_helper.batch_composer.compose_batch()
 
             # Get the example pairs by the selected indices
             model_input = np.take(a=self.dataset.x_train, indices=batch_pairs_indices, axis=0)
