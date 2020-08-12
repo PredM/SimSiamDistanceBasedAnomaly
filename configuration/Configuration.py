@@ -97,7 +97,7 @@ class ModelConfiguration:
         # If !use_individual_hyperparameters interpreted as a single json file, else as a folder
         # which contains json files named after the cases they should be used for
         # If no file with this name is present the 'default.json' Config will be used
-        self.hyper_file = self.hyper_file_folder + 'cnn2d_withAddInput'  # 'individual_hyperparameters_test'  #
+        self.hyper_file = self.hyper_file_folder + 'cnn1d'  # 'individual_hyperparameters_test'  #
 
         ##
         # Various settings influencing the similarity calculation
@@ -171,7 +171,8 @@ class TrainingConfiguration:
         # Key = Enum for selecting how the pairs are chosen, value = size of the subset of this type, must add up to 1.0
         # The same number of positive and negative pairs are generated for each type
         self.batch_distribution = {
-            BatchSubsetType.DISTRIB_BASED_ON_DATASET: 1.0
+            BatchSubsetType.EQUAL_CLASS_DISTRIB: 0.5,
+            BatchSubsetType.ONLY_FAILURE_PAIRS: 0.5
         }
 
         # Use a custom similarity values instead of 0 for unequal / negative pairs during batch creation
@@ -368,7 +369,7 @@ class StaticConfiguration:
         # Note: Folder of used model specified in GeneralConfiguration
 
         # Folder where the preprocessed training and test data for the neural network should be stored
-        self.training_data_folder = '../training_data/'
+        self.training_data_folder = '../data/training_data/'
 
         # Folder where the normalisation models should be stored
         self.scaler_folder = '../data/scaler/'

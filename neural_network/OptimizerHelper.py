@@ -2,7 +2,7 @@ import numpy as np
 import tensorflow as tf
 import tensorflow.keras.backend as K
 
-from neural_network.BatchComposer import BatchComposer
+from neural_network.BatchComposer import BatchComposer, CbsBatchComposer
 
 
 class OptimizerHelper:
@@ -14,7 +14,7 @@ class OptimizerHelper:
         self.dataset = dataset
         self.optimizer = None
 
-        self.batch_composer = BatchComposer(self.config, self.dataset)
+        self.batch_composer = BatchComposer(config, dataset, self.hyper, False)
 
         if self.hyper.gradient_cap >= 0:
             self.adam_optimizer = tf.keras.optimizers.Adam(learning_rate=self.hyper.learning_rate,
@@ -129,7 +129,7 @@ class CBSOptimizerHelper(OptimizerHelper):
         self.losses = []
         self.best_loss = 1000
         self.stopping_step_counter = 0
-        self.batch_composer = CbsBatchComposer(config, dataset)
+        self.batch_composer = CbsBatchComposer(config, dataset, self.hyper, False)
 
     def execute_early_stop(self, last_loss):
         if self.config.use_early_stopping:

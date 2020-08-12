@@ -16,8 +16,6 @@ class Dataset:
         self.x_train = None  # training data (examples,time,channels)
         self.y_train = None  # One hot encoded class labels (numExamples,numClasses)
         self.y_train_strings = None  # class labels as strings (numExamples,1)
-        self.one_hot_encoder_labels = None  # one hot label encoder
-        self.classes_Unique_oneHotEnc = None
         self.num_train_instances = None
         self.num_instances = None
 
@@ -56,9 +54,12 @@ class FullDataset(Dataset):
         # total number of classes
         self.num_classes = None
 
-        # dictionary with key: class as integer and value: array with index positions
+        # dictionary with key: class as string and value: array with index positions
         self.class_idx_to_ex_idxs_train = {}
         self.class_idx_to_ex_idxs_test = {}
+
+        # maps class as string to the index of the one hot encoding that corresponds to it
+        self.one_hot_index_to_string = {}
 
         # np array that contains the number of instances for each classLabel in the training data
         self.num_instances_by_class_train = None
@@ -118,16 +119,17 @@ class FullDataset(Dataset):
 
         # create a encoder, sparse output must be disabled to get the intended output format
         # added categories='auto' to use future behavior
-        one_hot_encoder = preprocessing.OneHotEncoder(sparse=False, categories='auto')
+        self.one_hot_encoder = preprocessing.OneHotEncoder(sparse=False, categories='auto')
 
         # prepare the encoder with training and test labels to ensure all are present
         # the fit-function 'learns' the encoding but does not jet transform the data
         # the axis argument specifies on which the two arrays are joined
-        one_hot_encoder = one_hot_encoder.fit(np.concatenate((self.y_train_strings, self.y_test_strings), axis=0))
+        self.one_hot_encoder = self.one_hot_encoder.fit(
+            np.concatenate((self.y_train_strings, self.y_test_strings), axis=0))
 
         # transforms the vector of labels into a one hot matrix
-        self.y_train = one_hot_encoder.transform(self.y_train_strings)
-        self.y_test = one_hot_encoder.transform(self.y_test_strings)
+        self.y_train = self.one_hot_encoder.transform(self.y_train_strings)
+        self.y_test = self.one_hot_encoder.transform(self.y_test_strings)
 
         # reduce to 1d array
         self.y_train_strings = np.squeeze(self.y_train_strings)
@@ -152,13 +154,13 @@ class FullDataset(Dataset):
 
         # get the unique classes and the corresponding number
         self.classes_total = np.unique(np.concatenate((self.y_train_strings, self.y_test_strings), axis=0))
-        self.classes_Unique_oneHotEnc = one_hot_encoder.transform(np.expand_dims(self.classes_total, axis=1))
         self.num_classes = self.classes_total.size
 
         # Create two dictionaries to link/associate each class with all its training examples
-        for i in range(self.num_classes):
-            self.class_idx_to_ex_idxs_train[i] = np.argwhere(self.y_train[:, i] > 0)
-            self.class_idx_to_ex_idxs_test[i] = np.argwhere(self.y_test[:, i] > 0)
+        for integer_index, c in enumerate(self.classes_total):
+            self.class_idx_to_ex_idxs_train[c] = np.argwhere(self.y_train[:, integer_index] > 0).reshape(-1)
+            self.class_idx_to_ex_idxs_test[c] = np.argwhere(self.y_test[:, integer_index] > 0).reshape(-1)
+            self.one_hot_index_to_string[integer_index] = c
 
         # collect number of instances for each class in training and test
         self.y_train_strings_unique, counts = np.unique(self.y_train_strings, return_counts=True)
