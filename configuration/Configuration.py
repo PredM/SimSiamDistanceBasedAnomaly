@@ -171,8 +171,7 @@ class TrainingConfiguration:
         # Key = Enum for selecting how the pairs are chosen, value = size of the subset of this type, must add up to 1.0
         # The same number of positive and negative pairs are generated for each type
         self.batch_distribution = {
-            BatchSubsetType.EQUAL_CLASS_DISTRIB: 0.5,
-            BatchSubsetType.ONLY_FAILURE_PAIRS: 0.5
+            BatchSubsetType.DISTRIB_BASED_ON_DATASET: 1,
         }
 
         # Use a custom similarity values instead of 0 for unequal / negative pairs during batch creation

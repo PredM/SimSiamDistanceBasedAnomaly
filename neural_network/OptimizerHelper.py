@@ -129,7 +129,7 @@ class CBSOptimizerHelper(OptimizerHelper):
         self.losses = []
         self.best_loss = 1000
         self.stopping_step_counter = 0
-        self.batch_composer = CbsBatchComposer(config, dataset, self.hyper, False)
+        self.batch_composer = CbsBatchComposer(config, dataset, self.hyper, False, group_id)
 
     def execute_early_stop(self, last_loss):
         if self.config.use_early_stopping:

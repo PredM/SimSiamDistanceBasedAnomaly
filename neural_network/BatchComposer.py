@@ -5,7 +5,7 @@ import numpy as np
 from configuration.Configuration import Configuration
 from configuration.Hyperparameter import Hyperparameters
 from configuration.enums import BatchSubsetType
-from neural_network.Dataset import FullDataset
+from neural_network.Dataset import FullDataset, CBSDataset
 
 
 class BatchComposer:
@@ -32,8 +32,8 @@ class BatchComposer:
         batch_pair_indices = []  # index number of each example used in the training
 
         for subset_type in self.config.batch_distribution.keys():
-            # TODO prüfen, wie das hier mit Rundungen aussieht
             percentage_type = self.config.batch_distribution.get(subset_type)
+            # Ceil rounds up to next integer
             nbr_pairs_with_this_type = math.ceil(percentage_type * self.hyper.batch_size)
 
             subset_pair_indices, subset_true_similarities = self.compose_subset(subset_type, nbr_pairs_with_this_type)
@@ -133,8 +133,20 @@ class CbsBatchComposer(BatchComposer):
     def __init__(self, config, dataset, hyper, from_test, group_id):
         super().__init__(config, dataset, hyper, from_test)
         self.group_id = group_id
+        self.dataset: CBSDataset = dataset
 
-    # TODO: Implementation for CBS, maybe include into super class, depending on complexity and usefulness
-    #  of other new features
-    def compose_batch(self):
-        raise NotImplementedError('TODO')
+    def draw_pair(self, is_positive, type=None):
+
+        if type == BatchSubsetType.DISTRIB_BASED_ON_DATASET:
+            pos_indices = self.dataset.group_to_indices_train.get(self.group_id)
+            neg_indices = self.dataset.group_to_negative_indices_train.get(self.group_id)
+
+            if is_positive:
+                i1, i2 = np.random.choice(pos_indices, 2, replace=True)
+                return i1, i2
+            else:
+                i1 = np.random.choice(pos_indices, 1, replace=True)[0]
+                i2 = np.random.choice(neg_indices, 1, replace=True)[0]
+                return i1, i2
+        else:
+            raise NotImplementedError('Subset type not implemented for CBS:', type)
