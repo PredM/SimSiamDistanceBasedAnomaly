@@ -1,5 +1,6 @@
 from case_based_similarity.CaseBasedSimilarity import CBS
 from configuration.Configuration import Configuration
+from configuration.enums import BatchSubsetType
 from neural_network.SNN import SimpleSNN
 
 
@@ -30,6 +31,11 @@ class ConfigChecker:
                                   self.config.type_of_loss_function == 'constrative_loss',
                                   'euclidean_dis should only be used for training with constrative loss.')
 
+        sum_percentages = sum(self.config.batch_distribution.values())
+        ConfigChecker.implication(True,
+                                  sum_percentages == 1.0,
+                                  'Percentages for batch subsets must add up to 1.0')
+
         ##
         # CBS
         ##
@@ -41,6 +47,11 @@ class ConfigChecker:
 
         ConfigChecker.implication(self.architecture_type == 'cbs', self.config.feature_variant == 'cbs_features',
                                   'Please use feature_variant == \'cbs_features\' for CBS models.')
+
+        ConfigChecker.implication(self.architecture_type == 'cbs', len(self.config.batch_distribution.keys()) == 1 and
+                                  list(self.config.batch_distribution.keys())[
+                                      0] == BatchSubsetType.DISTRIB_BASED_ON_DATASET,
+                                  'CBS currently only supports simple pair drawing using BatchSubsetType.DISTRIB_BASED_ON_DATASET')
 
         ##
         # Preprocessing

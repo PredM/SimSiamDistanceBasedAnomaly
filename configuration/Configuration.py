@@ -2,7 +2,6 @@ import json
 
 import pandas as pd
 
-
 ####
 # Note: Division into different classes only serves to improve clarity.
 # Only the Configuration class should be used to access all variables.
@@ -10,6 +9,8 @@ import pandas as pd
 # Otherwise they will be overwritten depending on the order of inheritance!
 # All methods should be added to the Configuration class to be able to access all variables
 ####
+from configuration.enums import BatchSubsetType
+
 
 class GeneralConfiguration:
 
@@ -96,7 +97,7 @@ class ModelConfiguration:
         # If !use_individual_hyperparameters interpreted as a single json file, else as a folder
         # which contains json files named after the cases they should be used for
         # If no file with this name is present the 'default.json' Config will be used
-        self.hyper_file = self.hyper_file_folder + 'cnn2d_withAddInput'  # 'individual_hyperparameters_test'  #
+        self.hyper_file = self.hyper_file_folder + 'cnn1d'  # 'individual_hyperparameters_test'  #
 
         ##
         # Various settings influencing the similarity calculation
@@ -166,17 +167,12 @@ class TrainingConfiguration:
         self.use_inference_test_during_training = False  # default False
         self.inference_during_training_epoch_interval = 10000  # default False
 
-        # The examples of a batch during training are selected based on the number of classes (=True)
-        # and not on the number of training examples contained in the training data set (=False).
-        # This means that each training batch contains almost examples from each class (practically
-        # upsampling of minority classes). Based on recommendation of lessons learned from successful siamese models:
-        # http://openaccess.thecvf.com/content_ICCV_2019/papers/Roy_Siamese_Networks_The_Tale_of_Two_Manifolds_ICCV_2019_paper.pdf
-        self.equalClassConsideration = True  # default: False
-
-        # If equalClassConsideration is true, then this parameter defines the proportion of examples
-        # based on class distribution and example distribution.
-        # Proportion = BatchSize/2/ThisFactor. E.g., 2 = class distribution only, 4 = half, 6 = 1/3, 8 = 1/4
-        self.upsampling_factor = 4  # default: 4, means half / half
+        # Definition of batch compositions
+        # Key = Enum for selecting how the pairs are chosen, value = size of the subset of this type, must add up to 1.0
+        # The same number of positive and negative pairs are generated for each type
+        self.batch_distribution = {
+            BatchSubsetType.DISTRIB_BASED_ON_DATASET: 1,
+        }
 
         # Use a custom similarity values instead of 0 for unequal / negative pairs during batch creation
         # These are based on the similarity matrices loaded in the dataset
@@ -372,7 +368,7 @@ class StaticConfiguration:
         # Note: Folder of used model specified in GeneralConfiguration
 
         # Folder where the preprocessed training and test data for the neural network should be stored
-        self.training_data_folder = '../training_data/'
+        self.training_data_folder = '../data/training_data/'
 
         # Folder where the normalisation models should be stored
         self.scaler_folder = '../data/scaler/'

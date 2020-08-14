@@ -2,6 +2,8 @@ import numpy as np
 import tensorflow as tf
 import tensorflow.keras.backend as K
 
+from neural_network.BatchComposer import BatchComposer, CbsBatchComposer
+
 
 class OptimizerHelper:
 
@@ -11,6 +13,8 @@ class OptimizerHelper:
         self.hyper = self.model.hyper
         self.dataset = dataset
         self.optimizer = None
+
+        self.batch_composer = BatchComposer(config, dataset, self.hyper, False)
 
         if self.hyper.gradient_cap >= 0:
             self.adam_optimizer = tf.keras.optimizers.Adam(learning_rate=self.hyper.learning_rate,
@@ -115,73 +119,6 @@ class OptimizerHelper:
 
         return pairwise_class_label_sim
 
-    def compose_batch(self):
-        batch_true_similarities = []  # similarity label for each pair
-        batch_pairs_indices = []  # index number of each example used in the training
-
-        # Generate a random vector that contains the number of classes that should be considered in the current batch
-        # 4 means approx. half of the batch contains no-failure, 1 and 2 uniform
-        equal_class_part = self.config.upsampling_factor
-        failure_classes_considered = np.random.randint(low=0, high=len(self.dataset.y_train_strings_unique),
-                                                       size=self.hyper.batch_size // equal_class_part)
-        # print("failure_classes_considered: ", failure_classes_considered)
-
-        # Compose batch
-        # // 2 because each iteration one similar and one dissimilar pair is added
-        for i in range(self.hyper.batch_size // 2):
-            # print("i: ", i)
-            #
-            # pos pair
-            #
-            if self.config.equalClassConsideration:
-                if i < self.hyper.batch_size // equal_class_part:
-                    # print(i,": ", failure_classes_considered[i-self.architecture.hyper.batch_size // 4])
-
-                    idx = (failure_classes_considered[i - self.hyper.batch_size // equal_class_part])
-                    # print(i, "idx: ", idx)
-                    pos_pair = self.dataset.draw_pair_by_class_idx(True, from_test=False, class_idx=idx)
-                    # class_idx=(i % self.dataset.num_classes))
-                else:
-                    pos_pair = self.dataset.draw_pair(True, from_test=False)
-            else:
-                pos_pair = self.dataset.draw_pair(True, from_test=False)
-            batch_pairs_indices.append(pos_pair[0])
-            batch_pairs_indices.append(pos_pair[1])
-            # print("PosPair: ", self.dataset.y_train_strings[pos_pair[0]]," - ", #
-            # self.dataset.y_train_strings[pos_pair[1]])
-            batch_true_similarities.append(1.0)
-
-            #
-            # neg pair here
-            #
-
-            # Find a negative pair
-            if self.config.equalClassConsideration:
-                if i < self.hyper.batch_size // equal_class_part:
-
-                    idx = (failure_classes_considered[i - self.hyper.batch_size // equal_class_part])
-                    neg_pair = self.dataset.draw_pair_by_class_idx(False, from_test=False, class_idx=idx)
-                else:
-                    neg_pair = self.dataset.draw_pair(False, from_test=False)
-            else:
-                neg_pair = self.dataset.draw_pair(False, from_test=False)
-            batch_pairs_indices.append(neg_pair[0])
-            batch_pairs_indices.append(neg_pair[1])
-            # print("NegPair: ", self.dataset.y_train_strings[neg_pair[0]], " - ",
-            # self.dataset.y_train_strings[neg_pair[1]])
-
-            # If configured a similarity value is used for the negative pair instead of full dissimilarity
-            if self.config.use_sim_value_for_neg_pair:
-                sim = self.dataset.get_sim_label_pair(neg_pair[0], neg_pair[1], 'train')
-                batch_true_similarities.append(sim)
-            else:
-                batch_true_similarities.append(0.0)
-
-        # Change the list of ground truth similarities to an array
-        true_similarities = np.asarray(batch_true_similarities)
-
-        return batch_pairs_indices, true_similarities
-
 
 class CBSOptimizerHelper(OptimizerHelper):
 
@@ -192,38 +129,7 @@ class CBSOptimizerHelper(OptimizerHelper):
         self.losses = []
         self.best_loss = 1000
         self.stopping_step_counter = 0
-
-    # Overwrites the standard implementation because some features are not compatible with the cbs currently
-    def compose_batch(self):
-        batch_true_similarities = []  # similarity label for each pair
-        batch_pairs_indices = []  # index number of each example used in the training
-        group_hyper = self.model.hyper
-
-        # Compose batch
-        # // 2 because each iteration one similar and one dissimilar pair is added
-
-        for i in range(group_hyper.batch_size // 2):
-
-            i1, i2 = self.dataset.draw_pair_cbs(True, self.group_id)
-            batch_pairs_indices.append(i1)
-            batch_pairs_indices.append(i2)
-            batch_true_similarities.append(1.0)
-
-            i1, i2 = self.dataset.draw_pair_cbs(False, self.group_id)
-            batch_pairs_indices.append(i1)
-            batch_pairs_indices.append(i2)
-
-            # If configured a similarity value is used for the negative pair instead of full dissimilarity
-            if self.config.use_sim_value_for_neg_pair:
-                sim = self.dataset.get_sim_label_pair(i1, i2, 'train')
-                batch_true_similarities.append(sim)
-            else:
-                batch_true_similarities.append(0.0)
-
-        # Change the list of ground truth similarities to an array
-        true_similarities = np.asarray(batch_true_similarities)
-
-        return batch_pairs_indices, true_similarities
+        self.batch_composer = CbsBatchComposer(config, dataset, self.hyper, False, group_id)
 
     def execute_early_stop(self, last_loss):
         if self.config.use_early_stopping:
