@@ -26,8 +26,6 @@ class Inference:
         else:
             self.idx_test_examples_query_pool = range(self.dataset.num_test_instances)
 
-        self.idx_test_examples_query_pool = range(20)
-
         self.evaluator = Evaluator(dataset, len(self.idx_test_examples_query_pool), self.config.k_of_knn)
 
     def infer_test_dataset(self):
@@ -39,7 +37,9 @@ class Inference:
             # print("sims shape: ", sims.shape, " label shape: ", labels.shape)
             # check similarities of all pairs and record the index of the closest training series
 
-            self.evaluator.add_single_example_results(sims, idx_test)
+            sims_are_distance_values = True if self.config.simple_measure in ['euclidean_dis'] else False
+
+            self.evaluator.add_single_example_results(sims, idx_test, sims_are_distance_values)
 
         # inference finished
         elapsed_time = time.perf_counter() - start_time

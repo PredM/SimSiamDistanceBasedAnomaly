@@ -59,13 +59,17 @@ class Evaluator:
     def get_nbr_correctly_classified(self):
         return np.diag(self.multi_class_results).sum()
 
-    def add_single_example_results(self, sims, test_example_index):
+    # TODO add flag sims_are_distance_values and corresponding if
+    def add_single_example_results(self, sims, test_example_index, sims_are_distance_values=False):
         ###
         # Get the relevant information about the results of this example
         ###
 
         # Get the indices of the examples sorted by smallest distance
-        nearest_neighbors_ranked_indices = np.argsort(-sims)
+        if sims_are_distance_values:
+            nearest_neighbors_ranked_indices = np.argsort(sims)
+        else:
+            nearest_neighbors_ranked_indices = np.argsort(-sims)
 
         # Get the true label stored in the dataset
         true_class = self.dataset.y_test_strings[test_example_index]
@@ -158,7 +162,10 @@ class Evaluator:
         knn_results = []
         for i in range(self.k_of_knn):
             index = ranking_nearest_neighbors_idx[i]
-            row = [i + 1, 'Class: ' + self.dataset.y_train_strings[index],
+            c = self.dataset.y_train_strings[index]
+            c = c if len(c) < 40 else c[0:40]+"..."
+
+            row = [i + 1, 'Class: ' + c,
                    'Sim: ' + str(round(sims[index], 6)),
                    'Case ID: ' + str(index),
                    'Failure: ' + str(self.dataset.failure_times_train[index]),
@@ -167,7 +174,7 @@ class Evaluator:
 
         print("K-nearest Neighbors of", nbr_tested_example, ':')
         for row in knn_results:
-            print("{: <3} {: <60} {: <20} {: <20} {: <20} {: <20}".format(*row))
+            print("{: <3} {: <60} {: <20} {: <20} {: <30} {: <20}".format(*row))
 
     # Calculates the final results based on the information added for each example during inference
     # Must be called after inference before print_results is called.

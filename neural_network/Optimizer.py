@@ -126,15 +126,17 @@ class SNNOptimizer(Optimizer):
         self.train_loss_results.append(epoch_loss_avg.result())
 
         if epoch % self.config.output_interval == 0:
-            print("Timestamp: {} ({:.2f} Seconds since last output) - Epoch: {} - Loss: {:.5f}".format(
+            self.delete_old_checkpoints(epoch)
+            dir_name = self.save_models(epoch)
+
+            print("Timestamp: {} ({:.2f} Seconds since last output) - Epoch: {} - Loss: {:.5f} - Name: {}".format(
                 datetime.now().strftime('%d.%m %H:%M:%S'),
                 (perf_counter() - self.last_output_time),
                 epoch,
-                epoch_loss_avg.result()
+                epoch_loss_avg.result(),
+                dir_name
             ))
 
-            self.delete_old_checkpoints(epoch)
-            self.save_models(epoch)
             self.last_output_time = perf_counter()
 
     def execute_early_stop(self):
@@ -173,32 +175,35 @@ class SNNOptimizer(Optimizer):
 
     def save_models(self, current_epoch):
         if current_epoch <= 0:
-            return
+            return ""
 
         # generate a name and create the directory, where the model files of this epoch should be stored
         epoch_string = 'epoch-' + str(current_epoch)
         dt_string = datetime.now().strftime("%m-%d_%H-%M-%S")
-        dir_name = self.config.models_folder + '_'.join(['temp', 'snn', 'model', dt_string, epoch_string]) + '/'
-        os.mkdir(dir_name)
-        self.dir_name_last_model_saved = dir_name
+        dir_name = '_'.join(['temp', 'snn', 'model', dt_string, epoch_string]) + '/'
+        path = self.config.models_folder + dir_name
+        os.mkdir(path)
+        self.dir_name_last_model_saved = path
 
         # generate the file names and save the model files in the directory created before
         subnet_file_name = '_'.join(['encoder', self.architecture.hyper.encoder_variant, epoch_string]) + '.h5'
 
         # write model configuration to file
         self.architecture.hyper.epochs_current = current_epoch
-        self.architecture.hyper.write_to_file(dir_name + 'hyperparameters_used.json')
+        self.architecture.hyper.write_to_file(path + 'hyperparameters_used.json')
 
-        self.architecture.encoder.model.save_weights(dir_name + subnet_file_name)
+        self.architecture.encoder.model.save_weights(path + subnet_file_name)
 
         if self.config.architecture_variant in ['standard_ffnn', 'fast_ffnn']:
             ffnn_file_name = '_'.join(['ffnn', epoch_string]) + '.h5'
-            self.architecture.ffnn.model.save_weights(dir_name + ffnn_file_name)
+            self.architecture.ffnn.model.save_weights(path + ffnn_file_name)
 
         loss = str(self.train_loss_results[-1].numpy())
 
-        with open(dir_name + 'loss.txt', 'w') as f:
+        with open(path + 'loss.txt', 'w') as f:
             f.write(loss)
+
+        return dir_name
 
 
 class CBSOptimizer(Optimizer):
@@ -302,9 +307,14 @@ class CBSOptimizer(Optimizer):
         self.architecture.kill_threads()
 
     def output(self, current_epoch):
-        print("Timestamp: {} ({:.2f} Seconds since last output) - Epoch: {}".format(
+        self.delete_old_checkpoints(current_epoch)
+        dir_name = self.save_models(current_epoch)
+
+        print("Timestamp: {} ({:.2f} Seconds since last output) - Epoch: {} - Name: {}".format(
             datetime.now().strftime('%d.%m %H:%M:%S'),
-            perf_counter() - self.last_output_time, current_epoch))
+            perf_counter() - self.last_output_time,
+            current_epoch,
+            dir_name))
 
         for group_handler in self.architecture.group_handlers:
             group_handler: CBSGroupHandler = group_handler
@@ -322,19 +332,19 @@ class CBSOptimizer(Optimizer):
                   .format(group_id, status, loss_of_case))
 
         print()
-        self.delete_old_checkpoints(current_epoch)
-        self.save_models(current_epoch)
+
         self.last_output_time = perf_counter()
 
     def save_models(self, current_epoch):
         if current_epoch <= 0:
-            return
+            return ""
 
         # Generate a name and create the directory, where the model files of this epoch should be stored
         epoch_string = 'epoch-' + str(current_epoch)
         dt_string = datetime.now().strftime("%m-%d_%H-%M-%S")
-        dir_name = self.config.models_folder + '_'.join(['temp', 'cbs', 'model', dt_string, epoch_string]) + '/'
-        os.mkdir(dir_name)
+        dir_name = '_'.join(['temp', 'cbs', 'model', dt_string, epoch_string]) + '/'
+        path = self.config.models_folder + dir_name
+        os.mkdir(path)
 
         for group_handler in self.architecture.group_handlers:
             group_handler: CBSGroupHandler = group_handler
@@ -343,7 +353,7 @@ class CBSOptimizer(Optimizer):
 
             # Create a subdirectory for the model files of this case handler
             subdirectory = group_id + '_model'
-            full_path = os.path.join(dir_name, subdirectory)
+            full_path = os.path.join(path, subdirectory)
             os.mkdir(full_path)
 
             # Write model configuration to file
@@ -358,3 +368,5 @@ class CBSOptimizer(Optimizer):
             if self.config.architecture_variant in ['standard_ffnn', 'fast_ffnn']:
                 ffnn_file_name = '_'.join(['ffnn', epoch_string]) + '.h5'
                 group_handler.model.ffnn.model.save_weights(os.path.join(full_path, ffnn_file_name))
+
+        return dir_name
