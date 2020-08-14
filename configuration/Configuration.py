@@ -45,8 +45,8 @@ class GeneralConfiguration:
         # by a single group handler during training and inference. Enabling this can be used if the models are to big
         # which would result in out of memory errors.
         # If using small models (which dont have oom problems) it is recommended to disable this function,
-        # since this should result in performance improvements
-        self.batch_wise_handler_execution = True  # Default: False
+        # since this should result in a performance improvements
+        self.batch_wise_handler_execution = False  # Default: False
 
 
 class ModelConfiguration:
@@ -161,11 +161,11 @@ class TrainingConfiguration:
 
         self.use_early_stopping = True
         self.early_stopping_epochs_limit = 1000
-        self.early_stopping_loss_minimum = 0.03  # Default: 0.0 (no effect), CNN2D_with_add_Input: BCE:0.03, MSE:0.01
+        self.early_stopping_loss_minimum = 0.0  # Default: 0.0 (no effect), CNN2D_with_add_Input: BCE:0.03, MSE:0.01
 
         # Parameter to control if and when a test is conducted through training
         self.use_inference_test_during_training = False  # default False
-        self.inference_during_training_epoch_interval = 10000  # default False
+        self.inference_during_training_epoch_interval = 10000
 
         # Definition of batch compositions
         # Key = Enum for selecting how the pairs are chosen, value = size of the subset of this type, must add up to 1.0
@@ -183,10 +183,10 @@ class TrainingConfiguration:
         self.continue_training = False  # default: False
 
         # Defines how often loss is printed and checkpoints are saved during training
-        self.output_interval = 1
+        self.output_interval = 200
 
         # How many model checkpoints are kept
-        self.model_files_stored = 2500
+        self.model_files_stored = 50
 
 
 class InferenceConfiguration:
@@ -211,7 +211,7 @@ class InferenceConfiguration:
         # If enabled the similarity assessment of the test dataset to the training datset will be split into chunks
         # Possibly necessary due to VRam limitation
         self.split_sim_calculation = True  # default False
-        self.sim_calculation_batch_size = 128
+        self.sim_calculation_batch_size = 256
 
         # If enabled the model is printed as model.png
         self.print_model = True
