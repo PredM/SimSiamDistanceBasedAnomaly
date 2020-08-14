@@ -1,6 +1,6 @@
 from case_based_similarity.CaseBasedSimilarity import CBS
 from configuration.Configuration import Configuration
-from configuration.Enums import BatchSubsetType
+from configuration.Enums import BatchSubsetType, LossFunction
 from neural_network.SNN import SimpleSNN
 
 
@@ -28,13 +28,29 @@ class ConfigChecker:
         ##
 
         ConfigChecker.implication(self.config.simple_measure == 'euclidean_dis',
-                                  self.config.type_of_loss_function == 'constrative_loss',
-                                  'euclidean_dis should only be used for training with constrative loss.')
+                                  self.config.type_of_loss_function in [LossFunction.TRIPLET_LOSS,
+                                                                        LossFunction.CONSTRATIVE_LOSS],
+                                  'euclidean_dis should only be used for constrative or triplet loss.')
 
         sum_percentages = sum(self.config.batch_distribution.values())
         ConfigChecker.implication(True,
                                   sum_percentages == 1.0,
                                   'Percentages for batch subsets must add up to 1.0')
+
+        ConfigChecker.implication(self.config.type_of_loss_function == LossFunction.TRIPLET_LOSS,
+                                  len(self.config.batch_distribution.keys()) == 1 and
+                                  list(self.config.batch_distribution.keys())[
+                                      0] == BatchSubsetType.TRIPLET_LOSS_BATCH,
+                                  'When using the triplet loss function only the corresponding batch type BatchSubsetType.TRIPLET_LOSS_BATCH can be used.')
+
+        ConfigChecker.implication(self.config.type_of_loss_function == LossFunction.TRIPLET_LOSS,
+                                  self.config.simple_measure == 'euclidean_dis',
+                                  'The euclidean distance must be used for triplet loss (set config.simple_measure = \'euclidean_dis\')')
+
+        # TODO Check if this is the case
+        ConfigChecker.implication(self.config.type_of_loss_function == LossFunction.TRIPLET_LOSS,
+                                  self.config.useFeatureWeightedSimilarity == False,
+                                  'This feature should not be used with the triplet loss function until evaluated.')
 
         ##
         # CBS

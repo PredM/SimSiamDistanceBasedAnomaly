@@ -9,7 +9,9 @@ import pandas as pd
 # Otherwise they will be overwritten depending on the order of inheritance!
 # All methods should be added to the Configuration class to be able to access all variables
 ####
-from configuration.Enums import BatchSubsetType
+from tensorflow.python.keras.losses import Loss
+
+from configuration.Enums import BatchSubsetType, LossFunction
 
 
 class GeneralConfiguration:
@@ -80,7 +82,7 @@ class ModelConfiguration:
         # Attention: Implementation expects a simple measure to return a similarity in the interval of [0,1]!
         # Only use euclidean_dis for TRAINING with contrastive loss
         self.simple_measures = ['abs_mean', 'euclidean_sim', 'euclidean_dis', 'dot_product', 'cosine']
-        self.simple_measure = self.simple_measures[0]
+        self.simple_measure = self.simple_measures[2]
 
         ###
         # Hyperparameters
@@ -108,7 +110,7 @@ class ModelConfiguration:
 
         # Additional option for encoder variant cnn2dwithaddinput and the euclidean distance:
         # Weighted euclidean similarity based on relevant attributes
-        self.useFeatureWeightedSimilarity = True  # default: False
+        self.useFeatureWeightedSimilarity = False  # default: False
 
         # Weights are based on masking vectors that contain 1 if a feature is selected as relevant for a
         # label (failure mode) and 0 otherwise. If option is set False then features based
@@ -148,12 +150,15 @@ class TrainingConfiguration:
         self.feature_variant = self.feature_variants[1]
         self.features_used = None
 
-        # TODO Add TripletLoss, Distance-Based Logistic Loss
-        self.loss_function_variants = ['binary_cross_entropy', 'constrative_loss', 'mean_squared_error', 'huber_loss']
-        self.type_of_loss_function = self.loss_function_variants[0]
+        # TODO Distance-Based Logistic Loss
+        self.type_of_loss_function = LossFunction.TRIPLET_LOSS
 
         # Settings for constrative_loss
         self.margin_of_loss_function = 2
+
+        # Scalar margin h for triplet loss function
+        self.triplet_loss_margin_h = 10
+
 
         # Reduce margin of constrative_loss or in case of binary cross entropy loss
         # smooth negative examples by half of the sim between different labels
@@ -171,7 +176,7 @@ class TrainingConfiguration:
         # Key = Enum for selecting how the pairs are chosen, value = size of the subset of this type, must add up to 1.0
         # The same number of positive and negative pairs are generated for each type
         self.batch_distribution = {
-            BatchSubsetType.DISTRIB_BASED_ON_DATASET: 1,
+            BatchSubsetType.TRIPLET_LOSS_BATCH: 1,
         }
 
         # Use a custom similarity values instead of 0 for unequal / negative pairs during batch creation

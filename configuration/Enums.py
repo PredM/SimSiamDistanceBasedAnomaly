@@ -10,3 +10,13 @@ class BatchSubsetType(Enum):
     ONLY_FAILURE_PAIRS = 2
     # Positive pairs will be the same as for 2, but negative pairs could also be failure mode, no_failure
     NO_FAILURE_ONLY_FOR_NEG_PAIRS = 3
+    # Special kind of batch generated for triplet loss
+    TRIPLET_LOSS_BATCH = 4
+
+
+class LossFunction(Enum):
+    BINARY_CROSS_ENTROPY = 0
+    CONSTRATIVE_LOSS = 1
+    MEAN_SQUARED_ERROR = 2
+    HUBER_LOSS = 3
+    TRIPLET_LOSS = 4
