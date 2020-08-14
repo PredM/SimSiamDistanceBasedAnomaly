@@ -1,6 +1,5 @@
 import numpy as np
 import pandas as pd
-import sklearn
 from sklearn import metrics
 
 from neural_network.Dataset import FullDataset
@@ -16,7 +15,7 @@ class Evaluator:
         # Dataframe that stores the results that will be output at the end of the inference process
         # Is not filled with data during the inference
         index = list(dataset.y_test_strings_unique) + ['combined']
-        cols = ['#Examples', 'TP', 'FP', 'TN', 'FN', 'TPR', 'FPR', 'FNR', 'FDR', 'AUC', 'ACC']
+        cols = ['#Examples', 'TP', 'FP', 'TN', 'FN', 'TPR', 'FPR', 'FNR', 'FDR', 'ACC']
         self.results = pd.DataFrame(0, index=index, columns=cols)
         self.results.index.name = 'Classes'
         self.results.loc['combined', '#Examples'] = self.num_test_examples
@@ -29,9 +28,6 @@ class Evaluator:
         # storing real, predicted label and similarity for each classification
         self.y_true = []
         self.y_pred = []
-        self.y_pred_sim = []
-
-        self.all_sims_for_auc = []
 
         self.unique_test_failures = np.unique(self.dataset.failure_times_test)
         idx = np.where(np.char.find(self.unique_test_failures, 'noFailure') >= 0)
@@ -56,11 +52,6 @@ class Evaluator:
         self.quality_fails_condition_quality = 0
 
         self.example_counter_fails = 0
-
-        major_version = int(sklearn.__version__.split('.')[1])
-        if major_version < 22:
-            raise SystemExit('ROC AUC Score can not be calculated. Update sklearn using: \n'
-                             'pip install --user --upgrade scikit-learn')
 
     def get_nbr_examples_tested(self):
         return self.results['#Examples'].drop('combined', axis=0).sum()
@@ -92,9 +83,6 @@ class Evaluator:
         # Store this information
         self.y_true.append(true_class)
         self.y_pred.append(max_sim_class)
-        self.y_pred_sim.append(max_sim)
-
-        self.all_sims_for_auc.append(sims)
 
         # Increase the value of this "label pair"
         self.multi_class_results.loc[max_sim_class, true_class] += 1
@@ -213,10 +201,6 @@ class Evaluator:
             self.results.loc[class_in_test, 'TN'] = true_negatives
 
             # Calculate false positive rate (FPR) and true positive rate (TPR) and other metrics
-            fpr, tpr, thresholds = metrics.roc_curve(np.stack(self.y_true, axis=0), np.stack(self.y_pred_sim, axis=0),
-                                                     pos_label=class_in_test)
-            self.results.loc[class_in_test, 'AUC'] = metrics.auc(fpr, tpr)
-
             self.results.loc[class_in_test, 'TPR'] = self.rate_calculation(true_positives, false_negatives)
             self.results.loc[class_in_test, 'FNR'] = self.rate_calculation(false_negatives, true_positives)
             self.results.loc[class_in_test, 'FPR'] = self.rate_calculation(false_positives, true_negatives)
@@ -234,10 +218,6 @@ class Evaluator:
 
         all_classes = list(self.results.index.values)
         all_classes.remove('combined')
-        y_true_one_hot, y_score, labels = self.get_auc_score_input(all_classes)
-        auc_score = metrics.roc_auc_score(y_true=y_true_one_hot, y_score=y_score, labels=labels,
-                                          multi_class='ovr')
-        self.results.loc['combined', 'ROC_AUC'] = auc_score
 
         # Correction of the accuracy for the "combined" row
         self.results.loc['combined', 'ACC'] = (self.results.loc['combined', ['TP', 'TN']].sum() / self.results.loc[
@@ -249,56 +229,6 @@ class Evaluator:
         self.results.loc['combined', 'FNR'] = self.rate_calculation(fnc, tpc)
         self.results.loc['combined', 'FPR'] = self.rate_calculation(fpc, tnc)
         self.results.loc['combined', 'FDR'] = self.rate_calculation(fpc, tpc)
-
-    def get_auc_score_input(self, classes: list):
-        # df = pd.dataframe(columns=labels)
-        y_true_array = np.array(self.y_true)
-        all_unique_classes = list(np.unique(y_true_array))
-
-        # Reduce array to examples where its true class is in the list of classes passed
-        indices_examples_with_c = [i for i in range(len(y_true_array)) if y_true_array[i] in classes]
-        y_true_array = y_true_array[indices_examples_with_c]
-
-        if len(indices_examples_with_c) == 0:
-            return None, None, None
-
-        # Get one hot encoding of true classes for all examples,
-        # More complicated because all unique classes should be columns, not only those present in y_true_array
-        df = pd.DataFrame({"col": y_true_array})
-        df['col'] = pd.Categorical(df['col'], categories=all_unique_classes)
-        df = pd.get_dummies(df['col'])
-
-        y_true_one_hot = df.to_numpy()
-        labels = list(df.columns.to_numpy())
-
-        scores = []
-
-        # for each example calculate the probabilities for each class
-        for i in indices_examples_with_c:
-            # create empty array with length == nbr of labels
-            class_props = np.zeros(len(all_unique_classes))
-
-            # get the similarity values for this example
-            sims_i = self.all_sims_for_auc[i]
-            sum_sims = sims_i.sum()
-
-            train_labels = self.dataset.y_train_strings
-
-            for j, c in enumerate(all_unique_classes):
-                # calculate the sum of similarities of example with class c
-                sum_sims_with_c = sims_i[train_labels == c].sum()
-
-                # calculate the ratio for this class and store
-                ratio = sum_sims_with_c / sum_sims
-                class_props[j] = ratio
-
-            # append the class props for each example
-            scores.append(class_props)
-
-        # (n_samples, n_classes).
-        # In the multi class case, the order of the class scores must correspond to the order of labels
-        y_score = np.array(scores)
-        return y_true_one_hot, y_score, labels
 
     @staticmethod
     def rate_calculation(numerator, denominator_part2):
@@ -329,6 +259,9 @@ class Evaluator:
 
         num_infers = self.get_nbr_examples_tested()
 
+        # Fix for divided by zero if all examples classified correctly
+        self.example_counter_fails = self.example_counter_fails if self.example_counter_fails > 0 else 1
+
         # print the result of completed inference process
         print('-------------------------------------------------------------')
         print('Final Result:')
@@ -338,7 +271,7 @@ class Evaluator:
         print('Average time per example:', round(elapsed_time / self.num_test_examples, 4), 'Seconds')
         print('-------------------------------------------------------------')
         print('Classification accuracy split by classes:')
-        print('FPR = false positive rate , TPR = true positive rate , AUC = area under curve, ACC = accuracy\n')
+        print('FPR = false positive rate , TPR = true positive rate , ACC = accuracy\n')
         print(self.results.to_string())
         print()
         print('-------------------------------------------------------------\n')

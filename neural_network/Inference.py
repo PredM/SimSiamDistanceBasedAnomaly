@@ -26,6 +26,8 @@ class Inference:
         else:
             self.idx_test_examples_query_pool = range(self.dataset.num_test_instances)
 
+        self.idx_test_examples_query_pool = range(20)
+
         self.evaluator = Evaluator(dataset, len(self.idx_test_examples_query_pool), self.config.k_of_knn)
 
     def infer_test_dataset(self):

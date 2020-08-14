@@ -29,7 +29,7 @@ class GeneralConfiguration:
         self.models_folder = '../data/trained_models/'
 
         # Path and file name to the specific model that should be used for testing and live classification
-        self.filename_model_to_use = 'temp_snn_model_06-29_17-44-52_epoch-2256/'
+        self.filename_model_to_use = 'temp_snn_model_08-14_08-22-36_epoch-200'
         self.directory_model_to_use = self.models_folder + self.filename_model_to_use + '/'
 
         ##
@@ -210,11 +210,11 @@ class InferenceConfiguration:
 
         # If enabled the similarity assessment of the test dataset to the training datset will be split into chunks
         # Possibly necessary due to VRam limitation
-        self.split_sim_calculation = True  # default False
+        self.split_sim_calculation = False  # default False
         self.sim_calculation_batch_size = 256
 
         # If enabled the model is printed as model.png
-        self.print_model = True
+        self.print_model = False
 
 
 class ClassificationConfiguration:
