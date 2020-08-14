@@ -2,6 +2,7 @@ import numpy as np
 import tensorflow as tf
 import tensorflow.keras.backend as K
 
+from configuration.Enums import LossFunction
 from neural_network.BatchComposer import BatchComposer, CbsBatchComposer
 
 
@@ -24,8 +25,6 @@ class OptimizerHelper:
 
     def update_single_model(self, model_input, true_similarities, query_classes=None):
         with tf.GradientTape() as tape:
-            pred_similarities = self.model.get_sims_for_batch(model_input)
-
             # Get parameters of subnet and ffnn (if complex sim measure)
             if self.config.architecture_variant in ['standard_ffnn', 'fast_ffnn']:
                 trainable_params = self.model.ffnn.model.trainable_variables + \
@@ -33,8 +32,10 @@ class OptimizerHelper:
             else:
                 trainable_params = self.model.encoder.model.trainable_variables
 
+            pred_similarities = self.model.get_sims_for_batch(model_input)
+
             # Calculate the loss based on configuration
-            if self.config.type_of_loss_function == "binary_cross_entropy":
+            if self.config.type_of_loss_function == LossFunction.BINARY_CROSS_ENTROPY:
 
                 if self.config.use_margin_reduction_based_on_label_sim:
                     sim = self.get_similarity_between_two_label_string(query_classes, neg_pair_wbce=True)
@@ -43,7 +44,7 @@ class OptimizerHelper:
                 else:
                     loss = tf.keras.losses.binary_crossentropy(y_true=true_similarities, y_pred=pred_similarities)
 
-            elif self.config.type_of_loss_function == "constrative_loss":
+            elif self.config.type_of_loss_function == LossFunction.CONSTRATIVE_LOSS:
 
                 if self.config.use_margin_reduction_based_on_label_sim:
                     sim = self.get_similarity_between_two_label_string(query_classes)
@@ -52,16 +53,18 @@ class OptimizerHelper:
                 else:
                     loss = self.contrastive_loss(y_true=true_similarities, y_pred=pred_similarities)
 
-            elif self.config.type_of_loss_function == "mean_squared_error":
-                loss = tf.keras.losses.MSE(true_similarities, pred_similarities)
+            elif self.config.type_of_loss_function == LossFunction.MEAN_SQUARED_ERROR:
+                loss = tf.keras.losses.MSE(true_similarities, y_pred=pred_similarities)
 
-            elif self.config.type_of_loss_function == "huber_loss":
+            elif self.config.type_of_loss_function == LossFunction.HUBER_LOSS:
                 huber = tf.keras.losses.Huber(delta=0.1)
                 loss = huber(true_similarities, pred_similarities)
+
+            elif self.config.type_of_loss_function == LossFunction.TRIPLET_LOSS:
+                loss = self.triplet_loss(pred_similarities)
             else:
                 raise AttributeError(
-                    'Unknown loss function name. Use: "binary_cross_entropy" or "constrative_loss": ',
-                    self.config.type_of_loss_function)
+                    'Unknown loss function:', self.config.type_of_loss_function)
 
             grads = tape.gradient(loss, trainable_params)
 
@@ -69,6 +72,23 @@ class OptimizerHelper:
             self.adam_optimizer.apply_gradients(zip(grads, trainable_params))
 
             return loss
+
+    # TODO Is this the correct way of aggregation the loss values for each triplet into a single loss value?
+    def triplet_loss(self, y_pred):
+        """
+        Triplet loss based on Conditional Similarity Networks by Veit et al.
+        https://vision.cornell.edu/se3/wp-content/uploads/2017/04/CSN_CVPR-1.pdf
+        """
+        # Input into model for single triplet: [x_i,x_j,x_i,x_l], see BatchComposer for details
+        # Output for single triplet: [D_i_j, D_i_l]
+
+        # Split y_pred into the single dij's and dil's and then compute the loss for each triplet
+        d_i_j_s = y_pred[::2]
+        d_i_l_s = y_pred[1::2]
+        temp = d_i_j_s - d_i_l_s + self.config.triplet_loss_margin_h
+        single_losses = tf.math.maximum(0, temp)
+
+        return tf.keras.backend.mean(single_losses)
 
     def contrastive_loss(self, y_true, y_pred, classes=None):
         """

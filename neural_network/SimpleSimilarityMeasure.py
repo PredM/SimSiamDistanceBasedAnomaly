@@ -1,7 +1,5 @@
 import tensorflow as tf
 
-
-# noinspection PyMethodMayBeStatic
 class SimpleSimilarityMeasure:
 
     def __init__(self, sim_type):
@@ -108,10 +106,7 @@ class SimpleSimilarityMeasure:
                 distance = self.w * diff + (1 - self.w) * distance_con
                 diff = tf.squeeze(distance)
         else:
-            # tf.print("a: ", a)
-            # tf.print("b: ", b)
             diff = tf.norm(a - b, ord='euclidean')
-            # tf.print("diff: ", diff)
 
         return diff
 
