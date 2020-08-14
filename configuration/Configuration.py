@@ -9,7 +9,7 @@ import pandas as pd
 # Otherwise they will be overwritten depending on the order of inheritance!
 # All methods should be added to the Configuration class to be able to access all variables
 ####
-from configuration.enums import BatchSubsetType
+from configuration.Enums import BatchSubsetType
 
 
 class GeneralConfiguration:

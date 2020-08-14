@@ -1,6 +1,6 @@
 from case_based_similarity.CaseBasedSimilarity import CBS
 from configuration.Configuration import Configuration
-from configuration.enums import BatchSubsetType
+from configuration.Enums import BatchSubsetType
 from neural_network.SNN import SimpleSNN
 
 

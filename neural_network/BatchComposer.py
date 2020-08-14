@@ -4,7 +4,7 @@ import numpy as np
 
 from configuration.Configuration import Configuration
 from configuration.Hyperparameter import Hyperparameters
-from configuration.enums import BatchSubsetType
+from configuration.Enums import BatchSubsetType
 from neural_network.Dataset import FullDataset, CBSDataset
 
 
