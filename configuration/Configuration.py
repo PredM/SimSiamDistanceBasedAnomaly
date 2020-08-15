@@ -2,6 +2,9 @@ import json
 
 import pandas as pd
 
+from configuration.Enums import BatchSubsetType, LossFunction
+
+
 ####
 # Note: Division into different classes only serves to improve clarity.
 # Only the Configuration class should be used to access all variables.
@@ -9,9 +12,6 @@ import pandas as pd
 # Otherwise they will be overwritten depending on the order of inheritance!
 # All methods should be added to the Configuration class to be able to access all variables
 ####
-from tensorflow.python.keras.losses import Loss
-
-from configuration.Enums import BatchSubsetType, LossFunction
 
 
 class GeneralConfiguration:
@@ -159,14 +159,14 @@ class TrainingConfiguration:
         # Scalar margin h for triplet loss function
         self.triplet_loss_margin_h = 10
 
-
         # Reduce margin of constrative_loss or in case of binary cross entropy loss
         # smooth negative examples by half of the sim between different labels
         self.use_margin_reduction_based_on_label_sim = False  # default: False
 
         self.use_early_stopping = True
         self.early_stopping_epochs_limit = 1000
-        self.early_stopping_loss_minimum = 0.0  # Default: 0.0 (no effect), CNN2D_with_add_Input: BCE:0.03, MSE:0.01
+        # FIXME -1.0 used because loss of 0 can occur for triplet loss
+        self.early_stopping_loss_minimum = -1.0  # Default: -1.0 (no effect), CNN2D_with_add_Input: BCE:0.03, MSE:0.01
 
         # Parameter to control if and when a test is conducted through training
         self.use_inference_test_during_training = False  # default False
@@ -176,7 +176,8 @@ class TrainingConfiguration:
         # Key = Enum for selecting how the pairs are chosen, value = size of the subset of this type, must add up to 1.0
         # The same number of positive and negative pairs are generated for each type
         self.batch_distribution = {
-            BatchSubsetType.TRIPLET_LOSS_BATCH: 1,
+            BatchSubsetType.DISTRIB_BASED_ON_DATASET: 0.5,
+            BatchSubsetType.EQUAL_CLASS_DISTRIB: 0.5
         }
 
         # Use a custom similarity values instead of 0 for unequal / negative pairs during batch creation

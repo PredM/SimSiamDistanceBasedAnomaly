@@ -3,7 +3,7 @@ import math
 import numpy as np
 
 from configuration.Configuration import Configuration
-from configuration.Enums import BatchSubsetType
+from configuration.Enums import BatchSubsetType, LossFunction
 from configuration.Hyperparameter import Hyperparameters
 from neural_network.Dataset import FullDataset, CBSDataset
 
@@ -36,8 +36,9 @@ class BatchComposer:
             # Ceil rounds up to next integer
             nbr_pairs_with_this_type = math.ceil(percentage_type * self.hyper.batch_size)
 
-            if subset_type == BatchSubsetType.TRIPLET_LOSS_BATCH:
-                subset_pair_indices, subset_true_similarities = self.compose_triplet_subset(nbr_pairs_with_this_type)
+            if self.config.type_of_loss_function == LossFunction.TRIPLET_LOSS:
+                subset_pair_indices, subset_true_similarities = self.compose_triplet_subset(subset_type,
+                                                                                            nbr_pairs_with_this_type)
             else:
                 subset_pair_indices, subset_true_similarities = self.compose_subset(subset_type,
                                                                                     nbr_pairs_with_this_type)
@@ -133,48 +134,50 @@ class BatchComposer:
         else:
             raise NotImplementedError('Unknown batch subset type:', type)
 
-    def compose_triplet_subset(self, nbr_pairs):
+    def compose_triplet_subset(self, subset_type, nbr_pairs):
         # subset_true_similarities are not used so any empty list can be returned in order so be compatible with the
         # compose_batch method
         subset_pair_indices, subset_true_similarities = [], []
 
-        for i in range(nbr_pairs // 4):
+        for i in range(nbr_pairs // 2):
             # Pos pairs
-            pos_triplet = self.draw_triplet(is_positive=True)
-            subset_pair_indices.append(pos_triplet[0])
-            subset_pair_indices.append(pos_triplet[1])
-            subset_pair_indices.append(pos_triplet[0])
-            subset_pair_indices.append(pos_triplet[2])
-
-            neg_triplet = self.draw_triplet(is_positive=False)
-            subset_pair_indices.append(neg_triplet[0])
-            subset_pair_indices.append(neg_triplet[1])
-            subset_pair_indices.append(neg_triplet[0])
-            subset_pair_indices.append(neg_triplet[2])
+            triplet = self.draw_triplet(subset_type)
+            subset_pair_indices.append(triplet[0])
+            subset_pair_indices.append(triplet[1])
+            subset_pair_indices.append(triplet[0])
+            subset_pair_indices.append(triplet[2])
 
         return subset_pair_indices, subset_true_similarities
 
-    # Analog to BatchSubsetType.DISTRIB_BASED_ON_DATASET
-    # Only the comparison example x_i is returned additionally
-    def draw_triplet(self, is_positive):
-        i = np.random.randint(0, self.num_instances, size=1)[0]
+    # Distribution of drawn examples based on dataset
+    def draw_triplet(self, type=None):
 
-        # Compared to old implementation we keep the first index and only redraw the second one
-        # in order to maybe increase the chance of non no failure pairs
-        j = np.random.randint(0, self.num_instances, size=1)[0]
+        if type == BatchSubsetType.DISTRIB_BASED_ON_DATASET:
 
-        # This way of determining a second index for a positive pair is faster than looping
-        if is_positive:
-            class_of_first = np.nonzero(self.y[j] == 1)[0][0]
-            examples_with_same = self.mapping.get(self.dataset.one_hot_index_to_string.get(class_of_first))
-            l = np.random.choice(examples_with_same, 1)[0]
-            return i, j, l
-        else:
+            # Get comparison example and its class
+            i = np.random.randint(0, self.num_instances, size=1)[0]
+            class_of_i = np.nonzero(self.y[i] == 1)[0][0]
+
+            # Get positive example
+            examples_with_same = self.mapping.get(self.dataset.one_hot_index_to_string.get(class_of_i))
+            j = np.random.choice(examples_with_same, 1)[0]
+
+            # Get negative example and return all
             while True:
                 l = np.random.randint(0, self.num_instances, size=1)[0]
                 # return if pair matches the is_positive criterion, else draw another one
                 if not np.array_equal(self.y[j], self.y[l]):
                     return i, j, l
+
+        elif type == BatchSubsetType.EQUAL_CLASS_DISTRIB:
+            # Replace = False ensures we get two different classes
+            class_i_and_j, class_l = np.random.choice(self.labels, size=2, replace=False)
+            i, j = np.random.choice(self.mapping.get(class_i_and_j), 2, replace=True)
+            l = np.random.choice(self.mapping.get(class_l), 1)[0]
+            return i, j, l
+
+        else:
+            raise NotImplementedError('Unknown batch subset type for triplet loss:', type)
 
 
 class CbsBatchComposer(BatchComposer):

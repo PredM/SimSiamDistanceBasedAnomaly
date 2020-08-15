@@ -38,12 +38,6 @@ class ConfigChecker:
                                   'Percentages for batch subsets must add up to 1.0')
 
         ConfigChecker.implication(self.config.type_of_loss_function == LossFunction.TRIPLET_LOSS,
-                                  len(self.config.batch_distribution.keys()) == 1 and
-                                  list(self.config.batch_distribution.keys())[
-                                      0] == BatchSubsetType.TRIPLET_LOSS_BATCH,
-                                  'When using the triplet loss function only the corresponding batch type BatchSubsetType.TRIPLET_LOSS_BATCH can be used.')
-
-        ConfigChecker.implication(self.config.type_of_loss_function == LossFunction.TRIPLET_LOSS,
                                   self.config.simple_measure == 'euclidean_dis',
                                   'The euclidean distance must be used for triplet loss (set config.simple_measure = \'euclidean_dis\')')
 
