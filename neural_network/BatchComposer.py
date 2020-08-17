@@ -180,6 +180,9 @@ class BatchComposer:
             raise NotImplementedError('Unknown batch subset type for triplet loss:', type)
 
 
+# TODO Maybe integrate in SNN BatchComposer
+#  if group id == none SNN behaviour else cbs behaviour
+# TODO Currently fixed to train (not test) dataset
 class CbsBatchComposer(BatchComposer):
     def __init__(self, config, dataset, hyper, from_test, group_id):
         super().__init__(config, dataset, hyper, from_test)
@@ -190,14 +193,36 @@ class CbsBatchComposer(BatchComposer):
 
         if type == BatchSubsetType.DISTRIB_BASED_ON_DATASET:
             pos_indices = self.dataset.group_to_indices_train.get(self.group_id)
-            neg_indices = self.dataset.group_to_negative_indices_train.get(self.group_id)
+            first_idx = np.random.choice(pos_indices, 1, replace=True)[0]
+
+            # This way of determining a second index for a positive pair is faster than looping
+            if is_positive:
+                class_of_first = np.nonzero(self.y[first_idx] == 1)[0][0]
+                examples_with_same = self.mapping.get(self.dataset.one_hot_index_to_string.get(class_of_first))
+                second_idx = np.random.choice(examples_with_same, 1)[0]
+
+                return first_idx, second_idx
+            else:
+                while True:
+                    second_idx = np.random.randint(0, self.num_instances, size=1)[0]
+                    # return if pair matches the is_positive criterion, else draw another one
+                    if not np.array_equal(self.y[first_idx], self.y[second_idx]):
+                        return first_idx, second_idx
+
+        elif type == BatchSubsetType.EQUAL_CLASS_DISTRIB:
+            cases_of_group = self.config.group_id_to_cases.get(self.group_id)
+            class_first_idx = np.random.choice(cases_of_group, 1)[0]
 
             if is_positive:
-                i1, i2 = np.random.choice(pos_indices, 2, replace=True)
-                return i1, i2
+                return np.random.choice(self.mapping.get(class_first_idx), 2, replace=True)
             else:
-                i1 = np.random.choice(pos_indices, 1, replace=True)[0]
-                i2 = np.random.choice(neg_indices, 1, replace=True)[0]
-                return i1, i2
+                while True:
+                    class_second_idx = np.random.choice(self.labels, size=1, replace=False)[0]
+
+                    if class_first_idx != class_second_idx:
+                        first_idx = np.random.choice(self.mapping.get(class_first_idx), 1)[0]
+                        second_idx = np.random.choice(self.mapping.get(class_second_idx), 1)[0]
+                        return first_idx, second_idx
+
         else:
-            raise NotImplementedError('Subset type not implemented for CBS:', type)
+            raise NotImplementedError('Subset type not implemented for CBS: ', type)

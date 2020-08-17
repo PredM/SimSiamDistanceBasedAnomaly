@@ -26,10 +26,6 @@
     1
   ],
   "fc_after_cnn1d_layers": [
-    1024,
-    768,
-    512
-
   ],
   "cnn2d_layers": [
     64,

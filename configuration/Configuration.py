@@ -82,7 +82,7 @@ class ModelConfiguration:
         # Attention: Implementation expects a simple measure to return a similarity in the interval of [0,1]!
         # Only use euclidean_dis for TRAINING with contrastive loss
         self.simple_measures = ['abs_mean', 'euclidean_sim', 'euclidean_dis', 'dot_product', 'cosine']
-        self.simple_measure = self.simple_measures[2]
+        self.simple_measure = self.simple_measures[0]
 
         ###
         # Hyperparameters
@@ -99,7 +99,7 @@ class ModelConfiguration:
         # If !use_individual_hyperparameters interpreted as a single json file, else as a folder
         # which contains json files named after the cases they should be used for
         # If no file with this name is present the 'default.json' Config will be used
-        self.hyper_file = self.hyper_file_folder + 'cnn1d'  # 'individual_hyperparameters_test'  #
+        self.hyper_file = self.hyper_file_folder + 'cbs_21-04.json'  # 'individual_hyperparameters_test'  #
 
         ##
         # Various settings influencing the similarity calculation
@@ -119,7 +119,7 @@ class ModelConfiguration:
         # Select whether the reduction to relevant features should be based on the case itself or the group it belongs
         # to. Based on case = True, based on group = False
         # Must be false for CBS!
-        self.individual_relevant_feature_selection = True  # default: True
+        self.individual_relevant_feature_selection = False  # default: True
 
         # Using the more restrictive features as additional masking vector for feature sim calculation
         # in cnn_with_add_input
@@ -151,7 +151,7 @@ class TrainingConfiguration:
         self.features_used = None
 
         # TODO Distance-Based Logistic Loss
-        self.type_of_loss_function = LossFunction.TRIPLET_LOSS
+        self.type_of_loss_function = LossFunction.BINARY_CROSS_ENTROPY
 
         # Settings for constrative_loss
         self.margin_of_loss_function = 2
@@ -164,7 +164,7 @@ class TrainingConfiguration:
         self.use_margin_reduction_based_on_label_sim = False  # default: False
 
         self.use_early_stopping = True
-        self.early_stopping_epochs_limit = 1000
+        self.early_stopping_epochs_limit = 500
         # FIXME -1.0 used because loss of 0 can occur for triplet loss
         self.early_stopping_loss_minimum = -1.0  # Default: -1.0 (no effect), CNN2D_with_add_Input: BCE:0.03, MSE:0.01
 
@@ -176,8 +176,7 @@ class TrainingConfiguration:
         # Key = Enum for selecting how the pairs are chosen, value = size of the subset of this type, must add up to 1.0
         # The same number of positive and negative pairs are generated for each type
         self.batch_distribution = {
-            BatchSubsetType.DISTRIB_BASED_ON_DATASET: 0.5,
-            BatchSubsetType.EQUAL_CLASS_DISTRIB: 0.5
+            BatchSubsetType.DISTRIB_BASED_ON_DATASET: 1.0,
         }
 
         # Use a custom similarity values instead of 0 for unequal / negative pairs during batch creation
@@ -189,7 +188,7 @@ class TrainingConfiguration:
         self.continue_training = False  # default: False
 
         # Defines how often loss is printed and checkpoints are saved during training
-        self.output_interval = 200
+        self.output_interval = 100
 
         # How many model checkpoints are kept
         self.model_files_stored = 50

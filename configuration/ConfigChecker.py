@@ -1,6 +1,6 @@
 from case_based_similarity.CaseBasedSimilarity import CBS
 from configuration.Configuration import Configuration
-from configuration.Enums import BatchSubsetType, LossFunction
+from configuration.Enums import LossFunction
 from neural_network.SNN import SimpleSNN
 
 
@@ -57,11 +57,6 @@ class ConfigChecker:
 
         ConfigChecker.implication(self.architecture_type == 'cbs', self.config.feature_variant == 'cbs_features',
                                   'Please use feature_variant == \'cbs_features\' for CBS models.')
-
-        ConfigChecker.implication(self.architecture_type == 'cbs', len(self.config.batch_distribution.keys()) == 1 and
-                                  list(self.config.batch_distribution.keys())[
-                                      0] == BatchSubsetType.DISTRIB_BASED_ON_DATASET,
-                                  'CBS currently only supports simple pair drawing using BatchSubsetType.DISTRIB_BASED_ON_DATASET')
 
         ##
         # Preprocessing
