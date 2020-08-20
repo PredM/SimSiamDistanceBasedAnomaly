@@ -370,11 +370,6 @@
       "txt18_o7",
       "txt18_o8"
     ],
-    "txt18_pneumatic_leakage_failure_mode_3_faulty": [
-      "hPa_18",
-      "txt18_o7",
-      "txt18_o8"
-    ],
     "txt18_transport_failure_mode_wout_workpiece": [
       "hPa_18",
       "txt18_o7",
@@ -530,10 +525,6 @@
       "txt15_m1.finished",
       "txt15_i1"
     ],
-    "txt15_i3_lightbarrier_failure_mode_1": [
-      "txt15_m1.finished",
-      "txt15_i3"
-    ],
     "txt15_i3_lightbarrier_failure_mode_2": [
       "txt15_m1.finished",
       "txt15_i3"
@@ -611,6 +602,7 @@
       "txt16_i4_lightbarrier_failure_mode_1"
     ],
     "g5": [
+      "txt16_pneumatic_leakage_failure_mode_1",
       "txt17_i1_switch_failure_mode_1",
       "txt17_i1_switch_failure_mode_2",
       "txt17_pneumatic_leakage_failure_mode_1",
@@ -783,9 +775,6 @@
     "txt18_pneumatic_leakage_failure_mode_2_faulty": [
       "hPa_18"
     ],
-    "txt18_pneumatic_leakage_failure_mode_3_faulty": [
-      "hPa_18"
-    ],
     "txt18_transport_failure_mode_wout_workpiece": [
       "hPa_18"
     ],
@@ -875,9 +864,6 @@
     ],
     "txt15_i1_lightbarrier_failure_mode_2": [
       "txt15_i1"
-    ],
-    "txt15_i3_lightbarrier_failure_mode_1": [
-      "txt15_i3"
     ],
     "txt15_i3_lightbarrier_failure_mode_2": [
       "txt15_i3"

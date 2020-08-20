@@ -31,7 +31,7 @@ class GeneralConfiguration:
         self.models_folder = '../data/trained_models/'
 
         # Path and file name to the specific model that should be used for testing and live classification
-        self.filename_model_to_use = 'temp_snn_model_08-14_08-22-36_epoch-200'
+        self.filename_model_to_use = 'temp_cbs_model_08-19_09-24-27_epoch-1750'
         self.directory_model_to_use = self.models_folder + self.filename_model_to_use + '/'
 
         ##
@@ -99,7 +99,7 @@ class ModelConfiguration:
         # If !use_individual_hyperparameters interpreted as a single json file, else as a folder
         # which contains json files named after the cases they should be used for
         # If no file with this name is present the 'default.json' Config will be used
-        self.hyper_file = self.hyper_file_folder + 'cbs_21-04.json'  # 'individual_hyperparameters_test'  #
+        self.hyper_file = self.hyper_file_folder + 'cbs_19-08.json'  # 'individual_hyperparameters_test'  #
 
         ##
         # Various settings influencing the similarity calculation
@@ -119,7 +119,7 @@ class ModelConfiguration:
         # Select whether the reduction to relevant features should be based on the case itself or the group it belongs
         # to. Based on case = True, based on group = False
         # Must be false for CBS!
-        self.individual_relevant_feature_selection = False  # default: True
+        self.individual_relevant_feature_selection = True  # default: True
 
         # Using the more restrictive features as additional masking vector for feature sim calculation
         # in cnn_with_add_input
@@ -164,9 +164,9 @@ class TrainingConfiguration:
         self.use_margin_reduction_based_on_label_sim = False  # default: False
 
         self.use_early_stopping = True
-        self.early_stopping_epochs_limit = 500
+        self.early_stopping_epochs_limit = 250
         # FIXME -1.0 used because loss of 0 can occur for triplet loss
-        self.early_stopping_loss_minimum = -1.0  # Default: -1.0 (no effect), CNN2D_with_add_Input: BCE:0.03, MSE:0.01
+        self.early_stopping_loss_minimum = 0.03  # Default: -1.0 (no effect), CNN2D_with_add_Input: BCE:0.03, MSE:0.01
 
         # Parameter to control if and when a test is conducted through training
         self.use_inference_test_during_training = False  # default False
@@ -176,7 +176,8 @@ class TrainingConfiguration:
         # Key = Enum for selecting how the pairs are chosen, value = size of the subset of this type, must add up to 1.0
         # The same number of positive and negative pairs are generated for each type
         self.batch_distribution = {
-            BatchSubsetType.DISTRIB_BASED_ON_DATASET: 1.0,
+            BatchSubsetType.DISTRIB_BASED_ON_DATASET: 0.5,
+            BatchSubsetType.EQUAL_CLASS_DISTRIB: 0.5
         }
 
         # Use a custom similarity values instead of 0 for unequal / negative pairs during batch creation
@@ -188,7 +189,7 @@ class TrainingConfiguration:
         self.continue_training = False  # default: False
 
         # Defines how often loss is printed and checkpoints are saved during training
-        self.output_interval = 100
+        self.output_interval = 50
 
         # How many model checkpoints are kept
         self.model_files_stored = 50

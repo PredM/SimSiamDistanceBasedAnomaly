@@ -1,7 +1,10 @@
 import json
+import os
+import sys
 
 import pandas as pd
 
+sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 from configuration.Configuration import Configuration
 
 
@@ -25,10 +28,10 @@ def load():
 
 def export_excel_for_grouping(export_to_excel):
     # dataframes should be printed completely
-    pd.set_option('display.max_rows', None)
-    pd.set_option('display.max_columns', None)
-    pd.set_option('display.width', None)
-    pd.set_option('display.max_colwidth', None)
+    pd.set_option('display.max_rows', 100)
+    pd.set_option('display.max_columns', 100)
+    pd.set_option('display.width', -1)
+    pd.set_option('display.max_colwidth', -1)
 
     cases, relevant_features = load()
     features_as_list = sorted(list(set(flatten(relevant_features.values()))))
@@ -48,7 +51,7 @@ def export_excel_for_grouping(export_to_excel):
 
 
 def main():
-    enable_output = False
+    enable_output = True
     export_to_excel = False
 
     # needs a dict with class -> relevant features in features.json
@@ -60,54 +63,43 @@ def main():
     # lists of cases that should be grouped together,
     # must be filled manually based on available knowledge or the exported excel sheet
     groups = [
-        [
-            'no_failure'
-        ],
-        [
-            'txt15_conveyor_failure_mode_driveshaft_slippage_failure',
-            'txt15_i1_lightbarrier_failure_mode_1',
-            'txt15_i1_lightbarrier_failure_mode_2',
-            'txt15_i3_lightbarrier_failure_mode_1',
-            'txt15_i3_lightbarrier_failure_mode_2',
-            'txt15_m1_t1_high_wear',
-            'txt15_m1_t1_low_wear',
-            'txt15_m1_t2_wear'
-        ],
-        [
-            'txt15_pneumatic_leakage_failure_mode_1',
-            'txt15_pneumatic_leakage_failure_mode_2',
-            'txt15_pneumatic_leakage_failure_mode_3'
-        ],
-        [
-            'txt16_conveyor_failure_mode_driveshaft_slippage_failure',
-            'txt16_conveyorbelt_big_gear_tooth_broken_failure',
-            'txt16_conveyorbelt_small_gear_tooth_broken_failure',
-            'txt16_m3_t1_high_wear',
-            'txt16_m3_t1_low_wear',
-            'txt16_m3_t2_wear',
-        ],
-        [
-            'txt16_i3_switch_failure_mode_2',
-            'txt16_i4_lightbarrier_failure_mode_1'
-        ],
-        [
-            'txt16_pneumatic_leakage_failure_mode_1',
-            'txt17_i1_switch_failure_mode_1',
-            'txt17_i1_switch_failure_mode_2',
-            'txt17_pneumatic_leakage_failure_mode_1',
-            'txt17_workingstation_transport_failure_mode_wout_workpiece'
-        ],
-        [
-            'txt18_pneumatic_leakage_failure_mode_1',
-            'txt18_pneumatic_leakage_failure_mode_2',
-            'txt18_pneumatic_leakage_failure_mode_2_faulty',
-            'txt18_pneumatic_leakage_failure_mode_3_faulty',
-            'txt18_transport_failure_mode_wout_workpiece'
-        ],
-        [
-            'txt19_i4_lightbarrier_failure_mode_1',
-            'txt19_i4_lightbarrier_failure_mode_2'
-        ]
+        ['no_failure', ],
+
+        ['txt15_i1_lightbarrier_failure_mode_1',
+         'txt15_i1_lightbarrier_failure_mode_2',
+         'txt15_i3_lightbarrier_failure_mode_2', ],
+
+        ['txt15_conveyor_failure_mode_driveshaft_slippage_failure',
+         'txt15_m1_t1_high_wear',
+         'txt15_m1_t1_low_wear',
+         'txt15_m1_t2_wear', ],
+
+        ['txt15_pneumatic_leakage_failure_mode_1',
+         'txt15_pneumatic_leakage_failure_mode_2',
+         'txt15_pneumatic_leakage_failure_mode_3', ],
+
+        ['txt16_conveyor_failure_mode_driveshaft_slippage_failure',
+         'txt16_conveyorbelt_big_gear_tooth_broken_failure',
+         'txt16_conveyorbelt_small_gear_tooth_broken_failure',
+         'txt16_m3_t1_high_wear',
+         'txt16_m3_t1_low_wear',
+         'txt16_m3_t2_wear', ],
+
+        ['txt16_i3_switch_failure_mode_2',
+         'txt16_i4_lightbarrier_failure_mode_1', ],
+
+        ['txt16_pneumatic_leakage_failure_mode_1',
+         'txt17_i1_switch_failure_mode_1',
+         'txt17_i1_switch_failure_mode_2',
+         'txt17_pneumatic_leakage_failure_mode_1', ],
+
+        ['txt18_pneumatic_leakage_failure_mode_1',
+         'txt18_pneumatic_leakage_failure_mode_2',
+         'txt18_pneumatic_leakage_failure_mode_2_faulty',
+         'txt18_transport_failure_mode_wout_workpiece', ],
+
+        ['txt19_i4_lightbarrier_failure_mode_1',
+         'txt19_i4_lightbarrier_failure_mode_2', ]
     ]
 
     # generate output tuples (grouped cases, relevant attributes for the group)
