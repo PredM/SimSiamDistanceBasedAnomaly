@@ -18,7 +18,8 @@ def get_cols(df, row_name):
 
 def load():
     config = Configuration()
-    relevant_features = config.case_to_individual_features
+    # FIXME Change back
+    relevant_features = config.case_to_individual_features_strict
 
     for key in relevant_features:
         relevant_features[key] = sorted(relevant_features[key])
@@ -52,7 +53,7 @@ def export_excel_for_grouping(export_to_excel):
 
 def main():
     enable_output = True
-    export_to_excel = False
+    export_to_excel = True
 
     # needs a dict with class -> relevant features in features.json
     df = export_excel_for_grouping(export_to_excel)

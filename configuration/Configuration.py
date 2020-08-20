@@ -546,8 +546,6 @@ class Configuration(
         print("- use_early_stopping: ", self.use_early_stopping)
         print("- early_stopping_epochs_limit: ", self.early_stopping_epochs_limit)
         print("- early_stopping_loss_minimum: ", self.early_stopping_loss_minimum)
-        print("- equalClassConsideration: ", self.equalClassConsideration)
-        print("- upsampling_factor: ", self.upsampling_factor)
         print("- model_files_stored: ", self.model_files_stored)
         print("")
         print("Inference related:")

@@ -189,6 +189,12 @@ class CbsBatchComposer(BatchComposer):
         self.group_id = group_id
         self.dataset: CBSDataset = dataset
 
+        # Get the classes the handler of with this id is responsible for and ensure only those are in the list
+        # that are also contained in the dataset
+        self.relevant_classes = list(set(self.config.group_id_to_cases.get(self.group_id)).intersection(
+            set(self.dataset.classes_total)))
+
+
     def draw_pair(self, is_positive, type=None):
 
         if type == BatchSubsetType.DISTRIB_BASED_ON_DATASET:
@@ -210,14 +216,23 @@ class CbsBatchComposer(BatchComposer):
                         return first_idx, second_idx
 
         elif type == BatchSubsetType.EQUAL_CLASS_DISTRIB:
-            cases_of_group = self.config.group_id_to_cases.get(self.group_id)
-            class_first_idx = np.random.choice(cases_of_group, 1)[0]
+            class_first_idx = np.random.choice(self.relevant_classes, 1, replace=True)[0]
+
+            if class_first_idx not in self.dataset.classes_total:
+                print(self.group_id)
+                print(self.relevant_classes)
+                raise ValueError('Class in config.json does not match the dataet:' + class_first_idx)
 
             if is_positive:
                 return np.random.choice(self.mapping.get(class_first_idx), 2, replace=True)
             else:
                 while True:
                     class_second_idx = np.random.choice(self.labels, size=1, replace=False)[0]
+
+                    if class_second_idx not in self.dataset.classes_total:
+                        print(self.group_id)
+                        print(self.relevant_classes)
+                        raise ValueError('Class in config.json does not match the dataet:' + class_first_idx)
 
                     if class_first_idx != class_second_idx:
                         first_idx = np.random.choice(self.mapping.get(class_first_idx), 1)[0]
