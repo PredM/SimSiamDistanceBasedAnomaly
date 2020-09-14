@@ -123,7 +123,7 @@ class ModelConfiguration:
 
         # Using the more restrictive features as additional masking vector for feature sim calculation
         # in cnn_with_add_input
-        self.use_additional_strict_masking_for_attribute_sim = True  # default: False
+        self.use_additional_strict_masking_for_attribute_sim = False  # default: False
 
         # Option to simulate a retrieval situation (during training) where only the weights of the
         # example from the case base/training data set are known:

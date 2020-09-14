@@ -100,7 +100,6 @@ class BatchComposer:
 
             if is_positive:
                 class_both_idx = np.random.choice(self.labels, size=1)[0]
-                # TODO Check if replace = True is correct --> True would mean a pair could consist of the same example
                 return np.random.choice(self.mapping.get(class_both_idx), 2, replace=True)
 
             else:

@@ -73,7 +73,6 @@ class OptimizerHelper:
 
             return loss
 
-    # TODO Is this the correct way of aggregation the loss values for each triplet into a single loss value?
     def triplet_loss(self, y_pred):
         """
         Triplet loss based on Conditional Similarity Networks by Veit et al.

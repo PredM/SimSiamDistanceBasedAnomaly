@@ -15,7 +15,7 @@ class Evaluator:
         # Dataframe that stores the results that will be output at the end of the inference process
         # Is not filled with data during the inference
         index = list(dataset.y_test_strings_unique) + ['combined']
-        cols = ['#Examples', 'TP', 'FP', 'TN', 'FN', 'TPR', 'FPR', 'FNR', 'FDR', 'ACC']
+        cols = ['#Examples', 'TP', 'FP', 'TN', 'FN', 'TPR', 'FPR', 'FNR', 'FDR', 'ACC', 'Hit@k']
         self.results = pd.DataFrame(0, index=index, columns=cols)
         self.results.index.name = 'Classes'
         self.results.loc['combined', '#Examples'] = self.num_test_examples
@@ -59,7 +59,6 @@ class Evaluator:
     def get_nbr_correctly_classified(self):
         return np.diag(self.multi_class_results).sum()
 
-    # TODO add flag sims_are_distance_values and corresponding if
     def add_single_example_results(self, sims, test_example_index, sims_are_distance_values=False):
         ###
         # Get the relevant information about the results of this example
@@ -74,8 +73,12 @@ class Evaluator:
         # Get the true label stored in the dataset
         true_class = self.dataset.y_test_strings[test_example_index]
 
-        # Get the class of the example with the highest sim = smallest distance
-        max_sim_class = self.dataset.y_train_strings[nearest_neighbors_ranked_indices[0]]
+        # Get the classes of the k examples with highest sim = smallest distance
+        classes_of_k_nearest_neighbors = self.dataset.y_train_strings[
+            nearest_neighbors_ranked_indices[np.arange(0, self.k_of_knn)]]
+
+        # Get the class of the example with the
+        max_sim_class = classes_of_k_nearest_neighbors[0]
 
         # Get the similarity value of the best example
         max_sim = np.asanyarray(sims[nearest_neighbors_ranked_indices[0]])
@@ -100,6 +103,11 @@ class Evaluator:
 
         # Increase the number of examples of true_class that have been tested and the total number of tested examples
         self.results.loc[true_class, '#Examples'] += 1
+
+        # Check Hit@k
+        if true_class in classes_of_k_nearest_neighbors:
+            self.results.loc[true_class, 'Hit@k'] += 1
+
 
         # Store the prediction result in respect to a failure occurrence
         if not true_class == 'no_failure':
@@ -147,7 +155,7 @@ class Evaluator:
             ['Localization quality:', self.quality_fails_localization / local_ecf],
             ['Condition quality:', self.quality_fails_condition_quality / local_ecf],
             ['Query Window:', self.dataset.get_time_window_str(test_example_index, 'test')],
-            ['Query Failure:', str(self.dataset.failure_times_test[test_example_index])]
+            ['Query Failure:', str(self.dataset.failure_times_test[test_example_index])],
         ]
 
         # output results for this example
@@ -163,7 +171,7 @@ class Evaluator:
         for i in range(self.k_of_knn):
             index = ranking_nearest_neighbors_idx[i]
             c = self.dataset.y_train_strings[index]
-            c = c if len(c) < 40 else c[0:40]+"..."
+            c = c if len(c) < 40 else c[0:40] + "..."
 
             row = [i + 1, 'Class: ' + c,
                    'Sim: ' + str(round(sims[index], 6)),
@@ -278,7 +286,8 @@ class Evaluator:
         print('Average time per example:', round(elapsed_time / self.num_test_examples, 4), 'Seconds')
         print('-------------------------------------------------------------')
         print('Classification accuracy split by classes:')
-        print('FPR = false positive rate , TPR = true positive rate , ACC = accuracy\n')
+        print('FPR = false positive rate , TPR = true positive rate , ACC = accuracy')
+        print('Hit@k = Number of examples where the real class is at least once among the k most similar examples\n')
         print(self.results.to_string())
         print()
         print('-------------------------------------------------------------\n')
