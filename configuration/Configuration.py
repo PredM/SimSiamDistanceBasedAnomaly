@@ -392,6 +392,10 @@ class StaticConfiguration:
         # File from which the case information should be loaded, used in dataset creation
         self.case_file = '../configuration/cases.csv'
 
+        # TS Fresh feature files
+        self.ts_fresh_filtered_file = self.training_data_folder + 'ts_fresh_extracted_features_filtered.pkl'
+        self.ts_fresh_unfiltered_file = self.training_data_folder + 'ts_fresh_extracted_features_unfiltered.pkl'
+
         # Select specific dataset with given parameter
         # Preprocessing however will include all defined datasets
         self.pathPrefix = self.datasets[dataset_to_import][0]

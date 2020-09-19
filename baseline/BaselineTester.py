@@ -10,6 +10,8 @@ from sklearn import preprocessing
 
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 
+from baseline.Representations import TSFreshRepresentation, RocketRepresentation
+from configuration.Enums import BaselineAlgorithm
 from neural_network.Evaluator import Evaluator
 from neural_network.Dataset import FullDataset
 from configuration.Configuration import Configuration
@@ -32,7 +34,8 @@ class Counter:
             return self.val.value
 
 
-def run(proc_id, return_dict, counter, dataset, test_index, indices_train_examples, algorithm, relevant_only):
+def run(proc_id, return_dict, counter, dataset, test_index, indices_train_examples, algorithm, relevant_only,
+        representation):
     try:
 
         results = np.zeros(len(indices_train_examples))
@@ -43,13 +46,19 @@ def run(proc_id, return_dict, counter, dataset, test_index, indices_train_exampl
             # Prepare examples
             ###
 
-            if algorithm == 'feature_based':
+            if algorithm == BaselineAlgorithm.FEATURE_BASED_TS_FRESH:
                 # feature based data is 2d-structured (examples,features)
-                test_example = dataset.x_test_TSFresh_features[test_index, :]
-                train_example = dataset.x_train_TSFresh_features[example_index, :]
+                test_example = representation.x_test_features[test_index, :]
+                train_example = representation.x_train_features[example_index, :]
+
+            elif algorithm == BaselineAlgorithm.FEATURE_BASED_ROCKET:
+                # TODO
+                raise NotImplementedError()
+
             elif relevant_only:
                 test_example = dataset.x_test[test_index]
                 test_example, train_example = dataset.reduce_to_relevant(test_example, example_index)
+
             else:
                 test_example = dataset.x_test[test_index]
                 train_example = dataset.x_train[example_index]
@@ -57,16 +66,16 @@ def run(proc_id, return_dict, counter, dataset, test_index, indices_train_exampl
             ##
             # Execute algorithm
             ##
-            if algorithm == 'dtw':
+            if algorithm == BaselineAlgorithm.DTW:
                 distance, _ = fastdtw(test_example, train_example, dist=euclidean)
 
-            elif algorithm == 'dtw_weighting_nbr_features':
+            elif algorithm == BaselineAlgorithm.DTW_WEIGHTING_NBR_FEATURES:
                 distance, _ = fastdtw(test_example, train_example, dist=euclidean)
                 distance = distance / test_example.shape[1]
 
-            elif algorithm == 'feature_based':
+            elif algorithm == BaselineAlgorithm.FEATURE_BASED_TS_FRESH:
                 if relevant_only:
-                    masking = dataset.get_ts_fresh_masking(example_index)
+                    masking = representation.get_masking(example_index)
                     weights = masking / (np.sum(masking))
                     distance = minkowski(test_example, train_example, 2, weights)
                     # Adjustment based on feature amount (improved performance)
@@ -76,6 +85,10 @@ def run(proc_id, return_dict, counter, dataset, test_index, indices_train_exampl
                     distance = distance * small_num_of_attributes_penalty
                 else:
                     distance = minkowski(test_example, train_example, 2)
+
+            elif algorithm == BaselineAlgorithm.FEATURE_BASED_ROCKET:
+                # TODO
+                raise NotImplementedError()
 
             else:
                 raise ValueError('Unkown algorithm:', algorithm)
@@ -88,13 +101,20 @@ def run(proc_id, return_dict, counter, dataset, test_index, indices_train_exampl
         pass
 
 
-def execute_baseline_test(dataset: FullDataset, start_index, end_index, nbr_threads, algorithm, k_of_knn,
-                          temp_output_interval, use_relevant_only=False, conversion_method=None):
-    evaluator = Evaluator(dataset, end_index - start_index, k_of_knn)
+# dataset, start_index, end_index, algorithm_used, temp_output_interval, use_relevant_only,
+#                           config
+def execute_baseline_test(dataset: FullDataset, start_index, end_index, algorithm, temp_output_interval, config,
+                          use_relevant_only=False):
+    evaluator = Evaluator(dataset, end_index - start_index, config.k_of_knn)
 
-    if algorithm == 'feature_based':
-        # Load features from TSFresh
-        dataset.load_feature_based_representation()
+    representation = None
+
+    if algorithm == BaselineAlgorithm.FEATURE_BASED_TS_FRESH:
+        representation = TSFreshRepresentation(config, dataset)
+    elif algorithm == BaselineAlgorithm.FEATURE_BASED_ROCKET:
+        representation = RocketRepresentation(config, dataset)
+
+    representation.load()
 
     start_time = perf_counter()
 
@@ -102,7 +122,7 @@ def execute_baseline_test(dataset: FullDataset, start_index, end_index, nbr_thre
         results = np.zeros(dataset.num_train_instances)
 
         # Split the training examples into n chunks, where n == the number of threads that should be used.
-        chunks = np.array_split(range(dataset.num_train_instances), nbr_threads)
+        chunks = np.array_split(range(dataset.num_train_instances), config.max_parallel_cores)
 
         threads = []
         counter = Counter(dataset.num_train_instances, temp_output_interval)
@@ -114,7 +134,7 @@ def execute_baseline_test(dataset: FullDataset, start_index, end_index, nbr_thre
             # Use carefully and ensure correct passing
             # proc_id, return_dict, counter, dataset, test_index, indices_train_examples, algorithm, relevant_only
             # chunk, dataset, test_index, use_relevant_only, counter, algorithm_used, i, return_dict
-            args = (i, return_dict, counter, dataset, test_index, chunk, algorithm, use_relevant_only)
+            args = (i, return_dict, counter, dataset, test_index, chunk, algorithm, use_relevant_only, representation)
             t = multiprocessing.Process(target=run, args=args)
             t.start()
             threads.append(t)
@@ -123,20 +143,24 @@ def execute_baseline_test(dataset: FullDataset, start_index, end_index, nbr_thre
             threads[i].join()
             results[chunk] = return_dict.get(i)
 
-        # If algorithm returns distance instead of similarity
-        if algorithm in ['dtw', 'dtw_weighting_nbr_features', 'feature_based']:
-            results = distance_to_sim(results, conversion_method)
-
         # Add additional empty line if temp. outputs are enabled
         if temp_output_interval > 0:
             print('')
-        evaluator.add_single_example_results(results, test_index)
+
+        # If algorithm returns distance instead of similarity
+        if algorithm in [BaselineAlgorithm.DTW, BaselineAlgorithm.DTW_WEIGHTING_NBR_FEATURES,
+                         BaselineAlgorithm.FEATURE_BASED_TS_FRESH]:
+            evaluator.add_single_example_results(results, test_index, sims_are_distance_values=True)
+        else:
+            evaluator.add_single_example_results(results, test_index)
 
     elapsed_time = perf_counter() - start_time
     evaluator.calculate_results()
     evaluator.print_results(elapsed_time)
 
 
+@DeprecationWarning
+# Will be removed, use flag sims_are_distance_values instead
 def distance_to_sim(distances, conversion_method):
     if conversion_method == 'min_max_scaling':
         return 1 - preprocessing.minmax_scale(distances, feature_range=(0, 1))
@@ -162,17 +186,22 @@ def main():
 
     dataset.load()
 
+    ###
+    # Start configuration
+    ###
+
     # select which part of the test dataset to test
-    start_index = 0
+    start_index = dataset.num_test_instances - 5
     end_index = dataset.num_test_instances  # dataset.num_test_instances
 
     # Output interval of how many examples have been compared so far. < 0 for no output
     temp_output_interval = -1
-    use_relevant_only = True
-    implemented_algorithms = ['dtw', 'dtw_weighting_nbr_features', 'feature_based']
-    algorithm_used = implemented_algorithms[0]
-    distance_to_sim_methods = ['1/(1+d)', 'div_max', 'min_max_scaling']
-    distance_to_sim_method = distance_to_sim_methods[0]
+    use_relevant_only = False
+    algorithm_used = BaselineAlgorithm.FEATURE_BASED_TS_FRESH
+
+    ###
+    # End configuration
+    ###
 
     relevant_type = 'Individual' if config.individual_relevant_feature_selection else 'Group based'
     print('Algorithm used:', algorithm_used)
@@ -184,8 +213,8 @@ def main():
     print('Case Based used for inference:', config.case_base_for_inference)
     print()
 
-    execute_baseline_test(dataset, start_index, end_index, config.max_parallel_cores, algorithm_used, config.k_of_knn,
-                          temp_output_interval, use_relevant_only, distance_to_sim_method)
+    execute_baseline_test(dataset, start_index, end_index, algorithm_used, temp_output_interval, config,
+                          use_relevant_only)
 
 
 # this script is used to execute the dtw and other baseline methods for comparision with the neural network

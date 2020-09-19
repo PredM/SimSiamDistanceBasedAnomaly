@@ -17,3 +17,9 @@ class LossFunction(Enum):
     MEAN_SQUARED_ERROR = 2
     HUBER_LOSS = 3
     TRIPLET_LOSS = 4
+
+class BaselineAlgorithm(Enum):
+    DTW = 0
+    DTW_WEIGHTING_NBR_FEATURES = 1
+    FEATURE_BASED_TS_FRESH = 2
+    FEATURE_BASED_ROCKET = 3
