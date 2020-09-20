@@ -13,6 +13,17 @@ from configuration.Enums import BatchSubsetType, LossFunction
 # All methods should be added to the Configuration class to be able to access all variables
 ####
 
+class BaselineConfiguration:
+
+    def __init__(self):
+
+
+        ##
+        # Rocket
+        ##
+
+        self.rocket_kernels = 10_000 # 10_000 is the rocket default
+        self.rocket_random_seed = 2342
 
 class GeneralConfiguration:
 
@@ -436,6 +447,7 @@ class Configuration(
     ModelConfiguration,
     GeneralConfiguration,
     StaticConfiguration,
+    BaselineConfiguration
 ):
 
     def __init__(self, dataset_to_import=0):
@@ -446,6 +458,7 @@ class Configuration(
         ModelConfiguration.__init__(self)
         GeneralConfiguration.__init__(self)
         StaticConfiguration.__init__(self, dataset_to_import)
+        BaselineConfiguration.__init__(self)
 
     def load_config_json(self, file_path):
         with open(file_path, 'r') as f:
