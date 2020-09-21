@@ -46,14 +46,10 @@ def run(proc_id, return_dict, counter, dataset, test_index, indices_train_exampl
             # Prepare examples
             ###
 
-            if algorithm == BaselineAlgorithm.FEATURE_BASED_TS_FRESH:
+            if algorithm in [BaselineAlgorithm.FEATURE_BASED_TS_FRESH, BaselineAlgorithm.FEATURE_BASED_ROCKET]:
                 # feature based data is 2d-structured (examples,features)
                 test_example = representation.x_test_features[test_index, :]
                 train_example = representation.x_train_features[example_index, :]
-
-            elif algorithm == BaselineAlgorithm.FEATURE_BASED_ROCKET:
-                # TODO
-                raise NotImplementedError()
 
             elif relevant_only:
                 test_example = dataset.x_test[test_index]
@@ -87,8 +83,11 @@ def run(proc_id, return_dict, counter, dataset, test_index, indices_train_exampl
                     distance = minkowski(test_example, train_example, 2)
 
             elif algorithm == BaselineAlgorithm.FEATURE_BASED_ROCKET:
-                # TODO
-                raise NotImplementedError()
+                if relevant_only:
+                    # TODO: Add implementation or add to config checker
+                    raise NotImplementedError('Rocket does not support relevant only')
+                else:
+                    distance = minkowski(test_example, train_example, 2)
 
             else:
                 raise ValueError('Unkown algorithm:', algorithm)
@@ -101,17 +100,14 @@ def run(proc_id, return_dict, counter, dataset, test_index, indices_train_exampl
         pass
 
 
-# dataset, start_index, end_index, algorithm_used, temp_output_interval, use_relevant_only,
-#                           config
-def execute_baseline_test(dataset: FullDataset, start_index, end_index, algorithm, temp_output_interval, config,
-                          use_relevant_only=False):
+def execute_baseline_test(config, dataset, start_index, end_index):
     evaluator = Evaluator(dataset, end_index - start_index, config.k_of_knn)
 
     representation = None
 
-    if algorithm == BaselineAlgorithm.FEATURE_BASED_TS_FRESH:
+    if config.baseline_algorithm == BaselineAlgorithm.FEATURE_BASED_TS_FRESH:
         representation = TSFreshRepresentation(config, dataset)
-    elif algorithm == BaselineAlgorithm.FEATURE_BASED_ROCKET:
+    elif config.baseline_algorithm == BaselineAlgorithm.FEATURE_BASED_ROCKET:
         representation = RocketRepresentation(config, dataset)
 
     representation.load()
@@ -125,7 +121,7 @@ def execute_baseline_test(dataset: FullDataset, start_index, end_index, algorith
         chunks = np.array_split(range(dataset.num_train_instances), config.max_parallel_cores)
 
         threads = []
-        counter = Counter(dataset.num_train_instances, temp_output_interval)
+        counter = Counter(dataset.num_train_instances, config.baseline_temp_output_interval)
         manager = multiprocessing.Manager()
         return_dict = manager.dict()
 
@@ -134,7 +130,8 @@ def execute_baseline_test(dataset: FullDataset, start_index, end_index, algorith
             # Use carefully and ensure correct passing
             # proc_id, return_dict, counter, dataset, test_index, indices_train_examples, algorithm, relevant_only
             # chunk, dataset, test_index, use_relevant_only, counter, algorithm_used, i, return_dict
-            args = (i, return_dict, counter, dataset, test_index, chunk, algorithm, use_relevant_only, representation)
+            args = (i, return_dict, counter, dataset, test_index, chunk, config.baseline_algorithm,
+                    config.baseline_use_relevant_only, representation)
             t = multiprocessing.Process(target=run, args=args)
             t.start()
             threads.append(t)
@@ -144,12 +141,12 @@ def execute_baseline_test(dataset: FullDataset, start_index, end_index, algorith
             results[chunk] = return_dict.get(i)
 
         # Add additional empty line if temp. outputs are enabled
-        if temp_output_interval > 0:
+        if config.baseline_temp_output_interval > 0:
             print('')
 
         # If algorithm returns distance instead of similarity
-        if algorithm in [BaselineAlgorithm.DTW, BaselineAlgorithm.DTW_WEIGHTING_NBR_FEATURES,
-                         BaselineAlgorithm.FEATURE_BASED_TS_FRESH]:
+        if config.baseline_algorithm in [BaselineAlgorithm.DTW, BaselineAlgorithm.DTW_WEIGHTING_NBR_FEATURES,
+                                         BaselineAlgorithm.FEATURE_BASED_TS_FRESH]:
             evaluator.add_single_example_results(results, test_index, sims_are_distance_values=True)
         else:
             evaluator.add_single_example_results(results, test_index)
@@ -186,26 +183,13 @@ def main():
 
     dataset.load()
 
-    ###
-    # Start configuration
-    ###
-
-    # select which part of the test dataset to test
-    start_index = dataset.num_test_instances - 5
+    # Select which part of the test dataset to infer, mainly for debugging
+    start_index = 0
     end_index = dataset.num_test_instances  # dataset.num_test_instances
 
-    # Output interval of how many examples have been compared so far. < 0 for no output
-    temp_output_interval = -1
-    use_relevant_only = False
-    algorithm_used = BaselineAlgorithm.FEATURE_BASED_TS_FRESH
-
-    ###
-    # End configuration
-    ###
-
     relevant_type = 'Individual' if config.individual_relevant_feature_selection else 'Group based'
-    print('Algorithm used:', algorithm_used)
-    print('Used relevant only:', use_relevant_only)
+    print('Algorithm used:', config.baseline_algorithm)
+    print('Used relevant only:', config.baseline_use_relevant_only)
     print('Type of feature selection:', relevant_type)
     print('Start index:', start_index)
     print('End index:', end_index)
@@ -213,11 +197,10 @@ def main():
     print('Case Based used for inference:', config.case_base_for_inference)
     print()
 
-    execute_baseline_test(dataset, start_index, end_index, algorithm_used, temp_output_interval, config,
-                          use_relevant_only)
+    execute_baseline_test(config, dataset, start_index, end_index)
 
 
-# this script is used to execute the dtw and other baseline methods for comparision with the neural network
+# this script is used to execute the dtw and other baseline methods for comparison with the neural network
 if __name__ == '__main__':
     try:
         main()

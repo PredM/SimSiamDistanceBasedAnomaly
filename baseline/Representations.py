@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+import sys
 from sktime.transformers.series_as_features.rocket import Rocket
 
 from configuration.Configuration import Configuration
@@ -62,6 +63,8 @@ class RocketRepresentation(Representation):
         super().__init__(config, dataset)
 
     @staticmethod
+    # Numpy dataset must be converted to expected format described
+    # @ https://www.sktime.org/en/latest/examples/loading_data.html
     def array_to_ts_df(array):
         # Input : (Example, Timestamp, Feature)
         # Temp 1: (Example, Feature, Timestamp)
@@ -79,33 +82,44 @@ class RocketRepresentation(Representation):
 
             list_of_examples.append(ex)
 
+        # Conversion to dataframe with expected format
         return pd.DataFrame(data=list_of_examples)
 
     def create_representation(self):
         rocket = Rocket(num_kernels=self.config.rocket_kernels,
+                        normalise=False,
                         random_state=self.config.rocket_random_seed)
 
-        x_test_pd = self.array_to_ts_df(self.dataset.x_test)
+        # Cast is necessary because rocket seems to expect 64 bit values
+        x_train_casted = self.dataset.x_train.astype('float64')
+        x_test_casted = self.dataset.x_test.astype('float64')
 
-        print('Started fitting')
-        x = rocket.fit_transform(x_test_pd)
-        print('Finished fitting')
+        x_train_df = self.array_to_ts_df(x_train_casted)
+        x_test_df = self.array_to_ts_df(x_test_casted)
 
-        #self.x_train_features = rocket.transform(x_test_pd)
+        print('Started fitting ...')
+        rocket.fit(x_train_df)
+        print('Finished fitting.')
 
-        print(x.head(10))
+        # TODO: Check if cast back to float32 is reasonable, could worsen the result
 
-        # FIXME Change back to correct fit/transform
+        self.x_train_features = rocket.transform(x_train_df).values  # .astype('float32')
+        print('\nFinished fitting the train dataset. Shape:', self.x_train_features.shape)
 
-        # print('Started fitting')
-        # rocket.fit(self.dataset.x_train)
-        # print('Finished fitting')
+        self.x_test_features = rocket.transform(x_test_df).values  # .astype('float32')
+        print('\nFinished fitting the test dataset. Shape:', self.x_test_features.shape)
 
-        # self.x_train_features = rocket.transform(self.dataset.x_train)
-        # self.x_test_features = rocket.transform(self.dataset.x_test)
+        np.save(self.config.rocket_features_train_file, self.x_train_features)
+        np.save(self.config.rocket_features_test_file, self.x_test_features)
 
     def load(self):
-        raise NotImplementedError()
+        self.x_train_features = np.load(self.config.rocket_features_train_file)
+        print('Features of train dataset loaded. Shape:', self.x_train_features.shape)
+
+        self.x_test_features = np.load(self.config.rocket_features_test_file)
+        print('Features of test dataset loaded. Shape:', self.x_test_features.shape)
+        print()
 
     def get_masking(self, train_example_index):
-        raise NotImplementedError()
+        raise NotImplementedError('This representation does not have a relevant feature extraction algorithm '
+                                  'hence it can not provide a masking')
