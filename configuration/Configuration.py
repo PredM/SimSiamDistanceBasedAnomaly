@@ -2,7 +2,7 @@ import json
 
 import pandas as pd
 
-from configuration.Enums import BatchSubsetType, LossFunction
+from configuration.Enums import BatchSubsetType, LossFunction, BaselineAlgorithm
 
 
 ####
@@ -13,6 +13,26 @@ from configuration.Enums import BatchSubsetType, LossFunction
 # All methods should be added to the Configuration class to be able to access all variables
 ####
 
+class BaselineConfiguration:
+
+    def __init__(self):
+
+        ##
+        # General
+        ##
+
+        # Output interval of how many examples have been compared so far. < 0 for no output
+        self.baseline_temp_output_interval = -1
+
+        self.baseline_use_relevant_only = False
+        self.baseline_algorithm = BaselineAlgorithm.FEATURE_BASED_ROCKET
+
+        ##
+        # Rocket
+        ##
+
+        self.rocket_kernels = 10_000 # 10_000 is the rocket default
+        self.rocket_random_seed = 2342
 
 class GeneralConfiguration:
 
@@ -25,7 +45,7 @@ class GeneralConfiguration:
         self.max_gpus_used = 4
 
         # Specifies the maximum number of cores to be used
-        self.max_parallel_cores = 40
+        self.max_parallel_cores = 1
 
         # Folder where the trained models are saved to during learning process
         self.models_folder = '../data/trained_models/'
@@ -392,6 +412,14 @@ class StaticConfiguration:
         # File from which the case information should be loaded, used in dataset creation
         self.case_file = '../configuration/cases.csv'
 
+        # TS Fresh feature files
+        self.ts_fresh_filtered_file = self.training_data_folder + 'ts_fresh_extracted_features_filtered.pkl'
+        self.ts_fresh_unfiltered_file = self.training_data_folder + 'ts_fresh_extracted_features_unfiltered.pkl'
+
+        # Rocket feature files
+        self.rocket_features_train_file = self.training_data_folder + "rocket_features_train.npy"
+        self.rocket_features_test_file = self.training_data_folder + "rocket_features_test.npy"
+
         # Select specific dataset with given parameter
         # Preprocessing however will include all defined datasets
         self.pathPrefix = self.datasets[dataset_to_import][0]
@@ -432,6 +460,7 @@ class Configuration(
     ModelConfiguration,
     GeneralConfiguration,
     StaticConfiguration,
+    BaselineConfiguration
 ):
 
     def __init__(self, dataset_to_import=0):
@@ -442,6 +471,7 @@ class Configuration(
         ModelConfiguration.__init__(self)
         GeneralConfiguration.__init__(self)
         StaticConfiguration.__init__(self, dataset_to_import)
+        BaselineConfiguration.__init__(self)
 
     def load_config_json(self, file_path):
         with open(file_path, 'r') as f:
