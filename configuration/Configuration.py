@@ -23,8 +23,8 @@ class BaselineConfiguration:
         # Output interval of how many examples have been compared so far. < 0 for no output
         self.baseline_temp_output_interval = -1
 
-        self.baseline_use_relevant_only = False
-        self.baseline_algorithm = BaselineAlgorithm.FEATURE_BASED_ROCKET
+        self.baseline_use_relevant_only = True
+        self.baseline_algorithm = BaselineAlgorithm.DTW
 
         ##
         # Rocket
@@ -507,6 +507,7 @@ class Configuration(
         group = self.case_to_group_id.get(case)
         return self.group_id_to_features.get(group)
 
+    # FIXME #62
     # returns individual defined features (instead of group features)
     def get_relevant_features_case(self, case):
         if self.use_additional_strict_masking_for_attribute_sim:

@@ -84,8 +84,7 @@ def run(proc_id, return_dict, counter, dataset, test_index, indices_train_exampl
 
             elif algorithm == BaselineAlgorithm.FEATURE_BASED_ROCKET:
                 if relevant_only:
-                    # TODO: Add implementation or add to config checker
-                    raise NotImplementedError('Rocket does not support relevant only')
+                    raise NotImplementedError('Rocket does not support relevant only option.')
                 else:
                     distance = minkowski(test_example, train_example, 2)
 
@@ -110,7 +109,8 @@ def execute_baseline_test(config, dataset, start_index, end_index):
     elif config.baseline_algorithm == BaselineAlgorithm.FEATURE_BASED_ROCKET:
         representation = RocketRepresentation(config, dataset)
 
-    representation.load()
+    if representation is not None:
+            representation.load()
 
     start_time = perf_counter()
 
