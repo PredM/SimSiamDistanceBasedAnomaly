@@ -14,7 +14,13 @@ def main():
     dataset = FullDataset(config.training_data_folder, config, training=True)
     dataset.load()
 
-    rp:RocketRepresentation = RocketRepresentation(config, dataset)
+    rp: RocketRepresentation = RocketRepresentation(config, dataset)
+    rp.create_representation()
+
+    dataset = FullDataset(config.case_base_folder, config, training=True)
+    dataset.load()
+
+    rp: RocketRepresentation = RocketRepresentation(config, dataset)
     rp.create_representation()
 
 

@@ -89,11 +89,9 @@ class SimpleSNN(AbstractSimilarityMeasure):
 
                 for index in range(batch_size):
                     # noinspection PyUnresolvedReferences
-                    aux_input[2 * index] = self.dataset.get_masking_float(
-                        self.dataset.y_train_strings[index])
+                    aux_input[2 * index] = self.dataset.get_masking_float(self.dataset.y_train_strings[index])
                     # noinspection PyUnresolvedReferences
-                    aux_input[2 * index + 1] = self.dataset.get_masking_float(
-                        self.dataset.y_train_strings[index])
+                    aux_input[2 * index + 1] = self.dataset.get_masking_float(self.dataset.y_train_strings[index])
                     # print("self.dataset.y_train_strings")
                     # print("index: ", index, )
                 # print("aux_input: ", aux_input.shape)

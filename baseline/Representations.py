@@ -1,6 +1,5 @@
-import pandas as pd
 import numpy as np
-import sys
+import pandas as pd
 from sktime.transformers.series_as_features.rocket import Rocket
 
 from configuration.Configuration import Configuration
@@ -35,6 +34,7 @@ class TSFreshRepresentation(Representation):
         # TODO Move representation calculation here
         raise NotImplementedError()
 
+    # TODO Add distinction between case base and normal training data set
     def load(self):
         filtered_cb_df = (pd.read_pickle(self.config.ts_fresh_filtered_file))
         unfiltered_test_examples_df = (pd.read_pickle(self.config.ts_fresh_unfiltered_file))
@@ -85,10 +85,10 @@ class RocketRepresentation(Representation):
         # Conversion to dataframe with expected format
         return pd.DataFrame(data=list_of_examples)
 
+    # dataset_folder as parameter in oder to distinguish between normal training data and case base
     def create_representation(self):
         rocket = Rocket(num_kernels=self.config.rocket_kernels,
-                        normalise=False,
-                        random_state=self.config.rocket_random_seed)
+                        normalise=False, random_state=self.config.rocket_random_seed)
 
         # Cast is necessary because rocket seems to expect 64 bit values
         x_train_casted = self.dataset.x_train.astype('float64')
@@ -109,14 +109,25 @@ class RocketRepresentation(Representation):
         self.x_test_features = rocket.transform(x_test_df).values  # .astype('float32')
         print('\nFinished fitting the test dataset. Shape:', self.x_test_features.shape)
 
-        np.save(self.config.rocket_features_train_file, self.x_train_features)
-        np.save(self.config.rocket_features_test_file, self.x_test_features)
+        if self.config.case_base_for_inference:
+            dataset_folder = self.config.case_base_folder
+        else:
+            dataset_folder = self.config.training_data_folder
+
+        np.save(dataset_folder + self.config.rocket_features_train_file, self.x_train_features)
+        np.save(dataset_folder + self.config.rocket_features_test_file, self.x_test_features)
 
     def load(self):
-        self.x_train_features = np.load(self.config.rocket_features_train_file)
+
+        if self.config.case_base_for_inference:
+            dataset_folder = self.config.case_base_folder
+        else:
+            dataset_folder = self.config.training_data_folder
+
+        self.x_train_features = np.load(dataset_folder + self.config.rocket_features_train_file)
         print('Features of train dataset loaded. Shape:', self.x_train_features.shape)
 
-        self.x_test_features = np.load(self.config.rocket_features_test_file)
+        self.x_test_features = np.load(dataset_folder + self.config.rocket_features_test_file)
         print('Features of test dataset loaded. Shape:', self.x_test_features.shape)
         print()
 

@@ -16,7 +16,6 @@ from configuration.Enums import BatchSubsetType, LossFunction, BaselineAlgorithm
 class BaselineConfiguration:
 
     def __init__(self):
-
         ##
         # General
         ##
@@ -31,8 +30,9 @@ class BaselineConfiguration:
         # Rocket
         ##
 
-        self.rocket_kernels = 10_000 # 10_000 is the rocket default
+        self.rocket_kernels = 10_000  # 10_000 is the rocket default
         self.rocket_random_seed = 2342
+
 
 class GeneralConfiguration:
 
@@ -417,8 +417,8 @@ class StaticConfiguration:
         self.ts_fresh_unfiltered_file = self.training_data_folder + 'ts_fresh_extracted_features_unfiltered.pkl'
 
         # Rocket feature files
-        self.rocket_features_train_file = self.training_data_folder + "rocket_features_train.npy"
-        self.rocket_features_test_file = self.training_data_folder + "rocket_features_test.npy"
+        self.rocket_features_train_file = 'rocket_features_train.npy'
+        self.rocket_features_test_file = 'rocket_features_test.npy'
 
         # Select specific dataset with given parameter
         # Preprocessing however will include all defined datasets
