@@ -1,3 +1,5 @@
+import json
+
 from case_based_similarity.CaseBasedSimilarity import CBS
 from configuration.Configuration import Configuration
 from configuration.Enums import LossFunction
@@ -126,6 +128,8 @@ class ConfigChecker:
                              architecture.hyper.fc_after_cnn1d_layers is None,
                              'Additional fully connected layers shouldn\'t be used with FFNN. '
                              'fc_after_cnn1d_layers list should be empty.')
+
+
 
         elif self.architecture_type == 'cbs':
             architecture: CBS = architecture

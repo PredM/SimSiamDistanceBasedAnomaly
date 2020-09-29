@@ -168,6 +168,7 @@ class CNN2dWithAddInput(NN):
         super().__init__(hyperparameters, input_shape)
         self.output_shape = None
 
+
     def create_model(self):
 
         print('Creating CNN with 2d kernel encoder with a sensor data input shape: ', self.input_shape[0],

@@ -45,13 +45,13 @@ class GeneralConfiguration:
         self.max_gpus_used = 4
 
         # Specifies the maximum number of cores to be used
-        self.max_parallel_cores = 1
+        self.max_parallel_cores = 40
 
         # Folder where the trained models are saved to during learning process
         self.models_folder = '../data/trained_models/'
 
         # Path and file name to the specific model that should be used for testing and live classification
-        self.filename_model_to_use = 'temp_cbs_model_08-19_09-24-27_epoch-1750'
+        self.filename_model_to_use = 'temp_snn_model_09-29_11-36-45_epoch-100'
         self.directory_model_to_use = self.models_folder + self.filename_model_to_use + '/'
 
         ##
@@ -119,7 +119,7 @@ class ModelConfiguration:
         # If !use_individual_hyperparameters interpreted as a single json file, else as a folder
         # which contains json files named after the cases they should be used for
         # If no file with this name is present the 'default.json' Config will be used
-        self.hyper_file = self.hyper_file_folder + 'cbs_19-08.json'  # 'individual_hyperparameters_test'  #
+        self.hyper_file = self.hyper_file_folder + 'cnn2d_withAddInput.json'  # 'individual_hyperparameters_test'  #
 
         ##
         # Various settings influencing the similarity calculation
@@ -143,7 +143,7 @@ class ModelConfiguration:
 
         # Using the more restrictive features as additional masking vector for feature sim calculation
         # in cnn_with_add_input
-        self.use_additional_strict_masking_for_attribute_sim = False  # default: False
+        self.use_additional_strict_masking_for_attribute_sim = True  # default: False
 
         # Option to simulate a retrieval situation (during training) where only the weights of the
         # example from the case base/training data set are known:
@@ -507,10 +507,9 @@ class Configuration(
         group = self.case_to_group_id.get(case)
         return self.group_id_to_features.get(group)
 
-    # FIXME #62
     # returns individual defined features (instead of group features)
-    def get_relevant_features_case(self, case):
-        if self.use_additional_strict_masking_for_attribute_sim:
+    def get_relevant_features_case(self, case, return_strict_masking=False):
+        if return_strict_masking:
             return [self.case_to_individual_features.get(case), self.case_to_individual_features_strict.get(case)]
         else:
             return self.case_to_individual_features.get(case)
