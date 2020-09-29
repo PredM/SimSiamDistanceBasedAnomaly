@@ -101,12 +101,10 @@ class RocketRepresentation(Representation):
         rocket.fit(x_train_df)
         print('Finished fitting.')
 
-        # TODO: Check if cast back to float32 is reasonable, could worsen the result
-
-        self.x_train_features = rocket.transform(x_train_df).values  # .astype('float32')
+        self.x_train_features = rocket.transform(x_train_df).values
         print('\nFinished fitting the train dataset. Shape:', self.x_train_features.shape)
 
-        self.x_test_features = rocket.transform(x_test_df).values  # .astype('float32')
+        self.x_test_features = rocket.transform(x_test_df).values
         print('\nFinished fitting the test dataset. Shape:', self.x_test_features.shape)
 
         if self.config.case_base_for_inference:

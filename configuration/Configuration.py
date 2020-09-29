@@ -507,7 +507,6 @@ class Configuration(
         group = self.case_to_group_id.get(case)
         return self.group_id_to_features.get(group)
 
-    # FIXME #62
     # returns individual defined features (instead of group features)
     def get_relevant_features_case(self, case):
         if self.use_additional_strict_masking_for_attribute_sim:

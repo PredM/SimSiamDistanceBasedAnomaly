@@ -323,6 +323,14 @@ class CNN2dWithAddInput(NN):
         return self.model.output_shape[0]
         # raise NotImplementedError('Must be added in order for ffnn version to work with this encoder')
 
+class TypeBaseCNN2D(NN):
+
+    def __init__(self, hyperparameters, input_shape):
+        super().__init__(hyperparameters, input_shape)
+
+
+    def create_model(self):
+        pass
 
 class CNN(NN):
 

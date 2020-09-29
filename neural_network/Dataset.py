@@ -222,7 +222,6 @@ class FullDataset(Dataset):
             masking = np.isin(self.feature_names_all, features)
             self.group_id_to_masking_vector[group_id] = masking
 
-    # TODO Issue #62 --> Add parameter strict=False, so default will be none, add True to all relevant calls
     # returns a boolean array with values depending on whether the attribute at this index is relevant
     # for the class of the passed label
     def get_masking(self, class_label):

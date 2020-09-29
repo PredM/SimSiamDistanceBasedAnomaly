@@ -41,7 +41,6 @@ class ConfigChecker:
                                   self.config.simple_measure == 'euclidean_dis',
                                   'The euclidean distance must be used for triplet loss (set config.simple_measure = \'euclidean_dis\')')
 
-        # TODO Check if this is the case
         ConfigChecker.implication(self.config.type_of_loss_function == LossFunction.TRIPLET_LOSS,
                                   self.config.useFeatureWeightedSimilarity == False,
                                   'This feature should not be used with the triplet loss function until evaluated.')
