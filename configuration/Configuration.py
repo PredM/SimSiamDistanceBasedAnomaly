@@ -167,7 +167,7 @@ class TrainingConfiguration:
         # for at least one case
         # self.features_used will be assigned when config.json loading
         self.feature_variants = ['all_features', 'cbs_features']
-        self.feature_variant = self.feature_variants[1]
+        self.feature_variant = self.feature_variants[0]
         self.features_used = None
 
         # TODO Distance-Based Logistic Loss
