@@ -119,7 +119,7 @@ class ModelConfiguration:
         # If !use_individual_hyperparameters interpreted as a single json file, else as a folder
         # which contains json files named after the cases they should be used for
         # If no file with this name is present the 'default.json' Config will be used
-        self.hyper_file = self.hyper_file_folder + 'cbs_19-08.json'  # 'individual_hyperparameters_test'  #
+        self.hyper_file = self.hyper_file_folder + 'typebased.json'  # 'individual_hyperparameters_test'  #
 
         ##
         # Various settings influencing the similarity calculation
@@ -383,6 +383,9 @@ class StaticConfiguration:
         self.group_id_to_cases = None
         self.group_id_to_features = None
 
+        self.type_based_groups = {}
+
+
         self.zeroOne, self.intNumbers, self.realValues, self.categoricalValues = None, None, None, None
 
         # noinspection PyUnresolvedReferences
@@ -494,6 +497,11 @@ class Configuration(
         self.case_to_group_id: dict = data['case_to_group_id']
         self.group_id_to_cases: dict = data['group_id_to_cases']
         self.group_id_to_features: dict = data['group_id_to_features']
+
+        # Keys must be converted to integer, json only uses strings
+        type_based_groups_json = data['type_based_groups']
+        for key, value in type_based_groups_json.items():
+            self.type_based_groups[int(key)] = value
 
         # Depending on the self.feature_variant the relevant features for creating a dataset are selected
         if self.feature_variant == 'cbs_features':

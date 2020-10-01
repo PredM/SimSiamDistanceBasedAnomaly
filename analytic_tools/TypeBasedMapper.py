@@ -113,8 +113,15 @@ def main():
     # for group in groups_as_indices:
     #     print(*group, sep=', ')
 
-    with open('../data/feature_selection/typeMapping.json', 'w', encoding='utf-8') as f:
-        json.dump(groups_as_indices, f, ensure_ascii=False, indent=2)
+    group_dict = {}
+
+    for index, group in enumerate(groups_as_indices):
+        group_dict[index] = group
+
+    file  ='../data/feature_selection/typeMapping.json'
+    print('Saving to ', file)
+    with open(file, 'w', encoding='utf-8') as f:
+        json.dump(group_dict, f, ensure_ascii=False, indent=2)
 
 if __name__ == '__main__':
     main()

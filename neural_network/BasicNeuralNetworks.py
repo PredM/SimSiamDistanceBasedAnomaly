@@ -323,14 +323,6 @@ class CNN2dWithAddInput(NN):
         return self.model.output_shape[0]
         # raise NotImplementedError('Must be added in order for ffnn version to work with this encoder')
 
-class TypeBaseCNN2D(NN):
-
-    def __init__(self, hyperparameters, input_shape):
-        super().__init__(hyperparameters, input_shape)
-
-
-    def create_model(self):
-        pass
 
 class CNN(NN):
 
@@ -385,52 +377,122 @@ class CNN(NN):
         self.model = model
 
 
+class TypeBasedEncoder(NN):
+
+    def __init__(self, hyperparameters, input_shape, group_to_attributes_mapping):
+        super().__init__(hyperparameters, input_shape)
+        self.group_to_attributes_mapping: dict = group_to_attributes_mapping
+        self.attribute_to_group_mapping = {}
+
+        for key, value in self.group_to_attributes_mapping.items():
+            for elem in value:
+                self.attribute_to_group_mapping[elem] = key
+
+        self.submodels = {}
+
+    def create_submodel(self):
+        submodel = CNN(self.hyper, input_shape=(1, self.input_shape[1]))
+        return submodel
+
+    def create_model(self):
+        print('Creating type based encoder with an input shape: ', self.input_shape)
+
+        # (self.input_shape[0], self.input_shape[1], 1)
+        full_input = tf.keras.Input(shape=self.input_shape, name="Input0")
+        nbr_attributes = self.input_shape[1]
+
+        for group_id in self.group_to_attributes_mapping.keys():
+            self.submodels[group_id] = self.create_submodel()
+
+        # TODO
+        #  Alternative: for each group
+        #  Create submodel and pass multiple inputs, i.e.
+        #  https://stackoverflow.com/questions/44872982/how-do-i-train-multiple-neural-nets-simultaneously-in-keras
+        submodel_outputs = []
+        for i in range(nbr_attributes):
+            group_attribute_i = self.attribute_to_group_mapping.get(i)
+            submodel_input = tf.keras.layers.Lambda(lambda x: x[:, :, i])(full_input)
+            submodel_input = tf.expand_dims(submodel_input, axis=1)
+
+            submodel: tf.keras.Sequential = self.submodels.get(group_attribute_i).model
+
+            # TODO Statt einfach zu prependen muss irgendwie input gesetzt werden, evtl. änderungen an CNN nötig
+            #  https://stackoverflow.com/questions/52754453/tensorflow-keras-attributeerror-layer-features-has-no-inbound-nodes
+            #  Daher CNN manuell in create submodel definieren und dabei direkt input übergeben sodass sich das problem hier garnicht mehr stellt.
+
+            #submodel.layers.insert(0, submodel_input, )
+
+            submodel_outputs.append(submodel.output)
+
+        outputs_combined = tf.keras.layers.Concatenate(axis=1)(submodel_outputs)
+        self.model = tf.keras.Model(inputs=full_input, outputs=outputs_combined)
+
+    # TODO Add pretty output for this encoder
+    def print_model_info(self):
+        pass
+
+
 class CNN2D(NN):
 
     def __init__(self, hyperparameters, input_shape):
         super().__init__(hyperparameters, input_shape)
 
     def create_model(self):
-        '''
-        Based on https://www.ijcai.org/proceedings/2019/0932.pdf
-        '''
+
         print('Creating CNN with 2d kernel encoder with an input shape: ', self.input_shape)
-        sensorDataInput = tf.keras.Input(shape=(self.input_shape[0], self.input_shape[1], 1), name="Input0")
 
-        layers = self.hyper.cnn2d_layers
+        input, output = self.layer_creation(self.hyper, self.input_shape)
 
-        if len(layers) < 1:
+        self.model = tf.keras.Model(inputs=input, outputs=output)
+
+    '''
+    Based on https://www.ijcai.org/proceedings/2019/0932.pdf
+    '''
+
+    @staticmethod
+    def layer_creation(hyper: Hyperparameters, input_shape):
+
+        if len(hyper.cnn2d_layers) < 1:
             print('CNN encoder with less than one layer for 2d kernels is not possible')
             sys.exit(1)
 
-        layer_properties = list(zip(self.hyper.cnn2d_layers, self.hyper.cnn2d_kernel_length, self.hyper.cnn2d_strides))
+        if len(hyper.cnn_layers) < 1:
+            print('Attention: No 1d conv layer on top of 2d conv is used!')
+            # FIXME: What should be achieved here? If really abort and not only warning insert next line again
+            # sys.exit(1)
+
+        if hyper.fc_after_cnn1d_layers is not None and len(hyper.fc_after_cnn1d_layers) < 1:
+            print('Adding FC with less than one layer is not possible')
+            sys.exit(1)
+
+        input = tf.keras.Input(shape=(input_shape[0], input_shape[1], 1), name="Input0")
+        layer_properties_2d = list(zip(hyper.cnn2d_layers, hyper.cnn2d_kernel_length, hyper.cnn2d_strides))
 
         # creating CNN encoder for sensor data
-        for i in range(len(layer_properties)):
-            num_filter, filter_size, stride = layer_properties[i][0], layer_properties[i][1], layer_properties[i][2]
+        for i in range(len(layer_properties_2d)):
+            num_filter, filter_size, stride = layer_properties_2d[i][0], layer_properties_2d[i][1], \
+                                              layer_properties_2d[i][2]
 
             # first layer must be handled separately because the input shape parameter must be set
             if i == 0:
                 conv_layer1 = tf.keras.layers.Conv2D(filters=num_filter, padding='VALID',
-                                                     kernel_size=(filter_size),
-                                                     strides=stride, input_shape=sensorDataInput.shape)
+                                                     kernel_size=(filter_size), strides=stride, input_shape=input.shape)
 
                 # Added 1D-Conv Layer to provide information across time steps in the first layer
-                conv_layer1d = tf.keras.layers.Conv1D(filters=61, padding='VALID', kernel_size=1,
-                                                      strides=1)
-                # inp = tf.squeeze(sensorDataInput)
-                reshape = tf.keras.layers.Reshape((self.input_shape[0], self.input_shape[1]))
-                inp = reshape(sensorDataInput)
+                conv_layer1d = tf.keras.layers.Conv1D(filters=61, padding='VALID', kernel_size=1, strides=1)
+                # inp = tf.squeeze(input)
+                reshape = tf.keras.layers.Reshape((input_shape[0], input_shape[1]))
+                inp = reshape(input)
                 temp = conv_layer1d(inp)
                 temp = tf.expand_dims(temp, -1)
-                sensor_data_input2 = tf.concat([sensorDataInput, temp], axis=3)
+                sensor_data_input2 = tf.concat([input, temp], axis=3)
 
                 x = conv_layer1(sensor_data_input2)
             else:
                 conv_layer = tf.keras.layers.Conv2D(filters=num_filter, padding='VALID',
-                                                    kernel_size=(filter_size),
-                                                    strides=stride)
+                                                    kernel_size=(filter_size), strides=stride)
                 x = conv_layer(x)
+
             x = tf.keras.layers.BatchNormalization()(x)
             x = tf.keras.layers.ReLU()(x)
 
@@ -440,15 +502,12 @@ class CNN2D(NN):
         reshape = tf.keras.layers.Reshape((x.shape[1], x.shape[2]))
         x = reshape(x)
 
-        if len(layers) < 1:
-            print('Attention: no one 1d conv on top of 2d conv is used!')
-            sys.exit(1)
-
-        layer_properties = list(zip(self.hyper.cnn_layers, self.hyper.cnn_kernel_length, self.hyper.cnn_strides))
+        layer_properties_1d = list(zip(hyper.cnn_layers, hyper.cnn_kernel_length, hyper.cnn_strides))
 
         # creating CNN encoder for sensor data
-        for i in range(len(layer_properties)):
-            num_filter, filter_size, stride = layer_properties[i][0], layer_properties[i][1], layer_properties[i][2]
+        for i in range(len(layer_properties_1d)):
+            num_filter, filter_size, stride = layer_properties_1d[i][0], layer_properties_1d[i][1], \
+                                              layer_properties_1d[i][2]
 
             conv_layer = tf.keras.layers.Conv1D(filters=num_filter, padding='VALID', kernel_size=filter_size,
                                                 strides=stride)
@@ -456,16 +515,15 @@ class CNN2D(NN):
             x = tf.keras.layers.BatchNormalization()(x)
             x = tf.keras.layers.ReLU()(x)
 
-        x = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(x)
+        x = tf.keras.layers.Dropout(rate=hyper.dropout_rate)(x)
 
-        if self.hyper.fc_after_cnn1d_layers is not None:
+        if hyper.fc_after_cnn1d_layers is not None:
             print('Adding FC layers')
-            layers_fc = self.hyper.fc_after_cnn1d_layers.copy()
-            if len(layers) < 1:
-                print('Adding FC with less than one layer is not possible')
-                sys.exit(1)
+
             x = tf.keras.layers.Flatten()(x)
             last_layer_size = 0
+
+            layers_fc = hyper.fc_after_cnn1d_layers.copy()
             for num_units in layers_fc:
                 x = tf.keras.layers.BatchNormalization()(x)
                 x = tf.keras.layers.Dense(units=num_units, activation=tf.keras.activations.relu)(x)
@@ -473,4 +531,6 @@ class CNN2D(NN):
 
             x = tf.keras.layers.Reshape((last_layer_size, 1))(x)
 
-        self.model = tf.keras.Model(inputs=sensorDataInput, outputs=x)
+        output = x
+
+        return input, output
