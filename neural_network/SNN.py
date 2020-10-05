@@ -247,9 +247,6 @@ class SimpleSNN(AbstractSimilarityMeasure):
         # calculate the output of the encoder for the examples in the batch
         context_vectors = self.encoder.model(batch, training=self.training)
 
-        # TODO Remove
-        print(context_vectors.shape)
-
         if self.hyper.encoder_variant == 'cnn2dwithaddinput':
             input_size = batch[0].shape[0] // 2
         else:

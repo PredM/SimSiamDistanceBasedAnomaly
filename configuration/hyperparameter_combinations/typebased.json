@@ -7,10 +7,19 @@
   "gradient_cap": -1,
   "dropout_rate": 0.05,
   "cnn_layers": [
+    256,
+    64,
+    16
   ],
   "cnn_kernel_length": [
+    5,
+    3,
+    5
   ],
   "cnn_strides": [
+    2,
+    2,
+    1
   ],
   "cnn2d_layers": [
     128,

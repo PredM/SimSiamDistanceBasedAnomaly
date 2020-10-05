@@ -23,8 +23,8 @@ class BaselineConfiguration:
         # Output interval of how many examples have been compared so far. < 0 for no output
         self.baseline_temp_output_interval = -1
 
-        self.baseline_use_relevant_only = True
-        self.baseline_algorithm = BaselineAlgorithm.DTW
+        self.baseline_use_relevant_only = False
+        self.baseline_algorithm = BaselineAlgorithm.FEATURE_BASED_ROCKET
 
         ##
         # Rocket
@@ -45,7 +45,7 @@ class GeneralConfiguration:
         self.max_gpus_used = 4
 
         # Specifies the maximum number of cores to be used
-        self.max_parallel_cores = 1
+        self.max_parallel_cores = 20
 
         # Folder where the trained models are saved to during learning process
         self.models_folder = '../data/trained_models/'
@@ -229,7 +229,7 @@ class InferenceConfiguration:
         # similarity assessment during inference.
         # Please note that the case base extraction only reduces the training data but fully copies the test data
         # so all test example will still be evaluated even if this is enabled
-        self.case_base_for_inference = True  # default: False
+        self.case_base_for_inference = False  # default: False
 
         # Parameter to control the size / number of the queries used for evaluation
         self.inference_with_failures_only = False  # default: False

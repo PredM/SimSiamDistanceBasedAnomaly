@@ -101,13 +101,7 @@ class Hyperparameters:
             self.tcn_layers = data['tcn_layers']
             self.tcn_kernel_length = data['tcn_kernel_length']
 
-        # FIXME update when used submodel is set up
-        if 'typebasedencoder' in self.encoder_variant:
-            self.cnn_layers = data['cnn_layers']
-            self.cnn_kernel_length = data['cnn_kernel_length']
-            self.cnn_strides = data['cnn_strides']
-
-        if 'cnn' in self.encoder_variant:
+        if self.encoder_variant in ['typebasedencoder', 'cnn', 'cnn2d', 'cnn2dwithaddinput']:
             self.cnn_layers = data['cnn_layers']
             self.cnn_kernel_length = data['cnn_kernel_length']
             self.cnn_strides = data['cnn_strides']
