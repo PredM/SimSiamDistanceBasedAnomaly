@@ -23,8 +23,8 @@ class BaselineConfiguration:
         # Output interval of how many examples have been compared so far. < 0 for no output
         self.baseline_temp_output_interval = -1
 
-        self.baseline_use_relevant_only = True
-        self.baseline_algorithm = BaselineAlgorithm.DTW
+        self.baseline_use_relevant_only = False
+        self.baseline_algorithm = BaselineAlgorithm.FEATURE_BASED_ROCKET
 
         ##
         # Rocket
@@ -45,7 +45,7 @@ class GeneralConfiguration:
         self.max_gpus_used = 4
 
         # Specifies the maximum number of cores to be used
-        self.max_parallel_cores = 1
+        self.max_parallel_cores = 20
 
         # Folder where the trained models are saved to during learning process
         self.models_folder = '../data/trained_models/'
@@ -119,7 +119,7 @@ class ModelConfiguration:
         # If !use_individual_hyperparameters interpreted as a single json file, else as a folder
         # which contains json files named after the cases they should be used for
         # If no file with this name is present the 'default.json' Config will be used
-        self.hyper_file = self.hyper_file_folder + 'cbs_19-08.json'  # 'individual_hyperparameters_test'  #
+        self.hyper_file = self.hyper_file_folder + 'typebased.json'  # 'individual_hyperparameters_test'  #
 
         ##
         # Various settings influencing the similarity calculation
@@ -167,7 +167,7 @@ class TrainingConfiguration:
         # for at least one case
         # self.features_used will be assigned when config.json loading
         self.feature_variants = ['all_features', 'cbs_features']
-        self.feature_variant = self.feature_variants[1]
+        self.feature_variant = self.feature_variants[0]
         self.features_used = None
 
         # TODO Distance-Based Logistic Loss
@@ -229,7 +229,7 @@ class InferenceConfiguration:
         # similarity assessment during inference.
         # Please note that the case base extraction only reduces the training data but fully copies the test data
         # so all test example will still be evaluated even if this is enabled
-        self.case_base_for_inference = True  # default: False
+        self.case_base_for_inference = False  # default: False
 
         # Parameter to control the size / number of the queries used for evaluation
         self.inference_with_failures_only = False  # default: False
@@ -383,6 +383,9 @@ class StaticConfiguration:
         self.group_id_to_cases = None
         self.group_id_to_features = None
 
+        self.type_based_groups = {}
+
+
         self.zeroOne, self.intNumbers, self.realValues, self.categoricalValues = None, None, None, None
 
         # noinspection PyUnresolvedReferences
@@ -495,6 +498,11 @@ class Configuration(
         self.group_id_to_cases: dict = data['group_id_to_cases']
         self.group_id_to_features: dict = data['group_id_to_features']
 
+        # Keys must be converted to integer, json only uses strings
+        type_based_groups_json = data['type_based_groups']
+        for key, value in type_based_groups_json.items():
+            self.type_based_groups[int(key)] = value
+
         # Depending on the self.feature_variant the relevant features for creating a dataset are selected
         if self.feature_variant == 'cbs_features':
             self.features_used = sorted(list(set(flatten(self.group_id_to_features.values()))))
@@ -507,7 +515,6 @@ class Configuration(
         group = self.case_to_group_id.get(case)
         return self.group_id_to_features.get(group)
 
-    # FIXME #62
     # returns individual defined features (instead of group features)
     def get_relevant_features_case(self, case):
         if self.use_additional_strict_masking_for_attribute_sim:

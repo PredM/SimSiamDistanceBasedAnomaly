@@ -5,7 +5,7 @@ import tensorflow as tf
 from configuration.Configuration import Configuration
 from configuration.Hyperparameter import Hyperparameters
 from neural_network.BasicNeuralNetworks import CNN, RNN, FFNN, CNN2dWithAddInput, \
-    CNN2D
+    CNN2D, TypeBasedEncoder
 from neural_network.Dataset import FullDataset
 from neural_network.SimpleSimilarityMeasure import SimpleSimilarityMeasure
 
@@ -366,6 +366,8 @@ class SimpleSNN(AbstractSimilarityMeasure):
             self.encoder = CNN(self.hyper, input_shape_encoder)
         elif self.hyper.encoder_variant == 'cnn2d':
             self.encoder = CNN2D(self.hyper, input_shape_encoder)
+        elif self.hyper.encoder_variant == 'typebasedencoder':
+            self.encoder = TypeBasedEncoder(self.hyper, input_shape_encoder, self.config.type_based_groups)
         elif self.hyper.encoder_variant == 'cnn2dwithaddinput':
             # Consideration of an encoder with multiple inputs
             if self.config.use_additional_strict_masking_for_attribute_sim:
