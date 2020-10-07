@@ -37,9 +37,10 @@ class NN:
         if self.model is None:
             raise AttributeError('Model not initialised. Can not load weights.')
 
-        if type(self) == CNN or type(self) == RNN or type(self) == CNN2dWithAddInput or type(self) == CNN2D:
+        if type(self) == CNN or type(self) == RNN or type(self) == CNN2dWithAddInput or type(self) == CNN2D \
+                or type(self) == DUMMY:
             prefix = 'encoder'
-        elif type(self) == FFNN:
+        elif type(self) == FFNN or type(self) == FFNN2:
             prefix = 'ffnn'
         else:
             raise AttributeError('Can not import models of type', type(self))
@@ -87,6 +88,37 @@ class FFNN(NN):
         # regardless of the configured number of layers, add a layer with
         # a single neuron that provides the indicator function output.
         output = tf.keras.layers.Dense(units=1, activation=tf.keras.activations.sigmoid)(x)
+
+        self.model = tf.keras.Model(inputs=layer_input, outputs=output)
+
+class FFNN2(NN):
+    # This model can be used in combination with standard_SNN and with feature rep. overwritten input
+    def __init__(self, hyperparameters, input_shape):
+        super().__init__(hyperparameters, input_shape)
+
+    def create_model(self):
+        print('Creating FFNN2 for input shape: ', self.input_shape)
+        #print("self.hyper.ffnn_layers: ", self.hyper.ffnn_layers)
+        layers = self.hyper.ffnn_layers
+        '''
+        if len(layers) < 1:
+            print('FFNN with less than one layer is not possible')
+            sys.exit(1)
+
+        # first layer must be handled separately because the input shape parameter must be set
+        num_units_first = layers.pop(0)
+        '''
+        layer_input = tf.keras.Input(shape=self.input_shape, name="Input")
+        '''
+        x = tf.keras.layers.Dense(units=num_units_first, activation=tf.keras.activations.relu,
+                                  input_shape=self.input_shape)(layer_input)
+
+        for num_units in layers:
+            x = tf.keras.layers.Dense(units=num_units, activation=tf.keras.activations.relu)(x)
+        '''
+        # regardless of the configured number of layers, add a layer with
+        # a single neuron that provides the indicator function output.
+        output = tf.keras.layers.Dense(units=1, activation=tf.keras.activations.sigmoid)(layer_input)
 
         self.model = tf.keras.Model(inputs=layer_input, outputs=output)
 
@@ -582,3 +614,16 @@ class CNN2D(NN):
         output = x
 
         return input, output
+
+class DUMMY(NN):
+    # This is an encoder without any learnable parameter and without any input transformation
+
+    def __init__(self, hyperparameters, input_shape):
+        super().__init__(hyperparameters, input_shape)
+
+    def create_model(self):
+
+        print('Creating a keras model without any parameter, input is the same as its output, no transformations: ', self.input_shape)
+        input = tf.keras.Input(shape=(self.input_shape[0], self.input_shape[1]), name="Input0")
+        output = input
+        self.model = tf.keras.Model(inputs=input, outputs=output, name='Dummy')

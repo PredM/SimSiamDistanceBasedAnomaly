@@ -9,7 +9,7 @@ class Hyperparameters:
         # Important: Variable names must match json file entries
         ##
 
-        self.encoder_variants = ['cnn', 'rnn', 'cnn2dwithaddinput', 'cnn2d', 'typebasedencoder']
+        self.encoder_variants = ['cnn', 'rnn', 'cnn2dwithaddinput', 'cnn2d', 'typebasedencoder', 'dummy']
         self.encoder_variant = None
 
         # Need to be changed after dataset was loaded

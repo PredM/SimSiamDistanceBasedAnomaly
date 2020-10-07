@@ -33,6 +33,12 @@ class BaselineConfiguration:
         self.rocket_kernels = 10_000  # 10_000 is the rocket default
         self.rocket_random_seed = 2342
 
+        ###
+        # Learning global similarity for baseline input
+        ###
+        # Tested configuration: True and standard_ffnn  with Rocket1NeuronDummy should be selected
+        self.overwrite_input_data_with_baseline_representation = False #default False
+
 
 class GeneralConfiguration:
 
@@ -398,6 +404,7 @@ class StaticConfiguration:
 
         # Folder where the preprocessed training and test data for the neural network should be stored
         self.training_data_folder = '../data/training_data/'
+        # self.training_data_folder = "../../../../data/pklein/PredMSiamNN/data/training_data/"
 
         # Folder where the normalisation models should be stored
         self.scaler_folder = '../data/scaler/'
@@ -408,6 +415,7 @@ class StaticConfiguration:
 
         # Folder where the reduced training data set aka. case base is saved to
         self.case_base_folder = '../data/case_base/'
+        # self.case_base_folder = "../../../../data/pklein/PredMSiamNN/data/case_base/"
 
         # Folder where text files with extracted cases are saved to, for export
         self.cases_folder = '../data/cases/'
