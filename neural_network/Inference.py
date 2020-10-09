@@ -11,6 +11,8 @@ from configuration.ConfigChecker import ConfigChecker
 from configuration.Configuration import Configuration
 from neural_network.Dataset import FullDataset
 from neural_network.SNN import initialise_snn
+from baseline.Representations import TSFreshRepresentation, RocketRepresentation
+from configuration.Enums import BaselineAlgorithm
 
 
 class Inference:
@@ -34,11 +36,10 @@ class Inference:
         for idx_test in self.idx_test_examples_query_pool:
             # measure the similarity between the test series and the training batch series
             sims, labels = self.architecture.get_sims(self.dataset.x_test[idx_test])
-            # print("sims shape: ", sims.shape, " label shape: ", labels.shape)
+            #print("sims shape: ", sims.shape, " label shape: ", labels.shape, "self.dataset.x_test.shape", self.dataset.x_test.shape)
             # check similarities of all pairs and record the index of the closest training series
 
             sims_are_distance_values = True if self.config.simple_measure in ['euclidean_dis'] else False
-
             self.evaluator.add_single_example_results(sims, idx_test, sims_are_distance_values)
 
         # inference finished
@@ -60,6 +61,15 @@ def main():
         dataset: FullDataset = FullDataset(config.training_data_folder, config, training=False)
 
     dataset.load()
+    if config.overwrite_input_data_with_baseline_representation:
+        if config.baseline_algorithm == BaselineAlgorithm.FEATURE_BASED_ROCKET:
+            representation = RocketRepresentation(config, dataset)
+            representation.load(usedForTraining = not config.case_base_for_inference)
+            dataset = representation.overwriteRawDataFromDataSet(dataset=dataset, representation=representation)
+        elif config.baseline_algorithm == BaselineAlgorithm.FEATURE_BASED_TS_FRESH:
+            raise NotImplementedError('This representation is not implemented for learning a global similarity measure')
+        else:
+            raise NotImplementedError('This representation is not considered for learning a global similarity measure')
 
     checker = ConfigChecker(config, dataset, 'snn', training=False)
     checker.pre_init_checks()

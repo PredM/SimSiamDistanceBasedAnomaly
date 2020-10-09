@@ -5,7 +5,7 @@ import tensorflow as tf
 from configuration.Configuration import Configuration
 from configuration.Hyperparameter import Hyperparameters
 from neural_network.BasicNeuralNetworks import CNN, RNN, FFNN, CNN2dWithAddInput, \
-    CNN2D
+    CNN2D, TypeBasedEncoder, DUMMY, FFNN2
 from neural_network.Dataset import FullDataset
 from neural_network.SimpleSimilarityMeasure import SimpleSimilarityMeasure
 
@@ -368,6 +368,8 @@ class SimpleSNN(AbstractSimilarityMeasure):
             self.encoder = CNN(self.hyper, input_shape_encoder)
         elif self.hyper.encoder_variant == 'cnn2d':
             self.encoder = CNN2D(self.hyper, input_shape_encoder)
+        elif self.hyper.encoder_variant == 'typebasedencoder':
+            self.encoder = TypeBasedEncoder(self.hyper, input_shape_encoder, self.config.type_based_groups)
         elif self.hyper.encoder_variant == 'cnn2dwithaddinput':
             # Consideration of an encoder with multiple inputs
 
@@ -386,6 +388,8 @@ class SimpleSNN(AbstractSimilarityMeasure):
                 self.encoder = CNN2dWithAddInput(self.hyper, [input_shape_encoder, self.hyper.time_series_depth])
         elif self.hyper.encoder_variant == 'rnn':
             self.encoder = RNN(self.hyper, input_shape_encoder)
+        elif self.hyper.encoder_variant == 'dummy':
+            self.encoder = DUMMY(self.hyper, input_shape_encoder)
         else:
             raise AttributeError('Unknown encoder variant:', self.hyper.encoder_variant)
 
@@ -398,9 +402,14 @@ class SimpleSNN(AbstractSimilarityMeasure):
         # These variants also need a ffnn
         if self.config.architecture_variant in ['standard_ffnn', 'fast_ffnn']:
             encoder_output_shape = self.encoder.get_output_shape()
-            # Neural Warp
-            input_shape_ffnn = (encoder_output_shape[1] ** 2, encoder_output_shape[2] * 2)
-            self.ffnn = FFNN(self.hyper, input_shape_ffnn)
+
+            if self.config.overwrite_input_data_with_baseline_representation:
+                input_shape_ffnn = (self.hyper.time_series_length,)
+                self.ffnn = FFNN2(self.hyper, input_shape_ffnn)
+            else:
+                # Neural Warp
+                input_shape_ffnn = (encoder_output_shape[1] ** 2, encoder_output_shape[2] * 2)
+                self.ffnn = FFNN(self.hyper, input_shape_ffnn)
 
             self.ffnn.create_model()
 
@@ -447,30 +456,44 @@ class SNN(SimpleSNN):
             b = context_vectors[2 * pair_index + 1, :, :]
         # a and b shape: [T, C]
 
-        # Neural Warp:
-        a, b = self.transform_to_time_step_wise(a, b)
+        if self.config.overwrite_input_data_with_baseline_representation:
+            # Trains a neural network on distances of feature-based representation such as Rocket or TSFresh
+            abs_distance = tf.abs(tf.subtract(a, b))
+            abs_distance_flattened = tf.keras.layers.Flatten()(abs_distance)
+            abs_distance_flattened = tf.transpose(abs_distance_flattened)
+            ffnn_input = abs_distance_flattened
+            ffnn = self.ffnn.model(ffnn_input, training=self.training)
+            # tf.print(ffnn, "shape: ",tf.shape(ffnn))
+            ffnn = tf.squeeze(ffnn)
+            # tf.print(abs_distance_flattened)
+            # sim = 1/(1+ffnn)
+            sim = ffnn
+        else:
+            # Neural Warp:
+            a, b = self.transform_to_time_step_wise(a, b)
 
-        # ffnn_input of FFNN are all time stamp combinations of a and b
-        ffnn_input = tf.concat([a, b], axis=1)
-        # b shape: [T*T, 2*C] OR [T*T, 4*C]
+            # ffnn_input of FFNN are all time stamp combinations of a and b
+            ffnn_input = tf.concat([a, b], axis=1)
+            # b shape: [T*T, 2*C] OR [T*T, 4*C]
 
-        # Predict the "relevance" of similarity between each time step
-        ffnn = self.ffnn.model(ffnn_input, training=self.training)
-        # ffnn shape: [T*T, 1]
+            # Predict the "relevance" of similarity between each time step
+            ffnn = self.ffnn.model(ffnn_input, training=self.training)
+            # ffnn shape: [T*T, 1]
 
-        # Calculate absolute distances between each time step
-        abs_distance = tf.abs(tf.subtract(a, b))
-        # abs_distance shape: [T*T, C]
+            # Calculate absolute distances between each time step
+            abs_distance = tf.abs(tf.subtract(a, b))
+            # abs_distance shape: [T*T, C]
 
-        # Compute the mean of absolute distances across each time step
-        timestepwise_mean_abs_difference = tf.expand_dims(tf.reduce_mean(abs_distance, axis=1), axis=-1)
-        # abs_distance shape: [T*T, 1]
+            # Compute the mean of absolute distances across each time step
+            timestepwise_mean_abs_difference = tf.expand_dims(tf.reduce_mean(abs_distance, axis=1), axis=-1)
+            # abs_distance shape: [T*T, 1]
 
-        # Scale / Weight (due to multiplication) the absolute distance of each time step combinations
-        # with the predicted "weight" for each time step
-        warped_dists = tf.multiply(timestepwise_mean_abs_difference, ffnn)
+            # Scale / Weight (due to multiplication) the absolute distance of each time step combinations
+            # with the predicted "weight" for each time step
+            warped_dists = tf.multiply(timestepwise_mean_abs_difference, ffnn)
 
-        sim = tf.exp(-tf.reduce_mean(warped_dists))
+            sim = tf.exp(-tf.reduce_mean(warped_dists))
+
         return sim
 
     def print_detailed_model_info(self):

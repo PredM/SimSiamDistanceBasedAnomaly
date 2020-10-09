@@ -93,6 +93,8 @@ class RocketRepresentation(Representation):
         # Cast is necessary because rocket seems to expect 64 bit values
         x_train_casted = self.dataset.x_train.astype('float64')
         x_test_casted = self.dataset.x_test.astype('float64')
+        print("x_train_casted: ", x_train_casted.shape)
+        print("x_test_casted: ", x_test_casted.shape)
 
         x_train_df = self.array_to_ts_df(x_train_casted)
         x_test_df = self.array_to_ts_df(x_test_casted)
@@ -101,28 +103,31 @@ class RocketRepresentation(Representation):
         rocket.fit(x_train_df)
         print('Finished fitting.')
 
-        # TODO: Check if cast back to float32 is reasonable, could worsen the result
-
-        self.x_train_features = rocket.transform(x_train_df).values  # .astype('float32')
+        self.x_train_features = rocket.transform(x_train_df).values
         print('\nFinished fitting the train dataset. Shape:', self.x_train_features.shape)
 
-        self.x_test_features = rocket.transform(x_test_df).values  # .astype('float32')
+        self.x_test_features = rocket.transform(x_test_df).values
         print('\nFinished fitting the test dataset. Shape:', self.x_test_features.shape)
 
         if self.config.case_base_for_inference:
             dataset_folder = self.config.case_base_folder
+            print("use case base folder: ", dataset_folder)
         else:
             dataset_folder = self.config.training_data_folder
 
         np.save(dataset_folder + self.config.rocket_features_train_file, self.x_train_features)
+        print('\nSaved the train dataset. Shape:', self.x_train_features.shape)
         np.save(dataset_folder + self.config.rocket_features_test_file, self.x_test_features)
 
-    def load(self):
+    def load(self, usedForTraining=False):
 
-        if self.config.case_base_for_inference:
-            dataset_folder = self.config.case_base_folder
-        else:
+        if usedForTraining:
             dataset_folder = self.config.training_data_folder
+        else:
+            if self.config.case_base_for_inference:
+                dataset_folder = self.config.case_base_folder
+            else:
+                dataset_folder = self.config.training_data_folder
 
         self.x_train_features = np.load(dataset_folder + self.config.rocket_features_train_file)
         print('Features of train dataset loaded. Shape:', self.x_train_features.shape)
@@ -134,3 +139,30 @@ class RocketRepresentation(Representation):
     def get_masking(self, train_example_index):
         raise NotImplementedError('This representation does not have a relevant feature extraction algorithm '
                                   'hence it can not provide a masking')
+
+    def overwriteRawDataFromDataSet(self, dataset, representation, usedForTraining=False):
+
+        dataset: FullDataset = dataset
+
+        representation: RocketRepresentation = representation
+        # print("representation.x_train_features.shape:", self.feature_representation.x_train_features.shape)
+        # Set type to float32
+        representation.x_train_features = representation.x_train_features.astype('float32')
+        representation.x_test_features = representation.x_test_features.astype('float32')
+
+        # 1. Reshape the represetation input according our format; adding 1 dimension for "features" instead data streams
+        # 2. Overwrite the sensor raw data with the feature representation
+        dataset.x_train = (representation.x_train_features[:, :]).reshape(
+            representation.x_train_features[:, :].shape[0],
+            representation.x_train_features[:, :].shape[1], 1)  # (example,features)
+        dataset.x_test = (representation.x_test_features[:, :]).reshape(
+            representation.x_test_features[:, :].shape[0],
+            representation.x_test_features[:, :].shape[1], 1)  # (example,features)
+
+        # Updating dataset entries that are relevant for creating the networks input
+        dataset.time_series_length = representation.x_train_features[:, :].shape[1]  # amount of features
+        dataset.time_series_depth = 1  # only one type of feature is used
+
+        # print("new shape of self.dataset.x_train:", dataset.x_train.shape)
+        # print("new shape of self.dataset.x_test:", dataset.x_test.shape)
+        return dataset

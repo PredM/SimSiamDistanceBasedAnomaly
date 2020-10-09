@@ -23,8 +23,8 @@ class BaselineConfiguration:
         # Output interval of how many examples have been compared so far. < 0 for no output
         self.baseline_temp_output_interval = -1
 
-        self.baseline_use_relevant_only = True
-        self.baseline_algorithm = BaselineAlgorithm.DTW
+        self.baseline_use_relevant_only = False
+        self.baseline_algorithm = BaselineAlgorithm.FEATURE_BASED_ROCKET
 
         ##
         # Rocket
@@ -32,6 +32,12 @@ class BaselineConfiguration:
 
         self.rocket_kernels = 10_000  # 10_000 is the rocket default
         self.rocket_random_seed = 2342
+
+        ###
+        # Learning global similarity for baseline input
+        ###
+        # Tested configuration: True and standard_ffnn  with Rocket1NeuronDummy should be selected
+        self.overwrite_input_data_with_baseline_representation = False #default False
 
 
 class GeneralConfiguration:
@@ -167,7 +173,7 @@ class TrainingConfiguration:
         # for at least one case
         # self.features_used will be assigned when config.json loading
         self.feature_variants = ['all_features', 'cbs_features']
-        self.feature_variant = self.feature_variants[1]
+        self.feature_variant = self.feature_variants[0]
         self.features_used = None
 
         # TODO Distance-Based Logistic Loss
@@ -229,7 +235,7 @@ class InferenceConfiguration:
         # similarity assessment during inference.
         # Please note that the case base extraction only reduces the training data but fully copies the test data
         # so all test example will still be evaluated even if this is enabled
-        self.case_base_for_inference = True  # default: False
+        self.case_base_for_inference = False  # default: False
 
         # Parameter to control the size / number of the queries used for evaluation
         self.inference_with_failures_only = False  # default: False
@@ -383,6 +389,9 @@ class StaticConfiguration:
         self.group_id_to_cases = None
         self.group_id_to_features = None
 
+        self.type_based_groups = {}
+
+
         self.zeroOne, self.intNumbers, self.realValues, self.categoricalValues = None, None, None, None
 
         # noinspection PyUnresolvedReferences
@@ -395,6 +404,7 @@ class StaticConfiguration:
 
         # Folder where the preprocessed training and test data for the neural network should be stored
         self.training_data_folder = '../data/training_data/'
+        # self.training_data_folder = "../../../../data/pklein/PredMSiamNN/data/training_data/"
 
         # Folder where the normalisation models should be stored
         self.scaler_folder = '../data/scaler/'
@@ -405,6 +415,7 @@ class StaticConfiguration:
 
         # Folder where the reduced training data set aka. case base is saved to
         self.case_base_folder = '../data/case_base/'
+        # self.case_base_folder = "../../../../data/pklein/PredMSiamNN/data/case_base/"
 
         # Folder where text files with extracted cases are saved to, for export
         self.cases_folder = '../data/cases/'
@@ -494,6 +505,11 @@ class Configuration(
         self.case_to_group_id: dict = data['case_to_group_id']
         self.group_id_to_cases: dict = data['group_id_to_cases']
         self.group_id_to_features: dict = data['group_id_to_features']
+
+        # Keys must be converted to integer, json only uses strings
+        type_based_groups_json = data['type_based_groups']
+        for key, value in type_based_groups_json.items():
+            self.type_based_groups[int(key)] = value
 
         # Depending on the self.feature_variant the relevant features for creating a dataset are selected
         if self.feature_variant == 'cbs_features':
