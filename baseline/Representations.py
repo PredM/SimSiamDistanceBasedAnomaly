@@ -3,6 +3,7 @@ import pandas as pd
 from sktime.transformers.series_as_features.rocket import Rocket
 
 from configuration.Configuration import Configuration
+from configuration.Enums import BaselineAlgorithm
 from neural_network.Dataset import FullDataset
 
 
@@ -22,6 +23,27 @@ class Representation():
 
     def get_masking(self, train_example_index):
         raise NotImplementedError('Not implemented for abstract base method')
+
+    def convert_into_dataset(self):
+        raise NotImplementedError('This representation is not considered for learning a global similarity measure')
+
+    @staticmethod
+    def convert_dataset_to_baseline_representation(config, dataset):
+
+        if not config.overwrite_input_data_with_baseline_representation:
+            return
+
+        if config.baseline_algorithm == BaselineAlgorithm.FEATURE_BASED_ROCKET:
+            representation = RocketRepresentation(config, dataset)
+        elif config.baseline_algorithm == BaselineAlgorithm.FEATURE_BASED_TS_FRESH:
+            representation = TSFreshRepresentation(config, dataset)
+        else:
+            raise NotImplementedError()
+
+        representation.load()
+        dataset = representation.convert_into_dataset()
+
+        return dataset
 
 
 class TSFreshRepresentation(Representation):
@@ -122,30 +144,17 @@ class RocketRepresentation(Representation):
         self.x_test_features = rocket.transform(x_test_df).values
         print('\nFinished fitting the test dataset. Shape:', self.x_test_features.shape)
 
-        if self.config.case_base_for_inference:
-            dataset_folder = self.config.case_base_folder
-            print("use case base folder: ", dataset_folder)
-        else:
-            dataset_folder = self.config.training_data_folder
-
-        np.save(dataset_folder + self.config.rocket_features_train_file, self.x_train_features)
+        np.save(self.dataset.dataset_folder + self.config.rocket_features_train_file, self.x_train_features)
         print('\nSaved the train dataset. Shape:', self.x_train_features.shape)
-        np.save(dataset_folder + self.config.rocket_features_test_file, self.x_test_features)
+        np.save(self.dataset.dataset_folder + self.config.rocket_features_test_file, self.x_test_features)
+        print('\nSaved the train dataset. Shape:', self.x_test_features.shape)
 
-    def load(self, usedForTraining=False):
+    def load(self):
 
-        if usedForTraining:
-            dataset_folder = self.config.training_data_folder
-        else:
-            if self.config.case_base_for_inference:
-                dataset_folder = self.config.case_base_folder
-            else:
-                dataset_folder = self.config.training_data_folder
-
-        self.x_train_features = np.load(dataset_folder + self.config.rocket_features_train_file)
+        self.x_train_features = np.load(self.dataset.dataset_folder + self.config.rocket_features_train_file)
         print('Features of train dataset loaded. Shape:', self.x_train_features.shape)
 
-        self.x_test_features = np.load(dataset_folder + self.config.rocket_features_test_file)
+        self.x_test_features = np.load(self.dataset.dataset_folder + self.config.rocket_features_test_file)
         print('Features of test dataset loaded. Shape:', self.x_test_features.shape)
         print()
 
@@ -153,27 +162,26 @@ class RocketRepresentation(Representation):
         raise NotImplementedError('This representation does not have a relevant feature extraction algorithm '
                                   'hence it can not provide a masking')
 
-    def overwriteRawDataFromDataSet(self, dataset, representation, usedForTraining=False):
+    def convert_into_dataset(self):
 
-        dataset: FullDataset = dataset
-
-        representation: RocketRepresentation = representation
         # print("representation.x_train_features.shape:", self.feature_representation.x_train_features.shape)
         # Set type to float32
-        representation.x_train_features = representation.x_train_features.astype('float32')
-        representation.x_test_features = representation.x_test_features.astype('float32')
+        self.x_train_features = self.x_train_features.astype('float32')
+        self.x_test_features = self.x_test_features.astype('float32')
+
+        dataset = self.dataset
 
         # 1. Reshape the represetation input according our format; adding 1 dimension for "features" instead data streams
         # 2. Overwrite the sensor raw data with the feature representation
-        dataset.x_train = (representation.x_train_features[:, :]).reshape(
-            representation.x_train_features[:, :].shape[0],
-            representation.x_train_features[:, :].shape[1], 1)  # (example,features)
-        dataset.x_test = (representation.x_test_features[:, :]).reshape(
-            representation.x_test_features[:, :].shape[0],
-            representation.x_test_features[:, :].shape[1], 1)  # (example,features)
+        dataset.x_train = (self.x_train_features[:, :]).reshape(
+            self.x_train_features[:, :].shape[0],
+            self.x_train_features[:, :].shape[1], 1)  # (example,features)
+        dataset.x_test = (self.x_test_features[:, :]).reshape(
+            self.x_test_features[:, :].shape[0],
+            self.x_test_features[:, :].shape[1], 1)  # (example,features)
 
         # Updating dataset entries that are relevant for creating the networks input
-        dataset.time_series_length = representation.x_train_features[:, :].shape[1]  # amount of features
+        dataset.time_series_length = self.x_train_features[:, :].shape[1]  # amount of features
         dataset.time_series_depth = 1  # only one type of feature is used
 
         # print("new shape of self.dataset.x_train:", dataset.x_train.shape)

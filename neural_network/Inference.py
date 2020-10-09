@@ -11,7 +11,7 @@ from configuration.ConfigChecker import ConfigChecker
 from configuration.Configuration import Configuration
 from neural_network.Dataset import FullDataset
 from neural_network.SNN import initialise_snn
-from baseline.Representations import TSFreshRepresentation, RocketRepresentation
+from baseline.Representations import TSFreshRepresentation, RocketRepresentation, Representation
 from configuration.Enums import BaselineAlgorithm
 
 
@@ -61,15 +61,7 @@ def main():
         dataset: FullDataset = FullDataset(config.training_data_folder, config, training=False)
 
     dataset.load()
-    if config.overwrite_input_data_with_baseline_representation:
-        if config.baseline_algorithm == BaselineAlgorithm.FEATURE_BASED_ROCKET:
-            representation = RocketRepresentation(config, dataset)
-            representation.load(usedForTraining = not config.case_base_for_inference)
-            dataset = representation.overwriteRawDataFromDataSet(dataset=dataset, representation=representation)
-        elif config.baseline_algorithm == BaselineAlgorithm.FEATURE_BASED_TS_FRESH:
-            raise NotImplementedError('This representation is not implemented for learning a global similarity measure')
-        else:
-            raise NotImplementedError('This representation is not considered for learning a global similarity measure')
+    dataset = Representation.convert_dataset_to_baseline_representation(config, dataset)
 
     checker = ConfigChecker(config, dataset, 'snn', training=False)
     checker.pre_init_checks()

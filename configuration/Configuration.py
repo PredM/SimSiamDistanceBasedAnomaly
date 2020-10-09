@@ -37,13 +37,11 @@ class BaselineConfiguration:
         self.rocket_kernels = 10_000  # 10_000 is the rocket default
         self.rocket_random_seed = 2342
 
-
-
         ###
         # Learning global similarity for baseline input
         ###
         # Tested configuration: True and standard_ffnn  with Rocket1NeuronDummy should be selected
-        self.overwrite_input_data_with_baseline_representation = False #default False
+        self.overwrite_input_data_with_baseline_representation = True  # default False
 
 
 class GeneralConfiguration:
@@ -63,7 +61,7 @@ class GeneralConfiguration:
         self.models_folder = '../data/trained_models/'
 
         # Path and file name to the specific model that should be used for testing and live classification
-        self.filename_model_to_use = 'temp_snn_model_10-09_11-44-39_epoch-50'
+        self.filename_model_to_use = 'temp_snn_model_10-09_14-06-52_epoch-50'
         self.directory_model_to_use = self.models_folder + self.filename_model_to_use + '/'
 
         ##
@@ -131,7 +129,7 @@ class ModelConfiguration:
         # If !use_individual_hyperparameters interpreted as a single json file, else as a folder
         # which contains json files named after the cases they should be used for
         # If no file with this name is present the 'default.json' Config will be used
-        self.hyper_file = self.hyper_file_folder + 'cnn2d_withAddInput.json'  # 'individual_hyperparameters_test'  #
+        self.hyper_file = self.hyper_file_folder + 'Rocket1NeuronDummy.json'  # 'individual_hyperparameters_test'  #
 
         ##
         # Various settings influencing the similarity calculation
@@ -241,7 +239,7 @@ class InferenceConfiguration:
         # similarity assessment during inference.
         # Please note that the case base extraction only reduces the training data but fully copies the test data
         # so all test example will still be evaluated even if this is enabled
-        self.case_base_for_inference = False  # default: False
+        self.case_base_for_inference = True  # default: False
 
         # Parameter to control the size / number of the queries used for evaluation
         self.inference_with_failures_only = False  # default: False
@@ -396,7 +394,6 @@ class StaticConfiguration:
         self.group_id_to_features = None
 
         self.type_based_groups = {}
-
 
         self.zeroOne, self.intNumbers, self.realValues, self.categoricalValues = None, None, None, None
 
