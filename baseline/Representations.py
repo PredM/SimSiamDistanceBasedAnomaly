@@ -160,9 +160,9 @@ class RocketRepresentation(Representation):
             representation.x_test_features[:, :].shape[1], 1)  # (example,features)
 
         # Updating dataset entries that are relevant for creating the networks input
-        dataset.time_series_length = representation.x_train_features[:, :].shape[1] #amount of features
-        dataset.time_series_depth = 1 # only one type of feature is used
+        dataset.time_series_length = representation.x_train_features[:, :].shape[1]  # amount of features
+        dataset.time_series_depth = 1  # only one type of feature is used
 
-       # print("new shape of self.dataset.x_train:", dataset.x_train.shape)
-       # print("new shape of self.dataset.x_test:", dataset.x_test.shape)
+        # print("new shape of self.dataset.x_train:", dataset.x_train.shape)
+        # print("new shape of self.dataset.x_test:", dataset.x_test.shape)
         return dataset
