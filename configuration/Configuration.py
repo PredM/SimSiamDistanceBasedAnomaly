@@ -26,12 +26,18 @@ class BaselineConfiguration:
         self.baseline_use_relevant_only = False
         self.baseline_algorithm = BaselineAlgorithm.FEATURE_BASED_ROCKET
 
+        # Should the case base representation be based on a fitting to the full training dataset?
+        # True = Fit representation using full training dataset / False = Fit representation on case base only.
+        self.force_fit_on_full_training_data = True
+
         ##
         # Rocket
         ##
 
         self.rocket_kernels = 10_000  # 10_000 is the rocket default
         self.rocket_random_seed = 2342
+
+
 
         ###
         # Learning global similarity for baseline input

@@ -21,7 +21,7 @@ def main():
     dataset.load()
 
     rp: RocketRepresentation = RocketRepresentation(config, dataset)
-    rp.create_representation()
+    rp.create_representation(for_case_base=True)
 
 
 if __name__ == '__main__':

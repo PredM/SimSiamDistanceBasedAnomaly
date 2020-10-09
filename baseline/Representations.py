@@ -14,7 +14,7 @@ class Representation():
         self.x_train_features = None
         self.x_test_features = None
 
-    def create_representation(self):
+    def create_representation(self, for_case_base=False):
         raise NotImplementedError('Not implemented for abstract base method')
 
     def load(self):
@@ -30,7 +30,7 @@ class TSFreshRepresentation(Representation):
         super().__init__(config, dataset)
         self.relevant_features = None
 
-    def create_representation(self):
+    def create_representation(self, for_case_base=False):
         # TODO Move representation calculation here
         raise NotImplementedError()
 
@@ -86,21 +86,34 @@ class RocketRepresentation(Representation):
         return pd.DataFrame(data=list_of_examples)
 
     # dataset_folder as parameter in oder to distinguish between normal training data and case base
-    def create_representation(self):
+    def create_representation(self, for_case_base=False):
         rocket = Rocket(num_kernels=self.config.rocket_kernels,
                         normalise=False, random_state=self.config.rocket_random_seed)
 
         # Cast is necessary because rocket seems to expect 64 bit values
         x_train_casted = self.dataset.x_train.astype('float64')
         x_test_casted = self.dataset.x_test.astype('float64')
-        print("x_train_casted: ", x_train_casted.shape)
-        print("x_test_casted: ", x_test_casted.shape)
 
+        print('Transforming from array to dataframe...\n')
         x_train_df = self.array_to_ts_df(x_train_casted)
         x_test_df = self.array_to_ts_df(x_test_casted)
 
-        print('Started fitting ...')
-        rocket.fit(x_train_df)
+        if for_case_base and self.config.force_fit_on_full_training_data:
+            print('Forced fitting on the full training dataset is enabled. '
+                  'Loading full training dataset before fitting...\n')
+
+            dataset_full_train = FullDataset(self.config.training_data_folder, self.config, training=True)
+            dataset_full_train.load()
+            full_train_casted = dataset_full_train.x_train.astype('float64')
+            full_train_df = self.array_to_ts_df(full_train_casted)
+
+            print('Started fitting ...')
+            rocket.fit(full_train_df)
+
+        else:
+            print('Started fitting ...')
+            rocket.fit(x_train_df)
+
         print('Finished fitting.')
 
         self.x_train_features = rocket.transform(x_train_df).values
