@@ -106,6 +106,7 @@ class ConfigChecker:
                                          'If any errors occur, the first step should be to try '
                                          'and activate split_sim_calculation or lower sim_calculation_batch_size.')
 
+
         ignored_by_ffnn = [self.config.normalize_snn_encoder_output,
                            self.config.use_time_step_wise_simple_similarity, ]
 

@@ -51,7 +51,7 @@ class GeneralConfiguration:
         self.models_folder = '../data/trained_models/'
 
         # Path and file name to the specific model that should be used for testing and live classification
-        self.filename_model_to_use = 'temp_snn_model_09-29_11-36-45_epoch-100'
+        self.filename_model_to_use = 'temp_snn_model_10-09_11-44-39_epoch-50'
         self.directory_model_to_use = self.models_folder + self.filename_model_to_use + '/'
 
         ##
@@ -143,7 +143,7 @@ class ModelConfiguration:
 
         # Using the more restrictive features as additional masking vector for feature sim calculation
         # in cnn_with_add_input
-        self.use_additional_strict_masking_for_attribute_sim = True  # default: False
+        self.use_additional_strict_masking_for_attribute_sim = False  # default: False
 
         # Option to simulate a retrieval situation (during training) where only the weights of the
         # example from the case base/training data set are known:
