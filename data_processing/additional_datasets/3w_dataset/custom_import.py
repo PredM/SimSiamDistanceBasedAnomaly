@@ -11,7 +11,7 @@ from sklearn import preprocessing
 
 #######################################################################################################################
 
-data_path = Path('..', 'data/3w_dataset/data')
+data_path = Path('../../..', 'data/3w_dataset/data')
 
 events_names = {0: 'Normal',
                 1: 'Abrupt Increase of BSW',
