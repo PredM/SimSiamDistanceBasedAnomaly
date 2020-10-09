@@ -1,3 +1,5 @@
+import json
+
 from case_based_similarity.CaseBasedSimilarity import CBS
 from configuration.Configuration import Configuration
 from configuration.Enums import LossFunction
@@ -103,6 +105,7 @@ class ConfigChecker:
                                          'If any errors occur, the first step should be to try '
                                          'and activate split_sim_calculation or lower sim_calculation_batch_size.')
 
+
         ignored_by_ffnn = [self.config.normalize_snn_encoder_output,
                            self.config.use_time_step_wise_simple_similarity, ]
 
@@ -125,6 +128,8 @@ class ConfigChecker:
                              architecture.hyper.fc_after_cnn1d_layers is None,
                              'Additional fully connected layers shouldn\'t be used with FFNN. '
                              'fc_after_cnn1d_layers list should be empty.')
+
+
 
         elif self.architecture_type == 'cbs':
             architecture: CBS = architecture

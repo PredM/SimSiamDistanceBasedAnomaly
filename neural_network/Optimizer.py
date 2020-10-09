@@ -111,8 +111,10 @@ class SNNOptimizer(Optimizer):
         model_input_class_strings = np.take(a=self.dataset.y_train_strings, indices=batch_pairs_indices, axis=0)
         model_aux_input = None
         if self.architecture.hyper.encoder_variant in ['cnn2dwithaddinput']:
-            model_aux_input = np.array([self.dataset.get_masking_float(label) for label in model_input_class_strings],
-                                       dtype='float32')
+            model_aux_input = np.array(
+                [self.dataset.get_masking_float(label, self.config.use_additional_strict_masking_for_attribute_sim) for
+                 label in model_input_class_strings],
+                dtype='float32')
 
         # Reshape (and integrate model_aux_input) if necessary for encoder variant
         # batch_size and index are irrelevant because not used if aux_input is passed

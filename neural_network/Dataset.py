@@ -68,6 +68,7 @@ class FullDataset(Dataset):
         # dictionary, key: class label, value: np array which contains 0s or 1s depending on whether the attribute
         # at this index is relevant for the class described with the label key
         self.class_label_to_masking_vector = {}
+        self.class_label_to_masking_vector_strict = {}
 
         self.group_id_to_masking_vector = {}
 
@@ -205,16 +206,18 @@ class FullDataset(Dataset):
     def calculate_maskings(self):
         for case in self.classes_total:
 
-            if self.config.individual_relevant_feature_selection:
-                relevant_features_for_case = self.config.get_relevant_features_case(case)
-            else:
-                relevant_features_for_case = self.config.get_relevant_features_group(case)
-
             if self.config.use_additional_strict_masking_for_attribute_sim:
+                relevant_features_for_case = self.config.get_relevant_features_case(case, return_strict_masking=True)
+
                 masking1 = np.isin(self.feature_names_all, relevant_features_for_case[0])
                 masking2 = np.isin(self.feature_names_all, relevant_features_for_case[1])
-                self.class_label_to_masking_vector[case] = [masking1, masking2]
+                self.class_label_to_masking_vector_strict[case] = [masking1, masking2]
             else:
+                if self.config.individual_relevant_feature_selection:
+                    relevant_features_for_case = self.config.get_relevant_features_case(case)
+                else:
+                    relevant_features_for_case = self.config.get_relevant_features_group(case)
+
                 masking = np.isin(self.feature_names_all, relevant_features_for_case)
                 self.class_label_to_masking_vector[case] = masking
 
@@ -224,17 +227,19 @@ class FullDataset(Dataset):
 
     # returns a boolean array with values depending on whether the attribute at this index is relevant
     # for the class of the passed label
-    def get_masking(self, class_label):
+    def get_masking(self, class_label, return_strict_masking=False):
 
-        if class_label not in self.class_label_to_masking_vector:
+        if ((class_label not in self.class_label_to_masking_vector) and not return_strict_masking) \
+                or ((class_label not in self.class_label_to_masking_vector_strict) and return_strict_masking):
             raise ValueError('Passed class label', class_label, 'was not found in masking dictionary')
+
+        if return_strict_masking:
+            masking = self.class_label_to_masking_vector_strict.get(class_label)
+            masking = np.concatenate((masking[0], masking[1]))
         else:
-            if self.config.use_additional_strict_masking_for_attribute_sim:
-                masking = self.class_label_to_masking_vector.get(class_label)
-                masking_vec = np.concatenate((masking[0], masking[1]))
-                return masking_vec
-            else:
-                return self.class_label_to_masking_vector.get(class_label)
+            masking = self.class_label_to_masking_vector.get(class_label)
+
+        return masking
 
     def get_masked_example_group(self, test_example, group_id):
 
@@ -244,8 +249,8 @@ class FullDataset(Dataset):
             mask = self.group_id_to_masking_vector.get(group_id)
             return test_example[:, mask]
 
-    def get_masking_float(self, class_label):
-        return self.get_masking(class_label).astype(float)
+    def get_masking_float(self, class_label, return_strict_masking=False):
+        return self.get_masking(class_label, return_strict_masking).astype(float)
 
     # Will return the test example and the train example (of the passed index) reduced to the
     # relevant attributes of the case of the train_example

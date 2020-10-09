@@ -1,4 +1,4 @@
-import matplotlib.pyplot as plt
+import numpy as np
 import numpy as np
 import tensorflow as tf
 
@@ -89,9 +89,11 @@ class SimpleSNN(AbstractSimilarityMeasure):
 
                 for index in range(batch_size):
                     # noinspection PyUnresolvedReferences
-                    aux_input[2 * index] = self.dataset.get_masking_float(self.dataset.y_train_strings[index])
+                    aux_input[2 * index] = self.dataset.get_masking_float(self.dataset.y_train_strings[index],
+                                                                          self.config.use_additional_strict_masking_for_attribute_sim)
                     # noinspection PyUnresolvedReferences
-                    aux_input[2 * index + 1] = self.dataset.get_masking_float(self.dataset.y_train_strings[index])
+                    aux_input[2 * index + 1] = self.dataset.get_masking_float(self.dataset.y_train_strings[index],
+                                                                              self.config.use_additional_strict_masking_for_attribute_sim)
                     # print("self.dataset.y_train_strings")
                     # print("index: ", index, )
                 # print("aux_input: ", aux_input.shape)
@@ -370,6 +372,15 @@ class SimpleSNN(AbstractSimilarityMeasure):
             self.encoder = TypeBasedEncoder(self.hyper, input_shape_encoder, self.config.type_based_groups)
         elif self.hyper.encoder_variant == 'cnn2dwithaddinput':
             # Consideration of an encoder with multiple inputs
+
+            config_value = self.config.use_additional_strict_masking_for_attribute_sim
+            hyperparameter_value = eval(self.hyper.use_additional_strict_masking)
+
+            # Cant be done in ConfigChecker because failure would happen between pre and post init checks
+            if config_value != hyperparameter_value:
+                raise ValueError(
+                    'Configuration setting whether to use strict masking must match the hyperparameters definied in the json file.')
+
             if self.config.use_additional_strict_masking_for_attribute_sim:
                 self.encoder = CNN2dWithAddInput(self.hyper,
                                                  [input_shape_encoder, self.hyper.time_series_depth * 2])
