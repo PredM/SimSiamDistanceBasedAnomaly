@@ -1,17 +1,19 @@
 import os
 import sys
 
+import joblib
+
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 
 import pandas as pd
 from math import ceil
 import numpy as np
 from pathlib import Path
-from sklearn import preprocessing
+from sklearn.preprocessing import MinMaxScaler
 
 #######################################################################################################################
 
-data_path = Path('../../..', 'data/3w_dataset/data')
+working_directory = Path('../../..', 'data/additional_datasets/3w_dataset/')
 
 events_names = {0: 'Normal',
                 1: 'Abrupt Increase of BSW',
@@ -37,7 +39,7 @@ abnormal_classes_codes = [1, 2, 5, 6, 7, 8]
 min_normal_period_size = 20 * 60  # In observations = seconds
 max_nan_percent = 0.1  # For selection of useful variables
 std_vars_min = 0.01  # For selection of useful variables
-disable_progressbar = False  # For less output
+disable_progressbar = True  # For less output
 
 split_range = 0.6  # Train size/test size
 max_samples_per_period = 15  # Limitation for safety
@@ -45,6 +47,156 @@ sample_size = 3 * 60  # In observations = seconds
 
 
 #######################################################################################################################
+
+def main():
+    pd.set_option('display.max_rows', 500)
+
+    print('\nImporting instances ...')
+    real_instances = pd.DataFrame(
+        class_and_file_generator(working_directory.joinpath('datasets/'), real=True, simulated=False, drawn=False),
+        columns=['class_code', 'instance_path'])
+
+    # We also want no failure cases -> No filtering here
+    # real_instances = real_instances.loc[real_instances.iloc[:, 0].isin(abnormal_classes_codes)].reset_index(drop=True)
+
+    x_train_dfs = []
+    x_test_dfs = []
+    y_train_lists = []
+    y_test_lists = []
+
+    print('\nExtracting single instances ...')
+    ignored_instances = 0
+    used_instances = 0
+    for i, row in real_instances.iterrows():
+
+        # Loads the current instance
+        class_code, instance_path = row
+        print('instance {}: {}'.format(i + 1, instance_path))
+        df = load_instance(instance_path)
+
+        # Ignores instances without sufficient normal periods
+        normal_period_size = (df['class'] == float(normal_class_code)).sum()
+        if normal_period_size < min_normal_period_size:
+            ignored_instances += 1
+            print('\tskipped because normal_period_size is insufficient for training ({})'.format(normal_period_size))
+            continue
+        used_instances += 1
+
+        # Extracts samples from the current real instance
+        ret = extract_samples(df, class_code)
+        df_samples_train, y_train, df_samples_test, y_test = ret
+
+        # We don't want a only binary classification
+        # y_test[y_test != normal_class_code] = -1
+        # y_test[y_test == normal_class_code] = 1
+
+        x_train_dfs.append(df_samples_train)
+        x_test_dfs.append(df_samples_test)
+        y_train_lists.append(y_train)
+        y_test_lists.append(y_test)
+
+    # Adaptation of the ID of the individual examples so that they are not mixed up later when grouped by ID
+    # --> Ensures that the IDs are unique across all examples, not just per DF
+    counter = 0
+    for df in x_train_dfs:
+        examples_in_df = df['id'].max()
+        df['id'] = df['id'] + counter
+        counter += examples_in_df + 1
+
+    for df in x_test_dfs:
+        examples_in_df = df['id'].max()
+        df['id'] = df['id'] + counter
+        counter += examples_in_df + 1
+
+    df_train_combined = pd.concat(x_train_dfs)
+    df_test_combined = pd.concat(x_test_dfs)
+
+    # Series of how many nan there are per attribute
+    nans_in_train = df_train_combined.isnull().sum()
+    nans_in_test = df_test_combined.isnull().sum()
+
+    if not ((nans_in_test == 0).all() and (nans_in_train == 0).all()):
+        raise Exception('NaN value found - handling not implemented yet')
+    else:
+        print('\nNo NaN values found.')
+
+    print('\nCombining into single numpy array...')
+    x_train = np.array(list(df_train_combined.groupby('id').apply(pd.DataFrame.to_numpy)))
+    x_test = np.array(list(df_test_combined.groupby('id').apply(pd.DataFrame.to_numpy)))
+
+    # reduce data arrays and column vector to sensor data columns only
+    attribute_indices = [2, 3, 4, 5, 6, 7]
+    attribute_names = df_train_combined.columns.values
+    attribute_names = attribute_names[attribute_indices]
+
+    x_train = x_train[:, :, attribute_indices]
+    x_test = x_test[:, :, attribute_indices]
+
+    # normalize like for our dataset
+    scaler_storage_path = str(working_directory) + '/scaler/'
+    x_train, x_test = normalise(x_train, x_test, scaler_storage_path)
+
+    # cast to float32 so it can directly be used by tensorflow
+    x_train, x_test, = x_train.astype('float32'), x_test.astype('float32')
+
+    y_train = np.array(y_train_lists).flatten()
+    y_test = np.array(y_test_lists).flatten()
+
+    # TODO Replace numbers with class names
+    #  Current Problem: Why are there classes 106, 107? Or: why aren't they in the dict above?
+    #  Maybe 106 is a special type of 6 - Check in paper
+    # print(y_train[[0, 1, 2, 3, 4, -2, -1]])
+    # y_train = np.array([events_names[key] for key in y_train])
+    # y_test = np.array([events_names[key] for key in y_test])
+    # print(y_train[[0, 1, 2, 3, 4, -2, -1]])
+
+
+    # TODO Maybe ignore predefined split into train and test --> combine into single df, custom spliting
+    #  (keep in mind: id handling maybe needs to be changed)
+    #  ensure examples from one run don't end up in both like in our dataset
+
+    training_data_location = str(working_directory) + '/training_data/'
+    print('\nExporting to: ', training_data_location)
+    np.save(training_data_location + 'train_features.npy', x_train)
+    np.save(training_data_location + 'test_features.npy', x_test)
+    np.save(training_data_location + 'train_labels.npy', y_train)
+    np.save(training_data_location + 'test_labels.npy', y_test)
+    np.save(training_data_location + 'feature_names.npy', attribute_names)
+
+
+# Nearly identical to the method in DatasetCreation.py, only path for storing the scalers was changed.
+def normalise(x_train: np.ndarray, x_test: np.ndarray, path):
+    length = x_train.shape[2]
+
+    print('\nExecuting normalisation...')
+    for i in range(length):
+        scaler = MinMaxScaler(feature_range=(0, 1))
+
+        # reshape column vector over each example and timestamp to a flatt array
+        # necessary for normalisation to work properly
+        shape_before = x_train[:, :, i].shape
+        x_train_shaped = x_train[:, :, i].reshape(shape_before[0] * shape_before[1], 1)
+
+        # learn scaler only on training data (best practice)
+        x_train_shaped = scaler.fit_transform(x_train_shaped)
+
+        # reshape back to original shape and assign normalised values
+        x_train[:, :, i] = x_train_shaped.reshape(shape_before)
+
+        # normalise test data
+        shape_before = x_test[:, :, i].shape
+        x_test_shaped = x_test[:, :, i].reshape(shape_before[0] * shape_before[1], 1)
+        x_test_shaped = scaler.transform(x_test_shaped)
+        x_test[:, :, i] = x_test_shaped.reshape(shape_before)
+
+        # export scaler to use with live data
+        scaler_filename = path + 'scaler_' + str(i) + '.save'
+        joblib.dump(scaler, scaler_filename)
+
+    return x_train, x_test
+
+
+####################################################################################################################
 
 # Unchanged method from demo 2
 def extract_samples(df, class_code):
@@ -267,100 +419,6 @@ def load_instance(instance_path):
         return df
     except Exception as e:
         raise Exception('error reading file {}: {}'.format(instance_path, e))
-
-
-def main():
-    real_instances = pd.DataFrame(class_and_file_generator(data_path,
-                                                           real=True,
-                                                           simulated=False,
-                                                           drawn=False),
-                                  columns=['class_code', 'instance_path'])
-
-    # We also want no failure cases -> No filtering here
-    # real_instances = real_instances.loc[real_instances.iloc[:, 0].isin(abnormal_classes_codes)].reset_index(drop=True)
-
-    # TODO Combine into single datastructure
-    # For each real instance with any type of undesirable event
-
-    x_train_dfs = []
-    x_test_dfs = []
-    y_train_lists = []
-    y_test_lists = []
-
-    ignored_instances = 0
-    used_instances = 0
-    for i, row in real_instances.iterrows():
-        # Loads the current instance
-        class_code, instance_path = row
-        print('instance {}: {}'.format(i + 1, instance_path))
-        df = load_instance(instance_path)
-
-        # Ignores instances without sufficient normal periods
-        normal_period_size = (df['class'] == float(normal_class_code)).sum()
-        if normal_period_size < min_normal_period_size:
-            ignored_instances += 1
-            print('\tskipped because normal_period_size is insufficient for training ({})'
-                  .format(normal_period_size))
-            continue
-        used_instances += 1
-
-        # Extracts samples from the current real instance
-        ret = extract_samples(df, class_code)
-        df_samples_train, y_train, df_samples_test, y_test = ret
-
-        # We don't want a only binary classification
-        # y_test[y_test != normal_class_code] = -1
-        # y_test[y_test == normal_class_code] = 1
-
-        # TODO: What does bad vars mean here?
-        #  --> % of nan values
-        #  --> Replace with same kind of interpolation
-        # Drops the bad vars
-        good_vars = np.isnan(df_samples_train[vars]).mean(0) <= max_nan_percent
-        std_vars = np.nanstd(df_samples_train[vars], 0)
-        good_vars &= (std_vars > std_vars_min)
-        good_vars = list(good_vars.index[good_vars])
-        bad_vars = list(set(vars) - set(good_vars))
-        df_samples_train.drop(columns=bad_vars, inplace=True, errors='ignore')
-        df_samples_test.drop(columns=bad_vars, inplace=True, errors='ignore')
-
-        # TODO ensure same scaler is used
-        # Normalizes the samples (zero mean and unit variance)
-        scaler = preprocessing.StandardScaler()
-        df_samples_train[good_vars] = scaler.fit_transform(df_samples_train[good_vars]).astype('float32')
-        df_samples_test[good_vars] = scaler.transform(df_samples_test[good_vars]).astype('float32')
-
-        x_train_dfs.append(df_samples_train)
-        x_test_dfs.append(df_samples_test)
-        y_train_lists.append(y_train)
-        y_test_lists.append(y_test)
-
-    df_train_combined = pd.concat(x_train_dfs)
-    df_test_combined = pd.concat(x_train_dfs)
-
-
-    x_train = np.array(list(df_train_combined.groupby('id').apply(pd.DataFrame.to_numpy)))
-    x_test = np.array(list(df_test_combined.groupby('id').apply(pd.DataFrame.to_numpy)))
-
-    # reduce to sensor data columns only
-    attribute_indices = [2, 3, 4, 5, 6, 7]
-    x_train = x_train[:, :, attribute_indices]
-    x_test = x_test[:, :, attribute_indices]
-
-    print(x_train.shape)
-    print(x_test.shape)
-
-
-    y_train = np.array(y_train_lists).flatten()
-    y_test = np.array(y_test_lists).flatten()
-
-    # FIXME Wieso so viele Einträge ? bzw. so wenige beispiele?
-    #  oben bei return prüfen ob da gleiche länge
-    print(len(y_train))
-    print('--------')
-    print(len(y_test))
-
-    # TODO Add export
 
 
 if __name__ == '__main__':

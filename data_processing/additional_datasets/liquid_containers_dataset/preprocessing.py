@@ -39,19 +39,19 @@ def main(logsPath):
 
     # Add dataset files
     records = []
-    records.append(DataSetFile('logs/normal_short.csv',
+    records.append(DataSetFile('../../../data/additional_datasets/liquid_containers_dataset/datasets/normal_short.csv',
                                'No',
                                'None',
                                'Normal',
                                'Normal'))
 
-    records.append(DataSetFile('logs/plastic_bag.csv',
+    records.append(DataSetFile('../../../data/additional_datasets/liquid_containers_dataset/datasets/plastic_bag.csv',
                                'Yes',
                                'Untrasounder Sensor',
                                'Plastic bag',
                                'Accident/Sabotage'))
 
-    records.append(DataSetFile('logs/blocked_1.csv',
+    records.append(DataSetFile('../../../data/additional_datasets/liquid_containers_dataset/datasets/blocked_1.csv',
                                'Yes',
                                'Untrasounder Sensor',
                                'Blocked measure 1',
@@ -59,7 +59,7 @@ def main(logsPath):
                                '',
                                'Blocked measure'))
 
-    records.append(DataSetFile('logs/blocked_2.csv',
+    records.append(DataSetFile('../../../data/additional_datasets/liquid_containers_dataset/datasets/blocked_2.csv',
                                'Yes',
                                'Untrasounder Sensor',
                                'Blocked measure 2',
@@ -67,7 +67,7 @@ def main(logsPath):
                                '',
                                'Blocked measure'))
 
-    records.append(DataSetFile('logs/poly_2.csv',
+    records.append(DataSetFile('../../../data/additional_datasets/liquid_containers_dataset/datasets/poly_2.csv',
                                'Yes',
                                'Untrasounder Sensor',
                                '2 Floating objects',
@@ -75,7 +75,7 @@ def main(logsPath):
                                '',
                                'Floating objects'))
 
-    records.append(DataSetFile('logs/poly_7.csv',
+    records.append(DataSetFile('../../../data/additional_datasets/liquid_containers_dataset/datasets/poly_7.csv',
                                'Yes',
                                'Untrasounder Sensor',
                                '7 Floating objects',
@@ -83,13 +83,13 @@ def main(logsPath):
                                '',
                                'Floating objects'))
 
-    records.append(DataSetFile('logs/wet_sensor.csv',
+    records.append(DataSetFile('../../../data/additional_datasets/liquid_containers_dataset/datasets/wet_sensor.csv',
                                'Yes',
                                'Untrasounder Sensor',
                                'Humidity',
                                'Breakdown'))
 
-    records.append(DataSetFile('logs/high_blocked.csv',
+    records.append(DataSetFile('../../../data/additional_datasets/liquid_containers_dataset/datasets/high_blocked.csv',
                                'Yes',
                                'Discrete Sensor 1',
                                'Sensor Failure',
@@ -97,7 +97,8 @@ def main(logsPath):
                                'Discrete Sensor',
                                'Sensor Failure'))
 
-    records.append(DataSetFile('logs/second_blocked.csv',
+    records.append(DataSetFile(
+        '../../../data/additional_datasets/liquid_containers_dataset/datasets/second_blocked.csv',
                                'Yes',
                                'Discrete Sensor 2',
                                'Sensor Failure',
@@ -105,25 +106,25 @@ def main(logsPath):
                                'Discrete Sensor',
                                'Sensor Failure'))
 
-    records.append(DataSetFile('logs/DoS_attack.csv',
+    records.append(DataSetFile('../../../data/additional_datasets/liquid_containers_dataset/datasets/DoS_attack.csv',
                                'Yes',
                                'Network',
                                'DoS',
                                'Cyber-attack'))
 
-    records.append(DataSetFile('logs/spoofing.csv',
+    records.append(DataSetFile('../../../data/additional_datasets/liquid_containers_dataset/datasets/spoofing.csv',
                                'Yes',
                                'Network',
                                'Spoofing',
                                'Cyber-attack'))
 
-    records.append(DataSetFile('logs/bad_conection.csv',
+    records.append(DataSetFile('../../../data/additional_datasets/liquid_containers_dataset/datasets/bad_conection.csv',
                                'Yes',
                                'Network',
                                'Wrong connection',
                                'Breakdown/Sabotage'))
 
-    records.append(DataSetFile('logs/hits_1.csv',
+    records.append(DataSetFile('../../../data/additional_datasets/liquid_containers_dataset/datasets/hits_1.csv',
                                'Yes',
                                'Whole',
                                'Person htting low intensity',
@@ -131,7 +132,7 @@ def main(logsPath):
                                '',
                                'Person hitting'))
 
-    records.append(DataSetFile('logs/hits_2.csv',
+    records.append(DataSetFile('../../../data/additional_datasets/liquid_containers_dataset/datasets/hits_2.csv',
                                'Yes',
                                'Whole',
                                'Person htting med intensity',
@@ -139,7 +140,7 @@ def main(logsPath):
                                '',
                                'Person hitting'))
 
-    records.append(DataSetFile('logs/hits_3.csv',
+    records.append(DataSetFile('../../../data/additional_datasets/liquid_containers_dataset/datasets/hits_3.csv',
                                'Yes',
                                'Whole',
                                'Person htting high intensity',
