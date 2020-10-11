@@ -41,7 +41,7 @@ class BaselineConfiguration:
         # Learning global similarity for baseline input
         ###
         # Tested configuration: True and standard_ffnn  with Rocket1NeuronDummy should be selected
-        self.overwrite_input_data_with_baseline_representation = True  # default False
+        self.overwrite_input_data_with_baseline_representation = False  # default False
 
 
 class GeneralConfiguration:
@@ -61,7 +61,7 @@ class GeneralConfiguration:
         self.models_folder = '../data/trained_models/'
 
         # Path and file name to the specific model that should be used for testing and live classification
-        self.filename_model_to_use = 'temp_snn_model_10-09_14-06-52_epoch-50'
+        self.filename_model_to_use = 'temp_snn_model_10-11_12-31-05_epoch-50'
         self.directory_model_to_use = self.models_folder + self.filename_model_to_use + '/'
 
         ##
@@ -129,7 +129,7 @@ class ModelConfiguration:
         # If !use_individual_hyperparameters interpreted as a single json file, else as a folder
         # which contains json files named after the cases they should be used for
         # If no file with this name is present the 'default.json' Config will be used
-        self.hyper_file = self.hyper_file_folder + 'Rocket1NeuronDummy.json'  # 'individual_hyperparameters_test'  #
+        self.hyper_file = self.hyper_file_folder + 'cnn2d_withAddInput.json'  # 'individual_hyperparameters_test'  #
 
         ##
         # Various settings influencing the similarity calculation
@@ -153,7 +153,7 @@ class ModelConfiguration:
 
         # Using the more restrictive features as additional masking vector for feature sim calculation
         # in cnn_with_add_input
-        self.use_additional_strict_masking_for_attribute_sim = False  # default: False
+        self.use_additional_strict_masking_for_attribute_sim = True  # default: False
 
         # Option to simulate a retrieval situation (during training) where only the weights of the
         # example from the case base/training data set are known:

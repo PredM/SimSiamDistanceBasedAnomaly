@@ -28,10 +28,12 @@ class Representation():
         raise NotImplementedError('This representation is not considered for learning a global similarity measure')
 
     @staticmethod
+    # Should be called after each dataset.load()
+    # Can't be called from there because of import cycle problem
     def convert_dataset_to_baseline_representation(config, dataset):
 
         if not config.overwrite_input_data_with_baseline_representation:
-            return
+            return dataset
 
         if config.baseline_algorithm == BaselineAlgorithm.FEATURE_BASED_ROCKET:
             representation = RocketRepresentation(config, dataset)

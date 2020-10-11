@@ -1,5 +1,3 @@
-import json
-
 from case_based_similarity.CaseBasedSimilarity import CBS
 from configuration.Configuration import Configuration
 from configuration.Enums import LossFunction
@@ -72,6 +70,7 @@ class ConfigChecker:
 
     @staticmethod
     def print_warnings(warnings):
+        print()
         print('##########################################')
         print('WARNINGS:')
         for warning in warnings:
@@ -97,14 +96,13 @@ class ConfigChecker:
             ])
 
         if not self.config.use_hyper_file:
-            self.list_of_warnings.append('Hyperparameters shouldn\'t be read from file. '
-                                         'Ensure entries in Hyperparameters.py are correct.')
+            self.list_of_warnings.append(['Hyperparameters shouldn\'t be read from file. ',
+                                          'Ensure entries in Hyperparameters.py are correct.'])
 
         if not self.config.split_sim_calculation and not self.training:
-            self.list_of_warnings.append('Batchwise similarity calculation is disabled. '
-                                         'If any errors occur, the first step should be to try '
-                                         'and activate split_sim_calculation or lower sim_calculation_batch_size.')
-
+            self.list_of_warnings.append(['Batchwise similarity calculation is disabled. ',
+                                          'If any errors occur, the first step should be to try and activate split_sim_calculation or lower sim_calculation_batch_size.',
+                                          'ESPECIALLY WHEN USING ENCODER OF TYPE "cnn2dwithaddinput".'])
 
         ignored_by_ffnn = [self.config.normalize_snn_encoder_output,
                            self.config.use_time_step_wise_simple_similarity, ]
@@ -129,12 +127,14 @@ class ConfigChecker:
                              'Additional fully connected layers shouldn\'t be used with FFNN. '
                              'fc_after_cnn1d_layers list should be empty.')
 
-
+            self.implication(self.config.overwrite_input_data_with_baseline_representation,
+                             architecture.hyper.encoder_variant == 'dummy',
+                             'config.overwrite_input_data_with_baseline_representation can\'t be used without a dummy encoder. \n'
+                             'Other encoders do not support this option hence it must be disabled.')
 
         elif self.architecture_type == 'cbs':
             architecture: CBS = architecture
 
-            one_not_none = False
             for gh in architecture.group_handlers:
                 self.implication('ffnn' in self.config.architecture_variant,
                                  gh.model.hyper.fc_after_cnn1d_layers is None,

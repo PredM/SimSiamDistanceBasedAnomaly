@@ -10,6 +10,7 @@ sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 
 from configuration.Configuration import Configuration
 
+
 # TODO: Change to match new Representation class
 def main():
     config = Configuration()
