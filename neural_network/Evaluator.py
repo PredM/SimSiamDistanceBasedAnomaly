@@ -15,7 +15,7 @@ class Evaluator:
         # Dataframe that stores the results that will be output at the end of the inference process
         # Is not filled with data during the inference
         index = list(dataset.y_test_strings_unique) + ['combined']
-        cols = ['#Examples', 'TP', 'FP', 'TN', 'FN', 'TPR', 'FPR', 'FNR', 'FDR', 'ACC', 'Hit@k']
+        cols = ['#Examples', 'TP', 'FP', 'TN', 'FN', 'TPR', 'FPR', 'FNR', 'FDR', 'ACC', 'Hit@k','FWI_1','FWI_3']
         self.results = pd.DataFrame(0, index=index, columns=cols)
         self.results.index.name = 'Classes'
         self.results.loc['combined', '#Examples'] = self.num_test_examples
@@ -220,6 +220,18 @@ class Evaluator:
             self.results.loc[class_in_test, 'FNR'] = self.rate_calculation(false_negatives, true_positives)
             self.results.loc[class_in_test, 'FPR'] = self.rate_calculation(false_positives, true_negatives)
             self.results.loc[class_in_test, 'FDR'] = self.rate_calculation(false_positives, true_positives)
+
+            # Calculate a prototypical score adopted from f-score with consideration of test instances
+            num_of_instances = self.results.loc[class_in_test, '#Examples'] #2907
+            num_max_false_positives = self.num_test_examples - num_of_instances #482
+            num_max_false_negatives = num_of_instances
+            self.results.loc[class_in_test, 'FWI_1'] = ((1/num_of_instances)*true_positives)/\
+                                             ((1/num_of_instances)*true_positives+
+                                              ((1/num_max_false_positives)*false_positives+(1/num_max_false_negatives)*false_negatives))
+            self.results.loc[class_in_test, 'FWI_3'] = ((1/num_of_instances)*true_positives*2) /\
+                                             ((1/num_of_instances)*true_positives*2 +
+                                              ((1/(num_max_false_positives + num_max_false_negatives))*(false_positives + false_negatives)) +
+                                              ((1/num_max_false_positives)*false_positives + (1/num_max_false_negatives)*false_negatives))
 
         # Fill the combined row with the sum of each class
         self.results.loc['combined', 'TP'] = self.results['TP'].sum()
