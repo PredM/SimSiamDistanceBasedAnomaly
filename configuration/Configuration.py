@@ -55,7 +55,7 @@ class GeneralConfiguration:
         self.max_gpus_used = 4
 
         # Specifies the maximum number of cores to be used
-        self.max_parallel_cores = 20
+        self.max_parallel_cores = 30
 
         # Path and file name to the specific model that should be used for testing and live classification
         # Folder where the models are stored is prepended below
@@ -432,8 +432,8 @@ class StaticConfiguration:
         self.case_file = '../configuration/cases.csv'
 
         # TS Fresh feature files
-        self.ts_fresh_filtered_file = self.training_data_folder + 'ts_fresh_extracted_features_filtered.pkl'
-        self.ts_fresh_unfiltered_file = self.training_data_folder + 'ts_fresh_extracted_features_unfiltered.pkl'
+        self.ts_fresh_filtered_file = 'ts_fresh_extracted_features_filtered.pkl'
+        self.ts_fresh_unfiltered_file = 'ts_fresh_extracted_features_unfiltered.pkl'
 
         # Rocket feature files
         self.rocket_features_train_file = 'rocket_features_train.npy'

@@ -2,6 +2,11 @@ import datetime
 import os
 import sys
 
+import psutil
+
+print(psutil.cpu_count())
+
+
 import numpy as np
 import pandas as pd
 from tsfresh import extract_features
@@ -59,7 +64,6 @@ def main():
         # tsfresh_input_x_test[]
 
     # get unique classes
-
     df_timeSeries_container = pd.DataFrame(data=tsfresh_input_x_test, columns=columns)
     df_labels = pd.DataFrame(data=y_train_strings)
     print("TS Fresh Feature Extraction started at: ", datetime.datetime.now())
@@ -94,4 +98,6 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+
+    print('Use TSFreshRepresentationCreator instead')
+    #main()

@@ -1,6 +1,10 @@
+import datetime
+
 import numpy as np
 import pandas as pd
+import tsfresh
 from sktime.transformers.series_as_features.rocket import Rocket
+from tsfresh.utilities.dataframe_functions import impute
 
 from configuration.Configuration import Configuration
 from configuration.Enums import BaselineAlgorithm
@@ -54,21 +58,82 @@ class TSFreshRepresentation(Representation):
         super().__init__(config, dataset)
         self.relevant_features = None
 
+    # TODO: Clean up variable names
     def create_representation(self, for_case_base=False):
-        # TODO Move representation calculation here
-        raise NotImplementedError()
+        print()
+        print("TS Fresh Feature Extraction Script started at: ", datetime.datetime.now())
+        print()
 
-    # TODO Add distinction between case base and normal training data set
+        x_train = self.dataset.x_train  # data training
+        y_train_strings = self.dataset.y_train_strings
+        feature_names = self.dataset.feature_names_all
+
+        columns = np.concatenate((['id', 'time'], feature_names))
+        # tsfresh_input_x_test = np.zeros([examples * time_series_length, attributes+2])
+        tsfresh_input_x_test = np.zeros([1, 63])
+        # add 2 columns for id and timestamp
+
+        # FIXME: Wieso heißt das output array "test" aber es wird über die Trainingsbeispiele iteriert?
+
+        print('Training example preparations running ...')
+        for example in range(self.dataset.num_train_instances):
+            id_vec = np.ones(x_train.shape[1]) * example
+            time_vec = np.arange(x_train.shape[1])
+
+            # stack id and time and example matrix together
+            id_time_matrix = np.dstack((id_vec, time_vec)).squeeze()  # (1500,2)
+            curr_ex = np.concatenate((id_time_matrix, x_train[example, :, :]), axis=1)  # (1500, 63)
+
+            # print('Example number:', example, "\tShape: ", curr_ex.shape)
+
+            if example == 0:
+                tsfresh_input_x_test = curr_ex
+            else:
+                tsfresh_input_x_test = np.concatenate((tsfresh_input_x_test, curr_ex), axis=0)
+
+        # noinspection PyTypeChecker
+        df_timeSeries_container = pd.DataFrame(data=tsfresh_input_x_test, columns=columns)
+
+        print("TS Fresh Feature Extraction started at: ", datetime.datetime.now())
+
+        extracted_features = tsfresh.extract_features(df_timeSeries_container, column_id="id", column_sort="time")
+
+        print('Extraction finished at:', datetime.datetime.now())
+        print('Extracted features (unfiltered): ', extracted_features.shape)
+
+        extracted_features.to_pickle(self.dataset.dataset_folder + self.config.ts_fresh_unfiltered_file)
+
+        # Remove NANs
+        extracted_features = impute(extracted_features)
+        print('Extracted features (imputed): ', extracted_features.shape)
+
+        filtered = tsfresh.select_features(extracted_features, y_train_strings)
+        print('Filtered features size: ', filtered.shape)
+        print('Filtered features: ', filtered)
+
+        filtered.to_pickle(self.dataset.dataset_folder + self.config.ts_fresh_filtered_file)
+
+    # FIXME Wird das noch benötigt?
+    def print_overview_after_creation(self):
+        y_train_strings = np.squeeze(self.dataset.y_train_strings)
+        print("y_train_strings: ", y_train_strings.shape)
+
+        features_unfiltered = pd.read_pickle(self.dataset.dataset_folder + self.config.ts_fresh_unfiltered_file)
+
+        print('Extracted features (unfiltered): ', features_unfiltered.shape)
+        print(features_unfiltered.head())
+
+    # TODO: Clean up variable names
     def load(self):
-        filtered_cb_df = (pd.read_pickle(self.config.ts_fresh_filtered_file))
-        unfiltered_test_examples_df = (pd.read_pickle(self.config.ts_fresh_unfiltered_file))
+        filtered_features = (pd.read_pickle(self.dataset.dataset_folder + self.config.ts_fresh_filtered_file))
+        unfiltered_features = (pd.read_pickle(self.dataset.dataset_folder + self.config.ts_fresh_unfiltered_file))
 
         # Attributes selected after TSFresh significance test on case base
-        self.relevant_features = filtered_cb_df.columns
-        filtered_test_examples_df = unfiltered_test_examples_df[self.relevant_features]
+        self.relevant_features = filtered_features.columns
+        filtered_test_examples_df = unfiltered_features[self.relevant_features]
 
         self.x_test_features = filtered_test_examples_df.values
-        self.x_train_features = filtered_cb_df.values
+        self.x_train_features = filtered_features.values
 
     def get_masking(self, train_example_index):
         class_label_train_example = self.dataset.y_train_strings[train_example_index]
