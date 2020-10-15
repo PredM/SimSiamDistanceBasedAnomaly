@@ -90,18 +90,23 @@ class FullDataset(Dataset):
         self.df_label_sim_failuremode = None
         self.df_label_sim_condition = None
 
+        self.is_third_party_dataset = True if self.config.dataset_folder_prefix != '../dataset/' else False
+
     def load_files(self):
 
         self.x_train = np.load(self.dataset_folder + 'train_features.npy')  # data training
         self.y_train_strings = np.expand_dims(np.load(self.dataset_folder + 'train_labels.npy'), axis=-1)
-        self.window_times_train = np.expand_dims(np.load(self.dataset_folder + 'train_window_times.npy'), axis=-1)
-        self.failure_times_train = np.expand_dims(np.load(self.dataset_folder + 'train_failure_times.npy'), axis=-1)
 
         self.x_test = np.load(self.dataset_folder + 'test_features.npy')  # data testing
         self.y_test_strings = np.expand_dims(np.load(self.dataset_folder + 'test_labels.npy'), axis=-1)
-        self.window_times_test = np.expand_dims(np.load(self.dataset_folder + 'test_window_times.npy'), axis=-1)
-        self.failure_times_test = np.expand_dims(np.load(self.dataset_folder + 'test_failure_times.npy'), axis=-1)
-        self.feature_names_all = np.load(self.dataset_folder + 'feature_names.npy')  # names of the features (3. dim)
+
+        self.feature_names_all = np.load(self.dataset_folder + 'feature_names.npy', allow_pickle=True)  # names of the features (3. dim)
+
+        if not self.is_third_party_dataset:
+            self.window_times_train = np.expand_dims(np.load(self.dataset_folder + 'train_window_times.npy'), axis=-1)
+            self.failure_times_train = np.expand_dims(np.load(self.dataset_folder + 'train_failure_times.npy'), axis=-1)
+            self.window_times_test = np.expand_dims(np.load(self.dataset_folder + 'test_window_times.npy'), axis=-1)
+            self.failure_times_test = np.expand_dims(np.load(self.dataset_folder + 'test_failure_times.npy'), axis=-1)
 
     def load(self, print_info=True):
         self.load_files()
@@ -161,18 +166,20 @@ class FullDataset(Dataset):
         self.classes_in_both = np.intersect1d(self.num_instances_by_class_test[:, 0],
                                               self.num_instances_by_class_train[:, 0])
 
-        # required for inference metric calculation
-        # get all failures and labels as unique entry
-        failure_times_label = np.stack((self.y_test_strings, np.squeeze(self.failure_times_test))).T
-        # extract unique permutations between failure occurrence time and labeled entry
-        unique_failure_times_label, failure_times_count = np.unique(failure_times_label, axis=0, return_counts=True)
-        # remove noFailure entries
-        idx = np.where(np.char.find(unique_failure_times_label, 'noFailure') >= 0)
-        self.unique_failure_times_label = np.delete(unique_failure_times_label, idx, 0)
-        self.failure_times_count = np.delete(failure_times_count, idx, 0)
+        if not self.is_third_party_dataset:
+            # required for inference metric calculation
+            # get all failures and labels as unique entry
+            failure_times_label = np.stack((self.y_test_strings, np.squeeze(self.failure_times_test))).T
+            # extract unique permutations between failure occurrence time and labeled entry
+            unique_failure_times_label, failure_times_count = np.unique(failure_times_label, axis=0, return_counts=True)
+            # remove noFailure entries
+            idx = np.where(np.char.find(unique_failure_times_label, 'noFailure') >= 0)
+            self.unique_failure_times_label = np.delete(unique_failure_times_label, idx, 0)
+            self.failure_times_count = np.delete(failure_times_count, idx, 0)
+
+            self.load_sim_matrices()
 
         self.calculate_maskings()
-        self.load_sim_matrices()
 
         # data
         # 1. dimension: example
@@ -185,9 +192,9 @@ class FullDataset(Dataset):
             print('Shape of training set (example, time, channels):', self.x_train.shape)
             print('Shape of test set (example, time, channels):', self.x_test.shape)
             print('Num of classes in train and test together:', self.num_classes)
-            # print('Classes used in training: ', len(self.y_train_strings_unique)," :",self.y_train_strings_unique)
-            # print('Classes used in test: ', len(self.y_test_strings_unique)," :", self.y_test_strings_unique)
-            # print('Classes in total: ', self.classes_total)
+            # print('Classes used in training: ', len(self.y_train_strings_unique), " :", self.y_train_strings_unique)
+            # print('Classes used in test: ', len(self.y_test_strings_unique), " :", self.y_test_strings_unique)
+            # print('Classes in both: ', self.classes_in_both)
             print()
 
     def load_sim_matrices(self):

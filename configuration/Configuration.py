@@ -27,8 +27,8 @@ class BaselineConfiguration:
         self.baseline_algorithm = BaselineAlgorithm.FEATURE_BASED_ROCKET
 
         # Should the case base representation be based on a fitting to the full training dataset?
-        # True = Fit representation using full training dataset / False = Fit representation on case base only.
-        self.force_fit_on_full_training_data = True
+        # True = Fit representation using full training dataset / Default: False = Fit representation on case base only.
+        self.force_fit_on_full_training_data = False
 
         ##
         # Rocket
@@ -55,14 +55,11 @@ class GeneralConfiguration:
         self.max_gpus_used = 4
 
         # Specifies the maximum number of cores to be used
-        self.max_parallel_cores = 40
-
-        # Folder where the trained models are saved to during learning process
-        self.models_folder = '../data/trained_models/'
+        self.max_parallel_cores = 20
 
         # Path and file name to the specific model that should be used for testing and live classification
-        self.filename_model_to_use = 'temp_snn_model_10-11_12-31-05_epoch-50'
-        self.directory_model_to_use = self.models_folder + self.filename_model_to_use + '/'
+        # Folder where the models are stored is prepended below
+        self.filename_model_to_use = 'temp_snn_model_10-15_12-06-21_epoch-200'
 
         ##
         # Debugging - Don't use for feature implementation
@@ -129,7 +126,7 @@ class ModelConfiguration:
         # If !use_individual_hyperparameters interpreted as a single json file, else as a folder
         # which contains json files named after the cases they should be used for
         # If no file with this name is present the 'default.json' Config will be used
-        self.hyper_file = self.hyper_file_folder + 'cnn2d_withAddInput.json'  # 'individual_hyperparameters_test'  #
+        self.hyper_file = self.hyper_file_folder + 'cnn1d.json'  # 'individual_hyperparameters_test'  #
 
         ##
         # Various settings influencing the similarity calculation
@@ -153,7 +150,7 @@ class ModelConfiguration:
 
         # Using the more restrictive features as additional masking vector for feature sim calculation
         # in cnn_with_add_input
-        self.use_additional_strict_masking_for_attribute_sim = True  # default: False
+        self.use_additional_strict_masking_for_attribute_sim = False  # default: False
 
         # Option to simulate a retrieval situation (during training) where only the weights of the
         # example from the case base/training data set are known:
@@ -195,7 +192,6 @@ class TrainingConfiguration:
 
         self.use_early_stopping = True
         self.early_stopping_epochs_limit = 250
-        # FIXME -1.0 used because loss of 0 can occur for triplet loss
         self.early_stopping_loss_minimum = 0.03  # Default: -1.0 (no effect), CNN2D_with_add_Input: BCE:0.03, MSE:0.01
 
         # Parameter to control if and when a test is conducted through training
@@ -219,7 +215,7 @@ class TrainingConfiguration:
         self.continue_training = False  # default: False
 
         # Defines how often loss is printed and checkpoints are saved during training
-        self.output_interval = 50
+        self.output_interval = 100
 
         # How many model checkpoints are kept
         self.model_files_stored = 50
@@ -405,23 +401,32 @@ class StaticConfiguration:
         ##
         # Note: Folder of used model specified in GeneralConfiguration
 
+        # Default prefix for main dataset
+        self.dataset_folder_prefix = '../data/'
+        # Prefix for the 3w dataset
+        #self.dataset_folder_prefix = '../data/additional_datasets/3w_dataset/'
+
+        # Folder where the trained models are saved to during learning process
+        self.models_folder = self.dataset_folder_prefix + 'trained_models/'
+
+        # noinspection PyUnresolvedReferences
+        self.directory_model_to_use = self.models_folder + self.filename_model_to_use + '/'
+
         # Folder where the preprocessed training and test data for the neural network should be stored
-        self.training_data_folder = '../data/training_data/'
-        # self.training_data_folder = "../../../../data/pklein/PredMSiamNN/data/training_data/"
+        self.training_data_folder = self.dataset_folder_prefix + 'training_data/'
 
         # Folder where the normalisation models should be stored
-        self.scaler_folder = '../data/scaler/'
+        self.scaler_folder = self.dataset_folder_prefix + 'scaler/'
 
         # Name of the files the dataframes are saved to after the import and cleaning
         self.filename_pkl = 'export_data.pkl'
         self.filename_pkl_cleaned = 'cleaned_data.pkl'
 
         # Folder where the reduced training data set aka. case base is saved to
-        self.case_base_folder = '../data/case_base/'
-        # self.case_base_folder = "../../../../data/pklein/PredMSiamNN/data/case_base/"
+        self.case_base_folder = self.dataset_folder_prefix + 'case_base/'
 
         # Folder where text files with extracted cases are saved to, for export
-        self.cases_folder = '../data/cases/'
+        self.cases_folder = self.dataset_folder_prefix + 'cases/'
 
         # File from which the case information should be loaded, used in dataset creation
         self.case_file = '../configuration/cases.csv'

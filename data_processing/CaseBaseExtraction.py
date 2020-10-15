@@ -15,9 +15,20 @@ def main():
 
     y_train = np.load(config.training_data_folder + 'train_labels.npy')  # labels of the training data
     x_train = np.load(config.training_data_folder + 'train_features.npy')  # labels of the training data
-    feature_names = np.load(config.training_data_folder + 'feature_names.npy')
-    failure_times_train = np.load(config.training_data_folder + 'train_failure_times.npy')
-    window_times_train = np.load(config.training_data_folder + 'train_window_times.npy')
+    feature_names = np.load(config.training_data_folder + 'feature_names.npy', allow_pickle=True)
+
+    if os.path.isfile(config.training_data_folder + 'train_failure_times.npy'):
+        failure_times_train = np.load(config.training_data_folder + 'train_failure_times.npy')
+        window_times_train = np.load(config.training_data_folder + 'train_window_times.npy')
+        is_third_party = False
+    else:
+        is_third_party = True
+        print()
+        print('######################################################################')
+        print('WARNING: train_failure_times.npy not found. \nAssuming a case base is created for a third party dataset, '
+              'where detailed information is unknown.')
+        print('######################################################################')
+        print()
 
     # get unique classes
     classes = np.unique(y_train)
@@ -53,25 +64,33 @@ def main():
     for i in range(len(classes)):
         casebase_labels_list.extend(y_train[new_indices[i]])
         casebase_features_list.extend(x_train[new_indices[i]])
-        casebase_failures_list.extend(failure_times_train[new_indices[i]])
-        casebase_window_times_list.extend(window_times_train[new_indices[i]])
+
+        if not is_third_party:
+            casebase_failures_list.extend(failure_times_train[new_indices[i]])
+            casebase_window_times_list.extend(window_times_train[new_indices[i]])
 
     # transform list of values back into an array and safe to file
     casebase_labels = np.stack(casebase_labels_list, axis=0)
     casebase_features = np.stack(casebase_features_list, axis=0)
-    casebase_failures = np.stack(casebase_failures_list, axis=0)
-    casebase_window_times = np.stack(casebase_window_times_list, axis=0)
+
+    if not is_third_party:
+        casebase_failures = np.stack(casebase_failures_list, axis=0)
+        casebase_window_times = np.stack(casebase_window_times_list, axis=0)
 
     print('Number of exaples in training data set:', casebase_features.shape[0])
 
     np.save(config.case_base_folder + 'train_features.npy', casebase_features.astype('float32'))
     np.save(config.case_base_folder + 'train_labels.npy', casebase_labels)
-    np.save(config.case_base_folder + 'train_failure_times.npy', casebase_failures)
-    np.save(config.case_base_folder + 'train_window_times.npy', casebase_window_times)
 
-    files_to_copy = ['feature_names.npy', 'test_labels.npy', 'test_features.npy', 'test_window_times.npy',
-                     'test_failure_times.npy', 'FailureMode_Sim_Matrix.csv', 'Lokalization_Sim_Matrix.csv',
-                     'Condition_Sim_Matrix.csv']
+    files_to_copy = ['feature_names.npy', 'test_labels.npy', 'test_features.npy']
+
+    if not is_third_party:
+        np.save(config.case_base_folder + 'train_failure_times.npy', casebase_failures)
+        np.save(config.case_base_folder + 'train_window_times.npy', casebase_window_times)
+
+        additional_files = ['test_window_times.npy', 'test_failure_times.npy', 'FailureMode_Sim_Matrix.csv',
+                            'Lokalization_Sim_Matrix.csv', 'Condition_Sim_Matrix.csv']
+        files_to_copy.extend(additional_files)
 
     for file in files_to_copy:
         copyfile(config.training_data_folder + file, config.case_base_folder + file)

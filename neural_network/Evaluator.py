@@ -15,7 +15,7 @@ class Evaluator:
         # Dataframe that stores the results that will be output at the end of the inference process
         # Is not filled with data during the inference
         index = list(dataset.y_test_strings_unique) + ['combined']
-        cols = ['#Examples', 'TP', 'FP', 'TN', 'FN', 'TPR', 'FPR', 'FNR', 'FDR', 'ACC', 'Hit@k','FWI_1','FWI_3']
+        cols = ['#Examples', 'TP', 'FP', 'TN', 'FN', 'TPR', 'FPR', 'FNR', 'FDR', 'ACC', 'Hit@k', 'FWI_1', 'FWI_3']
         self.results = pd.DataFrame(0, index=index, columns=cols)
         self.results.index.name = 'Classes'
         self.results.loc['combined', '#Examples'] = self.num_test_examples
@@ -29,20 +29,21 @@ class Evaluator:
         self.y_true = []
         self.y_pred = []
 
-        self.unique_test_failures = np.unique(self.dataset.failure_times_test)
-        idx = np.where(np.char.find(self.unique_test_failures, 'noFailure') >= 0)
-        self.unique_test_failures = np.delete(self.unique_test_failures, idx, 0)
-        self.num_test_failures = self.unique_test_failures.shape[0]
+        if not self.dataset.is_third_party_dataset:
+            self.unique_test_failures = np.unique(self.dataset.failure_times_test)
+            idx = np.where(np.char.find(self.unique_test_failures, 'noFailure') >= 0)
+            self.unique_test_failures = np.delete(self.unique_test_failures, idx, 0)
+            self.num_test_failures = self.unique_test_failures.shape[0]
 
-        # Auxiliary dataframe failure_results contains results with respect to failure occurrences
-        self.failure_results = pd.DataFrame({'Label': self.dataset.unique_failure_times_label[:, 0],
-                                             'FailureTime': self.dataset.unique_failure_times_label[:, 1],
-                                             'Chances': self.dataset.failure_times_count,
-                                             'Correct': np.zeros(self.dataset.unique_failure_times_label.shape[0]),
-                                             'AsOtherFailure': np.zeros(
-                                                 self.dataset.unique_failure_times_label.shape[0]),
-                                             'AsHealth': np.zeros(self.dataset.unique_failure_times_label.shape[0])}
-                                            )
+            # Auxiliary dataframe failure_results contains results with respect to failure occurrences
+            self.failure_results = pd.DataFrame({'Label': self.dataset.unique_failure_times_label[:, 0],
+                                                 'FailureTime': self.dataset.unique_failure_times_label[:, 1],
+                                                 'Chances': self.dataset.failure_times_count,
+                                                 'Correct': np.zeros(self.dataset.unique_failure_times_label.shape[0]),
+                                                 'AsOtherFailure': np.zeros(
+                                                     self.dataset.unique_failure_times_label.shape[0]),
+                                                 'AsHealth': np.zeros(self.dataset.unique_failure_times_label.shape[0])}
+                                                )
 
         self.quality_all_failure_localization = 0
         self.quality_all_failure_mode_diagnosis = 0
@@ -94,12 +95,15 @@ class Evaluator:
         # Increase the value of this "label pair"
         self.multi_class_results.loc[max_sim_class, true_class] += 1
 
-        self.quality_all_condition_quality += self.dataset.get_sim_label_pair_for_notion(true_class, max_sim_class,
-                                                                                         "condition")
-        self.quality_all_failure_mode_diagnosis += self.dataset.get_sim_label_pair_for_notion(true_class, max_sim_class,
-                                                                                              "failuremode")
-        self.quality_all_failure_localization += self.dataset.get_sim_label_pair_for_notion(true_class, max_sim_class,
-                                                                                            "localization")
+        if not self.dataset.is_third_party_dataset:
+            self.quality_all_condition_quality += self.dataset.get_sim_label_pair_for_notion(true_class, max_sim_class,
+                                                                                             "condition")
+            self.quality_all_failure_mode_diagnosis += self.dataset.get_sim_label_pair_for_notion(true_class,
+                                                                                                  max_sim_class,
+                                                                                                  "failuremode")
+            self.quality_all_failure_localization += self.dataset.get_sim_label_pair_for_notion(true_class,
+                                                                                                max_sim_class,
+                                                                                                "localization")
 
         # Increase the number of examples of true_class that have been tested and the total number of tested examples
         self.results.loc[true_class, '#Examples'] += 1
@@ -108,33 +112,35 @@ class Evaluator:
         if true_class in classes_of_k_nearest_neighbors:
             self.results.loc[true_class, 'Hit@k'] += 1
 
-
         # Store the prediction result in respect to a failure occurrence
         if not true_class == 'no_failure':
             self.example_counter_fails += 1
 
-            if true_class == max_sim_class:
-                self.failure_results.loc[(self.failure_results['Label'].isin([true_class])) & (
-                    self.failure_results['FailureTime'].isin(
-                        self.dataset.failure_times_test[test_example_index])), 'Correct'] += 1
+            if not self.dataset.is_third_party_dataset:
 
-            elif max_sim_class == 'no_failure':
-                self.failure_results.loc[(self.failure_results['Label'].isin([true_class])) & (
-                    self.failure_results['FailureTime'].isin(
-                        self.dataset.failure_times_test[test_example_index])), 'AsHealth'] += 1
+                if true_class == max_sim_class:
+                    self.failure_results.loc[(self.failure_results['Label'].isin([true_class])) & (
+                        self.failure_results['FailureTime'].isin(
+                            self.dataset.failure_times_test[test_example_index])), 'Correct'] += 1
 
-            else:
-                self.failure_results.loc[(self.failure_results['Label'].isin([true_class])) & (
-                    self.failure_results['FailureTime'].isin(
-                        self.dataset.failure_times_test[test_example_index])), 'AsOtherFailure'] += 1
+                elif max_sim_class == 'no_failure':
+                    self.failure_results.loc[(self.failure_results['Label'].isin([true_class])) & (
+                        self.failure_results['FailureTime'].isin(
+                            self.dataset.failure_times_test[test_example_index])), 'AsHealth'] += 1
 
-            self.quality_fails_condition_quality += self.dataset.get_sim_label_pair_for_notion(true_class,
-                                                                                               max_sim_class,
-                                                                                               "condition")
-            self.quality_fails_mode_diagnosis += self.dataset.get_sim_label_pair_for_notion(true_class, max_sim_class,
-                                                                                            "failuremode")
-            self.quality_fails_localization += self.dataset.get_sim_label_pair_for_notion(true_class, max_sim_class,
-                                                                                          "localization")
+                else:
+                    self.failure_results.loc[(self.failure_results['Label'].isin([true_class])) & (
+                        self.failure_results['FailureTime'].isin(
+                            self.dataset.failure_times_test[test_example_index])), 'AsOtherFailure'] += 1
+
+                self.quality_fails_condition_quality += self.dataset.get_sim_label_pair_for_notion(true_class,
+                                                                                                   max_sim_class,
+                                                                                                   "condition")
+                self.quality_fails_mode_diagnosis += self.dataset.get_sim_label_pair_for_notion(true_class,
+                                                                                                max_sim_class,
+                                                                                                "failuremode")
+                self.quality_fails_localization += self.dataset.get_sim_label_pair_for_notion(true_class, max_sim_class,
+                                                                                              "localization")
 
         ###
         # Output the results of this example
@@ -151,12 +157,14 @@ class Evaluator:
             ['Classified as:', max_sim_class],
             ['Correct class:', true_class],
             ['Similarity:', max_sim],
-            ['Diagnosis quality:', self.quality_fails_mode_diagnosis / local_ecf],
-            ['Localization quality:', self.quality_fails_localization / local_ecf],
-            ['Condition quality:', self.quality_fails_condition_quality / local_ecf],
-            ['Query Window:', self.dataset.get_time_window_str(test_example_index, 'test')],
-            ['Query Failure:', str(self.dataset.failure_times_test[test_example_index])],
+
         ]
+        if not self.dataset.is_third_party_dataset:
+            example_results.append(['Diagnosis quality:', self.quality_fails_mode_diagnosis / local_ecf])
+            example_results.append(['Localization quality:', self.quality_fails_localization / local_ecf])
+            example_results.append(['Condition quality:', self.quality_fails_condition_quality / local_ecf])
+            example_results.append(['Query Window:', self.dataset.get_time_window_str(test_example_index, 'test')])
+            example_results.append(['Query Failure:', str(self.dataset.failure_times_test[test_example_index])])
 
         # output results for this example
         for row in example_results:
@@ -176,13 +184,21 @@ class Evaluator:
             row = [i + 1, 'Class: ' + c,
                    'Sim: ' + str(round(sims[index], 6)),
                    'Case ID: ' + str(index),
-                   'Failure: ' + str(self.dataset.failure_times_train[index]),
-                   'Window: ' + self.dataset.get_time_window_str(index, 'train')]
+                   ]
+
+            if not self.dataset.is_third_party_dataset:
+                row.append('Failure: ' + str(self.dataset.failure_times_train[index]))
+                row.append('Window: ' + self.dataset.get_time_window_str(index, 'train'))
+
             knn_results.append(row)
 
         print("K-nearest Neighbors of", nbr_tested_example, ':')
         for row in knn_results:
-            print("{: <3} {: <60} {: <20} {: <20} {: <30} {: <20}".format(*row))
+
+            if not self.dataset.is_third_party_dataset:
+                print("{: <3} {: <60} {: <20} {: <20} {: <30} {: <20}".format(*row))
+            else:
+                print("{: <3} {: <60} {: <20} {: <20}".format(*row))
 
     # Calculates the final results based on the information added for each example during inference
     # Must be called after inference before print_results is called.
@@ -222,16 +238,19 @@ class Evaluator:
             self.results.loc[class_in_test, 'FDR'] = self.rate_calculation(false_positives, true_positives)
 
             # Calculate a prototypical score adopted from f-score with consideration of test instances
-            num_of_instances = self.results.loc[class_in_test, '#Examples'] #2907
-            num_max_false_positives = self.num_test_examples - num_of_instances #482
+            num_of_instances = self.results.loc[class_in_test, '#Examples']  # 2907
+            num_max_false_positives = self.num_test_examples - num_of_instances  # 482
             num_max_false_negatives = num_of_instances
-            self.results.loc[class_in_test, 'FWI_1'] = ((1/num_of_instances)*true_positives)/\
-                                             ((1/num_of_instances)*true_positives+
-                                              ((1/num_max_false_positives)*false_positives+(1/num_max_false_negatives)*false_negatives))
-            self.results.loc[class_in_test, 'FWI_3'] = ((1/num_of_instances)*true_positives*2) /\
-                                             ((1/num_of_instances)*true_positives*2 +
-                                              ((1/(num_max_false_positives + num_max_false_negatives))*(false_positives + false_negatives)) +
-                                              ((1/num_max_false_positives)*false_positives + (1/num_max_false_negatives)*false_negatives))
+            self.results.loc[class_in_test, 'FWI_1'] = ((1 / num_of_instances) * true_positives) / \
+                                                       ((1 / num_of_instances) * true_positives +
+                                                        ((1 / num_max_false_positives) * false_positives + (
+                                                                1 / num_max_false_negatives) * false_negatives))
+            self.results.loc[class_in_test, 'FWI_3'] = ((1 / num_of_instances) * true_positives * 2) / \
+                                                       ((1 / num_of_instances) * true_positives * 2 +
+                                                        ((1 / (num_max_false_positives + num_max_false_negatives)) * (
+                                                                false_positives + false_negatives)) +
+                                                        ((1 / num_max_false_positives) * false_positives + (
+                                                                1 / num_max_false_negatives) * false_negatives))
 
         # Fill the combined row with the sum of each class
         self.results.loc['combined', 'TP'] = self.results['TP'].sum()
@@ -270,19 +289,20 @@ class Evaluator:
         report = metrics.classification_report(y_true_array, y_pred_array,
                                                labels=list(self.dataset.y_test_strings_unique))
 
-        failure_detected_correct_sum = self.failure_results['Correct'].sum()
-        failure_detected_chances_sum = self.failure_results['Chances'].sum()
-        failure_detected_as_health_sum = self.failure_results['AsHealth'].sum()
-        failure_detected_as_other_failure_sum = self.failure_results['AsOtherFailure'].sum()
+        if not self.dataset.is_third_party_dataset:
+            failure_detected_correct_sum = self.failure_results['Correct'].sum()
+            failure_detected_chances_sum = self.failure_results['Chances'].sum()
+            failure_detected_as_health_sum = self.failure_results['AsHealth'].sum()
+            failure_detected_as_other_failure_sum = self.failure_results['AsOtherFailure'].sum()
 
-        self.failure_results.loc[-1] = ["Combined", "Sum: ",
-                                        failure_detected_chances_sum,
-                                        failure_detected_correct_sum,
-                                        failure_detected_as_other_failure_sum,
-                                        failure_detected_as_health_sum]
+            self.failure_results.loc[-1] = ["Combined", "Sum: ",
+                                            failure_detected_chances_sum,
+                                            failure_detected_correct_sum,
+                                            failure_detected_as_other_failure_sum,
+                                            failure_detected_as_health_sum]
 
-        # Local copy because using label as index would break the result adding function
-        failure_results_local = self.failure_results.set_index('Label')
+            # Local copy because using label as index would break the result adding function
+            failure_results_local = self.failure_results.set_index('Label')
 
         num_infers = self.get_nbr_examples_tested()
 
@@ -306,18 +326,21 @@ class Evaluator:
         print("Multiclass Results:")
         print(report)
         print('-------------------------------------------------------------\n')
-        print("Classification Result Report based on occurrence:")
-        print("Note: Chances only correct if complete test dataset is used.")
-        print(failure_results_local.to_string())
-        print()
-        print('-------------------------------------------------------------\n')
-        print('Self-defined quality measures:')
-        print("" + "\t")
-        print('Diagnosis quality all:', "\t\t", self.quality_all_failure_mode_diagnosis / num_infers,
-              "\t\t Failure only: \t", self.quality_fails_mode_diagnosis / self.example_counter_fails)
-        print('Localization quality:', "\t\t", self.quality_all_failure_localization / num_infers,
-              "\t\t Failure only: \t", self.quality_fails_localization / self.example_counter_fails)
-        print('Condition quality:', "\t\t", self.quality_all_condition_quality / num_infers, "\t\t Failure only: \t",
-              self.quality_fails_condition_quality / self.example_counter_fails)
-        print()
-        print('-------------------------------------------------------------')
+
+        if not self.dataset.is_third_party_dataset:
+            print("Classification Result Report based on occurrence:")
+            print("Note: Chances only correct if complete test dataset is used.")
+            print(failure_results_local.to_string())
+            print()
+            print('-------------------------------------------------------------\n')
+            print('Self-defined quality measures:')
+            print("" + "\t")
+            print('Diagnosis quality all:', "\t\t", self.quality_all_failure_mode_diagnosis / num_infers,
+                  "\t\t Failure only: \t", self.quality_fails_mode_diagnosis / self.example_counter_fails)
+            print('Localization quality:', "\t\t", self.quality_all_failure_localization / num_infers,
+                  "\t\t Failure only: \t", self.quality_fails_localization / self.example_counter_fails)
+            print('Condition quality:', "\t\t", self.quality_all_condition_quality / num_infers,
+                  "\t\t Failure only: \t",
+                  self.quality_fails_condition_quality / self.example_counter_fails)
+            print()
+            print('-------------------------------------------------------------')

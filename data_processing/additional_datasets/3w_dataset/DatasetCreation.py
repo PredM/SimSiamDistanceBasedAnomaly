@@ -1,15 +1,16 @@
 import os
 import sys
 
-import joblib
-
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 
+import joblib
 import pandas as pd
-from math import ceil
 import numpy as np
+
+from math import ceil
 from pathlib import Path
 from sklearn.preprocessing import MinMaxScaler
+from sklearn.model_selection import train_test_split
 
 #######################################################################################################################
 
@@ -41,12 +42,28 @@ max_nan_percent = 0.1  # For selection of useful variables
 std_vars_min = 0.01  # For selection of useful variables
 disable_progressbar = True  # For less output
 
-split_range = 0.6  # Train size/test size
-max_samples_per_period = 15  # Limitation for safety
+# TODO evtl. noch Anpassungen vornehmen
+split_range = 0.8  # Changed to match config setting, % of examples in train set
+split_random_seed = 23
+max_samples_per_period = 15  # Limitation for safety # TODO Erhöhung möglich/sinnvoll?
 sample_size = 3 * 60  # In observations = seconds
+
+# New settings
+custom_split = True
 
 
 #######################################################################################################################
+def replace_label(input_array, target_label, new_label):
+    new_labels = []
+
+    for label in input_array:
+        if label == target_label:
+            new_labels.append(new_label)
+        else:
+            new_labels.append(label)
+
+    return np.array(new_labels)
+
 
 def main():
     pd.set_option('display.max_rows', 500)
@@ -124,6 +141,41 @@ def main():
     x_train = np.array(list(df_train_combined.groupby('id').apply(pd.DataFrame.to_numpy)))
     x_test = np.array(list(df_test_combined.groupby('id').apply(pd.DataFrame.to_numpy)))
 
+    y_train = np.array(y_train_lists).flatten().astype(str)
+    y_test = np.array(y_test_lists).flatten().astype(str)
+
+    # TODO Replace numbers with class names
+    #  Current Problem: Why are there classes 106, 107? Or: why aren't they in the dict above?
+    #  Maybe 106 is a special type of 6 - Check in paper
+    # print(y_train[[0, 1, 2, 3, 4, -2, -1]])
+    # y_train = np.array([events_names[key] for key in y_train])
+    # y_test = np.array([events_names[key] for key in y_test])
+    # print(y_train[[0, 1, 2, 3, 4, -2, -1]])
+
+    y_train = replace_label(y_train, '0', 'no_failure')
+    y_test = replace_label(y_test, '0', 'no_failure')
+
+    # print('unique ids', len(pd.concat([df_train_combined, df_test_combined])['id'].value_counts()))
+    # print('number labels combined', str(len(y_test) + len(y_train)))
+    # print('x_train', x_train.shape)
+    # print('x_test', x_test.shape)
+    # print('y_train', y_train.shape)
+    # print('y_test', y_test.shape)
+
+    if custom_split:
+        # combine into single df / list and split into train/test again
+        # because the predefined split only has one class in test
+        examples_array = np.concatenate([x_train, x_test], axis=0)
+        labels_array = np.concatenate([y_train, y_test], axis=0)
+
+        print('examples_combined', examples_array.shape)
+        print('labels_combined', labels_array.shape)
+
+        print('\nExecute train/test split')
+        x_train, x_test, y_train, y_test = train_test_split(examples_array, labels_array,
+                                                            test_size=(1 - split_range),
+                                                            random_state=split_random_seed)
+
     # reduce data arrays and column vector to sensor data columns only
     attribute_indices = [2, 3, 4, 5, 6, 7]
     attribute_names = df_train_combined.columns.values
@@ -138,22 +190,6 @@ def main():
 
     # cast to float32 so it can directly be used by tensorflow
     x_train, x_test, = x_train.astype('float32'), x_test.astype('float32')
-
-    y_train = np.array(y_train_lists).flatten()
-    y_test = np.array(y_test_lists).flatten()
-
-    # TODO Replace numbers with class names
-    #  Current Problem: Why are there classes 106, 107? Or: why aren't they in the dict above?
-    #  Maybe 106 is a special type of 6 - Check in paper
-    # print(y_train[[0, 1, 2, 3, 4, -2, -1]])
-    # y_train = np.array([events_names[key] for key in y_train])
-    # y_test = np.array([events_names[key] for key in y_test])
-    # print(y_train[[0, 1, 2, 3, 4, -2, -1]])
-
-
-    # TODO Maybe ignore predefined split into train and test --> combine into single df, custom spliting
-    #  (keep in mind: id handling maybe needs to be changed)
-    #  ensure examples from one run don't end up in both like in our dataset
 
     training_data_location = str(working_directory) + '/training_data/'
     print('\nExporting to: ', training_data_location)
