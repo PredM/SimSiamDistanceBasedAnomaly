@@ -38,7 +38,7 @@ class NN:
             raise AttributeError('Model not initialised. Can not load weights.')
 
         if type(self) == CNN or type(self) == RNN or type(self) == CNN2dWithAddInput or type(self) == CNN2D \
-                or type(self) == DUMMY:
+                or type(self) == DUMMY or type(self) == TypeBasedEncoder:
             prefix = 'encoder'
         elif type(self) == FFNN or type(self) == FFNN2:
             prefix = 'ffnn'
