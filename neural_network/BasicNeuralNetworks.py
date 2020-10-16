@@ -91,6 +91,7 @@ class FFNN(NN):
 
         self.model = tf.keras.Model(inputs=layer_input, outputs=output)
 
+
 class FFNN2(NN):
     # This model can be used in combination with standard_SNN and with feature rep. overwritten input
     def __init__(self, hyperparameters, input_shape):
@@ -98,7 +99,7 @@ class FFNN2(NN):
 
     def create_model(self):
         print('Creating FFNN2 for input shape: ', self.input_shape)
-        #print("self.hyper.ffnn_layers: ", self.hyper.ffnn_layers)
+        # print("self.hyper.ffnn_layers: ", self.hyper.ffnn_layers)
         layers = self.hyper.ffnn_layers
         '''
         if len(layers) < 1:
@@ -179,12 +180,11 @@ class RNN(NN):
             # Even though .LSTM should use cuDnn Kernel the .RNN is faster
             # Also a not yet fixable error occurs, which is why this could be the case
             if i == 0:
-                layer = tf.keras.layers.RNN(tf.keras.layers.LSTMCell(num_units), return_sequences=True,
-                                            input_shape=self.input_shape)
-                # layer = tf.keras.layers.LSTM(units=num_units, return_sequences=True, input_shape=self.input_shape)
+                layer = tf.keras.layers.RNN(tf.keras.layers.LSTMCell(num_units), return_sequences=True, input_shape=self.input_shape)
+                #layer = tf.keras.layers.LSTM(units=num_units, return_sequences=True, input_shape=self.input_shape, use_bias=True)
             else:
                 layer = tf.keras.layers.RNN(tf.keras.layers.LSTMCell(num_units), return_sequences=True)
-                # layer = tf.keras.layers.LSTM(units=num_units, return_sequences=True)
+                #layer = tf.keras.layers.LSTM(units=num_units, return_sequences=True, use_bias=True)
             model.add(layer)
 
         # add Batch Norm and Dropout Layers
@@ -199,7 +199,6 @@ class CNN2dWithAddInput(NN):
     def __init__(self, hyperparameters, input_shape):
         super().__init__(hyperparameters, input_shape)
         self.output_shape = None
-
 
     def create_model(self):
 
@@ -222,13 +221,14 @@ class CNN2dWithAddInput(NN):
                                                                         name="SplitMaskVec_Strict")(
                 case_dependent_vector_input_i)
         else:
+            # FIXME @Klein shouldn't that be only normal?
             print("Masking: normal + strict")
             case_dependent_vector_input = case_dependent_vector_input_i
             case_dependent_vector_input_strict = case_dependent_vector_input_i
 
         layers = self.hyper.cnn2d_layers
 
-        print("learnFeatureWeights:False Feature weights are similar to masking vector")
+        print("learnFeatureWeights: False Feature weights are similar to masking vector")
         # case_dependent_vector_input_o = tf.keras.layers.GaussianNoise(0.3)(case_dependent_vector_input_strict)
         # case_dependent_vector_input_o = tf.multiply(case_dependent_vector_input_o, case_dependent_vector_input_strict)
         case_dependent_vector_input_o = case_dependent_vector_input_strict
@@ -539,7 +539,6 @@ class CNN2D(NN):
 
         if len(hyper.cnn_layers) < 1:
             print('Attention: No 1d conv layer on top of 2d conv is used!')
-            # FIXME: What should be achieved here? If really abort and not only warning insert next line again
             # sys.exit(1)
 
         if hyper.fc_after_cnn1d_layers is not None and len(hyper.fc_after_cnn1d_layers) < 1:
@@ -616,6 +615,7 @@ class CNN2D(NN):
 
         return input, output
 
+
 class DUMMY(NN):
     # This is an encoder without any learnable parameter and without any input transformation
 
@@ -623,8 +623,8 @@ class DUMMY(NN):
         super().__init__(hyperparameters, input_shape)
 
     def create_model(self):
-
-        print('Creating a keras model without any parameter, input is the same as its output, no transformations: ', self.input_shape)
+        print('Creating a keras model without any parameter, input is the same as its output, no transformations: ',
+              self.input_shape)
         input = tf.keras.Input(shape=(self.input_shape[0], self.input_shape[1]), name="Input0")
         output = input
         self.model = tf.keras.Model(inputs=input, outputs=output, name='Dummy')
