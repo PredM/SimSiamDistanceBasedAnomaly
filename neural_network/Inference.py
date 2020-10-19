@@ -5,14 +5,15 @@ import time
 import tensorflow as tf
 
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
+# suppress debugging messages of TensorFlow
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 from neural_network.Evaluator import Evaluator
 from configuration.ConfigChecker import ConfigChecker
 from configuration.Configuration import Configuration
 from neural_network.Dataset import FullDataset
 from neural_network.SNN import initialise_snn
-from baseline.Representations import TSFreshRepresentation, RocketRepresentation, Representation
-from configuration.Enums import BaselineAlgorithm
+from baseline.Representations import Representation
 
 
 class Inference:
@@ -36,7 +37,7 @@ class Inference:
         for idx_test in self.idx_test_examples_query_pool:
             # measure the similarity between the test series and the training batch series
             sims, labels = self.architecture.get_sims(self.dataset.x_test[idx_test])
-            #print("sims shape: ", sims.shape, " label shape: ", labels.shape, "self.dataset.x_test.shape", self.dataset.x_test.shape)
+            # print("sims shape: ", sims.shape, " label shape: ", labels.shape, "self.dataset.x_test.shape", self.dataset.x_test.shape)
             # check similarities of all pairs and record the index of the closest training series
 
             sims_are_distance_values = True if self.config.simple_measure in ['euclidean_dis'] else False
@@ -50,9 +51,6 @@ class Inference:
 
 
 def main():
-    # suppress debugging messages of TensorFlow
-    os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
-
     config = Configuration()
 
     if config.case_base_for_inference:

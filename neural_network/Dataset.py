@@ -90,7 +90,7 @@ class FullDataset(Dataset):
         self.df_label_sim_failuremode = None
         self.df_label_sim_condition = None
 
-        self.is_third_party_dataset = True if self.config.dataset_folder_prefix != '../dataset/' else False
+        self.is_third_party_dataset = True if self.config.data_folder_prefix != '../data/' else False
 
     def load_files(self):
 
@@ -100,7 +100,8 @@ class FullDataset(Dataset):
         self.x_test = np.load(self.dataset_folder + 'test_features.npy')  # data testing
         self.y_test_strings = np.expand_dims(np.load(self.dataset_folder + 'test_labels.npy'), axis=-1)
 
-        self.feature_names_all = np.load(self.dataset_folder + 'feature_names.npy', allow_pickle=True)  # names of the features (3. dim)
+        self.feature_names_all = np.load(self.dataset_folder + 'feature_names.npy',
+                                         allow_pickle=True)  # names of the features (3. dim)
 
         if not self.is_third_party_dataset:
             self.window_times_train = np.expand_dims(np.load(self.dataset_folder + 'train_window_times.npy'), axis=-1)
@@ -198,6 +199,7 @@ class FullDataset(Dataset):
             print()
 
     def load_sim_matrices(self):
+
         # load a matrix with pair-wise similarities between labels in respect
         # to different metrics
         self.df_label_sim_failuremode = pd.read_csv(self.dataset_folder + 'FailureMode_Sim_Matrix.csv', sep=';',

@@ -126,7 +126,7 @@ class ModelConfiguration:
         # If !use_individual_hyperparameters interpreted as a single json file, else as a folder
         # which contains json files named after the cases they should be used for
         # If no file with this name is present the 'default.json' Config will be used
-        self.hyper_file = self.hyper_file_folder + 'cnn1d.json'  # 'individual_hyperparameters_test'  #
+        self.hyper_file = self.hyper_file_folder + 'typebased.json'  # 'individual_hyperparameters_test'  #
 
         ##
         # Various settings influencing the similarity calculation
@@ -402,31 +402,31 @@ class StaticConfiguration:
         # Note: Folder of used model specified in GeneralConfiguration
 
         # Default prefix for main dataset
-        self.dataset_folder_prefix = '../data/'
+        self.data_folder_prefix = '../data/'
         # Prefix for the 3w dataset
         #self.dataset_folder_prefix = '../data/additional_datasets/3w_dataset/'
 
         # Folder where the trained models are saved to during learning process
-        self.models_folder = self.dataset_folder_prefix + 'trained_models/'
+        self.models_folder = self.data_folder_prefix + 'trained_models/'
 
         # noinspection PyUnresolvedReferences
         self.directory_model_to_use = self.models_folder + self.filename_model_to_use + '/'
 
         # Folder where the preprocessed training and test data for the neural network should be stored
-        self.training_data_folder = self.dataset_folder_prefix + 'training_data/'
+        self.training_data_folder = self.data_folder_prefix + 'training_data/'
 
         # Folder where the normalisation models should be stored
-        self.scaler_folder = self.dataset_folder_prefix + 'scaler/'
+        self.scaler_folder = self.data_folder_prefix + 'scaler/'
 
         # Name of the files the dataframes are saved to after the import and cleaning
         self.filename_pkl = 'export_data.pkl'
         self.filename_pkl_cleaned = 'cleaned_data.pkl'
 
         # Folder where the reduced training data set aka. case base is saved to
-        self.case_base_folder = self.dataset_folder_prefix + 'case_base/'
+        self.case_base_folder = self.data_folder_prefix + 'case_base/'
 
         # Folder where text files with extracted cases are saved to, for export
-        self.cases_folder = self.dataset_folder_prefix + 'cases/'
+        self.cases_folder = self.data_folder_prefix + 'cases/'
 
         # File from which the case information should be loaded, used in dataset creation
         self.case_file = '../configuration/cases.csv'

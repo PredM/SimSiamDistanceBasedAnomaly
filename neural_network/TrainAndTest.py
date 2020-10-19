@@ -2,8 +2,9 @@ import os
 import sys
 from datetime import datetime
 
-
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
+# suppress debugging messages of TensorFlow
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 from configuration.ConfigChecker import ConfigChecker
 from configuration.Configuration import Configuration
@@ -61,9 +62,6 @@ def change_model(config: Configuration, start_time_string):
 
 # noinspection DuplicatedCode
 def main():
-    # suppress debugging messages of TensorFlow
-    os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
-
     config = Configuration()
     config.print_detailed_config_used_for_training()
 

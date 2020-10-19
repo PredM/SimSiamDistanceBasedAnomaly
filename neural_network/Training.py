@@ -2,6 +2,8 @@ import os
 import sys
 
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
+# suppress debugging messages of TensorFlow
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 from configuration.ConfigChecker import ConfigChecker
 from configuration.Configuration import Configuration
@@ -12,9 +14,6 @@ from baseline.Representations import Representation
 
 
 def main():
-    # suppress debugging messages of TensorFlow
-    os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
-
     config = Configuration()
 
     dataset = FullDataset(config.training_data_folder, config, training=True)
