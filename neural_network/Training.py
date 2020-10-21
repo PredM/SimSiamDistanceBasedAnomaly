@@ -2,6 +2,7 @@ import os
 import sys
 
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
+
 # suppress debugging messages of TensorFlow
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 

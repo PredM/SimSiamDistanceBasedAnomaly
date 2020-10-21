@@ -4,7 +4,7 @@ from datetime import datetime
 
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 # suppress debugging messages of TensorFlow
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+# os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 from configuration.ConfigChecker import ConfigChecker
 from configuration.Configuration import Configuration

@@ -7,10 +7,26 @@ import joblib
 import pandas as pd
 import numpy as np
 
+from enum import Enum
 from math import ceil
 from pathlib import Path
 from sklearn.preprocessing import MinMaxScaler
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import train_test_split, GroupShuffleSplit
+
+
+class SplitVariant(Enum):
+    # Use the split implemented by the dataset authors (only contains no_failure in train)
+    PREDEFINED = 0
+
+    # Use total random split by sklearn
+    RANDOM_SPLIT = 1
+
+    # Split based on date_threshold defined below: all instances recorded before this date will be in train
+    DATE_BASED = 2
+
+    # ensures examples from same failure occurrence (assumed: same date) won't end up both in train and test
+    ENSURE_NO_MIX = 3
+
 
 #######################################################################################################################
 
@@ -26,6 +42,7 @@ events_names = {0: 'Normal',
                 7: 'Scaling in PCK',
                 8: 'Hydrate in Production Line'
                 }
+
 vars = ['P-PDG',
         'P-TPT',
         'T-TPT',
@@ -34,6 +51,7 @@ vars = ['P-PDG',
         'P-JUS-CKGL',
         'T-JUS-CKGL',
         'QGL']
+
 columns = ['timestamp'] + vars + ['class']
 normal_class_code = 0
 abnormal_classes_codes = [1, 2, 5, 6, 7, 8]
@@ -49,7 +67,8 @@ max_samples_per_period = 15  # Limitation for safety # TODO Erhöhung möglich/s
 sample_size = 3 * 60  # In observations = seconds
 
 # New settings
-custom_split = True
+split_variant = SplitVariant.ENSURE_NO_MIX
+date_threshold = '31-10-2017'
 
 
 #######################################################################################################################
@@ -138,8 +157,18 @@ def main():
         print('\nNo NaN values found.')
 
     print('\nCombining into single numpy array...')
-    x_train = np.array(list(df_train_combined.groupby('id').apply(pd.DataFrame.to_numpy)))
-    x_test = np.array(list(df_test_combined.groupby('id').apply(pd.DataFrame.to_numpy)))
+
+    # must be done here before grouping
+    attribute_names = df_train_combined.columns.values
+
+    df_train_combined = df_train_combined.groupby('id')
+    df_test_combined = df_test_combined.groupby('id')
+
+    dates_train = pd.to_datetime(df_train_combined.first()['timestamp']).dt.strftime('%d-%m-%Y').values
+    dates_test = pd.to_datetime(df_test_combined.first()['timestamp']).dt.strftime('%d-%m-%Y').values
+
+    x_train = np.array(list(df_train_combined.apply(pd.DataFrame.to_numpy)))
+    x_test = np.array(list(df_test_combined.apply(pd.DataFrame.to_numpy)))
 
     y_train = np.array(y_train_lists).flatten().astype(str)
     y_test = np.array(y_test_lists).flatten().astype(str)
@@ -162,23 +191,70 @@ def main():
     # print('y_train', y_train.shape)
     # print('y_test', y_test.shape)
 
-    if custom_split:
+    if split_variant == SplitVariant.PREDEFINED:
+        pass
+
+    elif split_variant == SplitVariant.RANDOM_SPLIT:
         # combine into single df / list and split into train/test again
         # because the predefined split only has one class in test
         examples_array = np.concatenate([x_train, x_test], axis=0)
         labels_array = np.concatenate([y_train, y_test], axis=0)
 
-        print('examples_combined', examples_array.shape)
-        print('labels_combined', labels_array.shape)
-
         print('\nExecute train/test split')
         x_train, x_test, y_train, y_test = train_test_split(examples_array, labels_array,
                                                             test_size=(1 - split_range),
                                                             random_state=split_random_seed)
+    elif split_variant == SplitVariant.DATE_BASED:
+        date_threshold_typed = pd.to_datetime(date_threshold)
+
+        x_train_new = []
+        x_test_new = []
+        y_train_new = []
+        y_test_new = []
+        dates_train_new = []
+        dates_test_new = []
+
+        examples_array = np.concatenate([x_train, x_test], axis=0)
+        labels_array = np.concatenate([y_train, y_test], axis=0)
+        dates = np.concatenate([dates_train, dates_test], axis=0)
+
+        # go through each example and add it to the corresponding list based on its date compared to the threshold
+        for x, y, date in zip(examples_array, labels_array, dates):
+            date_typed = pd.to_datetime(date)
+
+            if date_typed <= date_threshold_typed:
+                x_train_new.append(x)
+                y_train_new.append(y)
+                dates_train_new.append(date)
+
+            else:
+                x_test_new.append(x)
+                y_test_new.append(y)
+                dates_test_new.append(date)
+
+        x_train_new, x_test_new = np.array(x_train_new), np.array(x_test_new),
+        y_train_new, y_test_new = np.array(y_train_new), np.array(y_test_new)
+        dates_train_new, dates_test_new = np.array(dates_train_new), np.array(dates_test_new)
+
+        x_train, x_test, y_train, y_test = x_train_new, x_test_new, y_train_new, y_test_new
+        dates_train, dates_test = dates_train_new, dates_test_new
+
+    elif split_variant == SplitVariant.ENSURE_NO_MIX:
+        examples_array = np.concatenate([x_train, x_test], axis=0)
+        labels_array = np.concatenate([y_train, y_test], axis=0)
+        dates = np.concatenate([dates_train, dates_test], axis=0)
+
+        gss = GroupShuffleSplit(n_splits=1, test_size=(1 - split_range), random_state=split_random_seed)
+
+        train_indices, test_indices = list(gss.split(examples_array, labels_array, dates))[0]
+
+        x_train, y_train, dates_train = examples_array[train_indices], labels_array[train_indices], dates[train_indices]
+        x_test, y_test, dates_test = examples_array[test_indices], labels_array[test_indices], dates[test_indices]
+
+        assert len(set(dates_train).intersection(set(dates_test))) == 0, 'Error: One date in both sets!'
 
     # reduce data arrays and column vector to sensor data columns only
     attribute_indices = [2, 3, 4, 5, 6, 7]
-    attribute_names = df_train_combined.columns.values
     attribute_names = attribute_names[attribute_indices]
 
     x_train = x_train[:, :, attribute_indices]
@@ -190,6 +266,13 @@ def main():
 
     # cast to float32 so it can directly be used by tensorflow
     x_train, x_test, = x_train.astype('float32'), x_test.astype('float32')
+
+    print('\nOverview:')
+    print('Train dataset shape:', x_train.shape)
+    print('Train labels shape:', y_train.shape)
+    print('Test dataset shape:', x_test.shape)
+    print('Test labels shape:', y_test.shape)
+    print()
 
     training_data_location = str(working_directory) + '/training_data/'
     print('\nExporting to: ', training_data_location)
