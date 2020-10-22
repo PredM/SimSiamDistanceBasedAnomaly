@@ -535,20 +535,24 @@ class CNN2D(NN):
 
         if len(hyper.cnn2d_layers) < 1:
             print('CNN encoder with less than one layer for 2d kernels is not possible')
-            sys.exit(1)
+            sys.exit(-1)
 
         if len(hyper.cnn_layers) < 1:
             print('Attention: No 1d conv layer on top of 2d conv is used!')
-            # sys.exit(1)
 
-        if hyper.fc_after_cnn1d_layers is not None and len(hyper.fc_after_cnn1d_layers) < 1:
-            print('Adding FC with less than one layer is not possible')
-            sys.exit(1)
+        if hyper.fc_after_cnn1d_layers is None and hyper.graph_conv_channels is None:
+            print('Attention: Neither graph nor FC layers are added after 2D CNN.')
+
+        if hyper.fc_after_cnn1d_layers is not None and hyper.graph_conv_channels is not None:
+            print('Incompatible hyperparameter configuration: Can not add both graph and fc layers after 2D CNN.')
+            sys.exit(-1)
+
+        if hyper.graph_conv_channels is not None and hyper.global_attention_pool_channels is None:
+            print('Can not used graph conv layers without an aggregation via at least one global attention pool layer.')
+            sys.exit(-1)
 
         input = tf.keras.Input(shape=(input_shape[0], input_shape[1], 1), name="Input0")
         layer_properties_2d = list(zip(hyper.cnn2d_layers, hyper.cnn2d_kernel_length, hyper.cnn2d_strides))
-
-
 
         # creating CNN encoder for sensor data
         for i in range(len(layer_properties_2d)):
@@ -600,7 +604,7 @@ class CNN2D(NN):
         x = tf.keras.layers.Dropout(rate=hyper.dropout_rate)(x)
 
         if hyper.fc_after_cnn1d_layers is not None:
-            print('Adding FC layers')
+            print('Adding FC layers after 2D CNN. ')
 
             x = tf.keras.layers.Flatten()(x)
             last_layer_size = 0
@@ -612,6 +616,9 @@ class CNN2D(NN):
                 last_layer_size = num_units
 
             x = tf.keras.layers.Reshape((last_layer_size, 1))(x)
+
+        elif hyper.graph_conv_channels is not None:
+            pass
 
         output = x
 

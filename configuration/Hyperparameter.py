@@ -39,7 +39,12 @@ class Hyperparameters:
         self.cnn2d_kernel_length = None
         self.cnn2d_strides = None
 
+        # FC Layers after convolution layers, also used in cnn2d
         self.fc_after_cnn1d_layers = None
+
+        # Alternative aggregation using graph layers after cnn2d instead of fc layers
+        self.graph_conv_channels = None
+        self.global_attention_pool_channels = None
 
         self.lstm_layers = None
 
@@ -109,6 +114,15 @@ class Hyperparameters:
             fc_layer = data.get('fc_after_cnn1d_layers')
             if fc_layer is not None and len(fc_layer) > 0:
                 self.fc_after_cnn1d_layers = fc_layer
+
+            graph_conv_channels = data.get('graph_conv_channels')
+            global_attention_pool_channels = data.get('global_attention_pool_channels')
+
+            if graph_conv_channels is not None and len(graph_conv_channels) > 0:
+                self.graph_conv_channels = graph_conv_channels
+
+            if global_attention_pool_channels is not None and len(global_attention_pool_channels) > 0:
+                self.graph_conv_channels = global_attention_pool_channels
 
         if self.encoder_variant in ["cnn2d", "cnn2dwithaddinput"]:
             self.cnn2d_layers = data['cnn2d_layers']
