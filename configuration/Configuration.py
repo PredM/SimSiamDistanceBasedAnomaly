@@ -24,7 +24,7 @@ class BaselineConfiguration:
         self.baseline_temp_output_interval = -1
 
         self.baseline_use_relevant_only = False
-        self.baseline_algorithm = BaselineAlgorithm.FEATURE_BASED_ROCKET
+        self.baseline_algorithm = BaselineAlgorithm.DTW_WEIGHTING_NBR_FEATURES
 
         # Should the case base representation be based on a fitting to the full training dataset?
         # True = Fit representation using full training dataset / Default: False = Fit representation on case base only.
@@ -59,7 +59,7 @@ class GeneralConfiguration:
 
         # Path and file name to the specific model that should be used for testing and live classification
         # Folder where the models are stored is prepended below
-        self.filename_model_to_use = 'temp_snn_model_10-15_12-06-21_epoch-200'
+        self.filename_model_to_use = 'temp_snn_model_10-19_14-40-40_epoch-2100'
 
         ##
         # Debugging - Don't use for feature implementation
@@ -154,7 +154,7 @@ class ModelConfiguration:
 
         # Option to simulate a retrieval situation (during training) where only the weights of the
         # example from the case base/training data set are known:
-        self.use_same_feature_weights_for_unsimilar_pairs = True  # default: True
+        self.use_same_feature_weights_for_unsimilar_pairs = False  # default: True
 
         # Compares each time step of the encoded representation with each other time step
         # (instead of only comparing the ones with the same indices)
@@ -191,7 +191,7 @@ class TrainingConfiguration:
         self.use_margin_reduction_based_on_label_sim = False  # default: False
 
         self.use_early_stopping = True
-        self.early_stopping_epochs_limit = 250
+        self.early_stopping_epochs_limit = 300
         self.early_stopping_loss_minimum = 0.03  # Default: -1.0 (no effect), CNN2D_with_add_Input: BCE:0.03, MSE:0.01
 
         # Parameter to control if and when a test is conducted through training
@@ -243,7 +243,7 @@ class InferenceConfiguration:
         # If enabled the similarity assessment of the test dataset to the training datset will be split into chunks
         # Possibly necessary due to VRam limitation
         self.split_sim_calculation = False  # default False
-        self.sim_calculation_batch_size = 256
+        self.sim_calculation_batch_size = 64
 
         # If enabled the model is printed as model.png
         self.print_model = False
@@ -404,7 +404,7 @@ class StaticConfiguration:
         # Default prefix for main dataset
         self.data_folder_prefix = '../data/'
         # Prefix for the 3w dataset
-        #self.dataset_folder_prefix = '../data/additional_datasets/3w_dataset/'
+        # self.data_folder_prefix = '../data/additional_datasets/3w_dataset/'
 
         # Folder where the trained models are saved to during learning process
         self.models_folder = self.data_folder_prefix + 'trained_models/'

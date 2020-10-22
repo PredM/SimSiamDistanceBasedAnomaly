@@ -101,6 +101,7 @@ class TSFreshRepresentation(Representation):
         print('Extraction finished at:', datetime.datetime.now())
         print('Extracted features (unfiltered): ', extracted_features.shape)
 
+        print('Saving unfiltered to:', self.dataset.dataset_folder + self.config.ts_fresh_filtered_file)
         extracted_features.to_pickle(self.dataset.dataset_folder + self.config.ts_fresh_unfiltered_file)
 
         # Remove NANs
@@ -109,8 +110,9 @@ class TSFreshRepresentation(Representation):
 
         filtered = tsfresh.select_features(extracted_features, y_train_strings)
         print('Filtered features size: ', filtered.shape)
-        print('Filtered features: ', filtered)
+        # print('Filtered features: ', filtered)
 
+        print('Saving filtered to:', self.dataset.dataset_folder + self.config.ts_fresh_filtered_file)
         filtered.to_pickle(self.dataset.dataset_folder + self.config.ts_fresh_filtered_file)
 
     # FIXME Wird das noch benötigt?

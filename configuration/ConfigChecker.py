@@ -102,7 +102,7 @@ class ConfigChecker:
         if not self.config.split_sim_calculation and not self.training:
             self.list_of_warnings.append(['Batchwise similarity calculation is disabled. ',
                                           'If any errors occur, the first step should be to try and activate split_sim_calculation or lower sim_calculation_batch_size.',
-                                          'ESPECIALLY WHEN USING ENCODER OF TYPE "cnn2dwithaddinput".'])
+                                          'ESPECIALLY WHEN USING ENCODER OF TYPE "cnn2dwithaddinput" or "typebased".'])
 
         ignored_by_ffnn = [self.config.normalize_snn_encoder_output,
                            self.config.use_time_step_wise_simple_similarity, ]

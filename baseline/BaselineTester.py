@@ -110,7 +110,7 @@ def execute_baseline_test(config, dataset, start_index, end_index):
         representation = RocketRepresentation(config, dataset)
 
     if representation is not None:
-            representation.load()
+        representation.load()
 
     start_time = perf_counter()
 
@@ -196,6 +196,12 @@ def main():
     print('Number of parallel threads:', config.max_parallel_cores)
     print('Case Based used for inference:', config.case_base_for_inference)
     print()
+
+    if dataset.is_third_party_dataset and (
+            config.baseline_use_relevant_only or config.baseline_algorithm == BaselineAlgorithm.FEATURE_BASED_TS_FRESH):
+        raise ValueError(
+            'Third party datasets can not be used in combination with feature restriction, '
+            'e.g. reduction to relevant feature or the ts fresh algorithm.')
 
     execute_baseline_test(config, dataset, start_index, end_index)
 

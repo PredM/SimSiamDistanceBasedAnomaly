@@ -150,13 +150,15 @@ class Evaluator:
         current_tp = self.get_nbr_correctly_classified()
 
         # create output for this example
+        measure_string = 'Distance:' if sims_are_distance_values else 'Similarity:'
+
         example_results = [
             ['Example:', nbr_tested_as_string + '/' + str(self.num_test_examples)],
             ['Correctly classified:', str(current_tp) + '/' + nbr_tested_as_string],
             ['Correctly classified %:', (current_tp / self.get_nbr_examples_tested()) * 100.0],
             ['Classified as:', max_sim_class],
             ['Correct class:', true_class],
-            ['Similarity:', max_sim],
+            [measure_string, max_sim],
 
         ]
         if not self.dataset.is_third_party_dataset:
@@ -170,19 +172,20 @@ class Evaluator:
         for row in example_results:
             print("{: <25} {: <25}".format(*row))
         print()
-        self.knn_output(sims, nearest_neighbors_ranked_indices, nbr_tested_as_string)
+        self.knn_output(sims, nearest_neighbors_ranked_indices, nbr_tested_as_string, sims_are_distance_values)
         print()
         print()
 
-    def knn_output(self, sims, ranking_nearest_neighbors_idx, nbr_tested_example):
+    def knn_output(self, sims, ranking_nearest_neighbors_idx, nbr_tested_example, sims_are_distance_values):
         knn_results = []
         for i in range(self.k_of_knn):
             index = ranking_nearest_neighbors_idx[i]
             c = self.dataset.y_train_strings[index]
             c = c if len(c) < 40 else c[0:40] + "..."
 
+            measure_string = 'Dis: ' if sims_are_distance_values else 'Sim: '
             row = [i + 1, 'Class: ' + c,
-                   'Sim: ' + str(round(sims[index], 6)),
+                   measure_string + str(round(sims[index], 6)),
                    'Case ID: ' + str(index),
                    ]
 
