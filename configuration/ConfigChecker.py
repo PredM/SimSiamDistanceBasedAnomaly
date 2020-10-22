@@ -132,6 +132,20 @@ class ConfigChecker:
                              'config.overwrite_input_data_with_baseline_representation can\'t be used without a dummy encoder. \n'
                              'Other encoders do not support this option hence it must be disabled.')
 
+            incompatible_with_3rd_party = [
+                self.config.use_additional_strict_masking_for_attribute_sim,
+                self.config.use_same_feature_weights_for_unsimilar_pairs,
+                self.config.useFeatureWeightedSimilarity,
+                self.config.use_same_feature_weights_for_unsimilar_pairs,
+                self.config.use_sim_value_for_neg_pair,
+                architecture.hyper.encoder_variant in ['cnn2dwithaddinput', 'typebasedencoder']
+            ]
+            one_true = any(incompatible_with_3rd_party)
+
+            ConfigChecker.implication(architecture.dataset.is_third_party_dataset, not one_true,
+                                      'At least one configured feature is incompatible with 3rd party datasets.\n'
+                                      'Current dataset folder: ' + self.config.data_folder_prefix)
+
         elif self.architecture_type == 'cbs':
             architecture: CBS = architecture
 

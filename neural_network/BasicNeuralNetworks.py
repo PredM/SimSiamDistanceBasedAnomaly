@@ -548,6 +548,8 @@ class CNN2D(NN):
         input = tf.keras.Input(shape=(input_shape[0], input_shape[1], 1), name="Input0")
         layer_properties_2d = list(zip(hyper.cnn2d_layers, hyper.cnn2d_kernel_length, hyper.cnn2d_strides))
 
+
+
         # creating CNN encoder for sensor data
         for i in range(len(layer_properties_2d)):
             num_filter, filter_size, stride = layer_properties_2d[i][0], layer_properties_2d[i][1], \
@@ -559,7 +561,7 @@ class CNN2D(NN):
                                                      kernel_size=(filter_size), strides=stride, input_shape=input.shape)
 
                 # Added 1D-Conv Layer to provide information across time steps in the first layer
-                conv_layer1d = tf.keras.layers.Conv1D(filters=61, padding='VALID', kernel_size=1, strides=1)
+                conv_layer1d = tf.keras.layers.Conv1D(filters=input_shape[1], padding='VALID', kernel_size=1, strides=1)
                 # inp = tf.squeeze(input)
                 reshape = tf.keras.layers.Reshape((input_shape[0], input_shape[1]))
                 inp = reshape(input)
