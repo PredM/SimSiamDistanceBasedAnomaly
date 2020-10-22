@@ -307,17 +307,13 @@ def main():
 
         gss = GroupShuffleSplit(n_splits=1, test_size=config.test_split_size, random_state=config.random_seed)
 
-        for train_idx, test_idx in gss.split(examples_array, labels_array, failure_times_array_groups):
-            print("TRAIN:", train_idx, "TEST:", test_idx)
-        # split_idx in gss.split(examples_array, labels_array, failure_times_array_groups)
-        # train_idx = split_idx[0]
-        # test_idx = split_idx[1]
-        # print("train_idx:",train_idx)
+        train_indices, test_indices = list(gss.split(examples_array, labels_array, failure_times_array_groups))[0]
 
-        x_train, x_test = examples_array[train_idx], examples_array[test_idx]
-        y_train, y_test = labels_array[train_idx], labels_array[test_idx]
-        failure_times_train, failure_times_test = failure_times_array[train_idx], failure_times_array[test_idx]
-        window_times_train, window_times_test = window_times_array[train_idx], window_times_array[test_idx]
+        x_train, y_train = examples_array[train_indices], labels_array[train_indices]
+        x_test, y_test = examples_array[test_indices], labels_array[test_indices]
+
+        failure_times_train, failure_times_test = failure_times_array[train_indices], failure_times_array[test_indices]
+        window_times_train, window_times_test = window_times_array[train_indices], window_times_array[test_indices]
 
         print("X_train: ", x_train.shape, " X_test: ", x_test.shape)
         print("Y_train: ", y_train.shape, " Y_train: ", y_test.shape)
