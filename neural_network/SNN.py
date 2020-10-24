@@ -5,7 +5,7 @@ import tensorflow as tf
 from configuration.Configuration import Configuration
 from configuration.Hyperparameter import Hyperparameters
 from neural_network.BasicNeuralNetworks import CNN, RNN, FFNN, CNN2dWithAddInput, \
-    CNN2D, TypeBasedEncoder, DUMMY, FFNN2
+    CNN2D, TypeBasedEncoder, DUMMY, FFNN2, GraphCNN2D
 from neural_network.Dataset import FullDataset
 from neural_network.SimpleSimilarityMeasure import SimpleSimilarityMeasure
 
@@ -68,7 +68,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
 
     # Reshapes the standard import shape (examples x ts_length x ts_depth) if needed for the used encoder variant
     def reshape(self, input_pairs):
-        if self.hyper.encoder_variant in ['cnn2dwithaddinput', 'cnn2d']:
+        if self.hyper.encoder_variant in ['cnn2dwithaddinput', 'cnn2d', 'graphcnn2d']:
             input_pairs = np.reshape(input_pairs, (input_pairs.shape[0], input_pairs.shape[1], input_pairs.shape[2], 1))
         return input_pairs
 
@@ -367,6 +367,8 @@ class SimpleSNN(AbstractSimilarityMeasure):
             self.encoder = CNN(self.hyper, input_shape_encoder)
         elif self.hyper.encoder_variant == 'cnn2d':
             self.encoder = CNN2D(self.hyper, input_shape_encoder)
+        elif self.hyper.encoder_variant == 'graphcnn2d':
+            self.encoder = GraphCNN2D(self.hyper, input_shape_encoder)
         elif self.hyper.encoder_variant == 'typebasedencoder':
             self.encoder = TypeBasedEncoder(self.hyper, input_shape_encoder, self.config.type_based_groups)
         elif self.hyper.encoder_variant == 'cnn2dwithaddinput':
