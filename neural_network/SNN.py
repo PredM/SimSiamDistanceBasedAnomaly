@@ -245,10 +245,14 @@ class SimpleSNN(AbstractSimilarityMeasure):
     # Called by get_sims or get_sims_multiple_batches for a single example or by an optimizer directly
     @tf.function
     def get_sims_for_batch(self, batch):
+
+        # some encoder variants require special / additional input
+        batch = self.add_input(batch)
+
         # calculate the output of the encoder for the examples in the batch
         context_vectors = self.encoder.model(batch, training=self.training)
 
-        if self.hyper.encoder_variant == 'cnn2dwithaddinput':
+        if self.hyper.encoder_variant in ['cnn2dwithaddinput', 'graphcnn2d']:
             input_size = batch[0].shape[0] // 2
         else:
             input_size = batch.shape[0] // 2
@@ -257,6 +261,19 @@ class SimpleSNN(AbstractSimilarityMeasure):
                                tf.range(input_size, dtype=tf.int32), back_prop=True, dtype=tf.float32)
 
         return sims_batch
+
+    @tf.function
+    # TODO CLEAN UP
+    #  - Only if graph cnn2d
+    #  - Add return of input size
+    #  - Maybe add with add input stuff here? Check necessary effort
+    #  - find better name
+    #  - load predefined matrix - from where? config?
+    #  - check if training (and inference) works (not same loss?)
+    def add_input(self, batch):
+        x = np.ones(shape=(61, 61))
+
+        return [batch, x]
 
     @tf.function
     def get_sim_pair(self, context_vectors, pair_index):
@@ -285,6 +302,11 @@ class SimpleSNN(AbstractSimilarityMeasure):
                 w = context_vectors[3][2 * pair_index, :]
                 # debug output:
                 # tf.print("context_vectors[3][2 * pair_index, :]", context_vectors[4][2 * pair_index, :])
+
+        # TODO CLEAN UP
+        elif self.encoder.hyper.encoder_variant == 'graphcnn2d':
+            a = context_vectors[2 * pair_index, :]
+            b = context_vectors[2 * pair_index + 1, :]
 
         else:
             a = context_vectors[2 * pair_index, :, :]

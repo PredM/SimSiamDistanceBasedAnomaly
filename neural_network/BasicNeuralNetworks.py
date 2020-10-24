@@ -630,6 +630,7 @@ class GraphCNN2D(CNN2D):
 
     def type_specific_layer_creation(self, input, output):
 
+        # TODO Add comments, clean up, add todo for discussion wheter timestamps or features should be used as notes
         if self.hyper.graph_conv_channels is None:
             print('Number of channels of graph conv layers is not defined in the hyperparameters.')
             sys.exit(-1)
@@ -637,18 +638,27 @@ class GraphCNN2D(CNN2D):
             print('Can not used graph conv layers without an aggregation via at least one global attention pool layer.')
             sys.exit(-1)
         else:
-            adj_matrix = tf.keras.layers.Input(shape=(self.input_shape[1], self.input_shape[1]))
+            adj_matrix = tf.keras.layers.Input(shape=(self.input_shape[1], ))
 
             print('Adding graph layers after 2D CNN.')
 
-            print(output.shape)
+            print('Shape of output before transpose:', output.shape)
+
+            # Input of Graph Conv layer: ([batch], Nodes, Features)
+            # Here: Nodes = Attributes (univariate time series), Features = Time steps
+            # Shape of output: ([batch], Time steps, Attributes, so we must "switch" the second and third dimension
+            output = tf.transpose(output, perm=[0, 2, 1])
+            print('Shape of output after transpose:', output.shape)
+
             for channels in self.hyper.graph_conv_channels:
                 output = spektral.layers.GraphConv(channels=channels, activation='relu')([output, adj_matrix])
-                print(output.shape)
+
+            print('Shape after Graph Conv Layers:', output.shape)
 
             for channels in self.hyper.global_attention_pool_channels:
                 output = spektral.layers.GlobalAttentionPool(channels)(output)
-                print(output.shape)
+
+            print('Shape after Global Attention Layers:', output.shape)
 
             input = [input, adj_matrix]
         return input, output
