@@ -90,6 +90,10 @@ class FullDataset(Dataset):
         self.df_label_sim_failuremode = None
         self.df_label_sim_condition = None
 
+        # np array containing the adjacency information of features used by the graph cnn2d encoder
+        # loaded from config.graph_adjacency_matrix_file
+        self.graph_adjacency_matrix = None
+
         self.is_third_party_dataset = True if self.config.data_folder_prefix != '../data/' else False
 
     def load_files(self):
@@ -179,6 +183,7 @@ class FullDataset(Dataset):
             self.failure_times_count = np.delete(failure_times_count, idx, 0)
 
             self.load_sim_matrices()
+            self.load_adjacency_matrix()
 
         self.calculate_maskings()
 
@@ -202,15 +207,33 @@ class FullDataset(Dataset):
 
         # load a matrix with pair-wise similarities between labels in respect
         # to different metrics
-        self.df_label_sim_failuremode = pd.read_csv(self.dataset_folder + 'FailureMode_Sim_Matrix.csv', sep=';',
-                                                    index_col=0)
+        self.df_label_sim_failuremode = pd.read_csv(self.config.failure_mode_sim_matrix_file, sep=';', index_col=0)
         self.df_label_sim_failuremode.index = self.df_label_sim_failuremode.index.str.replace('\'', '')
-        self.df_label_sim_localization = pd.read_csv(self.dataset_folder + 'Lokalization_Sim_Matrix.csv', sep=';',
-                                                     index_col=0)
+
+        self.df_label_sim_localization = pd.read_csv(self.config.localisation_sim_matrix_file, sep=';', index_col=0)
         self.df_label_sim_localization.index = self.df_label_sim_localization.index.str.replace('\'', '')
-        self.df_label_sim_condition = pd.read_csv(self.dataset_folder + 'Condition_Sim_Matrix.csv', sep=';',
-                                                  index_col=0)
+
+        self.df_label_sim_condition = pd.read_csv(self.config.condition_sim_matrix_file, sep=';', index_col=0)
         self.df_label_sim_condition.index = self.df_label_sim_condition.index.str.replace('\'', '')
+
+    # TODO Test with actual matrix, especially the check with features array
+    def load_adjacency_matrix(self):
+        adj_matrix_df = pd.read_csv(self.config.graph_adjacency_matrix_file, sep=';', index_col=0)
+
+        col_values = adj_matrix_df.columns.values
+        index_values = adj_matrix_df.index.values
+
+        # if not np.array_equal(col_values, self.feature_names_all):
+        #     raise ValueError(
+        #         'Ordering of features in the adjacency matrix (columns) does not match the one in the dataset.')
+        #
+        # if not np.array_equal(index_values, self.feature_names_all):
+        #     raise ValueError(
+        #         'Ordering of features in the adjacency matrix (index) does not match the one in the dataset.')
+
+        self.graph_adjacency_matrix = adj_matrix_df.values.astype(dtype=np.float)
+
+
 
     def calculate_maskings(self):
         for case in self.classes_total:

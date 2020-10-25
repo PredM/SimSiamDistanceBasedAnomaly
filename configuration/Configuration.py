@@ -431,6 +431,14 @@ class StaticConfiguration:
         # File from which the case information should be loaded, used in dataset creation
         self.case_file = '../configuration/cases.csv'
 
+        # Custom measure sim matrices
+        self.condition_sim_matrix_file = self.training_data_folder + 'Condition_Sim_Matrix.csv'
+        self.failure_mode_sim_matrix_file = self.training_data_folder + 'FailureMode_Sim_Matrix.csv'
+        self.localisation_sim_matrix_file = self.training_data_folder + 'Localization_Sim_Matrix.csv'
+
+        # CSV file containing the adjacency information of features used by the graph cnn2d encoder
+        self.graph_adjacency_matrix_file = self.training_data_folder + 'adjacency_matrix.CSV'
+
         # TS Fresh feature files
         self.ts_fresh_filtered_file = 'ts_fresh_extracted_features_filtered.pkl'
         self.ts_fresh_unfiltered_file = 'ts_fresh_extracted_features_unfiltered.pkl'

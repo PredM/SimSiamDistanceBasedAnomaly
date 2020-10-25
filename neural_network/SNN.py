@@ -247,33 +247,33 @@ class SimpleSNN(AbstractSimilarityMeasure):
     def get_sims_for_batch(self, batch):
 
         # some encoder variants require special / additional input
-        batch = self.add_input(batch)
+        batch, examples_in_batch = self.input_extension(batch)
 
         # calculate the output of the encoder for the examples in the batch
         context_vectors = self.encoder.model(batch, training=self.training)
 
-        if self.hyper.encoder_variant in ['cnn2dwithaddinput', 'graphcnn2d']:
-            input_size = batch[0].shape[0] // 2
-        else:
-            input_size = batch.shape[0] // 2
-
         sims_batch = tf.map_fn(lambda pair_index: self.get_sim_pair(context_vectors, pair_index),
-                               tf.range(input_size, dtype=tf.int32), back_prop=True, dtype=tf.float32)
+                               tf.range(examples_in_batch, dtype=tf.int32), back_prop=True, dtype=tf.float32)
 
         return sims_batch
 
     @tf.function
-    # TODO CLEAN UP
-    #  - Only if graph cnn2d
-    #  - Add return of input size
+    # TODO
     #  - Maybe add with add input stuff here? Check necessary effort
-    #  - find better name
-    #  - load predefined matrix - from where? config?
     #  - check if training (and inference) works (not same loss?)
-    def add_input(self, batch):
-        x = np.ones(shape=(61, 61))
+    def input_extension(self, batch):
 
-        return [batch, x]
+        if self.hyper.encoder_variant == 'graphcnn2d':
+            examples_in_batch = batch[0].shape[0] // 2
+
+            return [batch, self.dataset.graph_adjacency_matrix], examples_in_batch
+
+        elif self.hyper.encoder_variant == 'cnn2dwithaddinput':
+            examples_in_batch = batch[0].shape[0] // 2
+            return batch, examples_in_batch
+        else:
+            examples_in_batch = batch.shape[0] // 2
+            return batch, examples_in_batch
 
     @tf.function
     def get_sim_pair(self, context_vectors, pair_index):
@@ -303,7 +303,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
                 # debug output:
                 # tf.print("context_vectors[3][2 * pair_index, :]", context_vectors[4][2 * pair_index, :])
 
-        # TODO CLEAN UP
+        # Results of this encoder are one dimensional: ([batch], features)
         elif self.encoder.hyper.encoder_variant == 'graphcnn2d':
             a = context_vectors[2 * pair_index, :]
             b = context_vectors[2 * pair_index + 1, :]

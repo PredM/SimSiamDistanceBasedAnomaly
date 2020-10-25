@@ -524,7 +524,10 @@ class CNN2D(NN):
 
         print('Creating CNN with 2d kernel encoder with an input shape: ', self.input_shape)
 
+        # Create basic 2d cnn layers
         input, output = self.layer_creation()
+
+        # Add additional layers based on configuration, e.g. fc layers
         input, output = self.type_specific_layer_creation(input, output)
 
         self.model = tf.keras.Model(inputs=input, outputs=output)
@@ -552,9 +555,6 @@ class CNN2D(NN):
     '''
 
     def layer_creation(self):
-        # TODO Clean up
-        # hyper = self.hyper
-        # input_shape = self.input_shape
 
         if len(self.hyper.cnn2d_layers) < 1:
             print('CNN encoder with less than one layer for 2d kernels is not possible')
@@ -628,19 +628,24 @@ class GraphCNN2D(CNN2D):
     def __init__(self, hyperparameters, input_shape):
         super().__init__(hyperparameters, input_shape)
 
+    # Overwrites the method from the base class so graph layers are added instead of fully connected ones
     def type_specific_layer_creation(self, input, output):
 
-        # TODO Add comments, clean up, add todo for discussion wheter timestamps or features should be used as notes
         if self.hyper.graph_conv_channels is None:
             print('Number of channels of graph conv layers is not defined in the hyperparameters.')
             sys.exit(-1)
+
         elif self.hyper.graph_conv_channels is not None and self.hyper.global_attention_pool_channels is None:
             print('Can not used graph conv layers without an aggregation via at least one global attention pool layer.')
             sys.exit(-1)
+
         else:
-            adj_matrix = tf.keras.layers.Input(shape=(self.input_shape[1], ))
 
             print('Adding graph layers after 2D CNN.')
+
+            # Define additional input over which the adjacency matrix is provided
+            # As shown here: https://graphneural.network/getting-started/
+            adj_matrix_input = tf.keras.layers.Input(shape=(self.input_shape[1], ))
 
             print('Shape of output before transpose:', output.shape)
 
@@ -651,7 +656,7 @@ class GraphCNN2D(CNN2D):
             print('Shape of output after transpose:', output.shape)
 
             for channels in self.hyper.graph_conv_channels:
-                output = spektral.layers.GraphConv(channels=channels, activation='relu')([output, adj_matrix])
+                output = spektral.layers.GraphConv(channels=channels, activation='relu')([output, adj_matrix_input])
 
             print('Shape after Graph Conv Layers:', output.shape)
 
@@ -660,7 +665,8 @@ class GraphCNN2D(CNN2D):
 
             print('Shape after Global Attention Layers:', output.shape)
 
-            input = [input, adj_matrix]
+            # Redefine input of madel as normal input + additional adjacency matrix input
+            input = [input, adj_matrix_input]
         return input, output
 
 
