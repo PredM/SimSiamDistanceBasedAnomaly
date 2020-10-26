@@ -257,23 +257,20 @@ class SimpleSNN(AbstractSimilarityMeasure):
 
         return sims_batch
 
-    @tf.function
     # TODO
     #  - Maybe add with add input stuff here? Check necessary effort
-    #  - check if training (and inference) works (not same loss?)
     def input_extension(self, batch):
 
         if self.hyper.encoder_variant == 'graphcnn2d':
-            examples_in_batch = batch[0].shape[0] // 2
-
-            return [batch, self.dataset.graph_adjacency_matrix], examples_in_batch
+            examples_in_batch = batch.shape[0] // 2
+            batch = [batch, self.dataset.graph_adjacency_matrix]
 
         elif self.hyper.encoder_variant == 'cnn2dwithaddinput':
             examples_in_batch = batch[0].shape[0] // 2
-            return batch, examples_in_batch
         else:
             examples_in_batch = batch.shape[0] // 2
-            return batch, examples_in_batch
+
+        return batch, examples_in_batch
 
     @tf.function
     def get_sim_pair(self, context_vectors, pair_index):

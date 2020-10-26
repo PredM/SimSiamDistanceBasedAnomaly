@@ -216,24 +216,21 @@ class FullDataset(Dataset):
         self.df_label_sim_condition = pd.read_csv(self.config.condition_sim_matrix_file, sep=';', index_col=0)
         self.df_label_sim_condition.index = self.df_label_sim_condition.index.str.replace('\'', '')
 
-    # TODO Test with actual matrix, especially the check with features array
     def load_adjacency_matrix(self):
         adj_matrix_df = pd.read_csv(self.config.graph_adjacency_matrix_file, sep=';', index_col=0)
 
         col_values = adj_matrix_df.columns.values
         index_values = adj_matrix_df.index.values
 
-        # if not np.array_equal(col_values, self.feature_names_all):
-        #     raise ValueError(
-        #         'Ordering of features in the adjacency matrix (columns) does not match the one in the dataset.')
-        #
-        # if not np.array_equal(index_values, self.feature_names_all):
-        #     raise ValueError(
-        #         'Ordering of features in the adjacency matrix (index) does not match the one in the dataset.')
+        if not np.array_equal(col_values, self.feature_names_all):
+            raise ValueError(
+                'Ordering of features in the adjacency matrix (columns) does not match the one in the dataset.')
+
+        if not np.array_equal(index_values, self.feature_names_all):
+            raise ValueError(
+                'Ordering of features in the adjacency matrix (index) does not match the one in the dataset.')
 
         self.graph_adjacency_matrix = adj_matrix_df.values.astype(dtype=np.float)
-
-
 
     def calculate_maskings(self):
         for case in self.classes_total:

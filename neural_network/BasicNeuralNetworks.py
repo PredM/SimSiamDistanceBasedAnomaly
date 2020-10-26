@@ -38,8 +38,7 @@ class NN:
         if self.model is None:
             raise AttributeError('Model not initialised. Can not load weights.')
 
-        if type(self) == CNN or type(self) == RNN or type(self) == CNN2dWithAddInput or type(self) == CNN2D \
-                or type(self) == DUMMY or type(self) == TypeBasedEncoder:
+        if type(self) in [CNN, RNN, CNN2D, CNN2dWithAddInput, GraphCNN2D, TypeBasedEncoder, DUMMY]:
             prefix = 'encoder'
         elif type(self) == FFNN or type(self) == FFNN2:
             prefix = 'ffnn'
@@ -645,7 +644,7 @@ class GraphCNN2D(CNN2D):
 
             # Define additional input over which the adjacency matrix is provided
             # As shown here: https://graphneural.network/getting-started/
-            adj_matrix_input = tf.keras.layers.Input(shape=(self.input_shape[1], ))
+            adj_matrix_input = tf.keras.layers.Input(shape=(self.input_shape[1],))
 
             print('Shape of output before transpose:', output.shape)
 
