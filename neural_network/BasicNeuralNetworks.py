@@ -640,29 +640,29 @@ class GraphCNN2D(CNN2D):
 
         else:
 
-            print('Adding graph layers after 2D CNN.')
+            # print('Adding graph layers after 2D CNN.')
 
             # Define additional input over which the adjacency matrix is provided
-            # As shown here: https://graphneural.network/getting-started/
+            # As shown here: https://graphneural.network/getting-started/, "," is necessary
             adj_matrix_input = tf.keras.layers.Input(shape=(self.input_shape[1],))
 
-            print('Shape of output before transpose:', output.shape)
+            # print('Shape of output before transpose:', output.shape)
 
             # Input of Graph Conv layer: ([batch], Nodes, Features)
             # Here: Nodes = Attributes (univariate time series), Features = Time steps
             # Shape of output: ([batch], Time steps, Attributes, so we must "switch" the second and third dimension
             output = tf.transpose(output, perm=[0, 2, 1])
-            print('Shape of output after transpose:', output.shape)
+            # print('Shape of output after transpose:', output.shape)
 
             for channels in self.hyper.graph_conv_channels:
                 output = spektral.layers.GraphConv(channels=channels, activation='relu')([output, adj_matrix_input])
 
-            print('Shape after Graph Conv Layers:', output.shape)
+            # print('Shape after Graph Conv Layers:', output.shape)
 
             for channels in self.hyper.global_attention_pool_channels:
                 output = spektral.layers.GlobalAttentionPool(channels)(output)
 
-            print('Shape after Global Attention Layers:', output.shape)
+            # print('Shape after Global Attention Layers:', output.shape)
 
             # Redefine input of madel as normal input + additional adjacency matrix input
             input = [input, adj_matrix_input]
