@@ -1,6 +1,7 @@
 import sys
 from os import listdir, path
 
+import spektral
 import tensorflow as tf
 
 from configuration.Hyperparameter import Hyperparameters
@@ -37,8 +38,7 @@ class NN:
         if self.model is None:
             raise AttributeError('Model not initialised. Can not load weights.')
 
-        if type(self) == CNN or type(self) == RNN or type(self) == CNN2dWithAddInput or type(self) == CNN2D \
-                or type(self) == DUMMY or type(self) == TypeBasedEncoder:
+        if type(self) in [CNN, RNN, CNN2D, CNN2dWithAddInput, GraphCNN2D, TypeBasedEncoder, DUMMY]:
             prefix = 'encoder'
         elif type(self) == FFNN or type(self) == FFNN2:
             prefix = 'ffnn'
@@ -180,11 +180,12 @@ class RNN(NN):
             # Even though .LSTM should use cuDnn Kernel the .RNN is faster
             # Also a not yet fixable error occurs, which is why this could be the case
             if i == 0:
-                layer = tf.keras.layers.RNN(tf.keras.layers.LSTMCell(num_units), return_sequences=True, input_shape=self.input_shape)
-                #layer = tf.keras.layers.LSTM(units=num_units, return_sequences=True, input_shape=self.input_shape, use_bias=True)
+                layer = tf.keras.layers.RNN(tf.keras.layers.LSTMCell(num_units), return_sequences=True,
+                                            input_shape=self.input_shape)
+                # layer = tf.keras.layers.LSTM(units=num_units, return_sequences=True, input_shape=self.input_shape, use_bias=True)
             else:
                 layer = tf.keras.layers.RNN(tf.keras.layers.LSTMCell(num_units), return_sequences=True)
-                #layer = tf.keras.layers.LSTM(units=num_units, return_sequences=True, use_bias=True)
+                # layer = tf.keras.layers.LSTM(units=num_units, return_sequences=True, use_bias=True)
             model.add(layer)
 
         # add Batch Norm and Dropout Layers
@@ -351,7 +352,7 @@ class CNN2dWithAddInput(NN):
         '''
 
     def get_output_shape(self):
-        # output shape onyl from first output x
+        # output shape only from first output x
         return self.model.output_shape[0]
         # raise NotImplementedError('Must be added in order for ffnn version to work with this encoder')
 
@@ -522,33 +523,49 @@ class CNN2D(NN):
 
         print('Creating CNN with 2d kernel encoder with an input shape: ', self.input_shape)
 
-        input, output = self.layer_creation(self.hyper, self.input_shape)
+        # Create basic 2d cnn layers
+        input, output = self.layer_creation()
+
+        # Add additional layers based on configuration, e.g. fc layers
+        input, output = self.type_specific_layer_creation(input, output)
 
         self.model = tf.keras.Model(inputs=input, outputs=output)
+
+    def type_specific_layer_creation(self, input, output):
+
+        if self.hyper.fc_after_cnn1d_layers is None:
+            print('Attention: No FC layers are added after 2D CNN.')
+        else:
+            print('Adding FC layers after 2D CNN. ')
+
+            output = tf.keras.layers.Flatten()(output)
+
+            layers_fc = self.hyper.fc_after_cnn1d_layers.copy()
+            for num_units in layers_fc:
+                output = tf.keras.layers.BatchNormalization()(output)
+                output = tf.keras.layers.Dense(units=num_units, activation=tf.keras.activations.relu)(output)
+
+            output = tf.keras.layers.Reshape((layers_fc[-1], 1))(output)
+
+        return input, output
 
     '''
     Based on https://www.ijcai.org/proceedings/2019/0932.pdf
     '''
 
-    @staticmethod
-    def layer_creation(hyper: Hyperparameters, input_shape):
+    def layer_creation(self):
 
-        if len(hyper.cnn2d_layers) < 1:
+        if len(self.hyper.cnn2d_layers) < 1:
             print('CNN encoder with less than one layer for 2d kernels is not possible')
-            sys.exit(1)
+            sys.exit(-1)
 
-        if len(hyper.cnn_layers) < 1:
+        if len(self.hyper.cnn_layers) < 1:
             print('Attention: No 1d conv layer on top of 2d conv is used!')
-            # sys.exit(1)
 
-        if hyper.fc_after_cnn1d_layers is not None and len(hyper.fc_after_cnn1d_layers) < 1:
-            print('Adding FC with less than one layer is not possible')
-            sys.exit(1)
+        input = tf.keras.Input(shape=(self.input_shape[0], self.input_shape[1], 1), name="Input0")
 
-        input = tf.keras.Input(shape=(input_shape[0], input_shape[1], 1), name="Input0")
-        layer_properties_2d = list(zip(hyper.cnn2d_layers, hyper.cnn2d_kernel_length, hyper.cnn2d_strides))
-
-
+        layer_properties_2d = list(
+            zip(self.hyper.cnn2d_layers, self.hyper.cnn2d_kernel_length, self.hyper.cnn2d_strides))
 
         # creating CNN encoder for sensor data
         for i in range(len(layer_properties_2d)):
@@ -561,9 +578,10 @@ class CNN2D(NN):
                                                      kernel_size=(filter_size), strides=stride, input_shape=input.shape)
 
                 # Added 1D-Conv Layer to provide information across time steps in the first layer
-                conv_layer1d = tf.keras.layers.Conv1D(filters=input_shape[1], padding='VALID', kernel_size=1, strides=1)
+                conv_layer1d = tf.keras.layers.Conv1D(filters=self.input_shape[1], padding='VALID', kernel_size=1,
+                                                      strides=1)
                 # inp = tf.squeeze(input)
-                reshape = tf.keras.layers.Reshape((input_shape[0], input_shape[1]))
+                reshape = tf.keras.layers.Reshape((self.input_shape[0], self.input_shape[1]))
                 inp = reshape(input)
                 temp = conv_layer1d(inp)
                 temp = tf.expand_dims(temp, -1)
@@ -584,7 +602,7 @@ class CNN2D(NN):
         reshape = tf.keras.layers.Reshape((x.shape[1], x.shape[2]))
         x = reshape(x)
 
-        layer_properties_1d = list(zip(hyper.cnn_layers, hyper.cnn_kernel_length, hyper.cnn_strides))
+        layer_properties_1d = list(zip(self.hyper.cnn_layers, self.hyper.cnn_kernel_length, self.hyper.cnn_strides))
 
         # creating CNN encoder for sensor data
         for i in range(len(layer_properties_1d)):
@@ -597,24 +615,57 @@ class CNN2D(NN):
             x = tf.keras.layers.BatchNormalization()(x)
             x = tf.keras.layers.ReLU()(x)
 
-        x = tf.keras.layers.Dropout(rate=hyper.dropout_rate)(x)
-
-        if hyper.fc_after_cnn1d_layers is not None:
-            print('Adding FC layers')
-
-            x = tf.keras.layers.Flatten()(x)
-            last_layer_size = 0
-
-            layers_fc = hyper.fc_after_cnn1d_layers.copy()
-            for num_units in layers_fc:
-                x = tf.keras.layers.BatchNormalization()(x)
-                x = tf.keras.layers.Dense(units=num_units, activation=tf.keras.activations.relu)(x)
-                last_layer_size = num_units
-
-            x = tf.keras.layers.Reshape((last_layer_size, 1))(x)
+        x = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(x)
 
         output = x
 
+        return input, output
+
+
+class GraphCNN2D(CNN2D):
+
+    def __init__(self, hyperparameters, input_shape):
+        super().__init__(hyperparameters, input_shape)
+
+    # Overwrites the method from the base class so graph layers are added instead of fully connected ones
+    def type_specific_layer_creation(self, input, output):
+
+        if self.hyper.graph_conv_channels is None:
+            print('Number of channels of graph conv layers is not defined in the hyperparameters.')
+            sys.exit(-1)
+
+        elif self.hyper.graph_conv_channels is not None and self.hyper.global_attention_pool_channels is None:
+            print('Can not used graph conv layers without an aggregation via at least one global attention pool layer.')
+            sys.exit(-1)
+
+        else:
+
+            # print('Adding graph layers after 2D CNN.')
+
+            # Define additional input over which the adjacency matrix is provided
+            # As shown here: https://graphneural.network/getting-started/, "," is necessary
+            adj_matrix_input = tf.keras.layers.Input(shape=(self.input_shape[1],))
+
+            # print('Shape of output before transpose:', output.shape)
+
+            # Input of Graph Conv layer: ([batch], Nodes, Features)
+            # Here: Nodes = Attributes (univariate time series), Features = Time steps
+            # Shape of output: ([batch], Time steps, Attributes, so we must "switch" the second and third dimension
+            output = tf.transpose(output, perm=[0, 2, 1])
+            # print('Shape of output after transpose:', output.shape)
+
+            for channels in self.hyper.graph_conv_channels:
+                output = spektral.layers.GraphConv(channels=channels, activation='relu')([output, adj_matrix_input])
+
+            # print('Shape after Graph Conv Layers:', output.shape)
+
+            for channels in self.hyper.global_attention_pool_channels:
+                output = spektral.layers.GlobalAttentionPool(channels)(output)
+
+            # print('Shape after Global Attention Layers:', output.shape)
+
+            # Redefine input of madel as normal input + additional adjacency matrix input
+            input = [input, adj_matrix_input]
         return input, output
 
 

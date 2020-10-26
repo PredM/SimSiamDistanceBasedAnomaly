@@ -59,7 +59,7 @@ class GeneralConfiguration:
 
         # Path and file name to the specific model that should be used for testing and live classification
         # Folder where the models are stored is prepended below
-        self.filename_model_to_use = 'temp_snn_model_10-19_14-40-40_epoch-2100'
+        self.filename_model_to_use = 'temp_snn_model_10-26_14-41-24_epoch-600'
 
         ##
         # Debugging - Don't use for feature implementation
@@ -126,7 +126,7 @@ class ModelConfiguration:
         # If !use_individual_hyperparameters interpreted as a single json file, else as a folder
         # which contains json files named after the cases they should be used for
         # If no file with this name is present the 'default.json' Config will be used
-        self.hyper_file = self.hyper_file_folder + 'cnn2d.json'  # 'individual_hyperparameters_test'  #
+        self.hyper_file = self.hyper_file_folder + 'cnn2d_with_graph.json'  # 'individual_hyperparameters_test'  #
 
         ##
         # Various settings influencing the similarity calculation
@@ -242,8 +242,8 @@ class InferenceConfiguration:
 
         # If enabled the similarity assessment of the test dataset to the training datset will be split into chunks
         # Possibly necessary due to VRam limitation
-        self.split_sim_calculation = False  # default False
-        self.sim_calculation_batch_size = 64
+        self.split_sim_calculation = True  # default False
+        self.sim_calculation_batch_size = 128
 
         # If enabled the model is printed as model.png
         self.print_model = False
@@ -430,6 +430,14 @@ class StaticConfiguration:
 
         # File from which the case information should be loaded, used in dataset creation
         self.case_file = '../configuration/cases.csv'
+
+        # Custom measure sim matrices
+        self.condition_sim_matrix_file = self.training_data_folder + 'Condition_Sim_Matrix.csv'
+        self.failure_mode_sim_matrix_file = self.training_data_folder + 'FailureMode_Sim_Matrix.csv'
+        self.localisation_sim_matrix_file = self.training_data_folder + 'Localization_Sim_Matrix.csv'
+
+        # CSV file containing the adjacency information of features used by the graph cnn2d encoder
+        self.graph_adjacency_matrix_file = self.training_data_folder + 'adjacency_matrix.CSV'
 
         # TS Fresh feature files
         self.ts_fresh_filtered_file = 'ts_fresh_extracted_features_filtered.pkl'

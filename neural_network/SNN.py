@@ -5,7 +5,7 @@ import tensorflow as tf
 from configuration.Configuration import Configuration
 from configuration.Hyperparameter import Hyperparameters
 from neural_network.BasicNeuralNetworks import CNN, RNN, FFNN, CNN2dWithAddInput, \
-    CNN2D, TypeBasedEncoder, DUMMY, FFNN2
+    CNN2D, TypeBasedEncoder, DUMMY, FFNN2, GraphCNN2D
 from neural_network.Dataset import FullDataset
 from neural_network.SimpleSimilarityMeasure import SimpleSimilarityMeasure
 
@@ -68,7 +68,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
 
     # Reshapes the standard import shape (examples x ts_length x ts_depth) if needed for the used encoder variant
     def reshape(self, input_pairs):
-        if self.hyper.encoder_variant in ['cnn2dwithaddinput', 'cnn2d']:
+        if self.hyper.encoder_variant in ['cnn2dwithaddinput', 'cnn2d', 'graphcnn2d']:
             input_pairs = np.reshape(input_pairs, (input_pairs.shape[0], input_pairs.shape[1], input_pairs.shape[2], 1))
         return input_pairs
 
@@ -245,18 +245,32 @@ class SimpleSNN(AbstractSimilarityMeasure):
     # Called by get_sims or get_sims_multiple_batches for a single example or by an optimizer directly
     @tf.function
     def get_sims_for_batch(self, batch):
+
+        # some encoder variants require special / additional input
+        batch, examples_in_batch = self.input_extension(batch)
+
         # calculate the output of the encoder for the examples in the batch
         context_vectors = self.encoder.model(batch, training=self.training)
 
-        if self.hyper.encoder_variant == 'cnn2dwithaddinput':
-            input_size = batch[0].shape[0] // 2
-        else:
-            input_size = batch.shape[0] // 2
-
         sims_batch = tf.map_fn(lambda pair_index: self.get_sim_pair(context_vectors, pair_index),
-                               tf.range(input_size, dtype=tf.int32), back_prop=True, dtype=tf.float32)
+                               tf.range(examples_in_batch, dtype=tf.int32), back_prop=True, dtype=tf.float32)
 
         return sims_batch
+
+    # TODO
+    #  - Maybe add with add input stuff here? Check necessary effort
+    def input_extension(self, batch):
+
+        if self.hyper.encoder_variant == 'graphcnn2d':
+            examples_in_batch = batch.shape[0] // 2
+            batch = [batch, self.dataset.graph_adjacency_matrix]
+
+        elif self.hyper.encoder_variant == 'cnn2dwithaddinput':
+            examples_in_batch = batch[0].shape[0] // 2
+        else:
+            examples_in_batch = batch.shape[0] // 2
+
+        return batch, examples_in_batch
 
     @tf.function
     def get_sim_pair(self, context_vectors, pair_index):
@@ -285,6 +299,11 @@ class SimpleSNN(AbstractSimilarityMeasure):
                 w = context_vectors[3][2 * pair_index, :]
                 # debug output:
                 # tf.print("context_vectors[3][2 * pair_index, :]", context_vectors[4][2 * pair_index, :])
+
+        # Results of this encoder are one dimensional: ([batch], features)
+        elif self.encoder.hyper.encoder_variant == 'graphcnn2d':
+            a = context_vectors[2 * pair_index, :]
+            b = context_vectors[2 * pair_index + 1, :]
 
         else:
             a = context_vectors[2 * pair_index, :, :]
@@ -367,6 +386,8 @@ class SimpleSNN(AbstractSimilarityMeasure):
             self.encoder = CNN(self.hyper, input_shape_encoder)
         elif self.hyper.encoder_variant == 'cnn2d':
             self.encoder = CNN2D(self.hyper, input_shape_encoder)
+        elif self.hyper.encoder_variant == 'graphcnn2d':
+            self.encoder = GraphCNN2D(self.hyper, input_shape_encoder)
         elif self.hyper.encoder_variant == 'typebasedencoder':
             self.encoder = TypeBasedEncoder(self.hyper, input_shape_encoder, self.config.type_based_groups)
         elif self.hyper.encoder_variant == 'cnn2dwithaddinput':

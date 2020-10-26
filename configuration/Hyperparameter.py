@@ -9,7 +9,7 @@ class Hyperparameters:
         # Important: Variable names must match json file entries
         ##
 
-        self.encoder_variants = ['cnn', 'rnn', 'cnn2dwithaddinput', 'cnn2d', 'typebasedencoder', 'dummy']
+        self.encoder_variants = ['cnn', 'rnn', 'cnn2dwithaddinput', 'cnn2d', 'typebasedencoder', 'dummy', 'graphcnn2d']
         self.encoder_variant = None
 
         # Need to be changed after dataset was loaded
@@ -39,7 +39,12 @@ class Hyperparameters:
         self.cnn2d_kernel_length = None
         self.cnn2d_strides = None
 
+        # FC Layers after convolution layers, also used in cnn2d
         self.fc_after_cnn1d_layers = None
+
+        # Alternative aggregation using graph layers after cnn2d instead of fc layers
+        self.graph_conv_channels = None
+        self.global_attention_pool_channels = None
 
         self.lstm_layers = None
 
@@ -101,7 +106,7 @@ class Hyperparameters:
             self.tcn_layers = data['tcn_layers']
             self.tcn_kernel_length = data['tcn_kernel_length']
 
-        if self.encoder_variant in ['typebasedencoder', 'cnn', 'cnn2d', 'cnn2dwithaddinput']:
+        if self.encoder_variant in ['typebasedencoder', 'cnn', 'cnn2d', 'cnn2dwithaddinput', 'graphcnn2d']:
             self.cnn_layers = data['cnn_layers']
             self.cnn_kernel_length = data['cnn_kernel_length']
             self.cnn_strides = data['cnn_strides']
@@ -110,10 +115,21 @@ class Hyperparameters:
             if fc_layer is not None and len(fc_layer) > 0:
                 self.fc_after_cnn1d_layers = fc_layer
 
-        if self.encoder_variant in ["cnn2d", "cnn2dwithaddinput"]:
+        if self.encoder_variant in ["cnn2d", "cnn2dwithaddinput", "graphcnn2d"]:
             self.cnn2d_layers = data['cnn2d_layers']
             self.cnn2d_kernel_length = data['cnn2d_kernel_length']
             self.cnn2d_strides = data['cnn2d_strides']
+
+        if self.encoder_variant in ['graphcnn2d']:
+
+            graph_conv_channels = data.get('graph_conv_channels')
+            global_attention_pool_channels = data.get('global_attention_pool_channels')
+
+            if graph_conv_channels is not None and len(graph_conv_channels) > 0:
+                self.graph_conv_channels = graph_conv_channels
+
+            if global_attention_pool_channels is not None and len(global_attention_pool_channels) > 0:
+                self.global_attention_pool_channels = global_attention_pool_channels
 
         if self.encoder_variant in ["cnn2dwithaddinput"]:
             self.useAttributeWiseAggregation = data['useAttributeWiseAggregation']
