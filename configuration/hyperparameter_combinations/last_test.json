@@ -1,0 +1,54 @@
+{
+  "encoder_variant": "graphcnn2d",
+  "batch_size": 64,
+  "epochs": 400000,
+  "epochs_current": 0,
+  "learning_rate": 0.001,
+  "gradient_cap": 0,
+  "dropout_rate": 0.05,
+  "cnn_layers": [
+  ],
+  "cnn_kernel_length": [
+  ],
+  "cnn_strides": [
+  ],
+  "graph_conv_channels": [
+    32
+  ],
+  "global_attention_pool_channels": [
+    32
+  ],
+  "cnn2d_layers": [
+    128,
+    64,
+    5
+  ],
+  "cnn2d_kernel_length": [
+    [
+      5,
+      1
+    ],
+    [
+      5,
+      1
+    ],
+    [
+      1,
+      1
+    ]
+  ],
+  "cnn2d_strides": [
+    [
+      2,
+      1
+    ],
+    [
+      1,
+      1
+    ],
+    [
+      1,
+      1
+    ]
+  ]
+}
