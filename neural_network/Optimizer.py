@@ -189,7 +189,7 @@ class SNNOptimizer(Optimizer):
 
         if ArchitectureVariant.is_complex(self.config.architecture_variant):
             ffnn_file_name = '_'.join(['complex_sim', epoch_string]) + '.h5'
-            self.architecture.ffnn.model.save_weights(path + ffnn_file_name)
+            self.architecture.complex_sim_measure.model.save_weights(path + ffnn_file_name)
 
         loss = str(self.train_loss_results[-1].numpy())
 
@@ -357,6 +357,6 @@ class CBSOptimizer(Optimizer):
 
             if ArchitectureVariant.is_complex(self.config.architecture_variant):
                 ffnn_file_name = '_'.join(['complex_sim', epoch_string]) + '.h5'
-                group_handler.model.ffnn.model.save_weights(os.path.join(full_path, ffnn_file_name))
+                group_handler.model.complex_sim_measure.model.save_weights(os.path.join(full_path, ffnn_file_name))
 
         return dir_name

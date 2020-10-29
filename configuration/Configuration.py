@@ -107,7 +107,7 @@ class ModelConfiguration:
         # Only use euclidean_dis for TRAINING with contrastive loss
         self.simple_measure = SimpleSimilarityMeasure.ABS_MEAN
 
-        self.complex_measure = ComplexSimilarityMeasure.FFNN_NW
+        self.complex_measure = ComplexSimilarityMeasure.GRAPH_SIM
 
         ###
         # Hyperparameters
@@ -124,7 +124,7 @@ class ModelConfiguration:
         # If !use_individual_hyperparameters interpreted as a single json file, else as a folder
         # which contains json files named after the cases they should be used for
         # If no file with this name is present the 'default.json' Config will be used
-        self.hyper_file = self.hyper_file_folder + 'change_testing.json'  # 'individual_hyperparameters_test'  #
+        self.hyper_file = self.hyper_file_folder + 'cnn2d_with_graph-26-10.json'  # 'individual_hyperparameters_test'  #
 
         ##
         # Various settings influencing the similarity calculation

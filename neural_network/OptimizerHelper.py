@@ -27,7 +27,7 @@ class OptimizerHelper:
         with tf.GradientTape() as tape:
             # Get parameters of subnet and ffnn (if complex sim measure)
             if ArchitectureVariant.is_complex(self.config.architecture_variant):
-                trainable_params = self.model.ffnn.model.trainable_variables + \
+                trainable_params = self.model.complex_sim_measure.model.trainable_variables + \
                                    self.model.encoder.model.trainable_variables
             else:
                 trainable_params = self.model.encoder.model.trainable_variables

@@ -5,7 +5,7 @@ from configuration.Configuration import Configuration
 from configuration.Enums import ArchitectureVariant, ComplexSimilarityMeasure
 from configuration.Hyperparameter import Hyperparameters
 from neural_network.BasicNeuralNetworks import CNN, RNN, FFNN, CNN2dWithAddInput, \
-    CNN2D, TypeBasedEncoder, DUMMY, BaselineOverwriteSimilarity, GraphCNN2D
+    CNN2D, TypeBasedEncoder, DUMMY, BaselineOverwriteSimilarity, GraphCNN2D, GraphSimilarity
 from neural_network.Dataset import FullDataset
 from neural_network.SimpleSimilarityMeasure import SimpleSimilarityMeasure
 
@@ -254,7 +254,8 @@ class SimpleSNN(AbstractSimilarityMeasure):
         context_vectors = self.encoder.model(batch, training=self.training)
 
         sims_batch = tf.map_fn(lambda pair_index: self.get_sim_pair(context_vectors, pair_index),
-                               tf.range(examples_in_batch, dtype=tf.int32), back_prop=True, dtype=tf.float32)
+                               tf.range(examples_in_batch, dtype=tf.int32), back_prop=True,
+                               fn_output_signature=tf.float32)
 
         return sims_batch
 
@@ -426,18 +427,21 @@ class SimpleSNN(AbstractSimilarityMeasure):
             encoder_output_shape = self.encoder.get_output_shape()
 
             # TODO change to complex sim
-            if self.config.overwrite_input_data_with_baseline_representation:
-                input_shape_ffnn = (self.hyper.time_series_length,)
-                self.ffnn = BaselineOverwriteSimilarity(self.hyper, input_shape_ffnn)
-            else:
-                # Neural Warp
-                input_shape_ffnn = (encoder_output_shape[1] ** 2, encoder_output_shape[2] * 2)
-                self.ffnn = FFNN(self.hyper, input_shape_ffnn)
+            if self.config.complex_measure == ComplexSimilarityMeasure.BASELINE_OVERWRITE:
+                input_shape = (self.hyper.time_series_length,)
+                self.complex_sim_measure = BaselineOverwriteSimilarity(self.hyper, input_shape)
+            elif self.config.complex_measure == ComplexSimilarityMeasure.FFNN_NW:
+                input_shape = (encoder_output_shape[1] ** 2, encoder_output_shape[2] * 2)
+                self.complex_sim_measure = FFNN(self.hyper, input_shape)
+            elif self.config.complex_measure == ComplexSimilarityMeasure.GRAPH_SIM:
+                # FIXME change to correct implementation
+                input_shape = encoder_output_shape
+                self.complex_sim_measure = GraphSimilarity(self.hyper, input_shape)
 
-            self.ffnn.create_model()
+            self.complex_sim_measure.create_model()
 
             if not self.training and not for_cbs:
-                self.ffnn.load_model_weights(model_folder)
+                self.complex_sim_measure.load_model_weights(model_folder)
 
     def print_detailed_model_info(self):
         print('')
@@ -450,8 +454,8 @@ class SNN(SimpleSNN):
     def __init__(self, config, dataset, training, for_group_handler=False, group_id=''):
         super().__init__(config, dataset, training, for_group_handler, group_id)
 
-        # in addition to the simple snn version this one uses a feed forward neural net as sim measure
-        self.ffnn = None
+        # in addition to the simple snn version this one uses a neural network as sim measure
+        self.complex_sim_measure = None
 
         # load model only if init was not called by subclass, would otherwise be executed multiple times
         if type(self) is SNN:
@@ -485,12 +489,12 @@ class SNN(SimpleSNN):
             abs_distance_flattened = tf.keras.layers.Flatten()(abs_distance)
             abs_distance_flattened = tf.transpose(abs_distance_flattened)
             ffnn_input = abs_distance_flattened
-            ffnn = self.ffnn.model(ffnn_input, training=self.training)
+            ffnn_output = self.complex_sim_measure.model(ffnn_input, training=self.training)
             # tf.print(ffnn, "shape: ",tf.shape(ffnn))
-            ffnn = tf.squeeze(ffnn)
+            ffnn_output = tf.squeeze(ffnn_output)
             # tf.print(abs_distance_flattened)
             # sim = 1/(1+ffnn)
-            sim = ffnn
+            sim = ffnn_output
         elif self.config.complex_measure == ComplexSimilarityMeasure.FFNN_NW:
             # Neural Warp:
             a, b = self.transform_to_time_step_wise(a, b)
@@ -503,7 +507,7 @@ class SNN(SimpleSNN):
             ffnn_input = tf.expand_dims(ffnn_input, axis=0)
 
             # Predict the "relevance" of similarity between each time step
-            ffnn = self.ffnn.model(ffnn_input, training=self.training)
+            ffnn_output = self.complex_sim_measure.model(ffnn_input, training=self.training)
             # ffnn shape: [T*T, 1]
 
             # Calculate absolute distances between each time step
@@ -516,7 +520,7 @@ class SNN(SimpleSNN):
 
             # Scale / Weight (due to multiplication) the absolute distance of each time step combinations
             # with the predicted "weight" for each time step
-            warped_dists = tf.multiply(timestepwise_mean_abs_difference, ffnn)
+            warped_dists = tf.multiply(timestepwise_mean_abs_difference, ffnn_output)
 
             sim = tf.exp(-tf.reduce_mean(warped_dists))
 
@@ -532,7 +536,7 @@ class SNN(SimpleSNN):
         print('')
         self.encoder.print_model_info()
         print('')
-        self.ffnn.print_model_info()
+        self.complex_sim_measure.print_model_info()
         print('')
 
 
@@ -585,10 +589,10 @@ class FastSimpleSNN(SimpleSNN):
         # dtype is necessary
         if type(self) == FastSimpleSNN:
             sims_batch = tf.map_fn(lambda pair_index: self.get_sim_pair(batch, pair_index),
-                                   tf.range(input_size, dtype=tf.int32), back_prop=True, dtype=tf.float32)
+                                   tf.range(input_size, dtype=tf.int32), back_prop=True, fn_output_signature=tf.float32)
         elif type(self) == FastSNN:
             sims_batch = tf.map_fn(lambda pair_index: self.get_sim_pair(self, batch, pair_index),
-                                   tf.range(input_size, dtype=tf.int32), back_prop=True, dtype=tf.float32)
+                                   tf.range(input_size, dtype=tf.int32), back_prop=True, fn_output_signature=tf.float32)
         else:
             raise ValueError('Unknown type')
 
@@ -601,7 +605,7 @@ class FastSNN(FastSimpleSNN):
         super().__init__(config, dataset, training, for_group_handler, group_id)
 
         # in addition to the simple snn version this one uses a feed forward neural net as sim measure
-        self.ffnn = None
+        self.complex_sim_measure = None
 
         # load model only if init was not called by subclass, would otherwise be executed multiple times
         if type(self) is FastSNN:
@@ -616,5 +620,5 @@ class FastSNN(FastSimpleSNN):
     def print_detailed_model_info(self):
         print('')
         self.encoder.print_model_info()
-        self.ffnn.print_model_info()
+        self.complex_sim_measure.print_model_info()
         print('')
