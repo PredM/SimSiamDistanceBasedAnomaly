@@ -2,7 +2,7 @@ import json
 
 import pandas as pd
 
-from configuration.Enums import BatchSubsetType, LossFunction, BaselineAlgorithm
+from configuration.Enums import BatchSubsetType, LossFunction, BaselineAlgorithm, SimpleSimilarityMeasure
 
 
 ####
@@ -108,8 +108,7 @@ class ModelConfiguration:
 
         # Attention: Implementation expects a simple measure to return a similarity in the interval of [0,1]!
         # Only use euclidean_dis for TRAINING with contrastive loss
-        self.simple_measures = ['abs_mean', 'euclidean_sim', 'euclidean_dis', 'dot_product', 'cosine']
-        self.simple_measure = self.simple_measures[0]
+        self.simple_measure = SimpleSimilarityMeasure.ABS_MEAN
 
         ###
         # Hyperparameters
@@ -209,10 +208,6 @@ class TrainingConfiguration:
         # Use a custom similarity values instead of 0 for unequal / negative pairs during batch creation
         # These are based on the similarity matrices loaded in the dataset
         self.use_sim_value_for_neg_pair = False  # default: False
-
-        # Select whether the training should be continued from the checkpoint defined as 'filename_model_to_use'
-        # Currently only working for SNNs, not CBS
-        self.continue_training = False  # default: False
 
         # Defines how often loss is printed and checkpoints are saved during training
         self.output_interval = 100

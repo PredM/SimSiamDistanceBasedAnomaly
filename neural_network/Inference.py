@@ -4,6 +4,8 @@ import time
 
 import tensorflow as tf
 
+from configuration.Enums import SimpleSimilarityMeasure
+
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 # suppress debugging messages of TensorFlow
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
@@ -40,7 +42,7 @@ class Inference:
             # print("sims shape: ", sims.shape, " label shape: ", labels.shape, "self.dataset.x_test.shape", self.dataset.x_test.shape)
             # check similarities of all pairs and record the index of the closest training series
 
-            sims_are_distance_values = True if self.config.simple_measure in ['euclidean_dis'] else False
+            sims_are_distance_values = True if self.config.simple_measure in [SimpleSimilarityMeasure.EUCLIDEAN_DIS] else False
             self.evaluator.add_single_example_results(sims, idx_test, sims_are_distance_values)
 
         # inference finished

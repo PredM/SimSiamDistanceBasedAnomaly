@@ -1,6 +1,6 @@
 from case_based_similarity.CaseBasedSimilarity import CBS
 from configuration.Configuration import Configuration
-from configuration.Enums import LossFunction
+from configuration.Enums import LossFunction, SimpleSimilarityMeasure
 from neural_network.SNN import SimpleSNN
 
 
@@ -27,7 +27,7 @@ class ConfigChecker:
         # SNN
         ##
 
-        ConfigChecker.implication(self.config.simple_measure == 'euclidean_dis',
+        ConfigChecker.implication(self.config.simple_measure == SimpleSimilarityMeasure.EUCLIDEAN_DIS,
                                   self.config.type_of_loss_function in [LossFunction.TRIPLET_LOSS,
                                                                         LossFunction.CONSTRATIVE_LOSS],
                                   'euclidean_dis should only be used for constrative or triplet loss.')
@@ -38,7 +38,7 @@ class ConfigChecker:
                                   'Percentages for batch subsets must add up to 1.0')
 
         ConfigChecker.implication(self.config.type_of_loss_function == LossFunction.TRIPLET_LOSS,
-                                  self.config.simple_measure == 'euclidean_dis',
+                                  self.config.simple_measure == SimpleSimilarityMeasure.EUCLIDEAN_DIS,
                                   'The euclidean distance must be used for triplet loss (set config.simple_measure = \'euclidean_dis\')')
 
         ConfigChecker.implication(self.config.type_of_loss_function == LossFunction.TRIPLET_LOSS,

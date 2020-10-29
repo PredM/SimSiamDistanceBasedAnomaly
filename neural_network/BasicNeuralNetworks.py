@@ -640,10 +640,6 @@ class TypeBasedEncoder(NN):
 
             attribute_outputs.append(attribute_output)
 
-        # TODO
-        #  Discuss / Test: Does the operation make sense?
-        #  Or rather omit and concatinate only with axis=1 below -->  (# Examples, # Attributes * (depending on layer properties), # Units in last layer)
-
         # Merge the encoder outputs for each attribute back into a single tensor
         # Shape after concatenation: (# Examples, # Attributes, (depending on layer properties), # Units in last layer)
         output = tf.keras.layers.Concatenate(axis=1)(attribute_outputs)

@@ -70,16 +70,6 @@ class SNNOptimizer(Optimizer):
     def optimize(self):
         current_epoch = 0
 
-        if self.config.continue_training:
-            self.architecture.load_model(cont=True)
-            current_epoch = self.architecture.hyper.epochs_current
-
-            if current_epoch >= self.architecture.hyper.epochs:
-                print('Training already finished. If training should be continued'
-                      ' increase the number of epochs in the hyperparameter file of the safed model')
-            else:
-                print('Continuing the training at epoch', current_epoch)
-
         self.last_output_time = perf_counter()
 
         for epoch in range(current_epoch, self.architecture.hyper.epochs):
@@ -237,9 +227,6 @@ class CBSOptimizer(Optimizer):
     def optimize(self):
 
         current_epoch = 0
-
-        if self.config.continue_training:
-            raise NotImplementedError()
 
         self.last_output_time = perf_counter()
 
