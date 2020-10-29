@@ -9,6 +9,7 @@ import tensorflow as tf
 
 from case_based_similarity.CaseBasedSimilarity import CBS, CBSGroupHandler
 from configuration.Configuration import Configuration
+from configuration.Enums import ArchitectureVariant
 from configuration.Hyperparameter import Hyperparameters
 from neural_network.Dataset import FullDataset, CBSDataset
 from neural_network.Inference import Inference
@@ -186,8 +187,8 @@ class SNNOptimizer(Optimizer):
 
         self.architecture.encoder.model.save_weights(path + subnet_file_name)
 
-        if self.config.architecture_variant in ['standard_ffnn', 'fast_ffnn']:
-            ffnn_file_name = '_'.join(['ffnn', epoch_string]) + '.h5'
+        if ArchitectureVariant.is_complex(self.config.architecture_variant):
+            ffnn_file_name = '_'.join(['complex_sim', epoch_string]) + '.h5'
             self.architecture.ffnn.model.save_weights(path + ffnn_file_name)
 
         loss = str(self.train_loss_results[-1].numpy())
@@ -354,8 +355,8 @@ class CBSOptimizer(Optimizer):
             encoder_file_name = '_'.join(['encoder', group_hyper.encoder_variant, epoch_string]) + '.h5'
             group_handler.model.encoder.model.save_weights(os.path.join(full_path, encoder_file_name))
 
-            if self.config.architecture_variant in ['standard_ffnn', 'fast_ffnn']:
-                ffnn_file_name = '_'.join(['ffnn', epoch_string]) + '.h5'
+            if ArchitectureVariant.is_complex(self.config.architecture_variant):
+                ffnn_file_name = '_'.join(['complex_sim', epoch_string]) + '.h5'
                 group_handler.model.ffnn.model.save_weights(os.path.join(full_path, ffnn_file_name))
 
         return dir_name

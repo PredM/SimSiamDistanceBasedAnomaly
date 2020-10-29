@@ -27,19 +27,37 @@ class BaselineAlgorithm(Enum):
     FEATURE_BASED_ROCKET = 3
 
 
+class ArchitectureVariant(Enum):
+    # standard = classic snn behaviour, context vectors calculated each time, also multiple times for the example
+    # fast = encoding of case base only once, example also only once
+    # simple = a simple similarity measure is used to compare the encoder outputs, configure in config.simple_measure
+    # complex = a neural network is used to determine similarity between encodings, configured in config.complex_measure
+
+    STANDARD_SIMPLE = 0
+    FAST_SIMPLE = 1
+    STANDARD_COMPLEX = 2
+    FAST_COMPLEX = 3
+
+    @staticmethod
+    def is_simple(av):
+        return av in [ArchitectureVariant.STANDARD_SIMPLE, ArchitectureVariant.FAST_SIMPLE]
+
+    @staticmethod
+    def is_complex(av):
+        return not ArchitectureVariant.is_simple(av)
+
+    @staticmethod
+    def is_fast(av):
+        return av in [ArchitectureVariant.FAST_SIMPLE, ArchitectureVariant.FAST_COMPLEX]
+
+
 class SimpleSimilarityMeasure(Enum):
     ABS_MEAN = 0
     EUCLIDEAN_SIM = 1
     EUCLIDEAN_DIS = 2
 
 
-class ArchitectureVariant(Enum):
-    STANDARD_SIMPLE = 0
-    FAST_SIMPLE = 1
-    STANDARD_COMPLEX = 2
-    FAST_COMPLEX = 3
-
-
 class ComplexSimilarityMeasure(Enum):
     FFNN_NW = 0
-    GRAPH = 1
+    GRAPH_SIM = 1
+    BASELINE_OVERWRITE = 2

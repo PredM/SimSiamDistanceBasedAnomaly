@@ -2,7 +2,7 @@ import numpy as np
 import tensorflow as tf
 import tensorflow.keras.backend as K
 
-from configuration.Enums import LossFunction
+from configuration.Enums import LossFunction, ArchitectureVariant
 from neural_network.BatchComposer import BatchComposer, CbsBatchComposer
 
 
@@ -26,7 +26,7 @@ class OptimizerHelper:
     def update_single_model(self, model_input, true_similarities, query_classes=None):
         with tf.GradientTape() as tape:
             # Get parameters of subnet and ffnn (if complex sim measure)
-            if self.config.architecture_variant in ['standard_ffnn', 'fast_ffnn']:
+            if ArchitectureVariant.is_complex(self.config.architecture_variant):
                 trainable_params = self.model.ffnn.model.trainable_variables + \
                                    self.model.encoder.model.trainable_variables
             else:

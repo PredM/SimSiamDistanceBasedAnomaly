@@ -1,6 +1,6 @@
 from case_based_similarity.CaseBasedSimilarity import CBS
 from configuration.Configuration import Configuration
-from configuration.Enums import LossFunction, SimpleSimilarityMeasure
+from configuration.Enums import LossFunction, SimpleSimilarityMeasure, ArchitectureVariant
 from neural_network.SNN import SimpleSNN
 
 
@@ -88,7 +88,7 @@ class ConfigChecker:
 
         # Add new entries below this line
 
-        if self.training and 'fast' in self.config.architecture_variant:
+        if self.training and ArchitectureVariant.is_fast(self.config.architecture_variant):
             self.list_of_warnings.append([
                 'The fast version can only be used for inference.',
                 'The training routine will use the standard version, otherwise the encoding',
@@ -107,7 +107,7 @@ class ConfigChecker:
         ignored_by_ffnn = [self.config.normalize_snn_encoder_output,
                            self.config.use_time_step_wise_simple_similarity, ]
 
-        if 'ffnn' in self.config.architecture_variant and any(ignored_by_ffnn):
+        if ArchitectureVariant.is_complex(self.config.architecture_variant) and any(ignored_by_ffnn):
             self.list_of_warnings.append([
                 'FFNN architecture ignores the following configurations:',
                 'normalize_snn_encoder_output, use_time_step_wise_simple_similarity, use_time_step_matching_simple_similarity',
@@ -122,7 +122,7 @@ class ConfigChecker:
         if self.architecture_type == 'snn':
             architecture: SimpleSNN = architecture
 
-            self.implication('ffnn' in self.config.architecture_variant,
+            self.implication(ArchitectureVariant.is_complex(self.config.architecture_variant),
                              architecture.hyper.fc_after_cnn1d_layers is None,
                              'Additional fully connected layers shouldn\'t be used with FFNN. '
                              'fc_after_cnn1d_layers list should be empty.')
@@ -150,7 +150,7 @@ class ConfigChecker:
             architecture: CBS = architecture
 
             for gh in architecture.group_handlers:
-                self.implication('ffnn' in self.config.architecture_variant,
+                self.implication(ArchitectureVariant.is_complex(self.config.architecture_variant),
                                  gh.model.hyper.fc_after_cnn1d_layers is None,
                                  'Additional fully connected layers shouldn\'t be used with FFNN. '
                                  'fc_after_cnn1d_layers list should be empty.')

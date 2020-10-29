@@ -1,6 +1,7 @@
 import tensorflow as tf
 
-from configuration.Enums import SimpleSimilarityMeasure
+# "as SSM" is necessary due to duplicate class names
+from configuration.Enums import SimpleSimilarityMeasure as SSM
 
 
 class SimpleSimilarityMeasure:
@@ -25,9 +26,9 @@ class SimpleSimilarityMeasure:
         self.w = w
 
         switcher = {
-            SimpleSimilarityMeasure.ABS_MEAN: self.abs_mean,
-            SimpleSimilarityMeasure.EUCLIDEAN_SIM: self.euclidean_sim,
-            SimpleSimilarityMeasure.EUCLIDEAN_DIS: self.euclidean_dis,
+            SSM.ABS_MEAN: self.abs_mean,
+            SSM.EUCLIDEAN_SIM: self.euclidean_sim,
+            SSM.EUCLIDEAN_DIS: self.euclidean_dis,
         }
 
         # Get the function from switcher dictionary

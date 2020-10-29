@@ -1,6 +1,8 @@
 import os
 import sys
 
+from configuration.Enums import ArchitectureVariant
+
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 
 import matplotlib.pyplot as plt
@@ -29,7 +31,7 @@ if __name__ == '__main__':
     encode_test_data = False
 
     config = Configuration()
-    config.architecture_variant = config.architecture_variants[0]
+    config.architecture_variant = ArchitectureVariant.STANDARD_SIMPLE
     if config.case_base_for_inference:
         dataset = FullDataset(config.case_base_folder, config, training=False)
     else:
