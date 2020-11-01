@@ -1,11 +1,11 @@
 import numpy as np
-import numpy as np
 import tensorflow as tf
 
 from configuration.Configuration import Configuration
+from configuration.Enums import ArchitectureVariant, ComplexSimilarityMeasure
 from configuration.Hyperparameter import Hyperparameters
 from neural_network.BasicNeuralNetworks import CNN, RNN, FFNN, CNN2dWithAddInput, \
-    CNN2D, TypeBasedEncoder, DUMMY, FFNN2, GraphCNN2D
+    CNN2D, TypeBasedEncoder, DUMMY, BaselineOverwriteSimilarity, GraphCNN2D, GraphSimilarity
 from neural_network.Dataset import FullDataset
 from neural_network.SimpleSimilarityMeasure import SimpleSimilarityMeasure
 
@@ -13,21 +13,22 @@ from neural_network.SimpleSimilarityMeasure import SimpleSimilarityMeasure
 # initialises the correct SNN variant depending on the configuration
 def initialise_snn(config: Configuration, dataset, training, for_cbs=False, group_id=''):
     var = config.architecture_variant
+    av = ArchitectureVariant
 
-    if training and var.endswith('simple') or not training and var == 'standard_simple':
+    if training and av.is_simple(var) or not training and var == av.STANDARD_SIMPLE:
         print('Creating standard SNN with simple similarity measure: ', config.simple_measure)
         return SimpleSNN(config, dataset, training, for_cbs, group_id)
 
-    elif training and var.endswith('ffnn') or not training and var == 'standard_ffnn':
-        print('Creating standard SNN with FFNN similarity measure')
+    elif training and not av.is_simple(var) or not training and var == av.STANDARD_COMPLEX:
+        print('Creating standard SNN with complex similarity measure')
         return SNN(config, dataset, training, for_cbs, group_id)
 
-    elif not training and var == 'fast_simple':
+    elif not training and var == av.FAST_SIMPLE:
         print('Creating fast SNN with simple similarity measure')
         return FastSimpleSNN(config, dataset, training, for_cbs, group_id)
 
-    elif not training and var == 'fast_ffnn':
-        print('Creating fast SNN with FFNN similarity measure')
+    elif not training and var == av.FAST_COMPLEX:
+        print('Creating fast SNN with complex similarity measure')
         return FastSNN(config, dataset, training, for_cbs, group_id)
 
     else:
@@ -59,7 +60,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
         self.hyper = None
         self.encoder = None
 
-        if 'simple' in self.config.architecture_variant:
+        if ArchitectureVariant.is_simple(self.config.architecture_variant):
             self.simple_sim = SimpleSimilarityMeasure(self.config.simple_measure)
 
         # Load model only if init was not called by subclass, would otherwise be executed multiple times
@@ -253,12 +254,10 @@ class SimpleSNN(AbstractSimilarityMeasure):
         context_vectors = self.encoder.model(batch, training=self.training)
 
         sims_batch = tf.map_fn(lambda pair_index: self.get_sim_pair(context_vectors, pair_index),
-                               tf.range(examples_in_batch, dtype=tf.int32), back_prop=True, dtype=tf.float32)
-
+                               tf.range(examples_in_batch, dtype=tf.int32), back_prop=True,
+                               fn_output_signature=tf.float32)
         return sims_batch
 
-    # TODO
-    #  - Maybe add with add input stuff here? Check necessary effort
     def input_extension(self, batch):
 
         if self.hyper.encoder_variant == 'graphcnn2d':
@@ -335,7 +334,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
 
         return a, b
 
-    def load_model(self, for_cbs=False, group_id='', cont=False):
+    def load_model(self, for_cbs=False, group_id=''):
 
         self.hyper = Hyperparameters()
 
@@ -416,25 +415,31 @@ class SimpleSNN(AbstractSimilarityMeasure):
         self.encoder.create_model()
 
         # load weights if snn that isn't training
-        if cont or (not self.training and not for_cbs):
+        if not self.training and not for_cbs:
             self.encoder.load_model_weights(model_folder)
 
         # These variants also need a ffnn
-        if self.config.architecture_variant in ['standard_ffnn', 'fast_ffnn']:
+        if ArchitectureVariant.is_complex(self.config.architecture_variant):
             encoder_output_shape = self.encoder.get_output_shape()
 
-            if self.config.overwrite_input_data_with_baseline_representation:
-                input_shape_ffnn = (self.hyper.time_series_length,)
-                self.ffnn = FFNN2(self.hyper, input_shape_ffnn)
-            else:
-                # Neural Warp
-                input_shape_ffnn = (encoder_output_shape[1] ** 2, encoder_output_shape[2] * 2)
-                self.ffnn = FFNN(self.hyper, input_shape_ffnn)
+            if self.config.complex_measure == ComplexSimilarityMeasure.BASELINE_OVERWRITE:
 
-            self.ffnn.create_model()
+                input_shape = (self.hyper.time_series_length,)
+                self.complex_sim_measure = BaselineOverwriteSimilarity(self.hyper, input_shape)
+            elif self.config.complex_measure == ComplexSimilarityMeasure.FFNN_NW:
 
-            if cont or (not self.training and not for_cbs):
-                self.ffnn.load_model_weights(model_folder)
+                input_shape = (encoder_output_shape[1] ** 2, encoder_output_shape[2] * 2)
+                self.complex_sim_measure = FFNN(self.hyper, input_shape)
+            elif self.config.complex_measure == ComplexSimilarityMeasure.GRAPH_SIM:
+
+                # input shape is (number of nodes = attributes, 2 * # features of context vector from cnn2d output)
+                # 2* because values for both examples are concatenated
+                input_shape = (encoder_output_shape[2], 2 * encoder_output_shape[1])
+                self.complex_sim_measure = GraphSimilarity(self.hyper, input_shape)
+            self.complex_sim_measure.create_model()
+
+            if not self.training and not for_cbs:
+                self.complex_sim_measure.load_model_weights(model_folder)
 
     def print_detailed_model_info(self):
         print('')
@@ -447,8 +452,8 @@ class SNN(SimpleSNN):
     def __init__(self, config, dataset, training, for_group_handler=False, group_id=''):
         super().__init__(config, dataset, training, for_group_handler, group_id)
 
-        # in addition to the simple snn version this one uses a feed forward neural net as sim measure
-        self.ffnn = None
+        # in addition to the simple snn version this one uses a neural network as sim measure
+        self.complex_sim_measure = None
 
         # load model only if init was not called by subclass, would otherwise be executed multiple times
         if type(self) is SNN:
@@ -476,19 +481,19 @@ class SNN(SimpleSNN):
             b = context_vectors[2 * pair_index + 1, :, :]
         # a and b shape: [T, C]
 
-        if self.config.overwrite_input_data_with_baseline_representation:
+        if self.config.complex_measure == ComplexSimilarityMeasure.BASELINE_OVERWRITE:
             # Trains a neural network on distances of feature-based representation such as Rocket or TSFresh
             abs_distance = tf.abs(tf.subtract(a, b))
             abs_distance_flattened = tf.keras.layers.Flatten()(abs_distance)
             abs_distance_flattened = tf.transpose(abs_distance_flattened)
             ffnn_input = abs_distance_flattened
-            ffnn = self.ffnn.model(ffnn_input, training=self.training)
+            ffnn_output = self.complex_sim_measure.model(ffnn_input, training=self.training)
             # tf.print(ffnn, "shape: ",tf.shape(ffnn))
-            ffnn = tf.squeeze(ffnn)
+            ffnn_output = tf.squeeze(ffnn_output)
             # tf.print(abs_distance_flattened)
             # sim = 1/(1+ffnn)
-            sim = ffnn
-        else:
+            sim = ffnn_output
+        elif self.config.complex_measure == ComplexSimilarityMeasure.FFNN_NW:
             # Neural Warp:
             a, b = self.transform_to_time_step_wise(a, b)
 
@@ -496,8 +501,11 @@ class SNN(SimpleSNN):
             ffnn_input = tf.concat([a, b], axis=1)
             # b shape: [T*T, 2*C] OR [T*T, 4*C]
 
+            # Added to deal with warning in new tensorflow version
+            ffnn_input = tf.expand_dims(ffnn_input, axis=0)
+
             # Predict the "relevance" of similarity between each time step
-            ffnn = self.ffnn.model(ffnn_input, training=self.training)
+            ffnn_output = self.complex_sim_measure.model(ffnn_input, training=self.training)
             # ffnn shape: [T*T, 1]
 
             # Calculate absolute distances between each time step
@@ -510,9 +518,20 @@ class SNN(SimpleSNN):
 
             # Scale / Weight (due to multiplication) the absolute distance of each time step combinations
             # with the predicted "weight" for each time step
-            warped_dists = tf.multiply(timestepwise_mean_abs_difference, ffnn)
+            warped_dists = tf.multiply(timestepwise_mean_abs_difference, ffnn_output)
 
             sim = tf.exp(-tf.reduce_mean(warped_dists))
+
+        elif self.config.complex_measure == ComplexSimilarityMeasure.GRAPH_SIM:
+            combined_context_input = tf.concat([a, b], axis=0)
+            combined_context_input = tf.transpose(combined_context_input, perm=[1, 0])
+            combined_input = [combined_context_input, self.dataset.graph_adjacency_matrix]
+
+            complex_measure_output = self.complex_sim_measure.model(combined_input, training=self.training)
+            sim = complex_measure_output
+
+        else:
+            raise ValueError('Complex similarity measure not implemented:', self.config.complex_measure)
 
         return sim
 
@@ -520,7 +539,7 @@ class SNN(SimpleSNN):
         print('')
         self.encoder.print_model_info()
         print('')
-        self.ffnn.print_model_info()
+        self.complex_sim_measure.print_model_info()
         print('')
 
 
@@ -573,10 +592,10 @@ class FastSimpleSNN(SimpleSNN):
         # dtype is necessary
         if type(self) == FastSimpleSNN:
             sims_batch = tf.map_fn(lambda pair_index: self.get_sim_pair(batch, pair_index),
-                                   tf.range(input_size, dtype=tf.int32), back_prop=True, dtype=tf.float32)
+                                   tf.range(input_size, dtype=tf.int32), back_prop=True, fn_output_signature=tf.float32)
         elif type(self) == FastSNN:
             sims_batch = tf.map_fn(lambda pair_index: self.get_sim_pair(self, batch, pair_index),
-                                   tf.range(input_size, dtype=tf.int32), back_prop=True, dtype=tf.float32)
+                                   tf.range(input_size, dtype=tf.int32), back_prop=True, fn_output_signature=tf.float32)
         else:
             raise ValueError('Unknown type')
 
@@ -589,7 +608,7 @@ class FastSNN(FastSimpleSNN):
         super().__init__(config, dataset, training, for_group_handler, group_id)
 
         # in addition to the simple snn version this one uses a feed forward neural net as sim measure
-        self.ffnn = None
+        self.complex_sim_measure = None
 
         # load model only if init was not called by subclass, would otherwise be executed multiple times
         if type(self) is FastSNN:
@@ -604,5 +623,5 @@ class FastSNN(FastSimpleSNN):
     def print_detailed_model_info(self):
         print('')
         self.encoder.print_model_info()
-        self.ffnn.print_model_info()
+        self.complex_sim_measure.print_model_info()
         print('')

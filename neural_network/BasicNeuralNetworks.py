@@ -40,8 +40,8 @@ class NN:
 
         if type(self) in [CNN, RNN, CNN2D, CNN2dWithAddInput, GraphCNN2D, TypeBasedEncoder, DUMMY]:
             prefix = 'encoder'
-        elif type(self) == FFNN or type(self) == FFNN2:
-            prefix = 'ffnn'
+        elif type(self) in [BaselineOverwriteSimilarity, FFNN, GraphSimilarity]:
+            prefix = 'complex_sim'
         else:
             raise AttributeError('Can not import models of type', type(self))
 
@@ -75,53 +75,16 @@ class FFNN(NN):
             print('FFNN with less than one layer is not possible')
             sys.exit(1)
 
-        # first layer must be handled separately because the input shape parameter must be set
-        num_units_first = layers.pop(0)
-        layer_input = tf.keras.Input(shape=self.input_shape, name="Input")
+        input = tf.keras.Input(shape=self.input_shape, name="FFNN-Input")
 
-        x = tf.keras.layers.Dense(units=num_units_first, activation=tf.keras.activations.relu,
-                                  input_shape=self.input_shape)(layer_input)
+        x = input
 
-        for num_units in layers:
-            x = tf.keras.layers.Dense(units=num_units, activation=tf.keras.activations.relu)(x)
+        for units in layers:
+            x = tf.keras.layers.Dense(units=units, activation=tf.keras.activations.relu)(x)
 
-        # regardless of the configured number of layers, add a layer with
-        # a single neuron that provides the indicator function output.
         output = tf.keras.layers.Dense(units=1, activation=tf.keras.activations.sigmoid)(x)
 
-        self.model = tf.keras.Model(inputs=layer_input, outputs=output)
-
-
-class FFNN2(NN):
-    # This model can be used in combination with standard_SNN and with feature rep. overwritten input
-    def __init__(self, hyperparameters, input_shape):
-        super().__init__(hyperparameters, input_shape)
-
-    def create_model(self):
-        print('Creating FFNN2 for input shape: ', self.input_shape)
-        # print("self.hyper.ffnn_layers: ", self.hyper.ffnn_layers)
-        layers = self.hyper.ffnn_layers
-        '''
-        if len(layers) < 1:
-            print('FFNN with less than one layer is not possible')
-            sys.exit(1)
-
-        # first layer must be handled separately because the input shape parameter must be set
-        num_units_first = layers.pop(0)
-        '''
-        layer_input = tf.keras.Input(shape=self.input_shape, name="Input")
-        '''
-        x = tf.keras.layers.Dense(units=num_units_first, activation=tf.keras.activations.relu,
-                                  input_shape=self.input_shape)(layer_input)
-
-        for num_units in layers:
-            x = tf.keras.layers.Dense(units=num_units, activation=tf.keras.activations.relu)(x)
-        '''
-        # regardless of the configured number of layers, add a layer with
-        # a single neuron that provides the indicator function output.
-        output = tf.keras.layers.Dense(units=1, activation=tf.keras.activations.sigmoid)(layer_input)
-
-        self.model = tf.keras.Model(inputs=layer_input, outputs=output)
+        self.model = tf.keras.Model(inputs=input, outputs=output)
 
 
 class RNN(NN):
@@ -377,9 +340,6 @@ class GraphCNN2D(CNN2D):
             sys.exit(-1)
 
         else:
-
-            # print('Adding graph layers after 2D CNN.')
-
             # Define additional input over which the adjacency matrix is provided
             # As shown here: https://graphneural.network/getting-started/, "," is necessary
             adj_matrix_input = tf.keras.layers.Input(shape=(self.input_shape[1],))
@@ -390,21 +350,57 @@ class GraphCNN2D(CNN2D):
             # Here: Nodes = Attributes (univariate time series), Features = Time steps
             # Shape of output: ([batch], Time steps, Attributes, so we must "switch" the second and third dimension
             output = tf.transpose(output, perm=[0, 2, 1])
-            # print('Shape of output after transpose:', output.shape)
 
             for channels in self.hyper.graph_conv_channels:
                 output = spektral.layers.GraphConv(channels=channels, activation='relu')([output, adj_matrix_input])
 
-            # print('Shape after Graph Conv Layers:', output.shape)
-
             for channels in self.hyper.global_attention_pool_channels:
                 output = spektral.layers.GlobalAttentionPool(channels)(output)
-
-            # print('Shape after Global Attention Layers:', output.shape)
 
             # Redefine input of madel as normal input + additional adjacency matrix input
             input = [input, adj_matrix_input]
         return input, output
+
+
+class GraphSimilarity(NN):
+
+    def __init__(self, hyperparameters, input_shape):
+        super().__init__(hyperparameters, input_shape)
+
+    def create_model(self):
+        print('Creating GraphSimilarity for input shape: ', self.input_shape)
+
+        if self.hyper.graph_conv_channels is None:
+            print('Number of channels of graph conv layers is not defined in the hyperparameters.')
+            sys.exit(-1)
+
+        elif self.hyper.graph_conv_channels is not None and self.hyper.global_attention_pool_channels is None:
+            print('Can not used graph conv layers without an aggregation via at least one global attention pool layer.')
+            sys.exit(-1)
+
+        elif self.hyper.ffnn_layers is None or len(self.hyper.ffnn_layers) == 0:
+            print('Warning: Only single FC layer with sigmoid function is added after global attention pool layer.')
+
+        # Define inputs as shown at https://graphneural.network/getting-started/
+        main_input = tf.keras.Input(shape=(self.input_shape[1],), name="EncoderOutput")
+        adj_matrix_input = tf.keras.layers.Input(shape=(self.input_shape[0],), name="AdjacencyMatrix")
+        output = main_input
+
+        for channels in self.hyper.graph_conv_channels:
+            output = spektral.layers.GraphConv(channels=channels, activation='relu')([output, adj_matrix_input])
+
+        for channels in self.hyper.global_attention_pool_channels:
+            output = spektral.layers.GlobalAttentionPool(channels)(output)
+
+        for units in self.hyper.ffnn_layers:
+            output = tf.keras.layers.Dense(units=units, activation=tf.keras.activations.relu)(output)
+            # output = tf.keras.layers.Dropout(self.hyper.dropout_rate)(output)
+
+        # Regardless of the configured layers,
+        # a last FC layer with sigmoid function is added to output a similarity value
+        output = tf.keras.layers.Dense(units=1, activation=tf.keras.activations.sigmoid)(output)[0][0]
+
+        self.model = tf.keras.Model(inputs=[main_input, adj_matrix_input], outputs=output)
 
 
 class CNN2dWithAddInput(NN):
@@ -640,10 +636,6 @@ class TypeBasedEncoder(NN):
 
             attribute_outputs.append(attribute_output)
 
-        # TODO
-        #  Discuss / Test: Does the operation make sense?
-        #  Or rather omit and concatinate only with axis=1 below -->  (# Examples, # Attributes * (depending on layer properties), # Units in last layer)
-
         # Merge the encoder outputs for each attribute back into a single tensor
         # Shape after concatenation: (# Examples, # Attributes, (depending on layer properties), # Units in last layer)
         output = tf.keras.layers.Concatenate(axis=1)(attribute_outputs)
@@ -679,3 +671,21 @@ class DUMMY(NN):
         input = tf.keras.Input(shape=(self.input_shape[0], self.input_shape[1]), name="Input0")
         output = input
         self.model = tf.keras.Model(inputs=input, outputs=output, name='Dummy')
+
+
+class BaselineOverwriteSimilarity(NN):
+
+    # This model can be used in combination with standard_SNN and with feature rep. overwritten input
+    def __init__(self, hyperparameters, input_shape):
+        super().__init__(hyperparameters, input_shape)
+
+    def create_model(self):
+        print('Creating FFNN2 for input shape: ', self.input_shape)
+
+        layer_input = tf.keras.Input(shape=self.input_shape, name="Input")
+
+        # regardless of the configured number of layers, add a layer with
+        # a single neuron that provides the indicator function output.
+        output = tf.keras.layers.Dense(units=1, activation=tf.keras.activations.sigmoid)(layer_input)
+
+        self.model = tf.keras.Model(inputs=layer_input, outputs=output)

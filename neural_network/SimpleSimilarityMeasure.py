@@ -1,5 +1,9 @@
 import tensorflow as tf
 
+# "as SSM" is necessary due to duplicate class names
+from configuration.Enums import SimpleSimilarityMeasure as SSM
+
+
 class SimpleSimilarityMeasure:
 
     def __init__(self, sim_type):
@@ -10,9 +14,6 @@ class SimpleSimilarityMeasure:
         self.a_context = None
         self.b_context = None
         self.w = None
-
-        self.implemented = ['abs_mean', 'euclidean_sim', 'euclidean_dis', 'dot_product', 'cosine']
-        assert sim_type in self.implemented
 
     @tf.function
     def get_sim(self, a, b, a_weights=None, b_weights=None, a_context=None, b_context=None, w=None):
@@ -25,11 +26,9 @@ class SimpleSimilarityMeasure:
         self.w = w
 
         switcher = {
-            'abs_mean': self.abs_mean,
-            'euclidean_sim': self.euclidean_sim,
-            'euclidean_dis': self.euclidean_dis,
-            'dot_product': self.dot_product,
-            'cosine': self.cosine
+            SSM.ABS_MEAN: self.abs_mean,
+            SSM.EUCLIDEAN_SIM: self.euclidean_sim,
+            SSM.EUCLIDEAN_DIS: self.euclidean_dis,
         }
 
         # Get the function from switcher dictionary
@@ -117,32 +116,3 @@ class SimpleSimilarityMeasure:
         diff = self.euclidean_dis(a, b)
         sim = 1 / (1 + tf.reduce_sum(diff))
         return sim
-
-    # TODO Doesn't work with binary cross entropy loss, always leads to same loss
-    #  Reason might be that this doesn't return a sim in [0,1]
-    @tf.function
-    def dot_product(self, a, b):
-        sim = tf.matmul(a, b, transpose_b=True)
-        return tf.reduce_mean(sim)
-
-    # TODO Doesn't work with binary cross entropy loss, always leads to same loss
-    #  Reason might be that this doesn't return a sim in [0,1]
-    #  possibly this could be used: https://www.tensorflow.org/api_docs/python/tf/keras/losses/CosineSimilarity
-    # source: https://bit.ly/390bDPQ
-    @tf.function
-    def cosine(self, a, b):
-        use_weighted_sim = self.a_weights is not None and self.b_weights is not None
-        if use_weighted_sim:
-            # source: https://stats.stackexchange.com/questions/384419/weighted-cosine-similarity
-            weight_vec = self.a_weights / tf.reduce_sum(self.a_weights)
-            normalize_a = tf.nn.l2_normalize(a, 0) * weight_vec
-            normalize_b = tf.nn.l2_normalize(b, 0) * weight_vec
-            cos_similarity = tf.reduce_sum(tf.multiply(normalize_a, normalize_b) * weight_vec)
-            # cos_similarity = 1-distance.cosine(a.numpy(),b.numpy(),self.a_weights)
-        else:
-            normalize_a = tf.nn.l2_normalize(a, 0)
-            normalize_b = tf.nn.l2_normalize(b, 0)
-            cos_similarity = tf.reduce_sum(tf.multiply(normalize_a, normalize_b))
-            # tf.print(cos_similarity)
-
-        return cos_similarity

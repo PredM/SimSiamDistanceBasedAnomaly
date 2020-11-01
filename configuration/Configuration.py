@@ -2,7 +2,8 @@ import json
 
 import pandas as pd
 
-from configuration.Enums import BatchSubsetType, LossFunction, BaselineAlgorithm
+from configuration.Enums import BatchSubsetType, LossFunction, BaselineAlgorithm, SimpleSimilarityMeasure, \
+    ArchitectureVariant, ComplexSimilarityMeasure
 
 
 ####
@@ -59,7 +60,7 @@ class GeneralConfiguration:
 
         # Path and file name to the specific model that should be used for testing and live classification
         # Folder where the models are stored is prepended below
-        self.filename_model_to_use = 'temp_snn_model_10-26_15-08-41_epoch-900'
+        self.filename_model_to_use = 'temp_snn_model_10-29_15-08-21_epoch-100'
 
         ##
         # Debugging - Don't use for feature implementation
@@ -89,15 +90,11 @@ class ModelConfiguration:
         ###
 
         ##
-        # Architecture (independent of whether a single SNN or the CBS is used)
+        # Architecture
         ##
 
-        # standard = classic snn behaviour, context vectors calculated each time, also multiple times for the example
-        # fast = encoding of case base only once, example also only once
-        # ffnn = uses ffnn as distance measure
-        # simple = mean absolute difference as distance measure instead of the ffnn
-        self.architecture_variants = ['standard_simple', 'standard_ffnn', 'fast_simple', 'fast_ffnn']
-        self.architecture_variant = self.architecture_variants[0]
+        # Selection which basic architecture is used, see enum class for details
+        self.architecture_variant = ArchitectureVariant.STANDARD_COMPLEX
 
         ##
         # Determines how the similarity between two embedding vectors is determined (when a simple architecture is used)
@@ -108,8 +105,9 @@ class ModelConfiguration:
 
         # Attention: Implementation expects a simple measure to return a similarity in the interval of [0,1]!
         # Only use euclidean_dis for TRAINING with contrastive loss
-        self.simple_measures = ['abs_mean', 'euclidean_sim', 'euclidean_dis', 'dot_product', 'cosine']
-        self.simple_measure = self.simple_measures[0]
+        self.simple_measure = SimpleSimilarityMeasure.ABS_MEAN
+
+        self.complex_measure = ComplexSimilarityMeasure.GRAPH_SIM
 
         ###
         # Hyperparameters
@@ -126,7 +124,7 @@ class ModelConfiguration:
         # If !use_individual_hyperparameters interpreted as a single json file, else as a folder
         # which contains json files named after the cases they should be used for
         # If no file with this name is present the 'default.json' Config will be used
-        self.hyper_file = self.hyper_file_folder + 'cnn2d_with_graph-26-10.json'  # 'individual_hyperparameters_test'  #
+        self.hyper_file = self.hyper_file_folder + 'graph_sim_testing.json'  # 'individual_hyperparameters_test'  #
 
         ##
         # Various settings influencing the similarity calculation
@@ -209,10 +207,6 @@ class TrainingConfiguration:
         # Use a custom similarity values instead of 0 for unequal / negative pairs during batch creation
         # These are based on the similarity matrices loaded in the dataset
         self.use_sim_value_for_neg_pair = False  # default: False
-
-        # Select whether the training should be continued from the checkpoint defined as 'filename_model_to_use'
-        # Currently only working for SNNs, not CBS
-        self.continue_training = False  # default: False
 
         # Defines how often loss is printed and checkpoints are saved during training
         self.output_interval = 100
