@@ -86,6 +86,7 @@ class FFNN(NN):
 
         self.model = tf.keras.Model(inputs=input, outputs=output)
 
+
 class RNN(NN):
 
     def __init__(self, hyperparameters, input_shape):
@@ -339,9 +340,6 @@ class GraphCNN2D(CNN2D):
             sys.exit(-1)
 
         else:
-
-            # print('Adding graph layers after 2D CNN.')
-
             # Define additional input over which the adjacency matrix is provided
             # As shown here: https://graphneural.network/getting-started/, "," is necessary
             adj_matrix_input = tf.keras.layers.Input(shape=(self.input_shape[1],))
@@ -352,17 +350,12 @@ class GraphCNN2D(CNN2D):
             # Here: Nodes = Attributes (univariate time series), Features = Time steps
             # Shape of output: ([batch], Time steps, Attributes, so we must "switch" the second and third dimension
             output = tf.transpose(output, perm=[0, 2, 1])
-            # print('Shape of output after transpose:', output.shape)
 
             for channels in self.hyper.graph_conv_channels:
                 output = spektral.layers.GraphConv(channels=channels, activation='relu')([output, adj_matrix_input])
 
-            # print('Shape after Graph Conv Layers:', output.shape)
-
             for channels in self.hyper.global_attention_pool_channels:
                 output = spektral.layers.GlobalAttentionPool(channels)(output)
-
-            # print('Shape after Global Attention Layers:', output.shape)
 
             # Redefine input of madel as normal input + additional adjacency matrix input
             input = [input, adj_matrix_input]
@@ -384,14 +377,30 @@ class GraphSimilarity(NN):
         elif self.hyper.graph_conv_channels is not None and self.hyper.global_attention_pool_channels is None:
             print('Can not used graph conv layers without an aggregation via at least one global attention pool layer.')
             sys.exit(-1)
+
         elif self.hyper.ffnn_layers is None or len(self.hyper.ffnn_layers) == 0:
             print('Warning: Only single FC layer with sigmoid function is added after global attention pool layer.')
 
-        # TODO Add actual network here
-        input = tf.keras.Input(shape=self.input_shape, name="Input0")
-        output = tf.keras.layers.Dense(1)(input)
+        # Define inputs as shown at https://graphneural.network/getting-started/
+        main_input = tf.keras.Input(shape=(self.input_shape[1],), name="EncoderOutput")
+        adj_matrix_input = tf.keras.layers.Input(shape=(self.input_shape[0],), name="AdjacencyMatrix")
+        output = main_input
 
-        self.model = tf.keras.Model(inputs=input, outputs=output)
+        for channels in self.hyper.graph_conv_channels:
+            output = spektral.layers.GraphConv(channels=channels, activation='relu')([output, adj_matrix_input])
+
+        for channels in self.hyper.global_attention_pool_channels:
+            output = spektral.layers.GlobalAttentionPool(channels)(output)
+
+        for units in self.hyper.ffnn_layers:
+            output = tf.keras.layers.Dense(units=units, activation=tf.keras.activations.relu)(output)
+            # output = tf.keras.layers.Dropout(self.hyper.dropout_rate)(output)
+
+        # Regardless of the configured layers,
+        # a last FC layer with sigmoid function is added to output a similarity value
+        output = tf.keras.layers.Dense(units=1, activation=tf.keras.activations.sigmoid)(output)[0][0]
+
+        self.model = tf.keras.Model(inputs=[main_input, adj_matrix_input], outputs=output)
 
 
 class CNN2dWithAddInput(NN):

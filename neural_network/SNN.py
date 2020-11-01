@@ -20,7 +20,7 @@ def initialise_snn(config: Configuration, dataset, training, for_cbs=False, grou
         return SimpleSNN(config, dataset, training, for_cbs, group_id)
 
     elif training and not av.is_simple(var) or not training and var == av.STANDARD_COMPLEX:
-        print('Creating standard SNN with FFNN similarity measure')
+        print('Creating standard SNN with complex similarity measure')
         return SNN(config, dataset, training, for_cbs, group_id)
 
     elif not training and var == av.FAST_SIMPLE:
@@ -28,7 +28,7 @@ def initialise_snn(config: Configuration, dataset, training, for_cbs=False, grou
         return FastSimpleSNN(config, dataset, training, for_cbs, group_id)
 
     elif not training and var == av.FAST_COMPLEX:
-        print('Creating fast SNN with FFNN similarity measure')
+        print('Creating fast SNN with complex similarity measure')
         return FastSNN(config, dataset, training, for_cbs, group_id)
 
     else:
@@ -256,11 +256,8 @@ class SimpleSNN(AbstractSimilarityMeasure):
         sims_batch = tf.map_fn(lambda pair_index: self.get_sim_pair(context_vectors, pair_index),
                                tf.range(examples_in_batch, dtype=tf.int32), back_prop=True,
                                fn_output_signature=tf.float32)
-
         return sims_batch
 
-    # TODO
-    #  - Maybe add with add input stuff here? Check necessary effort
     def input_extension(self, batch):
 
         if self.hyper.encoder_variant == 'graphcnn2d':
@@ -421,23 +418,24 @@ class SimpleSNN(AbstractSimilarityMeasure):
         if not self.training and not for_cbs:
             self.encoder.load_model_weights(model_folder)
 
-        # FIXME modify to match new
         # These variants also need a ffnn
         if ArchitectureVariant.is_complex(self.config.architecture_variant):
             encoder_output_shape = self.encoder.get_output_shape()
 
-            # TODO change to complex sim
             if self.config.complex_measure == ComplexSimilarityMeasure.BASELINE_OVERWRITE:
+
                 input_shape = (self.hyper.time_series_length,)
                 self.complex_sim_measure = BaselineOverwriteSimilarity(self.hyper, input_shape)
             elif self.config.complex_measure == ComplexSimilarityMeasure.FFNN_NW:
+
                 input_shape = (encoder_output_shape[1] ** 2, encoder_output_shape[2] * 2)
                 self.complex_sim_measure = FFNN(self.hyper, input_shape)
             elif self.config.complex_measure == ComplexSimilarityMeasure.GRAPH_SIM:
-                # FIXME change to correct implementation
-                input_shape = encoder_output_shape
-                self.complex_sim_measure = GraphSimilarity(self.hyper, input_shape)
 
+                # input shape is (number of nodes = attributes, 2 * # features of context vector from cnn2d output)
+                # 2* because values for both examples are concatenated
+                input_shape = (encoder_output_shape[2], 2 * encoder_output_shape[1])
+                self.complex_sim_measure = GraphSimilarity(self.hyper, input_shape)
             self.complex_sim_measure.create_model()
 
             if not self.training and not for_cbs:
@@ -525,8 +523,13 @@ class SNN(SimpleSNN):
             sim = tf.exp(-tf.reduce_mean(warped_dists))
 
         elif self.config.complex_measure == ComplexSimilarityMeasure.GRAPH_SIM:
-            # TODO ADD
-            sim = 23
+            combined_context_input = tf.concat([a, b], axis=0)
+            combined_context_input = tf.transpose(combined_context_input, perm=[1, 0])
+            combined_input = [combined_context_input, self.dataset.graph_adjacency_matrix]
+
+            complex_measure_output = self.complex_sim_measure.model(combined_input, training=self.training)
+            sim = complex_measure_output
+
         else:
             raise ValueError('Complex similarity measure not implemented:', self.config.complex_measure)
 
