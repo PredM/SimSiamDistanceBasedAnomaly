@@ -259,10 +259,11 @@ def import_dataset(dataset_to_import=0):
     print('\nSort streams by name to ensure same order like live data')
     df_combined = df_combined.reindex(sorted(df_combined.columns), axis=1)
 
-    if config.save_pkl_file:
-        print('\nSaving datafrane as pickle file in', config.pathPrefix)
-        df_combined.to_pickle(config.pathPrefix + config.filename_pkl)
-        print('Saving finished')
+    print('Final shape:', df_combined.shape)
+
+    print('\nSaving datafrane as pickle file in', config.pathPrefix)
+    df_combined.to_pickle(config.pathPrefix + config.filename_pkl)
+    print('Saving finished')
 
     if config.print_column_names:
         print(*list(df_combined.columns.values), sep="\n")
@@ -286,7 +287,6 @@ def main():
 
         print('-------------------------------')
         print()
-
 
 if __name__ == '__main__':
     main()

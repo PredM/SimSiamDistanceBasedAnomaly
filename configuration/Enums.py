@@ -61,3 +61,11 @@ class ComplexSimilarityMeasure(Enum):
     FFNN_NW = 0
     GRAPH_SIM = 1
     BASELINE_OVERWRITE = 2
+
+
+class TrainTestSplitMode(Enum):
+    # Examples of a single run to failure are not in both train and test
+    ENSURE_NO_MIX = 0
+
+    # Train only consists of no_failure examples, also includes ENSURE_NO_MIX guarantee
+    ANOMALY_DETECTION = 1

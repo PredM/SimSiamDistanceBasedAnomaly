@@ -7,43 +7,15 @@ import threading
 import joblib
 import numpy as np
 import pandas as pd
-from sklearn.model_selection import train_test_split, GroupShuffleSplit
+from sklearn.model_selection import GroupShuffleSplit
 from sklearn.preprocessing import MinMaxScaler, OrdinalEncoder
 
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 
+from data_preprocessing.DatasetCleaning import PostSplitCleaner, PreSplitCleaner
+from configuration.Enums import TrainTestSplitMode
 from configuration.ConfigChecker import ConfigChecker
 from configuration.Configuration import Configuration
-
-
-class DFConverter(threading.Thread):
-
-    def __init__(self, df: pd.DataFrame, time_series_length, use_over_lapping_windows):
-        super().__init__()
-        self.result = None
-        self.df = df
-        self.time_series_length = time_series_length
-        self.use_over_lapping_windows = use_over_lapping_windows
-        self.windowTimesAsString = None
-
-    def run(self):
-        print('\tExample:', self.df.index[0], 'to', self.df.index[-1])
-
-        if not self.use_over_lapping_windows:
-
-            # get time_series_length many indices with nearly equal distance in the interval
-            samples = np.linspace(0, len(self.df) - 1, self.time_series_length, dtype=int).tolist()
-            # print("result shape: ", self.result.shape, " df length: ", len(self.df))
-
-            # reduce the dataframe to the calculated indices
-            self.result = self.df.iloc[samples].to_numpy()
-        else:
-            # no reduction is used if overlapping window is applied
-            # because data is downsampled before according parameter sampling frequency
-            self.result = self.df.to_numpy()
-
-            self.windowTimesAsString = self.df.index[0].strftime("YYYYMMDD HH:mm:ss (%Y%m%d %H:%M:%S)"), 'to', \
-                                       self.df.index[-1].strftime("YYYYMMDD HH:mm:ss (%Y%m%d %H:%M:%S)")
 
 
 class CaseSplitter(threading.Thread):
@@ -59,13 +31,18 @@ class CaseSplitter(threading.Thread):
 
     def run(self):
         try:
+            # reassignment is necessary
             case_label = self.case_label
             failure_time = self.failure_time
             start_timestamp_case = self.start_timestamp_case
             end_timestamp_case = self.end_timestamp_case
             df = self.df
 
-            print('\tProcessing', case_label, ": ", start_timestamp_case, end_timestamp_case, "FAILURE: ", failure_time)
+            short_label = case_label[0:25] + '...' if len(case_label) > 25 else case_label
+            case_info = ['Processing ' + short_label, str(start_timestamp_case), str(end_timestamp_case),
+                         'Failure time:', str(failure_time)]
+
+            print("\t{: <50} {: <30} {: <30} {: <20} {: <25}".format(*case_info))
 
             # basic checks for correct timestamps
             if end_timestamp_case < start_timestamp_case:
@@ -88,7 +65,7 @@ def split_by_cases(df: pd.DataFrame, data_set_counter, config: Configuration):
 
     # get the cases of the dataset after which it should be split
     cases_info = config.cases_datasets[data_set_counter]
-    print(cases_info[1])
+    # print(cases_info[1])
     cases = []  # contains dataframes from sensor data
     labels = []  # contains the label of the dataframe
     failures = []  # contains the associated failure time stamp
@@ -128,73 +105,62 @@ def split_by_cases(df: pd.DataFrame, data_set_counter, config: Configuration):
     return cases, labels, failures
 
 
+def extract_single_example(df: pd.DataFrame):
+    # No reduction is used if overlapping window is applied
+    # because data is down sampled before according parameter sampling frequency
+    sampled_values = df.to_numpy()
+
+    # Split sampled values into actual example and values of next timestamp
+    example = sampled_values[0:-1]
+    next_values = sampled_values[-1]
+
+    # -2 instead of last index because like the version without overlapping time window
+    # the last value is not part of the actual example
+    time_window_pattern = "%Y-%m-%d %H:%M:%S"
+    time_window_string = df.index[0].strftime(time_window_pattern), df.index[-2].strftime(time_window_pattern)
+
+    # print('Example:', example.shape, df.index[0], df.index[0:-1][-1])
+    # print('\tNext:', next_values.shape, df.index[-1])
+
+    return example, next_values, time_window_string
+
+
 def split_into_examples(df: pd.DataFrame, label: str, examples: [np.ndarray], labels_of_examples: [str],
-                        time_series_length, interval_in_seconds, config, failure_times_of_examples: [str], failure_time,
-                        window_times_of_examples: [str], y, i_dataset):
-    thread_list = []
+                        config: Configuration,
+                        failure_times_of_examples: [str], failure_time,
+                        window_times_of_examples: [str], y, i_dataset, next_values: [np.ndarray]):
+    start_time = df.index[0]
+    end_time = df.index[-1]
 
-    # sample time_series_length many values form each of the intervals if their length is near the configured value
-    if not config.use_over_lapping_windows:
+    # TODO Check if while is correct: Should be owss or ts_length + freqz
+    # slide over data frame and extract windows until the window would exceed the last time step
+    while start_time + pd.to_timedelta(config.overlapping_window_step_seconds, unit='s') < end_time:
 
-        # split case into single intervals with the configured length
-        interval_list = [g for c, g in df.groupby(pd.Grouper(level='timestamp', freq=str(interval_in_seconds) + 's'))]
+        # generate a list with indexes for window
+        # time_series_length +1 because split the result into actual examples and values of next timestamp
+        overlapping_window_indices = pd.date_range(start_time, periods=config.time_series_length + 1,
+                                                   freq=config.resample_frequency)
 
-        for g in interval_list:
-            g_len = (g.index[-1] - g.index[0]).total_seconds()
+        example, next_values_example, time_window_string = extract_single_example(df.asof(overlapping_window_indices))
 
-            # ensure time interval is long enough
-            if interval_in_seconds - 0.5 <= g_len <= interval_in_seconds + 0.5:
-                t = DFConverter(g, time_series_length, False)
-                thread_list.append(t)
-    else:
-        # print("df.index[0]: ", df.index[0], "df.index[-1]: ", df.index[-1])
-        start_time = df.index[0]
-        end_time = df.index[-1]
-        # slide over data frame and extract windows until the window would exceed the last time step
-        while start_time + pd.to_timedelta(config.over_lapping_window_interval_in_seconds, unit='s') < end_time:
-            # generate a list with indexes for window
-            index = pd.date_range(start_time, periods=config.time_series_length, freq=config.resample_frequency)
-            # print("from: ", index[0], "to: ", index[-1])
+        # store information for each example calculated by the threads
+        labels_of_examples.append(label)
+        examples.append(example)
+        next_values.append(next_values_example)
+        window_times_of_examples.append(time_window_string)
 
-            # for use_over_lapping_windows doesn't do more than converting the part of the df into a numpy array
-            # using the converter thread overhead to be able to so no further different handling is needed
-            t = DFConverter(df.asof(index), time_series_length, True)
-            thread_list.append(t)
+        # store failure time or special string if no failure example
+        if label == 'no_failure':
+            failure_times_of_examples.append("noFailure-" + str(i_dataset) + "-" + str(y))
+        else:
+            failure_times_of_examples.append(str(failure_time))
 
-            # update next start time for next window
-            start_time = start_time + pd.to_timedelta(config.over_lapping_window_interval_in_seconds, unit='s')
-
-    # sampling done multi threaded with the amount of cores configured
-    thread_limit = config.max_parallel_cores if len(thread_list) > config.max_parallel_cores else len(thread_list)
-    threads_finished = 0
-
-    while threads_finished < len(thread_list):
-        if threads_finished + thread_limit > len(thread_list):
-            thread_limit = len(thread_list) - threads_finished
-
-        r = threads_finished + thread_limit
-        for i in range(threads_finished, r):
-            thread_list[i].start()
-
-        for i in range(threads_finished, r):
-            thread_list[i].join()
-
-        for i in range(threads_finished, r):
-            examples.append(thread_list[i].result)
-            labels_of_examples.append(label)
-
-            if failure_time == "":
-                failure_times_of_examples.append("noFailure-" + str(i_dataset) + "-" + str(y))
-            else:
-                failure_times_of_examples.append(str(failure_time))
-
-            window_times_of_examples.append(thread_list[i].windowTimesAsString)
-
-        threads_finished += thread_limit
+        # update next start time for next window
+        start_time = start_time + pd.to_timedelta(config.overlapping_window_step_seconds, unit='s')
 
 
 def normalise(x_train: np.ndarray, x_test: np.ndarray, config: Configuration):
-    print('Execute normalisation')
+    print('\nExecute normalisation')
     length = x_train.shape[2]
 
     for i in range(length):
@@ -224,6 +190,59 @@ def normalise(x_train: np.ndarray, x_test: np.ndarray, config: Configuration):
     return x_train, x_test
 
 
+def determine_train_test_indices(config: Configuration, examples_array, labels_array, failure_times_array):
+    if config.split_mode == TrainTestSplitMode.ENSURE_NO_MIX:
+
+        # Split into train and test considering that examples from a single failure run don't end up in both
+        print('\nExecute train/test split in ENSURE_NO_MIX mode.')
+        enc = OrdinalEncoder()
+        enc.fit(failure_times_array.reshape(-1, 1))
+        failure_times_array_groups = enc.transform(failure_times_array.reshape(-1, 1))
+
+        gss = GroupShuffleSplit(n_splits=1, test_size=config.test_split_size, random_state=config.random_seed)
+
+        train_indices, test_indices = list(gss.split(examples_array, labels_array, failure_times_array_groups))[0]
+
+    elif config.split_mode == TrainTestSplitMode.ANOMALY_DETECTION:
+
+        # This means all failure examples are in test
+        # Only no_failure examples will be split based on configured percentage
+        print('\nExecute train/test split in ANOMALY_DETECTION mode.')
+
+        # Split examples into normal and failure cases
+        failure_indices = np.argwhere(labels_array != 'no_failure').flatten()
+        no_failure_indices = np.argwhere(labels_array == 'no_failure').flatten()
+
+        # Execute recording instance based splitting only for no_failures
+        # For which the input arrays are first of all reduced to those examples
+        nf_examples = examples_array[no_failure_indices]
+        nf_labels = labels_array[no_failure_indices]
+        nf_failure_times = failure_times_array[no_failure_indices]
+
+        enc = OrdinalEncoder()
+        enc.fit(nf_failure_times.reshape(-1, 1))
+        nf_groups = enc.transform(nf_failure_times.reshape(-1, 1))
+
+        # Split the no failure only examples based on the recording instances and the split size
+        gss = GroupShuffleSplit(n_splits=1, test_size=config.test_split_size, random_state=config.random_seed)
+        nf_train_indices_in_reduced, nf_test_indices_in_reduced = \
+            list(gss.split(nf_examples, nf_labels, nf_groups))[0]
+
+        # Trace back the indices of the reduced arrays to the indices of the complete arrays
+        nf_train_indices = no_failure_indices[nf_train_indices_in_reduced]
+        nf_test_indices = no_failure_indices[nf_test_indices_in_reduced]
+
+        # Combine indices to full lists
+        # Train part only consists of the  train part of the no failure split,
+        # whereas the test part consists of the test part of the no failure split as well as failure examples
+        train_indices = list(nf_train_indices)
+        test_indices = list(failure_indices) + list(nf_test_indices)
+    else:
+        raise ValueError()
+
+    return train_indices, test_indices
+
+
 def main():
     config = Configuration()  # Get config for data directory
 
@@ -236,6 +255,7 @@ def main():
     # list of all examples
     examples: [np.ndarray] = []
     labels_of_examples: [str] = []
+    next_values: [np.ndarray] = []
     failure_times_of_examples: [str] = []
     window_times_of_examples: [str] = []
 
@@ -250,14 +270,8 @@ def main():
         with open(path_to_file, 'rb') as f:
             df: pd.DataFrame = pickle.load(f)
 
-        # cleaning moved to separate script because of computational demands
-        # df = clean_up_dataframe(df, config)
-
         # split the dataframe into the configured cases
         cases_df, labels_df, failures_df = split_by_cases(df, i, config)
-        print("cases_df: ", len(cases_df))
-        print("labels_df: ", len(labels_df))
-        print("failures_df: ", len(failures_df), ": ", failures_df)
 
         if i == 0:
             attributes = np.stack(df.columns, axis=0)
@@ -267,116 +281,126 @@ def main():
 
         # split the case into examples, which are added to the list of of all examples
         number_cases = len(cases_df)
+
+        print()
         for y in range(number_cases):
             df = cases_df[y]
 
             if len(df) <= 0:
-                print(i, y, 'empty')
-                print("df: ", df, )
+                print(i, y, ' is empty!')
                 continue
 
             start = df.index[0]
             end = df.index[-1]
             secs = (end - start).total_seconds()
-            print('\nSplitting case', y, '/', number_cases - 1, 'into examples. Length:', secs, " start: ", start,
-                  " end: ", end)
-            split_into_examples(df, labels_df[y], examples, labels_of_examples, config.time_series_length,
-                                config.interval_in_seconds, config, failure_times_of_examples, failures_df[y],
-                                window_times_of_examples, y, i)
+            print('Splitting case', y, '/', number_cases - 1, 'into examples. Length:', secs, " Start: ", start,
+                  " End: ", end)
+            split_into_examples(df, labels_df[y], examples, labels_of_examples, config,
+                                failure_times_of_examples, failures_df[y],
+                                window_times_of_examples, y, i, next_values)
+        print()
         del cases_df, labels_df, failures_df
         gc.collect()
 
     # convert lists of arrays to numpy array
     examples_array = np.stack(examples, axis=0)
     labels_array = np.stack(labels_of_examples, axis=0)
+    next_values_array = np.stack(next_values, axis=0)
     failure_times_array = np.stack(failure_times_of_examples, axis=0)
     window_times_array = np.stack(window_times_of_examples, axis=0)
 
     del examples, labels_of_examples, failure_times_of_examples, window_times_of_examples
     gc.collect()
 
-    # print("config.use_over_lapping_windows: ", config.use_over_lapping_windows)
-    if config.use_over_lapping_windows:
-        print('\nExecute train/test split with failure case consideration')
-        # define groups for GroupShuffleSplit
-        enc = OrdinalEncoder()
-        enc.fit(failure_times_array.reshape(-1, 1))
-        failure_times_array_groups = enc.transform(failure_times_array.reshape(-1, 1))
-        # print("groups: ",failure_times_array_groups)
-        # group_kfold = GroupKFold(n_splits=2)
+    cleaner = PreSplitCleaner(config, examples_array, labels_array, next_values_array, failure_times_array,
+                              window_times_array)
 
-        gss = GroupShuffleSplit(n_splits=1, test_size=config.test_split_size, random_state=config.random_seed)
+    print('\nExamples before pre train/test split cleaning:', examples_array.shape[0])
+    cleaner.clean()
+    examples_array, labels_array, next_values_array, failure_times_array, window_times_array = cleaner.return_all()
+    print('Examples after pre train/test split cleaning:', examples_array.shape[0])
 
-        train_indices, test_indices = list(gss.split(examples_array, labels_array, failure_times_array_groups))[0]
+    train_indices, test_indices = determine_train_test_indices(config, examples_array, labels_array,
+                                                               failure_times_array)
 
-        x_train, y_train = examples_array[train_indices], labels_array[train_indices]
-        x_test, y_test = examples_array[test_indices], labels_array[test_indices]
+    x_train, x_test = examples_array[train_indices], examples_array[test_indices]
+    y_train, y_test = labels_array[train_indices], labels_array[test_indices]
+    next_values_train, next_values_test = next_values_array[train_indices], next_values_array[test_indices]
+    failure_times_train, failure_times_test = failure_times_array[train_indices], failure_times_array[test_indices]
+    window_times_train, window_times_test = window_times_array[train_indices], window_times_array[test_indices]
 
-        failure_times_train, failure_times_test = failure_times_array[train_indices], failure_times_array[test_indices]
-        window_times_train, window_times_test = window_times_array[train_indices], window_times_array[test_indices]
+    del examples_array, labels_array, next_values_array, failure_times_array, window_times_array
+    gc.collect()
 
-        print("X_train: ", x_train.shape, " X_test: ", x_test.shape)
-        print("Y_train: ", y_train.shape, " Y_train: ", y_test.shape)
-        print("Failure_times_train: ", failure_times_train.shape, " Failure_times_test: ", failure_times_test.shape)
-        print("Window_times_train: ", window_times_train.shape, " Window_times_test: ", window_times_test.shape)
-        print("Classes in the train set: ", np.unique(y_train))
-        print("Classes in the test set: ", np.unique(y_test))
-        # print("Classes in train and test set: ", np.unique(np.concatenate(y_train, y_test)))
+    # Execute some manual corrections
+    cleaner = PostSplitCleaner(config,
+                               x_train, x_test,
+                               y_train, y_test,
+                               next_values_train, next_values_test,
+                               failure_times_train, failure_times_test,
+                               window_times_train, window_times_test)
 
-    else:
-        # split into train and test data set
-        print('\nExecute train/test split')
-        x_train, x_test, y_train, y_test = train_test_split(examples_array, labels_array,
-                                                            test_size=config.test_split_size,
-                                                            random_state=config.random_seed)
+    print('\nExamples in train before:', x_train.shape[0])
+    print('Examples in test before:', x_test.shape[0], '\n')
 
-    # Sort both datasets by the cases for easier handling
-    '''
-    x_train = x_train[y_train.argsort()]
-    y_train = np.sort(y_train)
+    cleaner.clean()
 
-    x_test = x_test[y_test.argsort()]
-    y_test = np.sort(y_test)
-    '''
+    x_train, x_test, y_train, y_test, next_values_train, next_values_test, \
+    failure_times_train, failure_times_test, window_times_train, window_times_test = cleaner.return_all()
 
-    print('Training data set shape: ', x_train.shape)
-    print('Training label set shape: ', y_train.shape)
-    print('Test data set shape: ', x_test.shape)
-    print('Test label set shape: ', y_test.shape, '\n')
+    print('\nExamples in train after:', x_train.shape[0])
+    print('Examples in test after:', x_test.shape[0], '\n')
+
+    print("x_train:", x_train.shape, "x_test:", x_test.shape)
+    print("y_train:", y_train.shape, "y_test:", y_test.shape)
+    print("next_values_train:", next_values_train.shape, "next_values_test:", next_values_test.shape)
+    print("failure_times_train:", failure_times_train.shape, "failure_times_test:", failure_times_test.shape)
+    print("window_times_train:", window_times_train.shape, "window_times_test:", window_times_test.shape)
+    print()
+    print("Classes in the train set:\n", np.unique(y_train))
+    print("Classes in the test set:\n", np.unique(y_test))
 
     # normalize each sensor stream to contain values in [0,1]
     x_train, x_test = normalise(x_train, x_test, config)
 
+    # cast to float32 so it can directly be used as tensorflow input without casting
     x_train, x_test, = x_train.astype('float32'), x_test.astype('float32')
 
     # save the np arrays
     print('\nSave to np arrays in ' + config.training_data_folder)
 
     print('Step 1/5')
-    np.save(config.training_data_folder + 'train_features_4_.npy', x_train)
+    np.save(config.training_data_folder + 'train_features.npy', x_train)
     print('Step 2/5')
-    np.save(config.training_data_folder + 'test_features_4_.npy', x_test)
+    np.save(config.training_data_folder + 'test_features.npy', x_test)
     print('Step 3/5')
-    np.save(config.training_data_folder + 'train_labels_4_.npy', y_train)
+    np.save(config.training_data_folder + 'train_labels.npy', y_train)
     print('Step 4/5')
-    np.save(config.training_data_folder + 'test_labels_4_.npy', y_test)
+    np.save(config.training_data_folder + 'test_labels.npy', y_test)
     print('Step 5/5')
-    np.save(config.training_data_folder + 'feature_names_4_.npy', attributes)
+    np.save(config.training_data_folder + 'feature_names.npy', attributes)
     print()
 
-    if config.use_over_lapping_windows:
-        print('Saving additional data if overlapping windows are used')
+    print('Saving additional data')
 
-        # Contains the associated time of a failure (if not no failure) for each example
-        print('Step 1/4')
-        np.save(config.training_data_folder + 'train_failure_times_4_.npy', failure_times_train)
-        print('Step 2/4')
-        np.save(config.training_data_folder + 'test_failure_times_4_.npy', failure_times_test)
-        print('Step 3/4')
-        # Contains the start and end time stamp for each training example
-        np.save(config.training_data_folder + 'train_window_times_4_.npy', window_times_train)
-        print('Step 4/4')
-        np.save(config.training_data_folder + 'test_window_times_4_.npy', window_times_test)
+    # Contains the associated time of a failure (if not no failure) for each example
+    print('Step 1/6')
+    np.save(config.training_data_folder + 'train_failure_times.npy', failure_times_train)
+    print('Step 2/6')
+    np.save(config.training_data_folder + 'test_failure_times.npy', failure_times_test)
+
+    # Contains the start and end time stamp for each training example
+    print('Step 3/6')
+    np.save(config.training_data_folder + 'train_window_times.npy', window_times_train)
+    print('Step 4/4')
+    np.save(config.training_data_folder + 'test_window_times.npy', window_times_test)
+
+    # Contain the values of the next timestamp after each training example
+    print('Step 5/6')
+    np.save(config.training_data_folder + 'train_next_values.npy', next_values_train)
+    print('Step 6/6')
+    np.save(config.training_data_folder + 'test_next_values.npy', next_values_test)
+    print()
 
 
 if __name__ == '__main__':

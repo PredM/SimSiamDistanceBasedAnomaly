@@ -948,5 +948,67 @@
       46,
       47
     ]
-  }
+  },
+  "label_renaming": {
+    "txt15_failuremode_driveshaft_slippage_2": "txt15_conveyor_failuremode_driveshaft_slippage_failure",
+    "txt15_i1_lightbarrier_failuremode3_1": "txt15_i1_lightbarrier_failuremode1",
+    "txt15_i1_lightbarrier_failuremode3_2": "txt15_i1_lightbarrier_failuremode2",
+    "txt16_failuremode_conveyorbelt_broken_big_gear_tooth_diagnosis": "txt16_conveyorbelt_big_gear_tooth_broken_failure",
+    "txt16_failuremode_conveyorbelt_broken_big_gear_tooth_diagnosis_2": "txt16_conveyorbelt_big_gear_tooth_broken_failure",
+    "txt16_failuremode_conveyorbelt_broken_small_gear_tooth_diagnosis": "txt16_conveyorbelt_small_gear_tooth_broken_failure",
+    "txt16_failuremode_driveshaft_slippage": "txt16_conveyor_failuremode_driveshaft_slippage_failure",
+    "txt16_failuremode_turntable_broken_bigh_gear_tooth_2": "txt16_turntable_big_gear_tooth_broken_failure",
+    "txt17_i1_switch_failuremode3_1": "txt17_i1_switch_failuremode1",
+    "txt17_i1_switch_failuremode3_2": "txt17_i1_switch_failuremode2",
+    "txt16_conveyorbelt_big_gear_tooth_broken_failure_2": "txt16_conveyorbelt_big_gear_tooth_broken_failure",
+    "txt18_pneumatic_leakage_failure_mode_1_2": "txt18_pneumatic_leakage_failure_mode_1",
+    "txt18_pneumatic_leakage_failure_mode_2_2": "txt18_pneumatic_leakage_failure_mode_2",
+    "txt18_pneumatic_leakage_failure_mode_2_1": "txt18_pneumatic_leakage_failure_mode_2_faulty",
+    "txt18_pneumatic_leakage_failure_mode_3_1": "txt18_pneumatic_leakage_failure_mode_3_faulty",
+    "txt17_pneumatic_leakage_failure_mode_1_1": "txt17_pneumatic_leakage_failure_mode_1_faulty",
+    "txt17_pneumatic_leakage_failure_mode_1_2": "txt17_pneumatic_leakage_failure_mode_1",
+    "txt17_failuremode_workingstation_transport_without_Workpiece": "txt17_workingstation_transport_failuremode_wout_workpiece",
+    "txt18_TransportWithoutWorkpiece_diagnosis": "txt18_transport_failuremode_wout_workpiece"
+  },
+  "label_renaming_overall": {
+    "failuremode": "failure_mode",
+    "mode1": "mode_1",
+    "mode2": "mode_2",
+    "mode3": "mode_3"
+  },
+  "unused_labels": [
+    "txt16_failuremode_conveyorbelt_operation_without_a_workpiece",
+    "txt16_failuremode_oven_door_blocked",
+    "txt16_failuremode_turntable_broken_bigh_gear_tooth_2",
+    "txt18_WorkpieceDroppedCrosswiseIntoOven",
+    "txt19_hrs_position_switch_not_reached",
+    "txt19_failuremode_tansport_without_bucket_box",
+    "txt19_failure_mode_crashed_into_HRS",
+    "txt18_failuremode1_Workpiecelost_white_1",
+    "txt18_failuremode1_Workpiecelost_white_2",
+    "txt18_WorkpieceLostDuringTransport_diagnosis",
+    "txt16_i4_lightbarrier_failuremode2",
+    "txt19_failuremode_bucket_box_fallen_down",
+    "txt16_i7_lightbarrier_failuremode1",
+    "txt17_pneumatic_leakage_failure_mode_1_1",
+    "txt15_i3_lightbarrier_failure_mode_1",
+    "txt16_pneumatic_leakage_failure_mode_1",
+    "txt18_pneumatic_leakage_failure_mode_3_faulty"
+  ],
+  "transfer_from_train_to_test": [
+    "2019-05-28 08:49:58",
+    "2019-05-28 08:27:24",
+    "2019-05-28 08:19:18",
+    "2019-05-23 10:17:54",
+    "2019-05-28 19:35:08",
+    "2019-06-08 11:46:28",
+    "2019-06-08 11:57:40",
+    "2019-05-23 13:39:55",
+    "2019-05-28 19:12:09",
+    "2019-06-07 20:20:52",
+    "2019-05-28 20:26:03",
+    "2019-06-07 20:13:24",
+    "2019-06-08 13:30:11",
+    "2019-05-28 15:31:22"
+  ]
 }

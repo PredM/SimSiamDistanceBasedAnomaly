@@ -3,7 +3,7 @@ import json
 import pandas as pd
 
 from configuration.Enums import BatchSubsetType, LossFunction, BaselineAlgorithm, SimpleSimilarityMeasure, \
-    ArchitectureVariant, ComplexSimilarityMeasure
+    ArchitectureVariant, ComplexSimilarityMeasure, TrainTestSplitMode
 
 
 ####
@@ -319,14 +319,9 @@ class PreprocessingConfiguration:
         # Define the length (= the number of timestamps) of the time series generated
         self.time_series_length = 1000
 
-        # Define the time window length in seconds the timestamps of a single time series should be distributed on
-        self.interval_in_seconds = 4
-
-        # To some extent the time series in each examples overlaps to another one
-        # If true: interval in seconds is not considered, just time series length
-        # Default: False
-        self.use_over_lapping_windows = True
-        self.over_lapping_window_interval_in_seconds = 1  # only used if overlapping windows is true
+        # Defines the step size of window, e.g. for = 2: Example 0 starts at 00:00:00 and Example 1 at 00:00:02
+        # For no overlapping: value = seconds(time_series_length * resample frequency)
+        self.overlapping_window_step_seconds = 1
 
         # Configure the motor failure parameters used in case extraction
         self.split_t1_high_low = True
@@ -339,6 +334,9 @@ class PreprocessingConfiguration:
 
         # share of examples used as test set
         self.test_split_size = 0.2
+
+        # way examples are split into train and test, see enum class for details
+        self.split_mode = TrainTestSplitMode.ANOMALY_DETECTION
 
         ##
         # Lists of topics separated by types that need different import variants
@@ -505,6 +503,16 @@ class Configuration(
         self.intNumbers = data['intNumbers']
         self.realValues = data['realValues']
         self.categoricalValues = data['categoricalValues']
+
+        self.label_renaming_overall = data['label_renaming_overall']
+        self.label_renaming = data['label_renaming']
+        self.transfer_from_train_to_test = data['transfer_from_train_to_test']
+        self.unused_labels = data['unused_labels']
+
+        # Remove duplicates to ensure output is correct (would result in wrong sum of changed examples otherwise)
+        self.unused_labels = list(set(self.unused_labels))
+        self.transfer_from_train_to_test = list(set(self.transfer_from_train_to_test))
+
 
         def flatten(list_of_lists):
             return [item for sublist in list_of_lists for item in sublist]

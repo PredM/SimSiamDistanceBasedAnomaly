@@ -35,9 +35,8 @@ def clean_up_dataframe(df: pd.DataFrame, config: Configuration):
 
     print('\tResampling (depending on freq: Downsampling) the data at a constant frequency'
           ' using nearest neighbor to forward fill NAN values')
-    # print(df.head(10))
     df = df.resample(config.resample_frequency).pad()  # .nearest
-    # print(df.head(10))
+
     print('\nShape after cleaning up the dataframe: ', df.shape)
 
     return df
