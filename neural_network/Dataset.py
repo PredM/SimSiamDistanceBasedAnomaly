@@ -296,10 +296,8 @@ class FullDataset(Dataset):
         else:
             raise ValueError('Unknown dataset type')
 
-        rep = lambda x: str(x).replace("['YYYYMMDD HH:mm:ss (", "").replace(")']", "")
-
-        t1 = rep(dataset[index][0])
-        t2 = rep(dataset[index][2])
+        t1 = dataset[index][0]
+        t2 = dataset[index][2]
         return " - ".join([t1, t2])
 
     def get_indices_failures_only_test(self):
