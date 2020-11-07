@@ -60,7 +60,7 @@ class GeneralConfiguration:
 
         # Path and file name to the specific model that should be used for testing and live classification
         # Folder where the models are stored is prepended below
-        self.filename_model_to_use = 'temp_snn_model_10-29_15-08-21_epoch-100'
+        self.filename_model_to_use = 'temp_snn_model_11-07_18-02-40_epoch-500'
 
         ##
         # Debugging - Don't use for feature implementation
@@ -94,7 +94,7 @@ class ModelConfiguration:
         ##
 
         # Selection which basic architecture is used, see enum class for details
-        self.architecture_variant = ArchitectureVariant.STANDARD_COMPLEX
+        self.architecture_variant = ArchitectureVariant.STANDARD_SIMPLE
 
         ##
         # Determines how the similarity between two embedding vectors is determined (when a simple architecture is used)
@@ -108,6 +108,7 @@ class ModelConfiguration:
         self.simple_measure = SimpleSimilarityMeasure.ABS_MEAN
 
         self.complex_measure = ComplexSimilarityMeasure.GRAPH_SIM
+
 
         ###
         # Hyperparameters
@@ -124,7 +125,7 @@ class ModelConfiguration:
         # If !use_individual_hyperparameters interpreted as a single json file, else as a folder
         # which contains json files named after the cases they should be used for
         # If no file with this name is present the 'default.json' Config will be used
-        self.hyper_file = self.hyper_file_folder + 'graph_sim_testing.json'  # 'individual_hyperparameters_test'  #
+        self.hyper_file = self.hyper_file_folder + 'graph_sim-07-11.json'  # 'individual_hyperparameters_test'  #
 
         ##
         # Various settings influencing the similarity calculation

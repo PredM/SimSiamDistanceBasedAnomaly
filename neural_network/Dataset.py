@@ -296,8 +296,13 @@ class FullDataset(Dataset):
         else:
             raise ValueError('Unknown dataset type')
 
-        t1 = dataset[index][0]
-        t2 = dataset[index][2]
+        # TODO Must be changed when dataset is regenerated due to change how the timestamp is stored
+        rep = lambda x: str(x).replace("['YYYYMMDD HH:mm:ss (", "").replace(")']", "")
+
+        t1 = rep(dataset[index][0])
+        t2 = rep(dataset[index][2])
+
+
         return " - ".join([t1, t2])
 
     def get_indices_failures_only_test(self):

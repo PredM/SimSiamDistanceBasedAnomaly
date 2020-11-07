@@ -17,22 +17,27 @@ class OptimizerHelper:
 
         self.batch_composer = BatchComposer(config, dataset, self.hyper, False)
 
-        if self.hyper.gradient_cap >= 0:
+        if self.hyper.gradient_cap > 0:
             self.adam_optimizer = tf.keras.optimizers.Adam(learning_rate=self.hyper.learning_rate,
                                                            clipnorm=self.hyper.gradient_cap)
         else:
             self.adam_optimizer = tf.keras.optimizers.Adam(learning_rate=self.hyper.learning_rate)
 
+        self.trainable_variables = None
+
+        # Get parameters of subnet and ffnn (if complex sim measure)
+        if ArchitectureVariant.is_complex(self.config.architecture_variant):
+            self.trainable_variables = self.model.complex_sim_measure.model.trainable_variables + \
+                                       self.model.encoder.model.trainable_variables
+        else:
+            self.trainable_variables = self.model.encoder.model.trainable_variables
+
     def update_single_model(self, model_input, true_similarities, query_classes=None):
         with tf.GradientTape() as tape:
-            # Get parameters of subnet and ffnn (if complex sim measure)
-            if ArchitectureVariant.is_complex(self.config.architecture_variant):
-                trainable_params = self.model.complex_sim_measure.model.trainable_variables + \
-                                   self.model.encoder.model.trainable_variables
-            else:
-                trainable_params = self.model.encoder.model.trainable_variables
 
             pred_similarities = self.model.get_sims_for_batch(model_input)
+
+            # print(pred_similarities[0:5])
 
             # Calculate the loss based on configuration
             if self.config.type_of_loss_function == LossFunction.BINARY_CROSS_ENTROPY:
@@ -66,10 +71,10 @@ class OptimizerHelper:
                 raise AttributeError(
                     'Unknown loss function:', self.config.type_of_loss_function)
 
-            grads = tape.gradient(loss, trainable_params)
+            grads = tape.gradient(loss, self.trainable_variables)
 
             # Apply the gradients to the trainable parameters
-            self.adam_optimizer.apply_gradients(zip(grads, trainable_params))
+            self.adam_optimizer.apply_gradients(zip(grads, self.trainable_variables))
 
             return loss
 

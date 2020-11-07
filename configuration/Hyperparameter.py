@@ -102,7 +102,6 @@ class Hyperparameters:
         if global_attention_pool_channels is not None and len(global_attention_pool_channels) > 0:
             self.global_attention_pool_channels = global_attention_pool_channels
 
-
         self.encoder_variant = data['encoder_variant'].lower()
 
         if self.encoder_variant not in self.encoder_variants:

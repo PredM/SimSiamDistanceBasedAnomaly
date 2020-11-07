@@ -256,6 +256,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
         sims_batch = tf.map_fn(lambda pair_index: self.get_sim_pair(context_vectors, pair_index),
                                tf.range(examples_in_batch, dtype=tf.int32), back_prop=True,
                                fn_output_signature=tf.float32)
+
         return sims_batch
 
     def input_extension(self, batch):

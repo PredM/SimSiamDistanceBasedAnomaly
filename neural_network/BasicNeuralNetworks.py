@@ -374,13 +374,6 @@ class GraphSimilarity(NN):
             print('Number of channels of graph conv layers is not defined in the hyperparameters.')
             sys.exit(-1)
 
-        elif self.hyper.graph_conv_channels is not None and self.hyper.global_attention_pool_channels is None:
-            print('Can not used graph conv layers without an aggregation via at least one global attention pool layer.')
-            sys.exit(-1)
-
-        elif self.hyper.ffnn_layers is None or len(self.hyper.ffnn_layers) == 0:
-            print('Warning: Only single FC layer with sigmoid function is added after global attention pool layer.')
-
         # Define inputs as shown at https://graphneural.network/getting-started/
         main_input = tf.keras.Input(shape=(self.input_shape[1],), name="EncoderOutput")
         adj_matrix_input = tf.keras.layers.Input(shape=(self.input_shape[0],), name="AdjacencyMatrix")
@@ -389,18 +382,19 @@ class GraphSimilarity(NN):
         for channels in self.hyper.graph_conv_channels:
             output = spektral.layers.GraphConv(channels=channels, activation='relu')([output, adj_matrix_input])
 
-        for channels in self.hyper.global_attention_pool_channels:
-            output = spektral.layers.GlobalAttentionPool(channels)(output)
-
-        for units in self.hyper.ffnn_layers:
-            output = tf.keras.layers.Dense(units=units, activation=tf.keras.activations.relu)(output)
-            # output = tf.keras.layers.Dropout(self.hyper.dropout_rate)(output)
+        # Number of channels if fixed to 1 in order to get a single value as result that can be transformed
+        # into a similarity values
+        output = spektral.layers.GlobalAttentionPool(channels=1)(output)
 
         # Regardless of the configured layers,
-        # a last FC layer with sigmoid function is added to output a similarity value
-        output = tf.keras.layers.Dense(units=1, activation=tf.keras.activations.sigmoid)(output)[0][0]
+        # add a single FC layer with one unit and with sigmoid function to output a similarity value
+        output = tf.keras.layers.Dense(units=1, activation=tf.keras.activations.sigmoid)(output)
+
+        # Remove the batch size dimension because this is called for a single example
+        output = tf.squeeze(output)
 
         self.model = tf.keras.Model(inputs=[main_input, adj_matrix_input], outputs=output)
+
 
 
 class CNN2dWithAddInput(NN):
