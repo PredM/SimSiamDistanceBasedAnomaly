@@ -1,0 +1,57 @@
+{
+  "notes": "",
+  "encoder_variant": "dwcnn2d",
+  "batch_size": 48,
+  "epochs": 400000,
+  "epochs_current": 0,
+  "learning_rate": 0.001,
+  "gradient_cap": -1,
+  "dropout_rate": 0.05,
+  "ffnn_layers": [
+    64,
+    16
+  ],
+  "cnn_layers": [
+  ],
+  "cnn_kernel_length": [
+  ],
+  "cnn_strides": [
+  ],
+  "graph_conv_channels": [
+    64
+  ],
+  "global_attention_pool_channels": [
+    64
+  ],
+  "cnn2d_layers": [
+    64
+  ],
+  "cnn2d_kernel_length": [
+    [
+      3,
+      1
+    ],
+    [
+      3,
+      1
+    ],
+    [
+      1,
+      1
+    ]
+  ],
+  "cnn2d_strides": [
+    [
+      1,
+      1
+    ],
+    [
+      1,
+      1
+    ],
+    [
+      1,
+      1
+    ]
+  ]
+}

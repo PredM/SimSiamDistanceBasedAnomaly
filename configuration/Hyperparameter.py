@@ -9,7 +9,8 @@ class Hyperparameters:
         # Important: Variable names must match json file entries
         ##
 
-        self.encoder_variants = ['cnn', 'rnn', 'cnn2dwithaddinput', 'cnn2d', 'typebasedencoder', 'dummy', 'graphcnn2d']
+        self.encoder_variants = ['cnn', 'rnn', 'cnn2dwithaddinput', 'cnn2d', 'typebasedencoder', 'dummy', 'graphcnn2d',
+                                 'dwcnn2d']
         self.encoder_variant = None
 
         # Need to be changed after dataset was loaded
@@ -124,7 +125,7 @@ class Hyperparameters:
             if fc_layer is not None and len(fc_layer) > 0:
                 self.fc_after_cnn1d_layers = fc_layer
 
-        if self.encoder_variant in ["cnn2d", "cnn2dwithaddinput", "graphcnn2d"]:
+        if self.encoder_variant in ["cnn2d", "cnn2dwithaddinput", "graphcnn2d", "dwcnn2d"]:
             self.cnn2d_layers = data['cnn2d_layers']
             self.cnn2d_kernel_length = data['cnn2d_kernel_length']
             self.cnn2d_strides = data['cnn2d_strides']

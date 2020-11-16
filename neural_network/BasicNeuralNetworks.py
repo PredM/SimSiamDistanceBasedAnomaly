@@ -38,7 +38,7 @@ class NN:
         if self.model is None:
             raise AttributeError('Model not initialised. Can not load weights.')
 
-        if type(self) in [CNN, RNN, CNN2D, CNN2dWithAddInput, GraphCNN2D, TypeBasedEncoder, DUMMY]:
+        if type(self) in [CNN, RNN, CNN2D, CNN2dWithAddInput, GraphCNN2D, TypeBasedEncoder, DUMMY, DepthwiseCNN2D]:
             prefix = 'encoder'
         elif type(self) in [BaselineOverwriteSimilarity, FFNN, GraphSimilarity]:
             prefix = 'complex_sim'
@@ -211,6 +211,40 @@ class CNN(NN):
             model.add(tf.keras.layers.Reshape((model.layers[len(model.layers) - 1].output.shape[1], 1)))
 
         self.model = model
+
+
+class DepthwiseCNN2D(NN):
+
+    def __init__(self, hyperparameters, input_shape):
+        super().__init__(hyperparameters, input_shape)
+
+    # https://www.tensorflow.org/api_docs/python/tf/keras/layers/DepthwiseConv2D?hl=de
+    def create_model(self):
+
+        if len(self.hyper.cnn2d_kernel_length) < 1:
+            print('Can not create DeptwiseCNN2D without kernel lengths being defined!')
+            sys.exit()
+
+        input = tf.keras.Input(shape=(self.input_shape[0], self.input_shape[1], 1), name="Input0")
+        print('Creating depthwise 2D convolution encoder with an input shape: ', input.shape)
+
+        x = input
+        # creating CNN encoder for sensor data
+        for filters, kernel_size, stride in zip(self.hyper.cnn2d_layers, self.hyper.cnn2d_kernel_length,
+                                                self.hyper.cnn2d_strides):
+            depthwise2Dconv = tf.keras.layers.SeparableConv2D(filters, kernel_size, stride,
+                                                              padding='valid',
+                                                              depth_multiplier=1,
+                                                              activation=tf.keras.activations.relu)
+
+            x = depthwise2Dconv(x)
+
+            x = tf.keras.layers.BatchNormalization()(x)
+            x = tf.keras.layers.ReLU()(x)
+        x = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(x)
+        output = x
+
+        self.model = tf.keras.Model(input, output)
 
 
 class CNN2D(NN):
@@ -394,7 +428,6 @@ class GraphSimilarity(NN):
         output = tf.squeeze(output)
 
         self.model = tf.keras.Model(inputs=[main_input, adj_matrix_input], outputs=output)
-
 
 
 class CNN2dWithAddInput(NN):

@@ -5,7 +5,7 @@ from configuration.Configuration import Configuration
 from configuration.Enums import ArchitectureVariant, ComplexSimilarityMeasure
 from configuration.Hyperparameter import Hyperparameters
 from neural_network.BasicNeuralNetworks import CNN, RNN, FFNN, CNN2dWithAddInput, \
-    CNN2D, TypeBasedEncoder, DUMMY, BaselineOverwriteSimilarity, GraphCNN2D, GraphSimilarity
+    CNN2D, TypeBasedEncoder, DUMMY, BaselineOverwriteSimilarity, GraphCNN2D, GraphSimilarity, DepthwiseCNN2D
 from neural_network.Dataset import FullDataset
 from neural_network.SimpleSimilarityMeasure import SimpleSimilarityMeasure
 
@@ -69,7 +69,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
 
     # Reshapes the standard import shape (examples x ts_length x ts_depth) if needed for the used encoder variant
     def reshape(self, input_pairs):
-        if self.hyper.encoder_variant in ['cnn2dwithaddinput', 'cnn2d', 'graphcnn2d']:
+        if self.hyper.encoder_variant in ['cnn2dwithaddinput', 'cnn2d', 'graphcnn2d', 'dwcnn2d']:
             input_pairs = np.reshape(input_pairs, (input_pairs.shape[0], input_pairs.shape[1], input_pairs.shape[2], 1))
         return input_pairs
 
@@ -198,7 +198,6 @@ class SimpleSNN(AbstractSimilarityMeasure):
             sims_all_examples[sim_start:sim_end] = sims_subsection
 
         return sims_all_examples
-
 
     # Called by get_sims or get_sims_multiple_batches for a single example or by an optimizer directly
     @tf.function
@@ -336,7 +335,6 @@ class SimpleSNN(AbstractSimilarityMeasure):
 
         return all_examples_encoded
 
-
     def load_model(self, for_cbs=False, group_id=''):
 
         self.hyper = Hyperparameters()
@@ -390,6 +388,8 @@ class SimpleSNN(AbstractSimilarityMeasure):
             self.encoder = CNN2D(self.hyper, input_shape_encoder)
         elif self.hyper.encoder_variant == 'graphcnn2d':
             self.encoder = GraphCNN2D(self.hyper, input_shape_encoder)
+        elif self.hyper.encoder_variant == 'dwcnn2d':
+            self.encoder = DepthwiseCNN2D(self.hyper, input_shape_encoder)
         elif self.hyper.encoder_variant == 'typebasedencoder':
             self.encoder = TypeBasedEncoder(self.hyper, input_shape_encoder, self.config.type_based_groups)
         elif self.hyper.encoder_variant == 'cnn2dwithaddinput':
