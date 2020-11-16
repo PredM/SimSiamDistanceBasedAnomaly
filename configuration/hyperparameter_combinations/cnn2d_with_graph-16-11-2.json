@@ -1,5 +1,6 @@
 {
-  "encoder_variant": "cnn2d",
+  "notes": "based on 26-10, reduced kernel lengths from 5 to 3 and first stride from 2 to 1",
+  "encoder_variant": "graphcnn2d",
   "batch_size": 48,
   "epochs": 400000,
   "epochs_current": 0,
@@ -7,6 +8,8 @@
   "gradient_cap": -1,
   "dropout_rate": 0.05,
   "ffnn_layers": [
+    64,
+    16
   ],
   "cnn_layers": [
   ],
@@ -15,13 +18,14 @@
   "cnn_strides": [
   ],
   "graph_conv_channels": [
-    32
+    64
   ],
   "global_attention_pool_channels": [
+    64
   ],
   "cnn2d_layers": [
     128,
-    32,
+    64,
     1
   ],
   "cnn2d_kernel_length": [

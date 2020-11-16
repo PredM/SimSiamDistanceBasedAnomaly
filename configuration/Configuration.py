@@ -60,7 +60,7 @@ class GeneralConfiguration:
 
         # Path and file name to the specific model that should be used for testing and live classification
         # Folder where the models are stored is prepended below
-        self.filename_model_to_use = 'temp_snn_model_11-07_18-02-40_epoch-500'
+        self.filename_model_to_use = 'temp_snn_model_11-16_09-17-53_epoch-1800'
 
         ##
         # Debugging - Don't use for feature implementation
@@ -108,7 +108,6 @@ class ModelConfiguration:
         self.simple_measure = SimpleSimilarityMeasure.ABS_MEAN
 
         self.complex_measure = ComplexSimilarityMeasure.GRAPH_SIM
-
 
         ###
         # Hyperparameters
@@ -513,7 +512,6 @@ class Configuration(
         # Remove duplicates to ensure output is correct (would result in wrong sum of changed examples otherwise)
         self.unused_labels = list(set(self.unused_labels))
         self.transfer_from_train_to_test = list(set(self.transfer_from_train_to_test))
-
 
         def flatten(list_of_lists):
             return [item for sublist in list_of_lists for item in sublist]

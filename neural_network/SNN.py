@@ -199,49 +199,6 @@ class SimpleSNN(AbstractSimilarityMeasure):
 
         return sims_all_examples
 
-    # Called by Dataset encode() to output encoded data of the input data in size of batches
-    def encode_in_batches(self, raw_data):
-        # Debugging, will raise error for encoders with additional input because of list structure
-        # assert batch.shape[0] % 2 == 0, 'Input batch of uneven length not possible'
-
-        # pair: index+0: test, index+1: train --> only half as many results
-        if self.hyper.encoder_variant == 'cnn2dwithaddinput':
-            num_examples = raw_data[0].shape[0]
-
-        else:
-            num_examples = raw_data.shape[0]
-
-        all_examples_encoded = []
-        batch_size = self.config.sim_calculation_batch_size
-
-        for index in range(0, num_examples, batch_size):
-
-            # fix batch size if it would exceed the number of examples in the
-            if index + batch_size >= num_examples:
-                batch_size = num_examples - index
-
-            # Debugging, will raise error for encoders with additional input because of list structure
-            # assert batch_size % 2 == 0, 'Batch of uneven length not possible'
-            # assert index % 2 == 0 and (index + batch_size) % 2 == 0, 'Mapping / splitting is not correct'
-
-            # Calculation of assignments of pair indices to similarity value indices
-
-            if self.hyper.encoder_variant == 'cnn2dwithaddinput':
-                subsection_examples = raw_data[0][index:index + batch_size]
-                subsection_aux_input = raw_data[1][index:index + batch_size]
-                subsection_batch = [subsection_examples, subsection_aux_input]
-            else:
-                subsection_batch = raw_data[index:index + batch_size]
-
-            # sims_subsection = self.get_sims_for_batch(subsection_batch)
-            examples_encoded_subsection = self.encoder.model(subsection_batch, training=False)
-            # print("sims_subsection: ", examples_encoded_subsection[0].shape,
-            # examples_encoded_subsection[1].shape, examples_encoded_subsection[2].shape,
-            # examples_encoded_subsection[2].shape)
-
-            all_examples_encoded.append(examples_encoded_subsection)
-
-        return all_examples_encoded
 
     # Called by get_sims or get_sims_multiple_batches for a single example or by an optimizer directly
     @tf.function
@@ -334,6 +291,51 @@ class SimpleSNN(AbstractSimilarityMeasure):
         b = tf.gather(b, indices_b)
 
         return a, b
+
+    # Called by Dataset encode() to output encoded data of the input data in size of batches
+    def encode_in_batches(self, raw_data):
+        # Debugging, will raise error for encoders with additional input because of list structure
+        # assert batch.shape[0] % 2 == 0, 'Input batch of uneven length not possible'
+
+        # pair: index+0: test, index+1: train --> only half as many results
+        if self.hyper.encoder_variant == 'cnn2dwithaddinput':
+            num_examples = raw_data[0].shape[0]
+
+        else:
+            num_examples = raw_data.shape[0]
+
+        all_examples_encoded = []
+        batch_size = self.config.sim_calculation_batch_size
+
+        for index in range(0, num_examples, batch_size):
+
+            # fix batch size if it would exceed the number of examples in the
+            if index + batch_size >= num_examples:
+                batch_size = num_examples - index
+
+            # Debugging, will raise error for encoders with additional input because of list structure
+            # assert batch_size % 2 == 0, 'Batch of uneven length not possible'
+            # assert index % 2 == 0 and (index + batch_size) % 2 == 0, 'Mapping / splitting is not correct'
+
+            # Calculation of assignments of pair indices to similarity value indices
+
+            if self.hyper.encoder_variant == 'cnn2dwithaddinput':
+                subsection_examples = raw_data[0][index:index + batch_size]
+                subsection_aux_input = raw_data[1][index:index + batch_size]
+                subsection_batch = [subsection_examples, subsection_aux_input]
+            else:
+                subsection_batch = raw_data[index:index + batch_size]
+
+            # sims_subsection = self.get_sims_for_batch(subsection_batch)
+            examples_encoded_subsection = self.encoder.model(subsection_batch, training=False)
+            # print("sims_subsection: ", examples_encoded_subsection[0].shape,
+            # examples_encoded_subsection[1].shape, examples_encoded_subsection[2].shape,
+            # examples_encoded_subsection[2].shape)
+
+            all_examples_encoded.append(examples_encoded_subsection)
+
+        return all_examples_encoded
+
 
     def load_model(self, for_cbs=False, group_id=''):
 
