@@ -1,6 +1,7 @@
 import sys
 from os import listdir, path
 
+import numpy as np
 import spektral
 import tensorflow as tf
 
@@ -213,38 +214,97 @@ class CNN(NN):
         self.model = model
 
 
+# TODO If this results in good performance rename in order to avoid confusions with the depth wise layer from tensorflow
+# https://www.tensorflow.org/api_docs/python/tf/keras/layers/DepthwiseConv2D?hl=de
 class DepthwiseCNN2D(NN):
 
     def __init__(self, hyperparameters, input_shape):
         super().__init__(hyperparameters, input_shape)
 
-    # https://www.tensorflow.org/api_docs/python/tf/keras/layers/DepthwiseConv2D?hl=de
+    # def create_submodel(self, input_shape, group):
+    #
+    #     input = tf.keras.layers.Input(shape=input_shape, name='Input_Attribute_' + str(group))
+    #     out = input
+    #
+    #     print(input.name)
+    #
+    #     for num_filters, kernel_size, strides in zip(self.hyper.cnn_layers,
+    #                                                  self.hyper.cnn_kernel_length,
+    #                                                  self.hyper.cnn_strides):
+    #         out = tf.keras.layers.Conv1D(filters=num_filters, padding='SAME', kernel_size=kernel_size, strides=strides,
+    #                                      activation=tf.keras.activations.relu)(out)
+    #
+    #     # Add dimension so we can reconstruct the attribute dimension when combining the outputs for each attribute
+    #     out = tf.expand_dims(out, axis=1)
+    #
+    #     return tf.keras.Model(inputs=[input], outputs=[out])
+
     def create_model(self):
+        print('Creating type based encoder with an input shape: ', self.input_shape)
 
-        if len(self.hyper.cnn2d_kernel_length) < 1:
-            print('Can not create DeptwiseCNN2D without kernel lengths being defined!')
-            sys.exit()
+        if len(self.hyper.cnn_layers) < 1:
+            print('CNN encoder with less than one layer is not possible')
+            sys.exit(1)
 
-        input = tf.keras.Input(shape=(self.input_shape[0], self.input_shape[1], 1), name="Input0")
-        print('Creating depthwise 2D convolution encoder with an input shape: ', input.shape)
+        full_input = tf.keras.Input(shape=self.input_shape, name="Input0")
+        nbr_attributes = self.input_shape[1]
+        outputs = []
 
-        x = input
-        # creating CNN encoder for sensor data
-        for filters, kernel_size, stride in zip(self.hyper.cnn2d_layers, self.hyper.cnn2d_kernel_length,
-                                                self.hyper.cnn2d_strides):
-            depthwise2Dconv = tf.keras.layers.SeparableConv2D(filters, kernel_size, stride,
-                                                              padding='valid',
-                                                              depth_multiplier=1,
-                                                              activation=tf.keras.activations.relu)
+        # Route each attribute vector through the encoder of it's group
+        for attribute in range(nbr_attributes):
 
-            x = depthwise2Dconv(x)
+            # Split the tensor of a single attribute
+            attribute_input = tf.keras.layers.Lambda(lambda x: x[:, :, attribute])(full_input)
 
-            x = tf.keras.layers.BatchNormalization()(x)
-            x = tf.keras.layers.ReLU()(x)
-        x = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(x)
-        output = x
+            # Add back the attribute dimension, which alway 1 here:
+            # (# Examples, # Timestamps) --> (# Examples, # Timestamps, 1)
+            attribute_input = tf.expand_dims(attribute_input, axis=2)
 
-        self.model = tf.keras.Model(input, output)
+            # Get the encoder for the attribute based on it's group and route the input split through it
+            out = attribute_input
+            for num_filters, kernel_size, strides in zip(self.hyper.cnn_layers,
+                                                         self.hyper.cnn_kernel_length,
+                                                         self.hyper.cnn_strides):
+                out = tf.keras.layers.Conv1D(filters=num_filters, kernel_size=kernel_size, strides=strides,
+                                             padding='SAME', activation=tf.keras.activations.relu)(out)
+
+            # Add dimension so we can reconstruct the attribute dimension when combining the outputs for each attribute
+            out = tf.expand_dims(out, axis=1)
+
+            outputs.append(out)
+
+        # Merge the encoder outputs for each attribute back into a single tensor
+        # Shape after concatenation: (# Examples, # Attributes, (depending on layer properties), # Units in last layer)
+        output = tf.keras.layers.Concatenate(axis=1)(outputs)
+
+        self.model = tf.keras.Model(inputs=full_input, outputs=output)
+
+    # def old_create_model(self):
+    #
+    #     if len(self.hyper.cnn2d_kernel_length) < 1:
+    #         print('Can not create DeptwiseCNN2D without kernel lengths being defined!')
+    #         sys.exit()
+    #
+    #     input = tf.keras.Input(shape=(self.input_shape[0], self.input_shape[1], 1), name="Input0")
+    #     print('Creating depthwise 2D convolution encoder with an input shape: ', input.shape)
+    #
+    #     x = input
+    #     # creating CNN encoder for sensor data
+    #     for filters, kernel_size, stride in zip(self.hyper.cnn2d_layers, self.hyper.cnn2d_kernel_length,
+    #                                             self.hyper.cnn2d_strides):
+    #         depthwise2Dconv = tf.keras.layers.SeparableConv2D(filters, kernel_size, stride,
+    #                                                           padding='SAME',
+    #                                                           depth_multiplier=1,
+    #                                                           activation=tf.keras.activations.relu)
+    #
+    #         x = depthwise2Dconv(x)
+    #
+    #         x = tf.keras.layers.BatchNormalization()(x)
+    #         x = tf.keras.layers.ReLU()(x)
+    #     x = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(x)
+    #     output = x
+    #
+    #     self.model = tf.keras.Model(input, output)
 
 
 class CNN2D(NN):

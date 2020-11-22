@@ -116,7 +116,7 @@ class Hyperparameters:
             self.tcn_layers = data['tcn_layers']
             self.tcn_kernel_length = data['tcn_kernel_length']
 
-        if self.encoder_variant in ['typebasedencoder', 'cnn', 'cnn2d', 'cnn2dwithaddinput', 'graphcnn2d']:
+        if self.encoder_variant in ['typebasedencoder', 'cnn', 'cnn2d', 'cnn2dwithaddinput', 'graphcnn2d', 'dwcnn2d']:
             self.cnn_layers = data['cnn_layers']
             self.cnn_kernel_length = data['cnn_kernel_length']
             self.cnn_strides = data['cnn_strides']
@@ -125,7 +125,7 @@ class Hyperparameters:
             if fc_layer is not None and len(fc_layer) > 0:
                 self.fc_after_cnn1d_layers = fc_layer
 
-        if self.encoder_variant in ["cnn2d", "cnn2dwithaddinput", "graphcnn2d", "dwcnn2d"]:
+        if self.encoder_variant in ["cnn2d", "cnn2dwithaddinput", "graphcnn2d"]:
             self.cnn2d_layers = data['cnn2d_layers']
             self.cnn2d_kernel_length = data['cnn2d_kernel_length']
             self.cnn2d_strides = data['cnn2d_strides']

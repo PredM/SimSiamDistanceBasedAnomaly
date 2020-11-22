@@ -1,0 +1,80 @@
+
+Dataset loaded:
+Shape of training set (example, time, channels): (25550, 1000, 61)
+Shape of test set (example, time, channels): (3389, 1000, 61)
+Num of classes in train and test together: 29
+
+Creating standard SNN with simple similarity measure:  SimpleSimilarityMeasure.ABS_MEAN
+Creating CNN with 2d kernel encoder with an input shape:  (1000, 61)
+Attention: No 1d conv layer on top of 2d conv is used!
+
+Model: "functional_1"
+__________________________________________________________________________________________________
+Layer (type)                    Output Shape         Param #     Connected to                     
+==================================================================================================
+Input0 (InputLayer)             [(None, 1000, 61, 1) 0                                            
+__________________________________________________________________________________________________
+reshape (Reshape)               (None, 1000, 61)     0           Input0[0][0]                     
+__________________________________________________________________________________________________
+conv1d (Conv1D)                 (None, 1000, 61)     3782        reshape[0][0]                    
+__________________________________________________________________________________________________
+tf_op_layer_ExpandDims (TensorF [(None, 1000, 61, 1) 0           conv1d[0][0]                     
+__________________________________________________________________________________________________
+tf_op_layer_concat (TensorFlowO [(None, 1000, 61, 2) 0           Input0[0][0]                     
+                                                                 tf_op_layer_ExpandDims[0][0]     
+__________________________________________________________________________________________________
+conv2d (Conv2D)                 (None, 998, 61, 128) 896         tf_op_layer_concat[0][0]         
+__________________________________________________________________________________________________
+batch_normalization (BatchNorma (None, 998, 61, 128) 512         conv2d[0][0]                     
+__________________________________________________________________________________________________
+re_lu (ReLU)                    (None, 998, 61, 128) 0           batch_normalization[0][0]        
+__________________________________________________________________________________________________
+conv2d_1 (Conv2D)               (None, 996, 61, 64)  24640       re_lu[0][0]                      
+__________________________________________________________________________________________________
+batch_normalization_1 (BatchNor (None, 996, 61, 64)  256         conv2d_1[0][0]                   
+__________________________________________________________________________________________________
+re_lu_1 (ReLU)                  (None, 996, 61, 64)  0           batch_normalization_1[0][0]      
+__________________________________________________________________________________________________
+conv2d_2 (Conv2D)               (None, 996, 61, 1)   65          re_lu_1[0][0]                    
+__________________________________________________________________________________________________
+batch_normalization_2 (BatchNor (None, 996, 61, 1)   4           conv2d_2[0][0]                   
+__________________________________________________________________________________________________
+re_lu_2 (ReLU)                  (None, 996, 61, 1)   0           batch_normalization_2[0][0]      
+__________________________________________________________________________________________________
+reshape_1 (Reshape)             (None, 996, 61)      0           re_lu_2[0][0]                    
+__________________________________________________________________________________________________
+dropout (Dropout)               (None, 996, 61)      0           reshape_1[0][0]                  
+__________________________________________________________________________________________________
+tf_op_layer_Transpose (TensorFl [(None, 61, 996)]    0           dropout[0][0]                    
+__________________________________________________________________________________________________
+input_1 (InputLayer)            [(None, 61)]         0                                            
+__________________________________________________________________________________________________
+graph_conv (GraphConv)          (None, 61, 64)       63808       tf_op_layer_Transpose[0][0]      
+                                                                 input_1[0][0]                    
+__________________________________________________________________________________________________
+global_attention_pool (GlobalAt (None, 64)           8320        graph_conv[0][0]                 
+==================================================================================================
+Total params: 102,283
+Trainable params: 101,897
+Non-trainable params: 386
+__________________________________________________________________________________________________
+
+Training:
+Timestamp: 16.11 08:40:47 (4.39 Seconds since last output) - Epoch: 0 - Loss: 5.52448 - Name: 
+Timestamp: 16.11 08:41:30 (43.04 Seconds since last output) - Epoch: 100 - Loss: 0.52485 - Name: temp_snn_model_11-16_08-41-30_epoch-100/
+Timestamp: 16.11 08:42:13 (43.06 Seconds since last output) - Epoch: 200 - Loss: 0.28240 - Name: temp_snn_model_11-16_08-42-13_epoch-200/
+Timestamp: 16.11 08:42:56 (42.79 Seconds since last output) - Epoch: 300 - Loss: 0.35407 - Name: temp_snn_model_11-16_08-42-56_epoch-300/
+Timestamp: 16.11 08:43:39 (42.67 Seconds since last output) - Epoch: 400 - Loss: 0.37944 - Name: temp_snn_model_11-16_08-43-38_epoch-400/
+Timestamp: 16.11 08:44:20 (41.69 Seconds since last output) - Epoch: 500 - Loss: 0.24773 - Name: temp_snn_model_11-16_08-44-20_epoch-500/
+Timestamp: 16.11 08:45:02 (41.72 Seconds since last output) - Epoch: 600 - Loss: 0.33682 - Name: temp_snn_model_11-16_08-45-02_epoch-600/
+Timestamp: 16.11 08:45:44 (41.72 Seconds since last output) - Epoch: 700 - Loss: 0.24670 - Name: temp_snn_model_11-16_08-45-44_epoch-700/
+Timestamp: 16.11 08:46:26 (42.06 Seconds since last output) - Epoch: 800 - Loss: 0.30581 - Name: temp_snn_model_11-16_08-46-26_epoch-800/
+Timestamp: 16.11 08:47:08 (41.98 Seconds since last output) - Epoch: 900 - Loss: 0.16549 - Name: temp_snn_model_11-16_08-47-08_epoch-900/
+Timestamp: 16.11 08:47:49 (41.25 Seconds since last output) - Epoch: 1000 - Loss: 0.27293 - Name: temp_snn_model_11-16_08-47-49_epoch-1000/
+Timestamp: 16.11 08:48:30 (41.34 Seconds since last output) - Epoch: 1100 - Loss: 0.18281 - Name: temp_snn_model_11-16_08-48-30_epoch-1100/
+Timestamp: 16.11 08:49:12 (41.29 Seconds since last output) - Epoch: 1200 - Loss: 0.31442 - Name: temp_snn_model_11-16_08-49-12_epoch-1200/
+Timestamp: 16.11 08:49:53 (41.22 Seconds since last output) - Epoch: 1300 - Loss: 0.11042 - Name: temp_snn_model_11-16_08-49-53_epoch-1300/
+Timestamp: 16.11 08:50:34 (40.98 Seconds since last output) - Epoch: 1400 - Loss: 0.23551 - Name: temp_snn_model_11-16_08-50-34_epoch-1400/
+Timestamp: 16.11 08:51:15 (40.72 Seconds since last output) - Epoch: 1500 - Loss: 0.17958 - Name: temp_snn_model_11-16_08-51-14_epoch-1500/
+Timestamp: 16.11 08:51:55 (40.96 Seconds since last output) - Epoch: 1600 - Loss: 0.28352 - Name: temp_snn_model_11-16_08-51-55_epoch-1600/
+Early stopping: Training stopped at epoch  1644  because loss did not decrease since  300 epochs.
