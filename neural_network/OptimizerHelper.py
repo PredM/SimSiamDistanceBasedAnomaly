@@ -34,7 +34,6 @@ class OptimizerHelper:
 
     def update_single_model(self, model_input, true_similarities, query_classes=None):
         with tf.GradientTape() as tape:
-
             pred_similarities = self.model.get_sims_for_batch(model_input)
 
             # print(pred_similarities[0:5])
@@ -72,9 +71,14 @@ class OptimizerHelper:
                     'Unknown loss function:', self.config.type_of_loss_function)
 
             grads = tape.gradient(loss, self.trainable_variables)
+            #grads = [tf.math.l2_normalize(w) for w in grads]
 
             # Apply the gradients to the trainable parameters
             self.adam_optimizer.apply_gradients(zip(grads, self.trainable_variables))
+            # For debugging the training process
+            #tf.print("Max of grads[0]: %.4f" % tf.reduce_max(grads[0]))
+            #tf.print("Min of grads[0]: %.4f" % tf.reduce_min(grads[0]))
+            #tf.print("Mean of grads[0]: %.4f" % tf.reduce_mean(grads[0]))
 
             return loss
 
