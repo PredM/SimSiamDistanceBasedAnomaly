@@ -1,6 +1,6 @@
 {
   "notes": "",
-  "encoder_variant": "dwcnn2d",
+  "encoder_variant": "graphattributeconvolution",
   "batch_size": 64,
   "epochs": 400000,
   "epochs_current": 0,
@@ -23,15 +23,14 @@
     1,
     1
   ],
+  "fc_after_cnn1d_layers": [
+    256,
+    64
+  ],
   "graph_conv_channels": [
+    64
   ],
   "global_attention_pool_channels": [
-  ],
-  "cnn2d_layers": [
-    1
-  ],
-  "cnn2d_kernel_length": [
-  ],
-  "cnn2d_strides": [
+    64
   ]
 }

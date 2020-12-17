@@ -1,7 +1,6 @@
 import sys
 from os import listdir, path
 
-import numpy as np
 import spektral
 import tensorflow as tf
 
@@ -39,7 +38,8 @@ class NN:
         if self.model is None:
             raise AttributeError('Model not initialised. Can not load weights.')
 
-        if type(self) in [CNN, RNN, CNN2D, CNN2dWithAddInput, GraphCNN2D, TypeBasedEncoder, DUMMY, DepthwiseCNN2D]:
+        if type(self) in [CNN, RNN, CNN2D, CNN2dWithAddInput, GraphCNN2D, TypeBasedEncoder, DUMMY,
+                          AttributeConvolution]:
             prefix = 'encoder'
         elif type(self) in [BaselineOverwriteSimilarity, FFNN, GraphSimilarity]:
             prefix = 'complex_sim'
@@ -60,6 +60,10 @@ class NN:
 
     def get_output_shape(self):
         return self.model.output_shape
+
+    # To enable cross model component inheritance
+    def type_specific_layer_creation(self, input, output):
+        pass
 
 
 class FFNN(NN):
@@ -214,97 +218,71 @@ class CNN(NN):
         self.model = model
 
 
-# TODO If this results in good performance rename in order to avoid confusions with the depth wise layer from tensorflow
-# https://www.tensorflow.org/api_docs/python/tf/keras/layers/DepthwiseConv2D?hl=de
-class DepthwiseCNN2D(NN):
+class AttributeConvolution(NN):
 
     def __init__(self, hyperparameters, input_shape):
         super().__init__(hyperparameters, input_shape)
 
-    # def create_submodel(self, input_shape, group):
-    #
-    #     input = tf.keras.layers.Input(shape=input_shape, name='Input_Attribute_' + str(group))
-    #     out = input
-    #
-    #     print(input.name)
-    #
-    #     for num_filters, kernel_size, strides in zip(self.hyper.cnn_layers,
-    #                                                  self.hyper.cnn_kernel_length,
-    #                                                  self.hyper.cnn_strides):
-    #         out = tf.keras.layers.Conv1D(filters=num_filters, padding='SAME', kernel_size=kernel_size, strides=strides,
-    #                                      activation=tf.keras.activations.relu)(out)
-    #
-    #     # Add dimension so we can reconstruct the attribute dimension when combining the outputs for each attribute
-    #     out = tf.expand_dims(out, axis=1)
-    #
-    #     return tf.keras.Model(inputs=[input], outputs=[out])
+        # Inherit only single method https://bit.ly/34pHUOA
+        self.type_specific_layer_creation = CNN2D.type_specific_layer_creation
 
     def create_model(self):
-        print('Creating type based encoder with an input shape: ', self.input_shape)
+
+        print('Creating attribute wise convolution encoder with an input shape: ', self.input_shape)
 
         if len(self.hyper.cnn_layers) < 1:
-            print('CNN encoder with less than one layer is not possible')
+            print('Encoder with less than one layer is not possible')
             sys.exit(1)
 
-        full_input = tf.keras.Input(shape=self.input_shape, name="Input0")
-        nbr_attributes = self.input_shape[1]
-        outputs = []
+        # Create basic 2d cnn layers
+        input, output = self.layer_creation()
 
-        # Route each attribute vector through the encoder of it's group
-        for attribute in range(nbr_attributes):
+        print('out base layers', output.shape)
 
-            # Split the tensor of a single attribute
-            attribute_input = tf.keras.layers.Lambda(lambda x: x[:, :, attribute])(full_input)
+        # Add additional layers based on configuration, e.g. fc layers
+        # noinspection PyArgumentList
+        input, output = self.type_specific_layer_creation(self, input, output)
 
-            # Add back the attribute dimension, which alway 1 here:
-            # (# Examples, # Timestamps) --> (# Examples, # Timestamps, 1)
-            attribute_input = tf.expand_dims(attribute_input, axis=2)
+        self.model = tf.keras.Model(inputs=input, outputs=output)
 
-            # Get the encoder for the attribute based on it's group and route the input split through it
-            out = attribute_input
-            for num_filters, kernel_size, strides in zip(self.hyper.cnn_layers,
-                                                         self.hyper.cnn_kernel_length,
-                                                         self.hyper.cnn_strides):
-                out = tf.keras.layers.Conv1D(filters=num_filters, kernel_size=kernel_size, strides=strides,
-                                             padding='SAME', activation=tf.keras.activations.relu)(out)
+    def layer_creation(self):
 
-            # Add dimension so we can reconstruct the attribute dimension when combining the outputs for each attribute
-            out = tf.expand_dims(out, axis=1)
+        input = tf.keras.Input(shape=self.input_shape, name="Input0")
+        x = input
 
-            outputs.append(out)
+        layer_properties = list(zip(self.hyper.cnn_layers, self.hyper.cnn_kernel_length, self.hyper.cnn_strides))
+        for units, kernel_size, strides in layer_properties:
+            print('Adding feature wise convolutions with {} filters per feature, '
+                  '{} kernels and {} strides ...'.format(units, kernel_size, strides))
 
-        # Merge the encoder outputs for each attribute back into a single tensor
-        # Shape after concatenation: (# Examples, # Attributes, (depending on layer properties), # Units in last layer)
-        output = tf.keras.layers.Concatenate(axis=1)(outputs)
+            # Based on https://stackoverflow.com/a/64990902
+            conv_layer = tf.keras.layers.Conv1D(
+                filters=units * self.hyper.time_series_depth,  # Configured filter number for each feature
+                kernel_size=kernel_size,
+                strides=strides,
+                activation=tf.keras.activations.relu,
+                padding='causal',  # Recommended for temporal data, see https://bit.ly/3fvY1Qu
+                groups=self.hyper.time_series_depth,  # Treat each feature as a separate input
+                data_format='channels_last')
+            x = conv_layer(x)
 
-        self.model = tf.keras.Model(inputs=full_input, outputs=output)
+        return input, x
 
-    # def old_create_model(self):
-    #
-    #     if len(self.hyper.cnn2d_kernel_length) < 1:
-    #         print('Can not create DeptwiseCNN2D without kernel lengths being defined!')
-    #         sys.exit()
-    #
-    #     input = tf.keras.Input(shape=(self.input_shape[0], self.input_shape[1], 1), name="Input0")
-    #     print('Creating depthwise 2D convolution encoder with an input shape: ', input.shape)
-    #
-    #     x = input
-    #     # creating CNN encoder for sensor data
-    #     for filters, kernel_size, stride in zip(self.hyper.cnn2d_layers, self.hyper.cnn2d_kernel_length,
-    #                                             self.hyper.cnn2d_strides):
-    #         depthwise2Dconv = tf.keras.layers.SeparableConv2D(filters, kernel_size, stride,
-    #                                                           padding='SAME',
-    #                                                           depth_multiplier=1,
-    #                                                           activation=tf.keras.activations.relu)
-    #
-    #         x = depthwise2Dconv(x)
-    #
-    #         x = tf.keras.layers.BatchNormalization()(x)
-    #         x = tf.keras.layers.ReLU()(x)
-    #     x = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(x)
-    #     output = x
-    #
-    #     self.model = tf.keras.Model(input, output)
+
+class GraphAttributeConvolution(AttributeConvolution):
+
+    def __init__(self, hyperparameters, input_shape):
+        super().__init__(hyperparameters, input_shape)
+
+        # Inherit only single method https://bit.ly/34pHUOA
+        self.type_specific_layer_creation = GraphCNN2D.type_specific_layer_creation
+
+    def create_model(self):
+        if self.hyper.cnn_layers[-1] != 1:
+            print('The number of filters in the last convolution layer must be = 1 for this type of encoder')
+            sys.exit(1)
+
+        super(GraphAttributeConvolution, self).create_model()
 
 
 class CNN2D(NN):
@@ -329,9 +307,9 @@ class CNN2D(NN):
     def type_specific_layer_creation(self, input, output):
 
         if self.hyper.fc_after_cnn1d_layers is None:
-            print('Attention: No FC layers are added after 2D CNN.')
+            print('Attention: No FC layers are added after the convolutional encoder.')
         else:
-            print('Adding FC layers after 2D CNN. ')
+            print('Adding FC layers after base encoder.')
 
             output = tf.keras.layers.Flatten()(output)
 
