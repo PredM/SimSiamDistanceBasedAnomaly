@@ -641,31 +641,21 @@ class TypeBasedEncoder(NN):
             for elem in value:
                 self.attribute_to_group_mapping[elem] = key
 
-        self.submodels = {}
-
     def create_submodel(self, input_shape, group):
-
-        input = tf.keras.layers.Input(shape=input_shape, name='Input_Group_' + str(group))
+        input = tf.keras.layers.Input(shape=input_shape)
         out = input
 
-        # Create cnn encoder in the same way as the standard cnn
-        layer_properties = list(zip(self.hyper.cnn_layers, self.hyper.cnn_kernel_length, self.hyper.cnn_strides))
-
-        for i in range(len(layer_properties)):
-            num_filter, filter_size, stride = layer_properties[i][0], layer_properties[i][1], layer_properties[i][2]
-
-            out = tf.keras.layers.Conv1D(filters=num_filter, padding='VALID', kernel_size=filter_size,
-                                         strides=stride)(out)
-
+        for num_filters, kernel_size, strides in zip(self.hyper.cnn_layers,
+                                                     self.hyper.cnn_kernel_length,
+                                                     self.hyper.cnn_strides):
+            out = tf.keras.layers.Conv1D(filters=num_filters, kernel_size=kernel_size, strides=strides,
+                                         padding='SAME', activation=tf.keras.activations.relu)(out)
             out = tf.keras.layers.BatchNormalization()(out)
             out = tf.keras.layers.ReLU()(out)
 
         out = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(out)
 
-        # Add dimension so we can reconstruct the attribute dimension when combining the outputs for each attribute
-        out = tf.expand_dims(out, axis=1)
-
-        return tf.keras.Model(inputs=[input], outputs=[out])
+        return tf.keras.Model(input, out, name='group_' + str(group) + '_encoder')
 
     def create_model(self):
         print('Creating type based encoder with an input shape: ', self.input_shape)
@@ -678,48 +668,31 @@ class TypeBasedEncoder(NN):
             print('Adding FC with less than one layer is not possible')
             sys.exit(1)
 
-        full_input = tf.keras.Input(shape=self.input_shape, name="Input0")
-        nbr_attributes = self.input_shape[1]
+        full_input = tf.keras.Input(shape=self.input_shape, name="TypeBasedEncoderInput")
+        group_to_encoder_mapping = {}
+        outputs = []
 
-        # Create a cnn encoder for each attribute group
-        for group_id in self.group_to_attributes_mapping.keys():
-            self.submodels[group_id] = self.create_submodel(input_shape=(self.input_shape[0], 1), group=group_id)
+        # Split the input tensors along the feature dimension, so 1D convolutions can be applied attribute wise
+        attribute_splits = tf.unstack(full_input, num=self.hyper.time_series_depth, axis=2)
 
-        # Route each attribute vector through the encoder of it's group
-        attribute_outputs = []
-        for attribute in range(nbr_attributes):
-            # Split the tensor of a single attribute
-            attribute_input = tf.keras.layers.Lambda(lambda x: x[:, :, attribute])(full_input)
+        # Create a convolutional encoder for each group of attributes
+        for group in self.group_to_attributes_mapping.keys():
+            group_to_encoder_mapping[group] = self.create_submodel((self.hyper.time_series_length, 1), group)
 
-            # Add back the attribute dimension, which alway 1 here:
-            # (# Examples, # Timestamps) --> (# Examples, # Timestamps, 1)
-            attribute_input = tf.expand_dims(attribute_input, axis=2)
+        for attribute_index, attribute_input in enumerate(attribute_splits):
+            # Get the encoder of the group this attribute belongs to
+            attribute_encoder = group_to_encoder_mapping.get(self.attribute_to_group_mapping.get(attribute_index))
 
-            # Get the encoder for the attribute based on it's group and route the input split through it
-            attribute_submodel = self.submodels.get(self.attribute_to_group_mapping.get(attribute))
-            attribute_output = attribute_submodel(attribute_input)
+            x = attribute_input
 
-            attribute_outputs.append(attribute_output)
+            # Before feeding into the encoder, the feature dimension must be artificially added again,
+            # as the conv layer expects a 3D input (batch size, steps, attributes)
+            x = tf.expand_dims(x, axis=-1, name='attribute_' + str(attribute_index))
+            x = attribute_encoder(x)
+            outputs.append(x)
 
-        # Merge the encoder outputs for each attribute back into a single tensor
-        # Shape after concatenation: (# Examples, # Attributes, (depending on layer properties), # Units in last layer)
-        output = tf.keras.layers.Concatenate(axis=1)(attribute_outputs)
-
-        # Join with FC layers if configured in the same way as for the normal cnn
-        if self.hyper.fc_after_cnn1d_layers is not None:
-            print('Adding FC layers')
-
-            output = tf.keras.layers.Flatten()(output)
-
-            layers_fc = self.hyper.fc_after_cnn1d_layers.copy()
-
-            for num_units in layers_fc:
-                output = tf.keras.layers.BatchNormalization()(output)
-                output = tf.keras.layers.Dense(units=num_units, activation=tf.keras.activations.relu)(output)
-                print(num_units)
-
-            # Normalize final output as recommended in Roy et al (2019) Siamese Networks: The Tale of Two Manifolds
-            output = tf.keras.layers.Reshape((output.shape[1], 1))(output)
+        # Merge the encoder outputs for each feature back into a single tensor
+        output = tf.keras.layers.Concatenate(axis=2)(outputs)
 
         self.model = tf.keras.Model(inputs=full_input, outputs=output)
 

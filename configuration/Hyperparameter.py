@@ -112,10 +112,6 @@ class Hyperparameters:
         if self.encoder_variant == 'rnn':
             self.lstm_layers = data['lstm_layers']
 
-        if self.encoder_variant == 'tcn':
-            self.tcn_layers = data['tcn_layers']
-            self.tcn_kernel_length = data['tcn_kernel_length']
-
         if self.encoder_variant in ['typebasedencoder', 'cnn', 'cnn2d', 'cnn2dwithaddinput', 'graphcnn2d',
                                     'attributeconvolution', 'graphattributeconvolution']:
             self.cnn_layers = data['cnn_layers']

@@ -1,6 +1,6 @@
 {
   "notes": "",
-  "encoder_variant": "graphattributeconvolution",
+  "encoder_variant": "typebasedencoder",
   "batch_size": 64,
   "epochs": 400000,
   "epochs_current": 0,
@@ -13,7 +13,7 @@
   ],
   "cnn_layers": [
     96,
-    1
+    32
   ],
   "cnn_kernel_length": [
     3,
