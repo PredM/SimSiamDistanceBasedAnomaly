@@ -1,8 +1,10 @@
 from time import perf_counter
 
 import numpy as np
+#np.set_printoptions(threshold=np.inf)
 import pandas as pd
 from sklearn import preprocessing
+from spektral import utils
 
 from configuration.Configuration import Configuration
 
@@ -92,7 +94,9 @@ class FullDataset(Dataset):
 
         # np array containing the adjacency information of features used by the graph cnn2d encoder
         # loaded from config.graph_adjacency_matrix_file
-        self.graph_adjacency_matrix = None
+        self.graph_adjacency_matrix_attributes = None   # lowest level, all attributes are considered
+        self.graph_adjacency_matrix_ws = None           # intermediate level, workstation relations are modeled
+        self.graph_pooling_relation_attr2ws_file = None                # ?
 
         self.is_third_party_dataset = True if self.config.data_folder_prefix != '../data/' else False
 
@@ -184,6 +188,7 @@ class FullDataset(Dataset):
 
             self.load_sim_matrices()
             self.load_adjacency_matrix()
+            self.load_workstation_attribute_membership()
 
         self.calculate_maskings()
 
@@ -217,10 +222,11 @@ class FullDataset(Dataset):
         self.df_label_sim_condition.index = self.df_label_sim_condition.index.str.replace('\'', '')
 
     def load_adjacency_matrix(self):
-        adj_matrix_df = pd.read_csv(self.config.graph_adjacency_matrix_file, sep=';', index_col=0)
+        # Load adjacency matrix for attributes
+        adj_matrix_attr_df = pd.read_csv(self.config.graph_adjacency_matrix_attributes_file, sep=';', index_col=0)
 
-        col_values = adj_matrix_df.columns.values
-        index_values = adj_matrix_df.index.values
+        col_values = adj_matrix_attr_df.columns.values
+        index_values = adj_matrix_attr_df.index.values
 
         if not np.array_equal(col_values, self.feature_names_all):
             raise ValueError(
@@ -230,7 +236,34 @@ class FullDataset(Dataset):
             raise ValueError(
                 'Ordering of features in the adjacency matrix (index) does not match the one in the dataset.')
 
-        self.graph_adjacency_matrix = adj_matrix_df.values.astype(dtype=np.float)
+        self.graph_adjacency_matrix_attributes = adj_matrix_attr_df.values.astype(dtype=np.float)
+
+        # Load adjacency matrix for workstations
+        adj_matrix_df = pd.read_csv(self.config.graph_adjacency_matrix_ws_file, sep=';', index_col=0)
+        self.graph_adjacency_matrix_ws = adj_matrix_df.values.astype(dtype=np.float)
+
+    def load_workstation_attribute_membership(self):
+        # Load a mapping from a data stream to its workstation (can be used for pooling after GNN-layer)
+        att_matrix_df = pd.read_csv(self.config.graph_attr_to_workstation_relation_file, sep=';', index_col=0)
+
+        col_values = att_matrix_df.columns.values
+        index_values = att_matrix_df.index.values
+
+        if not np.array_equal(col_values, self.feature_names_all):
+            raise ValueError(
+                'Ordering of features in the adjacency matrix (columns) does not match the one in the dataset.')
+
+        self.graph_pooling_relation_attr2ws_file = att_matrix_df.values.astype(dtype=np.float)
+        #print("TXT15: ", np.where(self.graph_attribute_file[4, :]==1))
+        #print("TXT16: ", np.where(self.graph_attribute_file[3, :]==1))
+        #print("TXT17: ", np.where(self.graph_attribute_file[2, :]==1))
+        #print("TXT18: ", np.where(self.graph_attribute_file[1, :]==1))
+        #print("TXT19: ", np.where(self.graph_attribute_file[0,:]==1))
+        self.graph_pooling_relation_attr2ws_file =[np.where(self.graph_pooling_relation_attr2ws_file[4, :] == 1),
+                                                   np.where(self.graph_pooling_relation_attr2ws_file[3, :] == 1),
+                                                   np.where(self.graph_pooling_relation_attr2ws_file[2, :] == 1),
+                                                   np.where(self.graph_pooling_relation_attr2ws_file[1, :] == 1),
+                                                   np.where(self.graph_pooling_relation_attr2ws_file[0, :] == 1)]
 
     def calculate_maskings(self):
         for case in self.classes_total:
@@ -270,6 +303,60 @@ class FullDataset(Dataset):
 
         return masking
 
+    # returns a boolean matrix with values depending on whether the attribute at this index is relevant
+    # for the class of the passed label
+    def get_adj_matrix(self, class_label):
+        # Use masking vectors to generated adj. matrix relevant to a class label
+        masking = self.class_label_to_masking_vector_strict.get(class_label)
+        strict_mask = masking[0]
+        context_mask = masking[1]
+        symmetric = None
+
+        adj_mat = np.zeros((61, 61))  # context_mask.shape[0]
+
+        if self.config.adj_matrix_preprocessing == 0:
+            # Create a adj. matrix of a fully connected graph (which connects every feature / attribute with eachother)
+            # Strategy 1:
+            adj_mat = np.ones((61, 61)) # context_mask.shape[0]
+            adj_mat = np.multiply(adj_mat, context_mask)
+            adj_mat = np.multiply(adj_mat.T, context_mask).T
+            symmetric = True
+        elif self.config.adj_matrix_preprocessing == 1:
+            # Strategy 2:
+            # Strict features are fully connected
+            adj_mat = np.ones((61, 61)) # context_mask.shape[0]
+            adj_mat = np.multiply(adj_mat, strict_mask)
+            adj_mat = np.multiply(adj_mat.T, strict_mask).T
+            # Context features are connected to them ( use as input for learning their representation)
+            diff_features = np.subtract(context_mask, strict_mask,dtype=np.float32)
+            #for i in range(61):
+            #    adj_mat[i, :] = adj_mat[i, :] + diff_features
+            adj_mat = np.add(adj_mat,diff_features) # row-wise addition of difference vector
+            # removing wrongly added rows
+            adj_mat = np.multiply(adj_mat.T, strict_mask).T
+            symmetric = True
+        elif self.config.adj_matrix_preprocessing == 2:
+            # Strategy 3:
+            # Strict features are fully connected
+            adj_mat = np.ones((61, 61)) # context_mask.shape[0]
+            adj_mat = np.multiply(adj_mat, strict_mask)
+            adj_mat = np.multiply(adj_mat.T, strict_mask).T
+            # Context features are connected to them ( use as input for learning their representation)
+            diff_features = np.subtract(context_mask, strict_mask,dtype=np.float32)
+            #for i in range(61):
+            #    adj_mat[i, :] = adj_mat[i, :] + diff_features
+            adj_mat = np.add(adj_mat.T,diff_features).T # column-wise addition of difference vector
+            # removing wrongly added rows
+            adj_mat = np.multiply(adj_mat, strict_mask)
+            symmetric = True
+
+
+        # Pre-process adj. matrix for GCN Layer
+        #print("Before adj_mat ", adj_mat.shape, " of ", class_label, ": ", adj_mat)
+        adj_mat = utils.gcn_filter(adj_mat, symmetric=symmetric)
+        #print("After adj_mat ",adj_mat.shape," of ", class_label, ": ", adj_mat)
+        return adj_mat
+
     def get_masked_example_group(self, test_example, group_id):
 
         if group_id not in self.group_id_to_masking_vector:
@@ -280,7 +367,8 @@ class FullDataset(Dataset):
 
     def get_masking_float(self, class_label, return_strict_masking=False):
         return self.get_masking(class_label, return_strict_masking).astype(float)
-
+    def adj_matrix_float(self, class_label):
+        return self.get_adj_matrix(class_label).astype(float)
     # Will return the test example and the train example (of the passed index) reduced to the
     # relevant attributes of the case of the train_example
     def reduce_to_relevant(self, test_example, train_example_index):
