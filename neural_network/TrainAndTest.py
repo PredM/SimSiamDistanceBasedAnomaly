@@ -1,6 +1,7 @@
 import os
 import sys
 from datetime import datetime
+import tensorflow as tf
 
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 # suppress debugging messages of TensorFlow
@@ -74,6 +75,9 @@ def main():
 
     snn = initialise_snn(config, dataset, True)
     snn.print_detailed_model_info()
+
+    if config.print_model:
+        tf.keras.utils.plot_model(snn.encoder.model, to_file='model.png', show_shapes=True, expand_nested=True)
 
     checker.post_init_checks(snn)
 
