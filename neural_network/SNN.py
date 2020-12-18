@@ -74,7 +74,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
         return input_pairs
 
     # Reshapes and adds auxiliary input for special encoder variants
-    def reshape_and_add_aux_input(self, input_pairs, batch_size, aux_input=None):
+    def reshape_and_add_aux_input(self, input_pairs, batch_size, aux_input=None, aux_input_adj=None):
 
         input_pairs = self.reshape(input_pairs)
 
@@ -88,12 +88,20 @@ class SimpleSNN(AbstractSimilarityMeasure):
                 else:
                     aux_input = np.zeros((2 * batch_size, self.hyper.time_series_depth), dtype='float32')
 
+                if aux_input_adj is None:
+                    aux_input_adj = np.zeros(
+                        (2 * batch_size, self.hyper.time_series_depth, self.hyper.time_series_depth), dtype='float32')
+
                 for index in range(batch_size):
                     aux_input[2 * index] = self.dataset.get_masking_float(self.dataset.y_train_strings[index],
                                                                           self.config.use_additional_strict_masking_for_attribute_sim)
 
                     aux_input[2 * index + 1] = self.dataset.get_masking_float(self.dataset.y_train_strings[index],
                                                                               self.config.use_additional_strict_masking_for_attribute_sim)
+
+                    aux_input_adj[2 * index] = self.dataset.get_adj_matrix(self.dataset.y_train_strings[index])
+                    aux_input_adj[2 * index + 1] = self.dataset.get_adj_matrix(self.dataset.y_train_strings[index])
+                    #print(self.dataset.y_train_strings[index], "aux_input_adj[2 * index]: ", aux_input_adj[2 * index])
                     # print("self.dataset.y_train_strings")
                     # print("index: ", index, )
                 # print("aux_input: ", aux_input.shape)
@@ -106,7 +114,10 @@ class SimpleSNN(AbstractSimilarityMeasure):
                         aux_input[2 * index] = aux_input[2 * index]
                         aux_input[2 * index + 1] = aux_input[2 * index]
                         # print("index: ", index, )
-            input_pairs = [input_pairs, aux_input]
+                        aux_input_adj[2 * index] = aux_input_adj[2 * index]
+                        aux_input_adj[2 * index +1] = aux_input_adj[2 * index]
+
+            input_pairs = [input_pairs, aux_input, aux_input_adj]
 
         return input_pairs
 
@@ -189,7 +200,8 @@ class SimpleSNN(AbstractSimilarityMeasure):
             if self.hyper.encoder_variant == 'cnn2dwithaddinput':
                 subsection_examples = batch[0][index:index + batch_size]
                 subsection_aux_input = batch[1][index:index + batch_size]
-                subsection_batch = [subsection_examples, subsection_aux_input]
+                subsection_aux_input_adj = batch[2][index:index + batch_size]
+                subsection_batch = [subsection_examples, subsection_aux_input, subsection_aux_input_adj]
             else:
                 subsection_batch = batch[index:index + batch_size]
 
@@ -214,12 +226,13 @@ class SimpleSNN(AbstractSimilarityMeasure):
                                fn_output_signature=tf.float32)
 
         return sims_batch
-
+    # This method allows to insert/add additional data which are the same for every training example
+    # e.g. adjacency matrices if graph neural networks are used
     def input_extension(self, batch):
 
         if self.hyper.encoder_variant == 'graphcnn2d':
             examples_in_batch = batch.shape[0] // 2
-            batch = [batch, self.dataset.graph_adjacency_matrix]
+            batch = [batch, self.dataset.graph_adjacency_matrix_attributes, self.dataset.graph_adjacency_matrix_ws]
 
         elif self.hyper.encoder_variant == 'cnn2dwithaddinput':
             examples_in_batch = batch[0].shape[0] // 2
@@ -405,9 +418,9 @@ class SimpleSNN(AbstractSimilarityMeasure):
 
             if self.config.use_additional_strict_masking_for_attribute_sim:
                 self.encoder = CNN2dWithAddInput(self.hyper,
-                                                 [input_shape_encoder, self.hyper.time_series_depth * 2])
+                                                 [input_shape_encoder, self.hyper.time_series_depth * 2, self.hyper.time_series_depth])
             else:
-                self.encoder = CNN2dWithAddInput(self.hyper, [input_shape_encoder, self.hyper.time_series_depth])
+                self.encoder = CNN2dWithAddInput(self.hyper, [input_shape_encoder, self.hyper.time_series_depth, self.hyper.time_series_depth])
         elif self.hyper.encoder_variant == 'rnn':
             self.encoder = RNN(self.hyper, input_shape_encoder)
         elif self.hyper.encoder_variant == 'dummy':
@@ -528,7 +541,7 @@ class SNN(SimpleSNN):
         elif self.config.complex_measure == ComplexSimilarityMeasure.GRAPH_SIM:
             combined_context_input = tf.concat([a, b], axis=0)
             combined_context_input = tf.transpose(combined_context_input, perm=[1, 0])
-            combined_input = [combined_context_input, self.dataset.graph_adjacency_matrix]
+            combined_input = [combined_context_input, self.dataset.graph_adjacency_matrix_attributes, self.dataset.graph_adjacency_matrix_ws]
 
             complex_measure_output = self.complex_sim_measure.model(combined_input, training=self.training)
             sim = complex_measure_output
