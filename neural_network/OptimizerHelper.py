@@ -65,7 +65,11 @@ class OptimizerHelper:
                 loss = huber(true_similarities, pred_similarities)
 
             elif self.config.type_of_loss_function == LossFunction.TRIPLET_LOSS:
-                loss = self.triplet_loss(pred_similarities)
+                if self.config.use_margin_reduction_based_on_label_sim:
+                    sim = self.get_similarity_between_two_label_string(query_classes)
+                    loss = self.triplet_loss(pred_similarities, classes=sim)
+                else:
+                    loss = self.triplet_loss(pred_similarities)
             else:
                 raise AttributeError(
                     'Unknown loss function:', self.config.type_of_loss_function)
@@ -82,7 +86,7 @@ class OptimizerHelper:
 
             return loss
 
-    def triplet_loss(self, y_pred):
+    def triplet_loss(self, y_pred, classes=None):
         """
         Triplet loss based on Conditional Similarity Networks by Veit et al.
         https://vision.cornell.edu/se3/wp-content/uploads/2017/04/CSN_CVPR-1.pdf
@@ -93,7 +97,12 @@ class OptimizerHelper:
         # Split y_pred into the single dij's and dil's and then compute the loss for each triplet
         d_i_j_s = y_pred[::2]
         d_i_l_s = y_pred[1::2]
-        temp = d_i_j_s - d_i_l_s + self.config.triplet_loss_margin_h
+
+        margin = self.config.triplet_loss_margin_h
+        if self.config.use_margin_reduction_based_on_label_sim:
+            # label adapted margin, classes contains the sim
+            margin = (1 - classes[1::2]) * margin
+        temp = d_i_j_s - d_i_l_s + margin #self.config.triplet_loss_margin_h
         single_losses = tf.math.maximum(0, temp)
 
         return tf.keras.backend.mean(single_losses)
