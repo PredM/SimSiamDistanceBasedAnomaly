@@ -124,7 +124,7 @@ class ModelConfiguration:
         # If !use_individual_hyperparameters interpreted as a single json file, else as a folder
         # which contains json files named after the cases they should be used for
         # If no file with this name is present the 'default.json' Config will be used
-        self.hyper_file = self.hyper_file_folder + 'dwcnn2d_test.json'  # 'individual_hyperparameters_test'  #
+        self.hyper_file = self.hyper_file_folder + 'testing.json'  # 'cnn2d_with_graph-26-10'  #
 
         ##
         # Various settings influencing the similarity calculation
