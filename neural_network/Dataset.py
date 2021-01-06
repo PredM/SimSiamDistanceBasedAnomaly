@@ -6,6 +6,8 @@ import pandas as pd
 from sklearn import preprocessing
 from spektral import utils
 
+from configuration.Enums import AdjacencyMatrixPreprossingCNN2DWithAddInput, NodeFeaturesForGraphVariants
+
 from configuration.Configuration import Configuration
 
 
@@ -97,8 +99,10 @@ class FullDataset(Dataset):
         self.graph_adjacency_matrix_attributes = None   # lowest level, all attributes are considered
         self.graph_adjacency_matrix_ws = None           # intermediate level, workstation relations are modeled
         self.graph_pooling_relation_attr2ws_file = None                # ?
+        self.additional_static_attribute_features = None
+        self.owl2vec_embedding_dim = None
 
-        self.is_third_party_dataset = True if self.config.data_folder_prefix != '../data/' else False
+        self.is_third_party_dataset = True if self.config.data_folder_prefix != '../../../../data/pklein/PredMSiamNN/data/' else False
 
     def load_files(self):
 
@@ -189,6 +193,8 @@ class FullDataset(Dataset):
             self.load_sim_matrices()
             self.load_adjacency_matrix()
             self.load_workstation_attribute_membership()
+            if self.config.use_additional_static_node_features_for_graphNN != 0:
+                self.load_additional_static_attribute_features()
 
         self.calculate_maskings()
 
@@ -265,6 +271,32 @@ class FullDataset(Dataset):
                                                    np.where(self.graph_pooling_relation_attr2ws_file[1, :] == 1),
                                                    np.where(self.graph_pooling_relation_attr2ws_file[0, :] == 1)]
 
+    def load_additional_static_attribute_features(self):
+        if self.config.use_additional_static_node_features_for_graphNN == NodeFeaturesForGraphVariants.ONE_HOT_ENCODED:
+            attribute_features = np.eye(61, dtype=int)
+            self.additional_static_attribute_features = attribute_features
+        if self.config.use_additional_static_node_features_for_graphNN == NodeFeaturesForGraphVariants.OWL2VEC_EMBEDDINGS_DIM32 or \
+                self.config.use_additional_static_node_features_for_graphNN == NodeFeaturesForGraphVariants.OWL2VEC_EMBEDDINGS_DIM16:
+
+            if self.config.use_additional_static_node_features_for_graphNN == NodeFeaturesForGraphVariants.OWL2VEC_EMBEDDINGS_DIM32:
+                self.owl2vec_embedding_dim = 32
+            elif self.config.use_additional_static_node_features_for_graphNN == NodeFeaturesForGraphVariants.OWL2VEC_EMBEDDINGS_DIM16:
+                self.owl2vec_embedding_dim = 16
+            # Define an arrary (owl2vec_attr_embeddings) according chosen embedding size [emb_dim, num_of_attributes]
+            owl2vec_attr_embeddings = np.zeros((self.owl2vec_embedding_dim, self.feature_names_all.shape[0]))
+            mapping_attr_to_ftonto_df = pd.read_csv(self.config.mapping_attr_to_ftonto_file, sep=';', index_col=0)
+            owl2vec_node_embeddings_df = pd.read_csv(self.config.graph_owl2vec_node_embeddings_file, sep=',',index_col=0)
+            owl2vec_node_embeddings_df.index = owl2vec_node_embeddings_df.index.map(str)
+
+            for idx, attr_name in enumerate(self.feature_names_all):
+                # Get ftOnto uri for each attribute
+                ftOnto_uri = mapping_attr_to_ftonto_df.loc[attr_name]
+                # Get its embedding by its uri and store it according the attribute order
+                # print(owl2vec_node_embeddings_df.loc[ftOnto_uri].values)
+                owl2vec_attr_embeddings[:,idx] = owl2vec_node_embeddings_df.loc[ftOnto_uri].values
+            #print("owl2vec_attr_embeddings shape: ", owl2vec_attr_embeddings.shape)
+            self.additional_static_attribute_features = owl2vec_attr_embeddings
+
     def calculate_maskings(self):
         for case in self.classes_total:
 
@@ -308,23 +340,32 @@ class FullDataset(Dataset):
     def get_adj_matrix(self, class_label):
         # Use masking vectors to generated adj. matrix relevant to a class label
         masking = self.class_label_to_masking_vector_strict.get(class_label)
-        strict_mask = masking[0]
-        context_mask = masking[1]
+        if self.config.use_additional_strict_masking_for_attribute_sim == False:
+            strict_mask = masking
+            context_mask = masking
+        else:
+            strict_mask = masking[0]
+            context_mask = masking[1]
         symmetric = None
 
-        adj_mat = np.zeros((61, 61))  # context_mask.shape[0]
+        if self.config.use_predefined_adj_matrix_as_base_for_preprocessing == True:
+            adj_mat = self.graph_adjacency_matrix_attributes
+            symmetric = True
+        else:
+            adj_mat = np.ones((61, 61))  # context_mask.shape[0]
+            symmetric = True
 
         if self.config.adj_matrix_preprocessing == 0:
-            # Create a adj. matrix of a fully connected graph (which connects every feature / attribute with eachother)
-            # Strategy 1:
-            adj_mat = np.ones((61, 61)) # context_mask.shape[0]
+            # Strategy 1: Masking out any irrelevant relationships based on labeled specific predefined context
+            # If based on ones(x,x): adj. matrix of a fully connected graph (which connects every feature / attribute
+            # with each other) is created based on labeled specific predefined context
             adj_mat = np.multiply(adj_mat, context_mask)
             adj_mat = np.multiply(adj_mat.T, context_mask).T
-            symmetric = True
+            #symmetric = True
         elif self.config.adj_matrix_preprocessing == 1:
             # Strategy 2:
             # Strict features are fully connected
-            adj_mat = np.ones((61, 61)) # context_mask.shape[0]
+            #adj_mat = np.ones((61, 61)) # context_mask.shape[0]
             adj_mat = np.multiply(adj_mat, strict_mask)
             adj_mat = np.multiply(adj_mat.T, strict_mask).T
             # Context features are connected to them ( use as input for learning their representation)
@@ -334,11 +375,11 @@ class FullDataset(Dataset):
             adj_mat = np.add(adj_mat,diff_features) # row-wise addition of difference vector
             # removing wrongly added rows
             adj_mat = np.multiply(adj_mat.T, strict_mask).T
-            symmetric = True
+            #symmetric = True
         elif self.config.adj_matrix_preprocessing == 2:
             # Strategy 3:
             # Strict features are fully connected
-            adj_mat = np.ones((61, 61)) # context_mask.shape[0]
+            #adj_mat = np.ones((61, 61)) # context_mask.shape[0]
             adj_mat = np.multiply(adj_mat, strict_mask)
             adj_mat = np.multiply(adj_mat.T, strict_mask).T
             # Context features are connected to them ( use as input for learning their representation)
@@ -348,12 +389,24 @@ class FullDataset(Dataset):
             adj_mat = np.add(adj_mat.T,diff_features).T # column-wise addition of difference vector
             # removing wrongly added rows
             adj_mat = np.multiply(adj_mat, strict_mask)
-            symmetric = True
+            #symmetric = True
 
+        if class_label == "no_failure":
+            if self.config.use_predefined_adj_matrix_as_base_for_preprocessing == True:
+                adj_mat = self.graph_adjacency_matrix_attributes
+            else:
+                #adj_mat = adj_mat
+                adj_mat = self.graph_adjacency_matrix_attributes
+                #adj_mat = np.ones((61, 61))  # context_mask.shape[0]
+
+        #adj_mat = self.graph_adjacency_matrix_attributes
 
         # Pre-process adj. matrix for GCN Layer
         #print("Before adj_mat ", adj_mat.shape, " of ", class_label, ": ", adj_mat)
-        adj_mat = utils.gcn_filter(adj_mat, symmetric=symmetric)
+        if self.config.use_GCN_adj_matrix_preprocessing:
+            adj_mat = utils.gcn_filter(adj_mat, symmetric=symmetric)
+        #GAT Layer - braucht normal kein Preprocessing
+        #adj_mat = utils.normalized_adjacency(adj_mat, symmetric=symmetric)
         #print("After adj_mat ",adj_mat.shape," of ", class_label, ": ", adj_mat)
         return adj_mat
 

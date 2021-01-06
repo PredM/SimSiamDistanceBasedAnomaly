@@ -3,7 +3,8 @@ import json
 import pandas as pd
 
 from configuration.Enums import BatchSubsetType, LossFunction, BaselineAlgorithm, SimpleSimilarityMeasure, \
-    ArchitectureVariant, ComplexSimilarityMeasure, TrainTestSplitMode
+    ArchitectureVariant, ComplexSimilarityMeasure, TrainTestSplitMode, AdjacencyMatrixPreprossingCNN2DWithAddInput,\
+    NodeFeaturesForGraphVariants
 
 
 ####
@@ -60,7 +61,7 @@ class GeneralConfiguration:
 
         # Path and file name to the specific model that should be used for testing and live classification
         # Folder where the models are stored is prepended below
-        self.filename_model_to_use = 'temp_snn_model_11-22_15-31-25_epoch-600'
+        self.filename_model_to_use = 'temp_snn_model_01-06_12-57-13_epoch-647'
 
         ##
         # Debugging - Don't use for feature implementation
@@ -94,7 +95,7 @@ class ModelConfiguration:
         ##
 
         # Selection which basic architecture is used, see enum class for details
-        self.architecture_variant = ArchitectureVariant.STANDARD_SIMPLE
+        self.architecture_variant = ArchitectureVariant.STANDARD_COMPLEX
 
         ##
         # Determines how the similarity between two embedding vectors is determined (when a simple architecture is used)
@@ -107,7 +108,7 @@ class ModelConfiguration:
         # Only use euclidean_dis for TRAINING with contrastive loss
         self.simple_measure = SimpleSimilarityMeasure.ABS_MEAN
 
-        self.complex_measure = ComplexSimilarityMeasure.GRAPH_SIM
+        self.complex_measure = ComplexSimilarityMeasure.CNN2DWAddInp
 
         ###
         # Hyperparameters
@@ -124,7 +125,7 @@ class ModelConfiguration:
         # If !use_individual_hyperparameters interpreted as a single json file, else as a folder
         # which contains json files named after the cases they should be used for
         # If no file with this name is present the 'default.json' Config will be used
-        self.hyper_file = self.hyper_file_folder + 'testing.json'  # 'cnn2d_with_graph-26-10'  #
+        self.hyper_file = self.hyper_file_folder + 'cnn2d_withAddInput_nwApproach.json'  # 'individual_hyperparameters_test'  #cnn2d_with_graph-22-11.json
 
         ##
         # Various settings influencing the similarity calculation
@@ -152,12 +153,15 @@ class ModelConfiguration:
 
         # Option to simulate a retrieval situation (during training) where only the weights of the
         # example from the case base/training data set are known:
-        self.use_same_feature_weights_for_unsimilar_pairs = False  # default: True
+        self.use_same_feature_weights_for_unsimilar_pairs = True   # default: True
 
         # Compares each time step of the encoded representation with each other time step
         # (instead of only comparing the ones with the same indices)
         # Implementation is based on NeuralWarp FFNN but used for simple similarity measures
         self.use_time_step_wise_simple_similarity = False  # default: False
+
+        # Using additional static node features
+        self.use_additional_static_node_features_for_graphNN = NodeFeaturesForGraphVariants.OWL2VEC_EMBEDDINGS_DIM16  # default: False
 
 
 class TrainingConfiguration:
@@ -189,8 +193,8 @@ class TrainingConfiguration:
         self.use_margin_reduction_based_on_label_sim = False  # default: False
 
         self.use_early_stopping = True
-        self.early_stopping_epochs_limit = 300
-        self.early_stopping_loss_minimum = 0.03  # Default: -1.0 (no effect), CNN2D_with_add_Input: BCE:0.03, MSE:0.01
+        self.early_stopping_epochs_limit = 500
+        self.early_stopping_loss_minimum = -1  # Default: -1.0 (no effect), CNN2D_with_add_Input: BCE:0.03, MSE:0.01
 
         # Parameter to control if and when a test is conducted through training
         self.use_inference_test_during_training = False  # default False
@@ -213,6 +217,11 @@ class TrainingConfiguration:
 
         # How many model checkpoints are kept
         self.model_files_stored = 50
+
+        # Define how the adjacency matrix is computed for cnn2dwithAddInput
+        self.use_predefined_adj_matrix_as_base_for_preprocessing = False
+        self.use_GCN_adj_matrix_preprocessing = True
+        self.adj_matrix_preprocessing = AdjacencyMatrixPreprossingCNN2DWithAddInput.ADJ_MATRIX_CONTEXT_GCN
 
 
 class InferenceConfiguration:
@@ -240,7 +249,10 @@ class InferenceConfiguration:
         self.sim_calculation_batch_size = 64
 
         # If enabled the model is printed as model.png
-        self.print_model = False
+        self.print_model = True
+
+        # In case of too small distance values (resulting in 1.0) through similarity transformation
+        self.distance_scaling_parameter_for_cnn2dwithAddInput_ontopNN = 1000.0
 
 
 class ClassificationConfiguration:
@@ -397,6 +409,7 @@ class StaticConfiguration:
         self.data_folder_prefix = '../data/'
         # Prefix for the 3w dataset
         # self.data_folder_prefix = '../data/additional_datasets/3w_dataset/'
+        #self.data_folder_prefix = '../../../../data/pklein/PredMSiamNN/data/'
 
         # Folder where the trained models are saved to during learning process
         self.models_folder = self.data_folder_prefix + 'trained_models/'
@@ -429,7 +442,14 @@ class StaticConfiguration:
         self.localisation_sim_matrix_file = self.training_data_folder + 'Localization_Sim_Matrix.csv'
 
         # CSV file containing the adjacency information of features used by the graph cnn2d encoder
-        self.graph_adjacency_matrix_file = self.training_data_folder + 'adjacency_matrix.CSV'
+        self.graph_adjacency_matrix_attributes_file = self.training_data_folder + 'adjacency_matrix.CSV' #'adjacency_matrix_all_attributes_allOne.csv'
+        self.graph_adjacency_matrix_ws_file = self.training_data_folder + 'adjacency_matrix_wokstation.csv'
+        self.graph_attr_to_workstation_relation_file = self.training_data_folder + 'attribute_to_txtcontroller.csv'
+        self.mapping_attr_to_ftonto_file = self.training_data_folder + 'mapping_attr_to_ftonto-uri.csv'
+        if self.use_additional_static_node_features_for_graphNN == NodeFeaturesForGraphVariants.OWL2VEC_EMBEDDINGS_DIM16:
+            self.graph_owl2vec_node_embeddings_file = self.training_data_folder + 'owl2vec_node_embeddings_dim16.csv'
+        elif self.use_additional_static_node_features_for_graphNN == NodeFeaturesForGraphVariants.OWL2VEC_EMBEDDINGS_DIM32:
+            self.graph_owl2vec_node_embeddings_file = self.training_data_folder + 'owl2vec_node_embeddings_dim32.csv'
 
         # TS Fresh feature files
         self.ts_fresh_filtered_file = 'ts_fresh_extracted_features_filtered.pkl'
@@ -589,6 +609,7 @@ class Configuration(
         print("General related:")
         print("- simple_measure: ", self.simple_measure)
         print("- hyper_file: ", self.hyper_file)
+        print("- self.models_folder: ",self.models_folder)
         print("")
         print("Masking related:")
         print("- individual_relevant_feature_selection: ", self.individual_relevant_feature_selection)
@@ -603,7 +624,8 @@ class Configuration(
         print("")
         print("Training related:")
         print("- type_of_loss_function: ", self.type_of_loss_function)
-        print("- margin_of_loss_function: ", self.margin_of_loss_function)
+        print("- margin_of_constrative_loss_function: ", self.margin_of_loss_function)
+        print("- margin_of_triplet_loss_function: ", self.triplet_loss_margin_h)
         print("- use_margin_reduction_based_on_label_sim: ", self.use_margin_reduction_based_on_label_sim)
         print("- use_sim_value_for_neg_pair: ", self.use_sim_value_for_neg_pair)
         print("- use_early_stopping: ", self.use_early_stopping)

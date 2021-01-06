@@ -39,6 +39,7 @@ class Hyperparameters:
         self.cnn2d_layers = None
         self.cnn2d_kernel_length = None
         self.cnn2d_strides = None
+        self.cnn2d_dilation_rate = None
 
         # FC Layers after convolution layers, also used in cnn2d
         self.fc_after_cnn1d_layers = None
@@ -63,6 +64,17 @@ class Hyperparameters:
         self.learnFeatureWeights = None
         self.use_weighted_distance_as_standard_ffnn_hyper = None
         self.use_additional_strict_masking = None
+        self.use_graph_conv_for_context_fusion = None
+        self.use_dilated_factor_for_conv = None
+        self.use_univariate_output_for_weighted_sim = None
+        self.learn_node_attribute_features = None
+        self.use_graph_conv_after2dCNNFC_context_fusion = None
+        self.use_graph_conv_after2dCNNFC_resNetBlock = None
+        self.use_graph_conv_after2dCNNFC_SkipCon = None
+        self.use_graph_conv_after2dCNNFC_GAT_instead_GCN = None
+        self.use_owl2vec_node_features = None
+        self.provide_output_for_on_top_network = None
+        self.use_case_of_on_top_network = None
 
     def set_time_series_properties(self, dataset):
         self.time_series_length = dataset.time_series_length
@@ -126,6 +138,9 @@ class Hyperparameters:
             self.cnn2d_layers = data['cnn2d_layers']
             self.cnn2d_kernel_length = data['cnn2d_kernel_length']
             self.cnn2d_strides = data['cnn2d_strides']
+            self.cnn2d_dilation_rate = data['cnn2d_dilation_rate']
+            self.useAttributeWiseAggregation = data['useAttributeWiseAggregation']
+            self.cnn2d_AttributeWiseAggregation = data['cnn2d_AttributeWiseAggregation']
 
         if self.encoder_variant in ["cnn2dwithaddinput"]:
             self.useAttributeWiseAggregation = data['useAttributeWiseAggregation']
@@ -133,6 +148,19 @@ class Hyperparameters:
             self.cnn2d_contextModule = data['cnn2d_contextModule']
             self.cnn2d_learnWeightForContextUsedInSim = data['cnn2d_learnWeightForContextUsedInSim']
             self.use_additional_strict_masking = data['use_additional_strict_masking']
+            self.use_graph_conv_for_context_fusion = data["use_graph_conv_for_context_fusion"]
+            self.use_dilated_factor_for_conv = data["use_dilated_factor_for_conv"]
+            self.use_univariate_output_for_weighted_sim = data["use_univariate_output_for_weighted_sim"]
+            self.graph_conv_channels = data["graph_conv_channels"]
+            self.learn_node_attribute_features = data["learn_node_attribute_features"]
+            self.use_graph_conv_after2dCNNFC_context_fusion = data["use_graph_conv_after2dCNNFC_context_fusion"]
+            self.use_graph_conv_after2dCNNFC_resNetBlock = data["use_graph_conv_after2dCNNFC_resNetBlock"]
+            self.use_graph_conv_after2dCNNFC_SkipCon = data["use_graph_conv_after2dCNNFC_SkipCon"]
+            self.use_graph_conv_after2dCNNFC_GAT_instead_GCN = data["use_graph_conv_after2dCNNFC_GAT_instead_GCN"]
+            self.use_owl2vec_node_features = data["use_owl2vec_node_features"]
+            self.provide_output_for_on_top_network = data["provide_output_for_on_top_network"]
+            self.use_case_of_on_top_network = data["use_case_of_on_top_network"]
+            self.ffnn_layers = data["ffnn_layers"]
 
             if data['useAddContextForSim'] == 'True':
                 self.useAddContextForSim = 'True'

@@ -1,7 +1,7 @@
 {
   "encoder_variant": "cnn2dwithaddinput",
   "batch_size": 64,
-  "epochs": 2500,
+  "epochs": 25000,
   "epochs_current": 0,
   "learning_rate": 0.001,
   "gradient_cap": -1,
@@ -66,9 +66,9 @@
     32
   ],
   "cnn2d_contextModule": [
-    256,
-    128,
-    64
+    1024,
+    768,
+    512
   ],
   "cnn2d_learnWeightForContextUsedInSim": [
     32,
@@ -84,15 +84,15 @@
     16
   ],
   "useAttributeWiseAggregation": "True",
-  "useAddContextForSim": "True",
-  "useAddContextForSim_LearnOrFixWeightVale": "True",
-  "use_additional_strict_masking": "True",
+  "useAddContextForSim": "False",
+  "useAddContextForSim_LearnOrFixWeightVale": "False",
+  "use_additional_strict_masking": "False",
   "use_graph_conv_for_context_fusion": "False",
   "use_dilated_factor_for_conv": "False",
   "use_univariate_output_for_weighted_sim": "True",
   "learn_node_attribute_features": "False",
-  "use_owl2vec_node_features": "False",
-  "use_graph_conv_after2dCNNFC_context_fusion": "False",
+  "use_owl2vec_node_features": "True",
+  "use_graph_conv_after2dCNNFC_context_fusion": "True",
   "use_graph_conv_after2dCNNFC_resNetBlock": "False",
   "use_graph_conv_after2dCNNFC_SkipCon": "False",
   "use_graph_conv_after2dCNNFC_GAT_instead_GCN": "False",

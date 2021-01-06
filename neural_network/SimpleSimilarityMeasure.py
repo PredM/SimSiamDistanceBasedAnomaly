@@ -54,13 +54,13 @@ class SimpleSimilarityMeasure:
         if use_weighted_sim:
             # Note: only one weight vector is used (a_weights) to simulate a retrieval situation
             # where only weights of the case are known
-            # tf.print(self.a_weights)
-            # tf.print(self.w, output_stream=sys.stdout)
             weight_matrix = self.get_weight_matrix(a)
-
+            #a = a / tf.sqrt(tf.math.reduce_sum(tf.square(a), axis=1, keepdims=True) + 1e-8)
+            #b = b / tf.sqrt(tf.math.reduce_sum(tf.square(b), axis=1, keepdims=True) + 1e-8)
             diff = tf.abs(a - b)
             # feature weighted distance:
             distance = tf.reduce_mean(weight_matrix * diff)
+            # distance = tf.reduce_sum(weight_matrix * diff)
             # tf. print("self.a_weights: ", tf.reduce_sum(self.a_weights))
 
             if use_additional_sim:
@@ -68,19 +68,26 @@ class SimpleSimilarityMeasure:
                 diff_con = tf.abs(self.a_context - self.b_context)
                 distance_con = tf.reduce_mean(diff_con)
                 if self.w is None:
-                    self.w = 0.3
+                    self.w = 0.5
                     distance = self.w * distance + (1 - self.w) * distance_con
-                    distance = tf.squeeze(distance)
+                    # new
+                    #distance = distance * distance_con
+                    #distance = (distance/(distance + distance_con)) * distance + (distance_con/(distance + distance_con)) * distance_con # cnn2d-wAddInputGraph-GCN64-LeakyRelu-SumPool_newDistanceMEasure_HIER_RICHTIG-ANDERER-WIE-NORMAL
+                    # end new
                 else:
                     # weight both distances
                     # tf.print("w: ",self.w)
                     distance = self.w * distance + (1 - self.w) * distance_con
                     distance = tf.squeeze(distance)
+                    #tf.print("w: ", self.w, "dis1: ",distance, "dis2: ",distance_con)
         else:
             diff = tf.abs(a - b)
             distance = tf.reduce_mean(diff)
         sim = tf.exp(-distance)
-
+        #tf.print("dis1: ",tf.reduce_mean(distance), "dis2: ", tf.reduce_mean(distance_con))
+        #tf.print("a: ", a)
+        #tf.print("b: ", b)
+        #tf.print("Sim: ", sim)
         return sim
 
     # Euclidean distance (required in contrastive loss function and converted sim)
@@ -98,15 +105,30 @@ class SimpleSimilarityMeasure:
             weighted_dist = tf.sqrt(tf.reduce_sum(weight_matrix * q * q))
             diff = weighted_dist
             if use_additional_sim:
-                # calculate context distance
-                diff_con = tf.norm(self.a_context - self.b_context, ord='euclidean')
-                distance_con = tf.reduce_mean(diff_con)
-                # weight both distances
-                distance = self.w * diff + (1 - self.w) * distance_con
-                diff = tf.squeeze(distance)
+                if self.w is None:
+                    self.w = 0.01
+                    #tf.print("self.a_context: ", self.a_context)
+                    #tf.print("self.b_context: ", self.b_context)
+                    # calculate context distance
+                    diff_con = tf.norm(self.a_context - self.b_context, ord='euclidean')
+                    distance_con = tf.reduce_mean(diff_con)
+                    # weight both distances
+                    distance_con = distance_con + tf.keras.backend.epsilon()
+                    diff = diff + tf.keras.backend.epsilon()
+                    distance = self.w * diff + (1 - self.w) * distance_con
+                    diff = tf.squeeze(distance)
+                    #tf.print("w: ", self.w, "dis1: ",distance, "dis2: ",distance_con)
+                else:
+                    # weight both distances
+                    #tf.print("w: ", self.w)
+                    diff_con = tf.norm(self.a_context - self.b_context, ord='euclidean')
+                    distance = self.w * diff + (1 - self.w) * diff_con
+                    diff = tf.squeeze(distance)
+                    # tf.print("w: ", self.w, "dis1: ",distance, "dis2: ",distance_con)
         else:
             diff = tf.norm(a - b, ord='euclidean')
-
+        #diff= diff + tf.keras.backend.epsilon()
+        #tf.print("diff final:", diff)
         return diff
 
     # Euclidean distance converted to a similarity

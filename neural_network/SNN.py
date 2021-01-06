@@ -1,3 +1,4 @@
+import sys
 import numpy as np
 import tensorflow as tf
 
@@ -6,7 +7,7 @@ from configuration.Enums import ArchitectureVariant, ComplexSimilarityMeasure
 from configuration.Hyperparameter import Hyperparameters
 from neural_network.BasicNeuralNetworks import CNN, RNN, FFNN, CNN2dWithAddInput, \
     CNN2D, TypeBasedEncoder, DUMMY, BaselineOverwriteSimilarity, GraphCNN2D, GraphSimilarity, AttributeConvolution, \
-    GraphAttributeConvolution
+    GraphAttributeConvolution, Cnn2DWithAddInput_Network_OnTop
 from neural_network.Dataset import FullDataset
 from neural_network.SimpleSimilarityMeasure import SimpleSimilarityMeasure
 
@@ -207,7 +208,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
                 subsection_batch = batch[index:index + batch_size]
 
             sims_subsection = self.get_sims_for_batch(subsection_batch)
-
+            sims_subsection = tf.squeeze(sims_subsection)
             sims_all_examples[sim_start:sim_end] = sims_subsection
 
         return sims_all_examples
@@ -237,6 +238,14 @@ class SimpleSNN(AbstractSimilarityMeasure):
 
         elif self.hyper.encoder_variant == 'cnn2dwithaddinput':
             examples_in_batch = batch[0].shape[0] // 2
+            # Add static attribute features
+            #print("batch[0]: ", batch[0].shape, "batch[1]: ", batch[1].shape, "batch[2]: ", batch[2].shape)
+            #Add batch Dimension to input
+            asaf_with_batch_dim = np.expand_dims(self.dataset.additional_static_attribute_features,-1)
+            asaf_with_batch_dim = np.repeat(asaf_with_batch_dim, batch[0].shape[0], axis=2)
+            asaf_with_batch_dim = np.reshape(asaf_with_batch_dim,(batch[0].shape[0],self.dataset.additional_static_attribute_features.shape[0],self.dataset.additional_static_attribute_features.shape[1]))
+            batch = [batch[0], batch[1], batch[2], asaf_with_batch_dim]
+            #print("batch[0]: ", batch[0].shape, "batch[1]: ", batch[1].shape, "batch[2]: ", batch[2].shape, "batch[3]: ", batch[3].shape)
         else:
             examples_in_batch = batch.shape[0] // 2
 
@@ -418,12 +427,12 @@ class SimpleSNN(AbstractSimilarityMeasure):
             if config_value != hyperparameter_value:
                 raise ValueError(
                     'Configuration setting whether to use strict masking must match the hyperparameters definied in the json file.')
-
+            num_of_features = self.dataset.feature_names_all.shape[0]
             if self.config.use_additional_strict_masking_for_attribute_sim:
                 self.encoder = CNN2dWithAddInput(self.hyper,
-                                                 [input_shape_encoder, self.hyper.time_series_depth * 2, self.hyper.time_series_depth])
+                                                 [input_shape_encoder, self.hyper.time_series_depth * 2, self.hyper.time_series_depth,(self.dataset.owl2vec_embedding_dim,num_of_features)])
             else:
-                self.encoder = CNN2dWithAddInput(self.hyper, [input_shape_encoder, self.hyper.time_series_depth, self.hyper.time_series_depth])
+                self.encoder = CNN2dWithAddInput(self.hyper, [input_shape_encoder, self.hyper.time_series_depth, self.hyper.time_series_depth,(self.dataset.owl2vec_embedding_dim,num_of_features)])
         elif self.hyper.encoder_variant == 'rnn':
             self.encoder = RNN(self.hyper, input_shape_encoder)
         elif self.hyper.encoder_variant == 'dummy':
@@ -455,6 +464,54 @@ class SimpleSNN(AbstractSimilarityMeasure):
                 # 2* because values for both examples are concatenated
                 input_shape = (encoder_output_shape[2], 2 * encoder_output_shape[1])
                 self.complex_sim_measure = GraphSimilarity(self.hyper, input_shape)
+
+            elif self.config.complex_measure == ComplexSimilarityMeasure.CNN2DWAddInp:
+
+                # WIP
+                last_chancel_size_GCN = self.hyper.graph_conv_channels[len(self.hyper.graph_conv_channels) - 1]
+                last_attfeaturewise_fc_layer_size = self.hyper.cnn2d_AttributeWiseAggregation[len(self.hyper.cnn2d_AttributeWiseAggregation) - 1]
+                input_shape = (last_chancel_size_GCN, 61)
+                if self.hyper.provide_output_for_on_top_network == "True":
+                    # Define additional input shapes
+                    input_shape_dis_vec = (last_chancel_size_GCN, 61)
+                    if self.config.use_additional_strict_masking_for_attribute_sim:
+                        input_shape_masking_vec = self.hyper.time_series_depth * 2
+                    else:
+                        input_shape_masking_vec = self.hyper.time_series_depth
+                    input_shape_adj_matrix = self.hyper.time_series_depth
+                    input_shape_owl2vec_matrix = (self.dataset.owl2vec_embedding_dim, num_of_features)
+
+                    # Initialize OnTop Network with hyper parameter and input shape:
+                    use_case = self.hyper.use_case_of_on_top_network
+                    # Extract the input
+                    if use_case == "weight":
+                        # Learn to weight two distance / similarity values
+                        self.complex_sim_measure = Cnn2DWithAddInput_Network_OnTop(self.hyper,
+                                                                                   [1, 1, input_shape_masking_vec])
+                    elif use_case == "global":
+                        self.complex_sim_measure = Cnn2DWithAddInput_Network_OnTop(self.hyper, [input_shape_dis_vec,
+                                                                                            input_shape_masking_vec,
+                                                                                            input_shape_adj_matrix,
+                                                                                            input_shape_owl2vec_matrix])
+
+                    elif use_case == "graph":
+                        self.complex_sim_measure = Cnn2DWithAddInput_Network_OnTop(self.hyper, [input_shape_dis_vec,
+                                                                                                input_shape_masking_vec,
+                                                                                                input_shape_adj_matrix,
+                                                                                                input_shape_owl2vec_matrix])
+                    elif use_case == "nw_approach":
+                        if self.hyper.use_graph_conv_after2dCNNFC_context_fusion == "True":
+                            deep_feature_size = last_chancel_size_GCN*2
+                        else:
+                            deep_feature_size = last_attfeaturewise_fc_layer_size*2
+                        self.complex_sim_measure = Cnn2DWithAddInput_Network_OnTop(self.hyper,
+                                                                                   [deep_feature_size,
+                                                                                    # [last_chancel_size_GCN * 2 + 61 + 16,
+                                                                                    61])
+                else:
+                    self.complex_sim_measure = Cnn2DWithAddInput_Network_OnTop(self.hyper, input_shape)
+
+
             self.complex_sim_measure.create_model()
 
             if not self.training and not for_cbs:
@@ -495,6 +552,16 @@ class SNN(SimpleSNN):
             a = context_vectors[0][2 * pair_index, :]
             b = context_vectors[0][2 * pair_index + 1, :]
             # w = context_vectors[1][2 * pair_index, :]
+            if self.hyper.provide_output_for_on_top_network == "True":
+                a = context_vectors[0][2 * pair_index, :]
+                b = context_vectors[0][2 * pair_index + 1, :]
+                masking_vec = context_vectors[1][2 * pair_index, :]
+                adj_matrix = context_vectors[2][2 * pair_index, :]
+                owl2vec_features = context_vectors[3][2 * pair_index, :]
+                if self.hyper.useAddContextForSim == "True":
+                    a_2 = context_vectors[4][2 * pair_index, :]
+                    b_2 = context_vectors[4][2 * pair_index + 1, :]
+
         else:
             a = context_vectors[2 * pair_index, :, :]
             b = context_vectors[2 * pair_index + 1, :, :]
@@ -548,6 +615,148 @@ class SNN(SimpleSNN):
 
             complex_measure_output = self.complex_sim_measure.model(combined_input, training=self.training)
             sim = complex_measure_output
+
+        elif self.config.complex_measure == ComplexSimilarityMeasure.CNN2DWAddInp:
+            use_case =self.hyper.use_case_of_on_top_network
+            # Work in Progress
+            # Following use cases are available:
+            # nw_approach: applies the NeuralWarp approach on an input of size (Attributes, deep features)
+            # weight:
+            # predict: gets a distance vector (and additional information) to predict the final similarity
+            # graph: gets distance vectors for every data stream (node) to predict the final similarity
+
+            #Prepare Input
+            if use_case != "nw_approach":
+                #abs_distance = tf.expand_dims(abs_distance,0)
+                owl2vec_features = tf.expand_dims(owl2vec_features, 0)
+                masking_vec = tf.expand_dims(masking_vec, 0)
+
+            if use_case == "graph":
+                ffnn_input = tf.concat([a, b], axis=0)
+                ffnn_input = tf.expand_dims(ffnn_input, 0)
+                input_nn = [ffnn_input, masking_vec, adj_matrix, owl2vec_features]
+                sim = self.complex_sim_measure.model(input_nn, training=self.training)
+                #im = dis2_sim_max
+
+            elif use_case == "global":
+                '''
+                abs_distance = tf.expand_dims(abs_distance, 0)
+                input_nn = [abs_distance, masking_vec, adj_matrix, owl2vec_features]
+                sim = self.complex_sim_measure.model(input_nn, training=self.training)
+                sim = tf.squeeze(sim)
+                diff_ = tf.abs(diff - sim)
+                abs_distance = weight_matrix * diff_
+
+                sim = tf.exp(-tf.reduce_mean(abs_distance))
+                '''
+
+            elif use_case == "weight":
+                ### Distance Calculation
+                # 1. Calculate Feature weighted abs distance:
+                # Create Weight Matrix
+                weight_matrix = tf.reshape(tf.tile(masking_vec, [a.shape[0]]), [a.shape[0], a.shape[1]])
+                a_weights_sum = tf.reduce_sum(weight_matrix)
+                a_weights_sum = tf.add(a_weights_sum, tf.keras.backend.epsilon())
+                weight_matrix = weight_matrix / a_weights_sum
+                # Calculate distance
+                diff = tf.abs(a - b)
+                abs_distance = weight_matrix * diff
+
+                if self.hyper.useAddContextForSim == "True":
+                    # 2. Context abs distance:
+                    abs_distance_2 = tf.abs(a_2 - b_2)
+                    # tf.print("abs_distance: ", abs_distance)
+                    # tf.print("abs_distance_2: ", abs_distance_2)
+
+                # Distance aggregation
+                dis1_sum = tf.reduce_sum(abs_distance)
+                dis1_mean = tf.reduce_mean(abs_distance)
+                if self.hyper.useAddContextForSim == "True":
+                    dis2_sum = tf.reduce_sum(abs_distance_2)
+                    dis2_mean = tf.reduce_mean(abs_distance_2)
+
+                dis1_sim_exp = tf.exp(-dis1_mean)
+                dis1_sim_exp_Test = tf.exp(-dis1_sum)
+                dis1_sim_max = 1 - (dis1_sum / 1000)
+                if self.hyper.useAddContextForSim == "True":
+                    dis2_sim_exp = tf.exp(-dis2_mean)
+                    dis2_sim_max = 1 - (dis2_sum / 1000)
+
+                if self.hyper.useAddContextForSim == "True":
+                    tf.print("dis1 sum, mean, sim_max, sim_exp: ", dis1_sum, dis1_mean, dis1_sim_exp, dis1_sim_max,
+                             "dis2: ", dis2_sum, dis2_mean, dis2_sim_exp, dis2_sim_max)
+                # tf.print("dis2: ", dis2, "in sim: ", tf.exp(-dis2), "in sim: ", 1 - (dis2/1000))
+                # dis1 = tf.expand_dims(dis1,0)
+                # dis2 = tf.expand_dims(dis2, 0)
+                # tf.print("dis1 shape: ", dis1.shape)
+                # abs_distance = tf.abs(tf.subtract(a, b))
+                input_nn = [tf.expand_dims(dis1_sum,-1),tf.expand_dims(dis2_mean,-1), masking_vec]
+                sim_w = self.complex_sim_measure.model(input_nn, training=self.training)
+                sim_w = sim_w + tf.keras.backend.epsilon()
+                weighted_sim = dis1_sum * sim_w + (1-sim_w) * dis2_mean
+                tf.print("sim_w: ", sim_w,"d1: ", dis1_sim_exp_Test,"d2: ", dis2_sim_exp," weighted_sim: ", weighted_sim)
+                sim = sim_w
+
+            elif use_case == "nw_approach":
+                # NeuralWarp approach applied on deed encoded features
+                # Prepare NN input
+                ffnn_input = tf.concat([a, b], axis=0)
+
+                masking_vecs = tf.reshape(tf.tile(masking_vec, [61]), [61, 61])
+                #ffnn_input = tf.concat([ffnn_input,masking_vecs],axis=0)
+                '''
+                owl2vec_features_ = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate+0.5)(
+                    owl2vec_features)
+                #ffnn_input = tf.concat([masking_vecs, owl2vec_features_], axis=0)
+                ffnn_input = tf.concat([ffnn_input, owl2vec_features_], axis=0)
+                '''
+                ffnn_input = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(ffnn_input)
+                ffnn_input = tf.expand_dims(ffnn_input, axis=0)
+
+                # Predict the "relevance" of distance for every attribute (data stream) w.r.t. current masking vector
+                ffnn_output = self.complex_sim_measure.model(tf.transpose(ffnn_input), training=self.training)
+                ffnn_output = tf.transpose(ffnn_output)
+
+                # Generate weight matrix and calculate (weighted) distance
+                weight_matrix = tf.reshape(tf.tile(masking_vec, [a.shape[0]]), [a.shape[0], a.shape[1]])
+                a_weights_sum = tf.reduce_sum(weight_matrix)
+                a_weights_sum = tf.add(a_weights_sum, tf.keras.backend.epsilon())
+                weight_matrix = weight_matrix / a_weights_sum
+                # Calculate distance
+                diff = tf.abs(a - b)
+                #diff = tf.norm(a - b, ord='euclidean')
+                #tf.print("diff final:", diff)
+                abs_distance = weight_matrix * diff
+                #abs_distance = diff
+
+                attributewise_summed_abs_difference = tf.expand_dims(tf.reduce_sum(abs_distance, axis=0), axis=-1)
+                # abs_distance shape: [A, 1]
+
+                # Normalize predicted relevance vector
+                # ffnn_output = ffnn_output/a_weights_sum
+
+                # Scale / Weight (due to multiplication) the distance of between every attribute
+                # with the predicted "weight" for each attribute w.r.t to the masking vector
+                warped_dists = tf.multiply(attributewise_summed_abs_difference, ffnn_output)
+                # Mask distances that are not relevant
+                warped_dists = tf.multiply(warped_dists, masking_vec)
+                ''' DEBUG:
+                tf.print("a:", a,output_stream=sys.stdout)
+                tf.print("b:", b,output_stream=sys.stdout)
+                tf.print("Distance warped: ", tf.reduce_sum(warped_dists), "Abs.: ", tf.reduce_sum(abs_distance),output_stream=sys.stdout)
+                tf.print("Mask:", masking_vec,output_stream=sys.stdout)
+                tf.print("Adj Matrix:", adj_matrix, output_stream=sys.stdout)
+                tf.print("Distance per attribute:", attributewise_summed_abs_difference,output_stream=sys.stdout)
+                tf.print("--------------------------",output_stream=sys.stdout)
+                '''
+                #1000000 # needed in the case that distances are two small for similarity converting
+                if self.training == False:
+                    sim = tf.exp(-tf.reduce_sum(warped_dists*self.config.distance_scaling_parameter_for_cnn2dwithAddInput_ontopNN))  # 10000
+                else:
+                    sim = tf.exp(-tf.reduce_sum(warped_dists))
+
+            #sim = tf.exp(-abs_distance)
+            #tf.print("sim: ", sim)
 
         else:
             raise ValueError('Complex similarity measure not implemented:', self.config.complex_measure)

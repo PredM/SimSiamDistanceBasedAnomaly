@@ -61,6 +61,7 @@ class ComplexSimilarityMeasure(Enum):
     FFNN_NW = 0
     GRAPH_SIM = 1
     BASELINE_OVERWRITE = 2
+    CNN2DWAddInp = 3
 
 
 class TrainTestSplitMode(Enum):
@@ -69,3 +70,16 @@ class TrainTestSplitMode(Enum):
 
     # Train only consists of no_failure examples, also includes ENSURE_NO_MIX guarantee
     ANOMALY_DETECTION = 1
+
+class AdjacencyMatrixPreprossingCNN2DWithAddInput(Enum):
+    # The type of adj matrix used
+    ADJ_MATRIX_CONTEXT_GCN = 0
+    ADJ_MATRIX_STRICT_GCN = 1
+    ADJ_MATRIX_STRICT_WITH_CONTEXT_DIFF_GCN = 2
+
+class NodeFeaturesForGraphVariants(Enum):
+    # The type of node features used
+    NO_ADDITIONAL_NODE_FEATURES = 0
+    ONE_HOT_ENCODED = 1
+    OWL2VEC_EMBEDDINGS_DIM16 = 2
+    OWL2VEC_EMBEDDINGS_DIM32 = 3
