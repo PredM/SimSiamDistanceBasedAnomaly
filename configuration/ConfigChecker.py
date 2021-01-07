@@ -132,11 +132,11 @@ class ConfigChecker:
                              architecture.hyper.encoder_variant == 'dummy',
                              'config.overwrite_input_data_with_baseline_representation can\'t be used without a dummy encoder. \n'
                              'Other encoders do not support this option hence it must be disabled.')
-
+            '''
             self.implication(self.config.useFeatureWeightedSimilarity == False,
                              architecture.hyper.use_univariate_output_for_weighted_sim == 'True',
                              'Did you forget to activate feature weighted similarity for a standard / simple SNN output?')
-
+            '''
             incompatible_with_3rd_party = [
                 self.config.use_additional_strict_masking_for_attribute_sim,
                 self.config.use_same_feature_weights_for_unsimilar_pairs,
