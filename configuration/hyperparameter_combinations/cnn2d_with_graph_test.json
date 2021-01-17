@@ -1,12 +1,12 @@
 {
-  "notes": "currently best results",
+  "notes": "currently best results, no 1d conv before 2d conv used",
   "encoder_variant": "graphcnn2d",
   "batch_size": 64,
-  "epochs": 400000,
+  "epochs": 25000,
   "epochs_current": 0,
   "learning_rate": 0.001,
   "gradient_cap": -1,
-  "dropout_rate": 0.05,
+  "dropout_rate": 0.1,
   "ffnn_layers": [
     64,
     16
@@ -18,43 +18,27 @@
   "cnn_strides": [
   ],
   "graph_conv_channels": [
-    64
+    128
   ],
   "global_attention_pool_channels": [
-    64
+    128
   ],
   "cnn2d_layers": [
     128,
     64,
-    1
+    4
   ],
   "cnn2d_kernel_length": [
-    [
-      5,
-      1
-    ],
-    [
-      5,
-      1
-    ],
-    [
-      1,
-      1
-    ]
+    [5,1],
+    [5,1],
+    [3,1],
+    [1,1]
   ],
   "cnn2d_strides": [
-    [
-      2,
-      1
-    ],
-    [
-      1,
-      1
-    ],
-    [
-      1,
-      1
-    ]
+    [2,1],
+    [2,1],
+    [2,1],
+    [1,1]
   ],
         "cnn2d_dilation_rate": [
     [1,1],
@@ -64,12 +48,13 @@
     [1,1],
     [1,1]
   ],
-    "useAttributeWiseAggregation": "False",
+    "useAttributeWiseAggregation": "True",
       "cnn2d_AttributeWiseAggregation": [
     512,
     256,
-    128      ],
-  "useFilterwise1DConvBefore2DConv": "True",
-    "useFactoryStructureFusion": "False",
-    "use_owl2vec_node_features": "False"
+        128
+      ],
+  "useFilterwise1DConvBefore2DConv": "False",
+  "useFactoryStructureFusion": "False",
+  "use_owl2vec_node_features": "True"
 }

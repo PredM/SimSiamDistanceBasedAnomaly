@@ -55,6 +55,7 @@ class SimpleSimilarityMeasure(Enum):
     ABS_MEAN = 0
     EUCLIDEAN_SIM = 1
     EUCLIDEAN_DIS = 2
+    COSINE = 3
 
 
 class ComplexSimilarityMeasure(Enum):
@@ -83,3 +84,9 @@ class NodeFeaturesForGraphVariants(Enum):
     ONE_HOT_ENCODED = 1
     OWL2VEC_EMBEDDINGS_DIM16 = 2
     OWL2VEC_EMBEDDINGS_DIM32 = 3
+
+class AdjacencyMatrixType(Enum):
+    # The type of adj matrix used
+    ADJ_MAT_TYPE_AS_ONE_GRAPH_SPARSE = 0
+    ADJ_MAT_TYPE_AS_ONE_GRAPH_WS_FULLY = 1
+    ADJ_MAT_TYPE_FIRST_VARIANT = 2

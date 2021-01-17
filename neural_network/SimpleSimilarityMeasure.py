@@ -29,6 +29,7 @@ class SimpleSimilarityMeasure:
             SSM.ABS_MEAN: self.abs_mean,
             SSM.EUCLIDEAN_SIM: self.euclidean_sim,
             SSM.EUCLIDEAN_DIS: self.euclidean_dis,
+            SSM.COSINE: self.cosine,
         }
 
         # Get the function from switcher dictionary
@@ -138,3 +139,21 @@ class SimpleSimilarityMeasure:
         diff = self.euclidean_dis(a, b)
         sim = 1 / (1 + tf.reduce_sum(diff))
         return sim
+
+    @tf.function
+    def cosine(self, a, b):
+        use_weighted_sim = self.a_weights is not None and self.b_weights is not None
+        if use_weighted_sim:
+            # source: https://stats.stackexchange.com/questions/384419/weighted-cosine-similarity
+            weight_vec = self.a_weights / tf.reduce_sum(self.a_weights)
+            normalize_a = tf.nn.l2_normalize(a, 0) * weight_vec
+            normalize_b = tf.nn.l2_normalize(b, 0) * weight_vec
+            cos_similarity = tf.reduce_sum(tf.multiply(normalize_a, normalize_b) * weight_vec)
+            # cos_similarity = 1-distance.cosine(a.numpy(),b.numpy(),self.a_weights)
+        else:
+            normalize_a = tf.nn.l2_normalize(a, 0)
+            normalize_b = tf.nn.l2_normalize(b, 0)
+            cos_similarity = tf.reduce_sum(tf.multiply(normalize_a, normalize_b))
+            # tf.print(cos_similarity)
+
+        return cos_similarity

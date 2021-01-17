@@ -69,7 +69,7 @@
     512,
     256,
     128      ],
-  "useFilterwise1DConvBefore2DConv": "True",
+  "useFilterwise1DConvBefore2DConv": "False",
     "useFactoryStructureFusion": "False",
-    "use_owl2vec_node_features": "False"
+    "use_owl2vec_node_features": "True"
 }

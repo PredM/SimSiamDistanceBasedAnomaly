@@ -311,7 +311,7 @@
     "vsg_acc_y",
     "vsg_acc_z"
   ],
-  "relevant_features_beforeUpdate2021": {
+  "relevant_features": {
     "no_failure": [
       "txt15_i1",
       "txt15_i3",
@@ -536,7 +536,7 @@
       "a_15_1_z"
     ]
   },
-    "relevant_features": {
+    "relevant_features_New_2021": {
     "no_failure": [
       "txt15_i1",
       "txt15_i3",

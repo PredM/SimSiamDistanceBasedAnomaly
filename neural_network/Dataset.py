@@ -1,7 +1,7 @@
 from time import perf_counter
 
 import numpy as np
-#np.set_printoptions(threshold=np.inf)
+np.set_printoptions(threshold=np.inf)
 import pandas as pd
 from sklearn import preprocessing
 from spektral import utils
@@ -243,6 +243,10 @@ class FullDataset(Dataset):
                 'Ordering of features in the adjacency matrix (index) does not match the one in the dataset.')
 
         self.graph_adjacency_matrix_attributes = adj_matrix_attr_df.values.astype(dtype=np.float)
+        #self.graph_adjacency_matrix_attributes = self.graph_adjacency_matrix_attributes + np.eye(61, dtype=int)
+        #print(self.graph_adjacency_matrix_attributes)
+        if self.config.use_GCN_adj_matrix_preprocessing:
+            self.graph_adjacency_matrix_attributes = utils.gcn_filter(self.graph_adjacency_matrix_attributes, symmetric=True)
 
         # Load adjacency matrix for workstations
         adj_matrix_df = pd.read_csv(self.config.graph_adjacency_matrix_ws_file, sep=';', index_col=0)
@@ -294,7 +298,7 @@ class FullDataset(Dataset):
                 # Get its embedding by its uri and store it according the attribute order
                 # print(owl2vec_node_embeddings_df.loc[ftOnto_uri].values)
                 owl2vec_attr_embeddings[:,idx] = owl2vec_node_embeddings_df.loc[ftOnto_uri].values
-            #print("owl2vec_attr_embeddings shape: ", owl2vec_attr_embeddings.shape)
+
             self.additional_static_attribute_features = owl2vec_attr_embeddings
 
     def calculate_maskings(self):
@@ -332,14 +336,13 @@ class FullDataset(Dataset):
             masking = np.concatenate((masking[0], masking[1]))
         else:
             masking = self.class_label_to_masking_vector.get(class_label)
-
         return masking
 
     # returns a boolean matrix with values depending on whether the attribute at this index is relevant
     # for the class of the passed label
     def get_adj_matrix(self, class_label):
         # Use masking vectors to generated adj. matrix relevant to a class label
-        masking = self.class_label_to_masking_vector_strict.get(class_label)
+        masking = self.get_masking(class_label, self.config.use_additional_strict_masking_for_attribute_sim)
         if self.config.use_additional_strict_masking_for_attribute_sim == False:
             strict_mask = masking
             context_mask = masking
@@ -347,6 +350,8 @@ class FullDataset(Dataset):
             strict_mask = masking[0]
             context_mask = masking[1]
         symmetric = None
+        #strict_mask = self.apply_masking_regularization(strict_mask, class_label, rate=0.1)
+        #context_mask = self.apply_masking_regularization(context_mask, class_label, rate=0.1)
 
         if self.config.use_predefined_adj_matrix_as_base_for_preprocessing == True:
             adj_mat = self.graph_adjacency_matrix_attributes
@@ -398,18 +403,57 @@ class FullDataset(Dataset):
                 #adj_mat = adj_mat
                 adj_mat = self.graph_adjacency_matrix_attributes
                 #adj_mat = np.ones((61, 61))  # context_mask.shape[0]
+        else:
+            #remove self connection from self generated adj matrixes
+            identity_matrix = np.identity(61)
+            identity_matrix[identity_matrix > 0] = -1
+            self_con_remove = identity_matrix + np.ones((61, 61))
+            adj_mat = adj_mat * self_con_remove
 
         #adj_mat = self.graph_adjacency_matrix_attributes
+        import tensorflow as tf
+        #adj_mat = tf.nn.dropout(adj_mat, rate = 0.1, seed = 1).numpy()
 
         # Pre-process adj. matrix for GCN Layer
         #print("Before adj_mat ", adj_mat.shape, " of ", class_label, ": ", adj_mat)
+        #adj_mat = self.graph_adjacency_matrix_attributes
         if self.config.use_GCN_adj_matrix_preprocessing:
             adj_mat = utils.gcn_filter(adj_mat, symmetric=symmetric)
         #GAT Layer - braucht normal kein Preprocessing
         #adj_mat = utils.normalized_adjacency(adj_mat, symmetric=symmetric)
         #print("After adj_mat ",adj_mat.shape," of ", class_label, ": ", adj_mat)
+
         return adj_mat
 
+    def apply_masking_regularization(self, maskingvector, label, rate=0.1):
+        if maskingvector is not None:
+            if label == "no_failure":
+                # Add nodes first and then remove nodes
+                indices_add = np.random.choice(np.arange(maskingvector.shape[0]), replace=False,
+                                           size=int(maskingvector.shape[0] * rate))
+                indices_remove = np.random.choice(np.arange(maskingvector.shape[0]), replace=False,
+                                               size=int(maskingvector.shape[0] * rate))
+
+                maskingvector[indices_remove] = 0
+                maskingvector[indices_add] = 1
+            else:
+                # Add nodes first and then remove nodes
+                indices_add = np.random.choice(np.arange(maskingvector.shape[0]), replace=False,
+                                           size=int(maskingvector.shape[0] * rate))
+                indices_remove = np.random.choice(np.arange(maskingvector.shape[0]), replace=False,
+                                               size=int(maskingvector.shape[0] * rate))
+                maskingvector[indices_remove] = 0
+                maskingvector[indices_add] = 1
+        else:
+            print("maskingvector is none")
+
+        return maskingvector
+
+    def get_static_attribute_features(self, batchsize):
+        asaf_with_batch_dim = np.expand_dims(self.additional_static_attribute_features, -1)
+        asaf_with_batch_dim = np.repeat(asaf_with_batch_dim, batchsize, axis=2)
+        asaf_with_batch_dim = np.transpose(asaf_with_batch_dim, axes=[2, 0, 1])
+        return asaf_with_batch_dim
     def get_masked_example_group(self, test_example, group_id):
 
         if group_id not in self.group_id_to_masking_vector:
@@ -449,32 +493,15 @@ class FullDataset(Dataset):
     def get_indices_failures_only_test(self):
         return np.where(self.y_test_strings != 'no_failure')[0]
 
-    # TODO @Klein wird das auskommentierte noch benötigt?
     def encode(self, snn, encode_test_data=False):
 
         start_time_encoding = perf_counter()
         print('Encoding of dataset started')
 
         x_train_unencoded = self.x_train
-        '''
-        x_train_masking = np.zeros((self.x_train.shape[0],self.x_train.shape[2]))
-        for i,label in enumerate(self.y_train_strings):
-            #print(i,label)
-            x_train_masking[i,:] = self.get_masking(label)
-        print("x_train_masking: ", x_train_masking.shape)
-        '''
+
         self.x_train = None
         batchsize = self.config.sim_calculation_batch_size
-        '''
-        for example in range(x_train_unencoded.shape[0]//batchsize):
-            start = example * batchsize
-            end = (example +1) * batchsize
-            #print("x_train_unencoded: ", x_train_unencoded.shape)
-            print("batch: ", example, "start: ", start, "end: ", end)
-            batch = x_train_unencoded[:132,:,:]
-            batch = snn.reshape(batch)
-            x_train_unencoded = snn.reshape_and_add_aux_input(x_train_unencoded, batch_size=66)
-        '''
 
         x_train_unencoded_reshaped = snn.reshape_and_add_aux_input(x_train_unencoded,
                                                                    batch_size=(x_train_unencoded.shape[0] // 2))
@@ -491,48 +518,37 @@ class FullDataset(Dataset):
                 x_train_encoded_1 = np.append(x_train_encoded_1, encoded_batch[1], axis=0)
                 x_train_encoded_2 = np.append(x_train_encoded_2, encoded_batch[2], axis=0)
                 x_train_encoded_3 = np.append(x_train_encoded_3, encoded_batch[3], axis=0)
-            '''
-            print("x_train_encoded_0: ", x_train_encoded_0.shape)
-            print("x_train_encoded_1: ", x_train_encoded_1.shape)
-            print("x_train_encoded_2: ", x_train_encoded_2.shape)
-            print("x_train_encoded_3: ", x_train_encoded_3.shape)
-            '''
+
             x_train_encoded_0 = x_train_encoded_0[batchsize:, :, :]
             x_train_encoded_1 = x_train_encoded_1[batchsize:, :]
             x_train_encoded_2 = x_train_encoded_2[batchsize:, :, :]
             x_train_encoded_3 = x_train_encoded_3[batchsize:, :]
-            '''
-            print("x_train_encoded_0: ", x_train_encoded_0.shape)
-            print("x_train_encoded_1: ", x_train_encoded_1.shape)
-            print("x_train_encoded_2: ", x_train_encoded_2.shape)
-            print("x_train_encoded_3: ", x_train_encoded_3.shape)
-            '''
-            '''
-            x_train_unencoded = snn.reshape(x_train_unencoded[:132,:,:])
-            print("x_train_unencoded: ", x_train_unencoded.shape)
-            x_train_unencoded = snn.reshape_and_add_aux_input(x_train_unencoded, batch_size=66)
-            print("x_train_unencoded: ", x_train_unencoded[0].shape, x_train_unencoded[1].shape)
-            x_train_encoded = snn.encoder.model(x_train_unencoded, training=False)
-            x_train_encoded = np.asarray(x_train_encoded)
-            self.x_train = x_train_encoded
-            '''
+
             self.x_train = [x_train_encoded_0, x_train_encoded_1, x_train_encoded_2, x_train_encoded_3]
         else:
-            print("shape. ", encoded[0].shape)
+            print("SNN Output of Encoded data shape. ", encoded[0].shape)
             x_train_encoded_0 = encoded[0]
+            #x_train_encoded_0 = np.expand_dims(x_train_encoded_0, -1)
             for encoded_batch in encoded:
                 x_train_encoded_0 = np.append(x_train_encoded_0, encoded_batch, axis=0)
-            x_train_encoded_0 = x_train_encoded_0[batchsize:, :, :]
+            x_train_encoded_0 = x_train_encoded_0[batchsize:, :]
             self.x_train = x_train_encoded_0
         # x_test will not be encoded by default because examples should simulate "new data" --> encoded at runtime
         # but can be done for visualisation purposes
         if encode_test_data:
             x_test_unencoded = self.x_test
             self.x_test = None
-            x_test_unencoded = snn.reshape(x_test_unencoded)
-            x_test_encoded = snn.encoder.model(x_test_unencoded, training=False)
-            x_test_encoded = np.asarray(x_test_encoded)
-            self.x_test = x_test_encoded
+            x_test_unencoded_reshaped = snn.reshape(x_test_unencoded)
+            print("x_test_unencoded_reshaped shape: ", x_test_unencoded_reshaped.shape)
+            x_test_encoded = snn.encode_in_batches(x_test_unencoded_reshaped)
+            #x_test_encoded = snn.encoder.model(x_test_unencoded, training=False)
+            #x_test_encoded = np.asarray(x_test_encoded)
+            x_test_encoded_0 = x_test_encoded[0]
+            # x_train_encoded_0 = np.expand_dims(x_train_encoded_0, -1)
+            for encoded_batch in x_test_encoded:
+                x_test_encoded_0 = np.append(x_test_encoded_0, encoded_batch, axis=0)
+            x_test_encoded_0 = x_test_encoded_0[batchsize:, :]
+            self.x_test = x_test_encoded_0
 
         encoding_duration = perf_counter() - start_time_encoding
         print('Encoding of dataset finished. Duration:', encoding_duration)

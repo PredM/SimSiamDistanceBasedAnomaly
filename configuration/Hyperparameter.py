@@ -75,6 +75,14 @@ class Hyperparameters:
         self.use_owl2vec_node_features = None
         self.provide_output_for_on_top_network = None
         self.use_case_of_on_top_network = None
+        self.l1_rate_act = None
+        self.l1_rate_kernel = None
+        self.l2_rate_act = None
+        self.l2_rate_kernel = None
+        self.l1_rate = None
+        self.l2_rate = None
+        self.useFilterwise1DConvBefore2DConv = None
+        self.useFactoryStructureFusion = None
 
     def set_time_series_properties(self, dataset):
         self.time_series_length = dataset.time_series_length
@@ -141,6 +149,11 @@ class Hyperparameters:
             self.cnn2d_dilation_rate = data['cnn2d_dilation_rate']
             self.useAttributeWiseAggregation = data['useAttributeWiseAggregation']
             self.cnn2d_AttributeWiseAggregation = data['cnn2d_AttributeWiseAggregation']
+            self.useFilterwise1DConvBefore2DConv = data['useFilterwise1DConvBefore2DConv']
+
+        if self.encoder_variant in ["graphcnn2d"]:
+            self.useFactoryStructureFusion = data['useFactoryStructureFusion']
+            self.use_owl2vec_node_features = data['use_owl2vec_node_features']
 
         if self.encoder_variant in ["cnn2dwithaddinput"]:
             self.useAttributeWiseAggregation = data['useAttributeWiseAggregation']
@@ -161,6 +174,12 @@ class Hyperparameters:
             self.provide_output_for_on_top_network = data["provide_output_for_on_top_network"]
             self.use_case_of_on_top_network = data["use_case_of_on_top_network"]
             self.ffnn_layers = data["ffnn_layers"]
+
+            self.l1_rate_act = data["l1_rate_act"]
+            self.l1_rate_kernel = data["l1_rate_kernel"]
+            self.l2_rate_act = data["l2_rate_act"]
+            self.l2_rate_kernel = data["l2_rate_kernel"]
+
 
             if data['useAddContextForSim'] == 'True':
                 self.useAddContextForSim = 'True'

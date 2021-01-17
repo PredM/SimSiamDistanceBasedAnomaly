@@ -4,7 +4,7 @@ import pandas as pd
 
 from configuration.Enums import BatchSubsetType, LossFunction, BaselineAlgorithm, SimpleSimilarityMeasure, \
     ArchitectureVariant, ComplexSimilarityMeasure, TrainTestSplitMode, AdjacencyMatrixPreprossingCNN2DWithAddInput,\
-    NodeFeaturesForGraphVariants
+    NodeFeaturesForGraphVariants, AdjacencyMatrixType
 
 
 ####
@@ -25,8 +25,8 @@ class BaselineConfiguration:
         # Output interval of how many examples have been compared so far. < 0 for no output
         self.baseline_temp_output_interval = -1
 
-        self.baseline_use_relevant_only = False
-        self.baseline_algorithm = BaselineAlgorithm.DTW_WEIGHTING_NBR_FEATURES
+        self.baseline_use_relevant_only = True
+        self.baseline_algorithm = BaselineAlgorithm.FEATURE_BASED_ROCKET
 
         # Should the case base representation be based on a fitting to the full training dataset?
         # True = Fit representation using full training dataset / Default: False = Fit representation on case base only.
@@ -61,7 +61,7 @@ class GeneralConfiguration:
 
         # Path and file name to the specific model that should be used for testing and live classification
         # Folder where the models are stored is prepended below
-        self.filename_model_to_use = 'temp_snn_model_01-06_12-57-13_epoch-647'
+        self.filename_model_to_use = 'temp_snn_model_01-16_19-05-36_epoch-2075'
 
         ##
         # Debugging - Don't use for feature implementation
@@ -95,7 +95,7 @@ class ModelConfiguration:
         ##
 
         # Selection which basic architecture is used, see enum class for details
-        self.architecture_variant = ArchitectureVariant.STANDARD_COMPLEX
+        self.architecture_variant = ArchitectureVariant.STANDARD_SIMPLE
 
         ##
         # Determines how the similarity between two embedding vectors is determined (when a simple architecture is used)
@@ -125,7 +125,7 @@ class ModelConfiguration:
         # If !use_individual_hyperparameters interpreted as a single json file, else as a folder
         # which contains json files named after the cases they should be used for
         # If no file with this name is present the 'default.json' Config will be used
-        self.hyper_file = self.hyper_file_folder + 'cnn2d_withAddInput_nwApproach.json'  # 'individual_hyperparameters_test'  #cnn2d_with_graph-22-11.json
+        self.hyper_file = self.hyper_file_folder + 'cnn2d_with_graph_test.json'  #cnn2d_withAddInput_ContextStrang.json  'cnn2d_with_graph-26-10.json'  #cnn2d_with_graph_test.json #cnn2d_withAddInput_nwApproach.json
 
         ##
         # Various settings influencing the similarity calculation
@@ -136,7 +136,7 @@ class ModelConfiguration:
 
         # Additional option for encoder variant cnn2dwithaddinput and the euclidean distance:
         # Weighted euclidean similarity based on relevant attributes
-        self.useFeatureWeightedSimilarity = False  # default: False
+        self.useFeatureWeightedSimilarity = True  # default: False
 
         # Weights are based on masking vectors that contain 1 if a feature is selected as relevant for a
         # label (failure mode) and 0 otherwise. If option is set False then features based
@@ -149,7 +149,7 @@ class ModelConfiguration:
 
         # Using the more restrictive features as additional masking vector for feature sim calculation
         # in cnn_with_add_input
-        self.use_additional_strict_masking_for_attribute_sim = False  # default: False
+        self.use_additional_strict_masking_for_attribute_sim = True  # default: False
 
         # Option to simulate a retrieval situation (during training) where only the weights of the
         # example from the case base/training data set are known:
@@ -186,7 +186,7 @@ class TrainingConfiguration:
         self.margin_of_loss_function = 2
 
         # Scalar margin h for triplet loss function
-        self.triplet_loss_margin_h = 10
+        self.triplet_loss_margin_h = 0.1
 
         # Reduce margin of constrative_loss or in case of binary cross entropy loss
         # smooth negative examples by half of the sim between different labels
@@ -213,14 +213,17 @@ class TrainingConfiguration:
         self.use_sim_value_for_neg_pair = False  # default: False
 
         # Defines how often loss is printed and checkpoints are saved during training
-        self.output_interval = 100
+        self.output_interval = 1
 
         # How many model checkpoints are kept
-        self.model_files_stored = 50
+        self.model_files_stored = 10001
+
+        # Select which adjacency matrix is used as based
+        self.adj_matrix_type = AdjacencyMatrixType.ADJ_MAT_TYPE_AS_ONE_GRAPH_SPARSE
 
         # Define how the adjacency matrix is computed for cnn2dwithAddInput
-        self.use_predefined_adj_matrix_as_base_for_preprocessing = False
-        self.use_GCN_adj_matrix_preprocessing = True
+        self.use_predefined_adj_matrix_as_base_for_preprocessing = True
+        self.use_GCN_adj_matrix_preprocessing = False
         self.adj_matrix_preprocessing = AdjacencyMatrixPreprossingCNN2DWithAddInput.ADJ_MATRIX_CONTEXT_GCN
 
 
@@ -252,7 +255,7 @@ class InferenceConfiguration:
         self.print_model = True
 
         # In case of too small distance values (resulting in 1.0) through similarity transformation
-        self.distance_scaling_parameter_for_cnn2dwithAddInput_ontopNN = 1000.0
+        self.distance_scaling_parameter_for_cnn2dwithAddInput_ontopNN = 1.0
 
 
 class ClassificationConfiguration:
@@ -409,7 +412,7 @@ class StaticConfiguration:
         self.data_folder_prefix = '../data/'
         # Prefix for the 3w dataset
         # self.data_folder_prefix = '../data/additional_datasets/3w_dataset/'
-        #self.data_folder_prefix = '../../../../data/pklein/PredMSiamNN/data/'
+        self.data_folder_prefix = '../../../../data/pklein/PredMSiamNN/data/'
 
         # Folder where the trained models are saved to during learning process
         self.models_folder = self.data_folder_prefix + 'trained_models/'
@@ -418,7 +421,7 @@ class StaticConfiguration:
         self.directory_model_to_use = self.models_folder + self.filename_model_to_use + '/'
 
         # Folder where the preprocessed training and test data for the neural network should be stored
-        self.training_data_folder = self.data_folder_prefix + 'training_data/'
+        self.training_data_folder = self.data_folder_prefix + 'training_data/' # 'case_base/' for training tsfresh
 
         # Folder where the normalisation models should be stored
         self.scaler_folder = self.data_folder_prefix + 'scaler/'
@@ -442,7 +445,15 @@ class StaticConfiguration:
         self.localisation_sim_matrix_file = self.training_data_folder + 'Localization_Sim_Matrix.csv'
 
         # CSV file containing the adjacency information of features used by the graph cnn2d encoder
-        self.graph_adjacency_matrix_attributes_file = self.training_data_folder + 'adjacency_matrix.CSV' #'adjacency_matrix_all_attributes_allOne.csv'
+        if self.adj_matrix_type == AdjacencyMatrixType.ADJ_MAT_TYPE_AS_ONE_GRAPH_SPARSE:
+            self.graph_adjacency_matrix_attributes_file = self.training_data_folder + 'adjacency_matrix_v3_fullGraph_sparse.CSV'
+        elif self.adj_matrix_type == AdjacencyMatrixType.ADJ_MAT_TYPE_AS_ONE_GRAPH_WS_FULLY:
+            self.graph_adjacency_matrix_attributes_file = self.training_data_folder + 'adjacency_matrix_v3_fullGraph_wsFullyConnected.CSV'
+        elif self.adj_matrix_type == AdjacencyMatrixType.ADJ_MAT_TYPE_FIRST_VARIANT:
+            self.graph_adjacency_matrix_attributes_file = self.training_data_folder + 'adjacency_matrix.CSV'
+        else:
+            raise AttributeError('Unknown adj. matrix variant:', self.adj_matrix_type)
+        #self.graph_adjacency_matrix_attributes_file = self.training_data_folder + 'adjacency_matrix_v3_fullGraph_sparse.CSV' #'adjacency_matrix.CSV'#'adjacency_matrix_v3_fullGraph_sparse.CSV' #'adjacency_matrix_all_attributes_allOne.csv'
         self.graph_adjacency_matrix_ws_file = self.training_data_folder + 'adjacency_matrix_wokstation.csv'
         self.graph_attr_to_workstation_relation_file = self.training_data_folder + 'attribute_to_txtcontroller.csv'
         self.mapping_attr_to_ftonto_file = self.training_data_folder + 'mapping_attr_to_ftonto-uri.csv'
@@ -454,6 +465,8 @@ class StaticConfiguration:
         # TS Fresh feature files
         self.ts_fresh_filtered_file = 'ts_fresh_extracted_features_filtered.pkl'
         self.ts_fresh_unfiltered_file = 'ts_fresh_extracted_features_unfiltered.pkl'
+        self.ts_fresh_filtered_file_scaled = "ts_fresh_extracted_features_filtered_min_max_scaled.npy"
+        self.ts_fresh_unfiltered_file_scaled = "ts_fresh_extracted_features_unfiltered_min_max_scaled.npy"
 
         # Rocket feature files
         self.rocket_features_train_file = 'rocket_features_train.npy'
@@ -622,7 +635,13 @@ class Configuration(
         print("- use_time_step_wise_simple_similarity: ", self.use_time_step_wise_simple_similarity)
         print("- feature_variant: ", self.feature_variant)
         print("")
+        print("Graph Input related:")
+        print("- adj_matrix_type: ", self.adj_matrix_type)
+        print("Static Node Features: ")
+        print("use_additional_static_node_features_for_graphNN: " ,self.use_additional_static_node_features_for_graphNN)
+        print("")
         print("Training related:")
+        print("- batch_distribution: ", self.batch_distribution)
         print("- type_of_loss_function: ", self.type_of_loss_function)
         print("- margin_of_constrative_loss_function: ", self.margin_of_loss_function)
         print("- margin_of_triplet_loss_function: ", self.triplet_loss_margin_h)
@@ -632,6 +651,7 @@ class Configuration(
         print("- early_stopping_epochs_limit: ", self.early_stopping_epochs_limit)
         print("- early_stopping_loss_minimum: ", self.early_stopping_loss_minimum)
         print("- model_files_stored: ", self.model_files_stored)
+        print("- output_interval: ", self.output_interval)
         print("")
         print("Inference related:")
         print("- case_base_for_inference: ", self.case_base_for_inference)

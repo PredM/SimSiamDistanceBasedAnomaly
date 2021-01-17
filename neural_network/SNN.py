@@ -234,16 +234,20 @@ class SimpleSNN(AbstractSimilarityMeasure):
 
         if self.hyper.encoder_variant in ['graphcnn2d', 'graphattributeconvolution']:
             examples_in_batch = batch.shape[0] // 2
-            batch = [batch, self.dataset.graph_adjacency_matrix_attributes, self.dataset.graph_adjacency_matrix_ws]
+            asaf_with_batch_dim = self.dataset.get_static_attribute_features(batchsize=batch.shape[0])
+            batch = [batch, self.dataset.graph_adjacency_matrix_attributes, self.dataset.graph_adjacency_matrix_ws, asaf_with_batch_dim]
 
         elif self.hyper.encoder_variant == 'cnn2dwithaddinput':
             examples_in_batch = batch[0].shape[0] // 2
             # Add static attribute features
             #print("batch[0]: ", batch[0].shape, "batch[1]: ", batch[1].shape, "batch[2]: ", batch[2].shape)
-            #Add batch Dimension to input
+            #Add batch dimension to input static attribute features
+            '''
             asaf_with_batch_dim = np.expand_dims(self.dataset.additional_static_attribute_features,-1)
             asaf_with_batch_dim = np.repeat(asaf_with_batch_dim, batch[0].shape[0], axis=2)
             asaf_with_batch_dim = np.reshape(asaf_with_batch_dim,(batch[0].shape[0],self.dataset.additional_static_attribute_features.shape[0],self.dataset.additional_static_attribute_features.shape[1]))
+            '''
+            asaf_with_batch_dim = self.dataset.get_static_attribute_features(batchsize=batch.shape[0])
             batch = [batch[0], batch[1], batch[2], asaf_with_batch_dim]
             #print("batch[0]: ", batch[0].shape, "batch[1]: ", batch[1].shape, "batch[2]: ", batch[2].shape, "batch[3]: ", batch[3].shape)
         else:
@@ -345,6 +349,10 @@ class SimpleSNN(AbstractSimilarityMeasure):
                 subsection_examples = raw_data[0][index:index + batch_size]
                 subsection_aux_input = raw_data[1][index:index + batch_size]
                 subsection_batch = [subsection_examples, subsection_aux_input]
+            elif self.hyper.encoder_variant == 'graphcnn2d':
+                subsection_batch = raw_data[index:index + batch_size]
+                asaf_with_batch_dim = self.dataset.get_static_attribute_features(batchsize=batch_size)
+                subsection_batch = [subsection_batch, self.dataset.graph_adjacency_matrix_attributes, self.dataset.graph_adjacency_matrix_ws, asaf_with_batch_dim]
             else:
                 subsection_batch = raw_data[index:index + batch_size]
 
@@ -410,6 +418,9 @@ class SimpleSNN(AbstractSimilarityMeasure):
         elif self.hyper.encoder_variant == 'cnn2d':
             self.encoder = CNN2D(self.hyper, input_shape_encoder)
         elif self.hyper.encoder_variant == 'graphcnn2d':
+            input_shape_encoder = [(self.hyper.time_series_length, self.hyper.time_series_depth),
+                                   (self.hyper.time_series_depth,),(5,),
+                                   (self.dataset.owl2vec_embedding_dim, self.hyper.time_series_depth)]
             self.encoder = GraphCNN2D(self.hyper, input_shape_encoder)
         elif self.hyper.encoder_variant == 'attributeconvolution':
             self.encoder = AttributeConvolution(self.hyper, input_shape_encoder)
@@ -569,10 +580,21 @@ class SNN(SimpleSNN):
 
         if self.config.complex_measure == ComplexSimilarityMeasure.BASELINE_OVERWRITE:
             # Trains a neural network on distances of feature-based representation such as Rocket or TSFresh
-            abs_distance = tf.abs(tf.subtract(a, b))
-            abs_distance_flattened = tf.keras.layers.Flatten()(abs_distance)
-            abs_distance_flattened = tf.transpose(abs_distance_flattened)
-            ffnn_input = abs_distance_flattened
+            # Calculates a distance vector between both inputs
+            if self.config.simple_measure.value == 0:
+                #Abs Dist
+                distance = tf.abs(tf.subtract(a, b))
+            elif self.config.simple_measure.value == 1:
+                # Eucl Dist (Sim is used, since we just learn on the distance, but predict similarity )
+                distance = (tf.sqrt(tf.square(a-b)))
+            else:
+                raise AttributeError("Chosen simple distance measure (in Configuration.py)  is not supported. "
+                                     "Supported are: Absmean and EuclSim", self.config.simple_measure.value)
+                print()
+            distance_flattened = tf.keras.layers.Flatten()(distance)
+            distance_flattened = tf.transpose(distance_flattened)
+            # Using the distance to learn a single sigmoid neuron to weight them
+            ffnn_input = distance_flattened
             ffnn_output = self.complex_sim_measure.model(ffnn_input, training=self.training)
             # tf.print(ffnn, "shape: ",tf.shape(ffnn))
             ffnn_output = tf.squeeze(ffnn_output)
@@ -702,15 +724,30 @@ class SNN(SimpleSNN):
                 # Prepare NN input
                 ffnn_input = tf.concat([a, b], axis=0)
 
-                masking_vecs = tf.reshape(tf.tile(masking_vec, [61]), [61, 61])
+                #masking_vecs = tf.reshape(tf.tile(masking_vec, [61]), [61, 61])
                 #ffnn_input = tf.concat([ffnn_input,masking_vecs],axis=0)
+
+                # mask input:
+                #ffnn_input = tf.multiply(ffnn_input, masking_vec)
+
+                # Adding a mean pooled graph
+                '''
+                a_mean = tf.reduce_mean(a, axis=1)
+                a_means = tf.reshape(tf.tile(a_mean, [61]), [32, 61])
+                b_mean = tf.reduce_mean(b, axis=1)
+                b_means = tf.reshape(tf.tile(b_mean, [61]), [32, 61])
+                global_diff = tf.abs(a_means - b_means)
+                global_diff = tf.reduce_mean(global_diff)
+                ffnn_input = tf.concat([a_means, ffnn_input], axis=0)
+                ffnn_input = tf.concat([ffnn_input, b_means], axis=0)
+                '''
                 '''
                 owl2vec_features_ = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate+0.5)(
                     owl2vec_features)
                 #ffnn_input = tf.concat([masking_vecs, owl2vec_features_], axis=0)
                 ffnn_input = tf.concat([ffnn_input, owl2vec_features_], axis=0)
                 '''
-                ffnn_input = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(ffnn_input)
+                #ffnn_input = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(ffnn_input)
                 ffnn_input = tf.expand_dims(ffnn_input, axis=0)
 
                 # Predict the "relevance" of distance for every attribute (data stream) w.r.t. current masking vector
@@ -733,18 +770,20 @@ class SNN(SimpleSNN):
                 # abs_distance shape: [A, 1]
 
                 # Normalize predicted relevance vector
-                # ffnn_output = ffnn_output/a_weights_sum
+                ffnn_output = ffnn_output/a_weights_sum
 
                 # Scale / Weight (due to multiplication) the distance of between every attribute
                 # with the predicted "weight" for each attribute w.r.t to the masking vector
                 warped_dists = tf.multiply(attributewise_summed_abs_difference, ffnn_output)
                 # Mask distances that are not relevant
-                warped_dists = tf.multiply(warped_dists, masking_vec)
+                warped_dists_masked = tf.multiply(warped_dists, masking_vec)
                 ''' DEBUG:
                 tf.print("a:", a,output_stream=sys.stdout)
                 tf.print("b:", b,output_stream=sys.stdout)
-                tf.print("Distance warped: ", tf.reduce_sum(warped_dists), "Abs.: ", tf.reduce_sum(abs_distance),output_stream=sys.stdout)
-                tf.print("Mask:", masking_vec,output_stream=sys.stdout)
+                tf.print("FFNN Input:", ffnn_input, output_stream=sys.stdout)
+                tf.print("FFNN Output:", ffnn_output, output_stream=sys.stdout)
+                tf.print("Mask:", masking_vec, output_stream=sys.stdout)
+                tf.print("Distance warped: ", tf.reduce_sum(warped_dists),"Distance masked :",tf.reduce_sum(warped_dists_masked), "Abs.: ", tf.reduce_sum(abs_distance),output_stream=sys.stdout)
                 tf.print("Adj Matrix:", adj_matrix, output_stream=sys.stdout)
                 tf.print("Distance per attribute:", attributewise_summed_abs_difference,output_stream=sys.stdout)
                 tf.print("--------------------------",output_stream=sys.stdout)

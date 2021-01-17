@@ -336,7 +336,7 @@ class CNN2D(NN):
         if len(self.hyper.cnn_layers) < 1:
             print('Attention: No 1d conv layer on top of 2d conv is used!')
 
-        input = tf.keras.Input(shape=(self.input_shape[0], self.input_shape[1], 1), name="Input0")
+        input = tf.keras.Input(shape=(self.input_shape[0][0], self.input_shape[0][1], 1), name="Input0")
 
         layer_properties_2d = list(
             zip(self.hyper.cnn2d_layers, self.hyper.cnn2d_kernel_length, self.hyper.cnn2d_strides))
@@ -348,24 +348,34 @@ class CNN2D(NN):
 
             # first layer must be handled separately because the input shape parameter must be set
             if i == 0:
+                # Add 1D-Conv Layer to provide information across time steps in the first layer
+                if self.hyper.useFilterwise1DConvBefore2DConv == "True":
+                    print("Filterwise 1D Conv before 2D Conv is used")
+                    conv_layer1d = tf.keras.layers.Conv1D(filters=self.input_shape[0][1], padding='VALID',
+                                                          kernel_size=1, strides=1, name="1DConvContext-normal")
+                    reshape = tf.keras.layers.Reshape((self.input_shape[0][0], self.input_shape[0][1]))
+                    inp = reshape(input)
+                    temp = conv_layer1d(inp)
+                    temp = tf.expand_dims(temp, -1)
+                    sensor_data_input2 = tf.concat([input, temp], axis=3)
+                elif self.hyper.useFilterwise1DConvBefore2DConv == "restricted":
+                    print("Filterwise Restricted 1D Conv before 2D Conv is used")
+                    conv_layer1d = FilterRestricted1DConvLayer(kernel_size=(1, 61, 61), padding='VALID', strides=1,
+                                                               name="1DConvContext-restricted")
+                    reshape = tf.keras.layers.Reshape((self.input_shape[0][0], self.input_shape[0][1]))
+                    inp = reshape(input)
+                    temp = conv_layer1d(inp)
+                    temp = tf.expand_dims(temp, -1)
+                    sensor_data_input2 = tf.concat([input, temp], axis=3)
+                else:
+                    sensor_data_input2 = input
+                    # Add First 2DConv Layer
                 conv_layer1 = tf.keras.layers.Conv2D(filters=num_filter, padding='VALID',
-                                                     kernel_size=(filter_size), strides=stride, input_shape=input.shape)
-                #TODO make them as hyper parameter
-                '''
-                # Added 1D-Conv Layer to provide information across time steps in the first layer
-                conv_layer1d = tf.keras.layers.Conv1D(filters=self.input_shape[1], padding='VALID', kernel_size=1,
-                                                      strides=1)
-                # inp = tf.squeeze(input)
-                reshape = tf.keras.layers.Reshape((self.input_shape[0], self.input_shape[1]))
-                inp = reshape(input)
-                temp = conv_layer1d(inp)
-                temp = tf.expand_dims(temp, -1)
-                sensor_data_input2 = tf.concat([input, temp], axis=3)
-                '''
-                x = conv_layer1(input)
+                                                     kernel_size=(filter_size), strides=stride, input_shape=input.shape, name="2DConv-"+str(i))
+                x = conv_layer1(sensor_data_input2)
             else:
                 conv_layer = tf.keras.layers.Conv2D(filters=num_filter, padding='VALID',
-                                                    kernel_size=(filter_size), strides=stride)
+                                                    kernel_size=(filter_size), strides=stride, name="2DConv"+str(i))
                 x = conv_layer(x)
 
             x = tf.keras.layers.BatchNormalization()(x)
@@ -409,7 +419,7 @@ class CNN2D(NN):
         x = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(x)
 
         # Attribute-wise feature aggregation via (time-distributed) fully-connected layers
-        if self.hyper.useAttributeWiseAggregation:
+        if self.hyper.useAttributeWiseAggregation == "True":
             print('Adding FC layers for attribute wise feature merging/aggregation')
             layers_fc = self.hyper.cnn2d_AttributeWiseAggregation.copy()
             # x = tf.keras.layers.Multiply()([x, case_dependent_vector_input])
@@ -420,7 +430,6 @@ class CNN2D(NN):
                     tf.keras.layers.Dense(units=num_units, activation=tf.keras.activations.relu),
                     name="FC_FeatureWise_Aggreg_Layer_" + str(num_units) + "U")(x)
             x = tf.keras.layers.Permute((2, 1))(x)  # transpose
-        # Output 1, used for weighted distance measure
 
         layer_properties_1d = list(zip(self.hyper.cnn_layers, self.hyper.cnn_kernel_length, self.hyper.cnn_strides))
 
@@ -435,7 +444,7 @@ class CNN2D(NN):
             x = tf.keras.layers.BatchNormalization()(x)
             x = tf.keras.layers.ReLU()(x)
 
-        x = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(x)
+        #x = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(x)
 
         output = x
 
@@ -461,8 +470,13 @@ class GraphCNN2D(CNN2D):
         else:
             # Define additional input over which the adjacency matrix is provided
             # As shown here: https://graphneural.network/getting-started/, "," is necessary
-            adj_matrix_input = tf.keras.layers.Input(shape=(self.input_shape[1],))
-            adj_matrix_input_ws = tf.keras.layers.Input(shape=(5,))
+            adj_matrix_input_ds = tf.keras.layers.Input(shape=self.input_shape[1], name="AdjMatDS")
+            adj_matrix_input_ws = tf.keras.layers.Input(shape=self.input_shape[2], name="AdjMatWS")
+            static_attribute_features_input = tf.keras.layers.Input(shape=self.input_shape[3], name="StaticAttributeFeatures")
+
+            # Concat time series features with additional static node features
+            if self.hyper.use_owl2vec_node_features == "True":
+                output = tf.concat([output, static_attribute_features_input], axis=1)
 
             # print('Shape of output before transpose:', output.shape)
 
@@ -472,95 +486,81 @@ class GraphCNN2D(CNN2D):
             output = tf.transpose(output, perm=[0, 2, 1])
 
             for channels in self.hyper.graph_conv_channels:
-                output = spektral.layers.GCNConv(channels=channels, activation=None)([output, adj_matrix_input])
                 output = tf.keras.layers.BatchNormalization()(output)
-                output = tf.keras.layers.ReLU()(output)
-                output = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(output)
+                #output = spektral.layers.GCNConv(channels=channels, activation="relu")([output, adj_matrix_input_ds])
+                output = spektral.layers.GATConv(channels=channels, activation="relu")([output, adj_matrix_input_ds])
+                output_GCN_ds = output
+                #output = tf.abs(tf.add(output2, output))
+                #output = tf.keras.layers.BatchNormalization()(output)
+                #output = tf.keras.layers.ReLU()(output)
+                #output = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(output)
 
-            for channels in self.hyper.global_attention_pool_channels:
-                output = spektral.layers.GlobalAttentionPool(channels)(output)
+            if self.hyper.useFactoryStructureFusion == "False":
+                for channels in self.hyper.global_attention_pool_channels:
+                    output = spektral.layers.GlobalAttentionPool(channels)(output_GCN_ds)
+                    #output = spektral.layers.GlobalSumPool()(output)
+            else:
+                # WORK IN PROGRESS:
+                # enables pooling of data stream nodes according the factory structure ( can be used instead GlobalSumPool)
+                # Allocate data streams to workstations
+                workstation_attributes = []
+                workstation_attributes_idx = []
+                txt15 = [ 0,  1,  2,  6,  9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
+                txt16 = [ 3,  4,  5, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29]
+                txt17 = [ 7, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39]
+                txt18 = [ 8, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50]
+                txt19 = [51, 52, 53, 54, 55, 56, 57, 58, 59, 60]
+                workstation_attributes_idx.append(txt15)
+                workstation_attributes_idx.append(txt16)
+                workstation_attributes_idx.append(txt17)
+                workstation_attributes_idx.append(txt18)
+                workstation_attributes_idx.append(txt19)
+
+                output_data_stream_level = output_GCN_ds
+                output_data_stream_level_pooled = spektral.layers.GlobalAttentionPool(channels)(output_GCN_ds)
+
+                for workstation in range(5):
+                    #indices_of_attributes = tf.slice(indices_of_attributes,[workstation,0],[workstation, 61])
+                    #indices_of_attributes = tf.keras.layers.Lambda(lambda x: x[workstation, :])(indices_of_attributes)
+                    attributes = []
+                    #print(workstation, ". workstation: ", indices_of_attributes)
+                    for attribute in workstation_attributes_idx[workstation]: #range(workstation*10,workstation*10+10):
+                        # Split the tensor of a single attribute
+                        #print("attribute:", attribute)
+                        attribute_input = tf.keras.layers.Lambda(lambda x: x[:, attribute, :])(output_data_stream_level)
+                        attribute_input = tf.expand_dims(attribute_input, axis=2)
+                        attributes.append(attribute_input)
+                    workstation_attributes.append(attributes)
+
+                # Pool data streams based on their workstation affiliation
+                workstation_representation_pooled = []
+                for workstation in range(5):
+                    #print("workstation_attributes[workstation]: ", workstation_attributes[workstation])
+                    output2 = tf.keras.layers.Concatenate()(workstation_attributes[workstation])
+                    output2 = tf.transpose(output2, perm=[0, 2, 1])
+                    #output = spektral.layers.GlobalSumPool()(output2)
+                    output = spektral.layers.GlobalAttentionPool(channels)(output2)
+                    output = tf.expand_dims(output, axis=2)
+                    workstation_representation_pooled.append(output)
+                # Apply Graph Conv between Wokstations
+                output = tf.keras.layers.Concatenate()(workstation_representation_pooled)
+                output_workstation_level = tf.transpose(output, perm=[0, 2, 1])
+                output_GCN_ws = spektral.layers.GCNConv(channels=channels, activation="relu")([output_workstation_level, adj_matrix_input_ws])
+                #output = tf.abs(tf.add(output_workstation_level, output_GCN_ws))
                 #output = spektral.layers.GlobalSumPool()(output)
-                #output = spektral.layers.MinCutPool(k=10)([output, adj_matrix_input])
-                #output = spektral.layers.MinCutPool(k=1)([output, adj_matrix_input])
-                #output = spektral.layers.GlobalAttentionPool(channels)(output)
-                #output = tf.squeeze(output) # remove dimension 0 with 1 - reason why this happens?
-            #output = tf.keras.layers.Dense(units=32, activation=tf.keras.activations.relu)(output)
-            #TODO: Integrate as hyper parameter option after further testing
-            '''# WORK IN PROGRESS: enables pooling of sensor nodes according the factory structure ( can be used intead GlobalSumPool)
-            # Pool for each workstation
-            workstation_attributes = []
-            workstation_attributes_idx = []
-            txt15 = [ 0,  1,  2,  6,  9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
-            txt16 = [ 3,  4,  5, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29]
-            txt17 = [ 7, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39]
-            txt18 = [ 8, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50]
-            txt19 = [51, 52, 53, 54, 55, 56, 57, 58, 59, 60]
-            workstation_attributes_idx.append(txt15)
-            workstation_attributes_idx.append(txt16)
-            workstation_attributes_idx.append(txt17)
-            workstation_attributes_idx.append(txt18)
-            workstation_attributes_idx.append(txt19)
+                output_factory_level = spektral.layers.GlobalAttentionPool(channels)(output_GCN_ws)
+                output = output_factory_level
 
-            for workstation in range(5):
-                #indices_of_attributes = tf.slice(indices_of_attributes,[workstation,0],[workstation, 61])
-                #indices_of_attributes = tf.keras.layers.Lambda(lambda x: x[workstation, :])(indices_of_attributes)
-                attributes = []
-                #print(workstation, ". workstation: ", indices_of_attributes)
-                for attribute in workstation_attributes_idx[workstation]: #range(workstation*10,workstation*10+10):
-                    # Split the tensor of a single attribute
-                    print("attribute:", attribute)
-                    attribute_input = tf.keras.layers.Lambda(lambda x: x[:, attribute, :])(output)
-                    attribute_input = tf.expand_dims(attribute_input, axis=2)
-                    attributes.append(attribute_input)
-                workstation_attributes.append(attributes)
-
-            # Pool Attributes based on Workstation
-            workstation_representation_pooled = []
-            for workstation in range(5):
-                print("workstation_attributes[workstation]: ", workstation_attributes[workstation])
-                output2 = tf.keras.layers.Concatenate()(workstation_attributes[workstation])
-                output2 = tf.transpose(output2, perm=[0, 2, 1])
-                output = spektral.layers.GlobalSumPool()(output2)
-                #output = spektral.layers.GlobalAttentionPool(channels)(output2)
-                output = tf.expand_dims(output, axis=2)
-                workstation_representation_pooled.append(output)
-            output = tf.keras.layers.Concatenate()(workstation_representation_pooled)
-            output = tf.transpose(output, perm=[0, 2, 1])
-            #ws_gcn = spektral.layers.GCNConv(channels=channels, activation='relu')
-            #output = ws_gcn([output, adj_matrix_input_ws])
-            #output = ws_gcn([output, adj_matrix_input_ws])
-            output = spektral.layers.GCNConv(channels=channels, activation='relu')([output, adj_matrix_input_ws])
-            output = spektral.layers.GlobalSumPool()(output)
-            #output = spektral.layers.GlobalAttentionPool(channels)(output)
-            '''
-
-            #  Additional Output
-            '''
-            output_ = tf.keras.layers.Flatten()(input)
-
-            #x = tf.keras.layers.BatchNormalization()(output_)
-            output_ = tf.keras.layers.Dense(units=128, activation=None)(output_)
-            #x = tf.keras.layers.BatchNormalization()(x)
-            #output_ = tf.keras.layers.Dense(units=128, activation=tf.keras.activations.relu)(x)
-            output_ = tf.keras.layers.Flatten()(output_)
-            # skip connection
-            output = tf.keras.layers.Add()([output, output_])
-            '''
-            ### NEW
-            #output__ = tf.expand_dims(output_, axis=1)
-            #conv1d_trans_layer4 = tf.keras.layers.Conv1DTranspose(filters=1,strides=2,kernel_size=1,activation='relu', name="DeConv4")
-            #y = conv1d_trans_layer4(output__)
-            #output = tf.keras.layers.Add()([output, x])
-            ### END NEW
-
-            #output_ = output_ *0.0
-            #output = tf.keras.layers.Concatenate()([output, output_])
-
-
+                # Use different level (failure dependent?) for similarity calculation
+                '''
+                output_workstation_level_flatten = tf.keras.layers.Flatten()(output_workstation_level)
+                output_factory_level_flatten  = tf.keras.layers.Flatten()(output_factory_level)
+                output_data_stream_level_pooled_flatten  = tf.keras.layers.Flatten()(output_factory_level)
+                output = tf.keras.layers.Concatenate()([output_workstation_level_flatten,output_factory_level_flatten, output_data_stream_level_pooled_flatten])
+                '''
 
             # Redefine input of madel as normal input + additional adjacency matrix input
-            input = [input, adj_matrix_input, adj_matrix_input_ws]
-
+            input = [input, adj_matrix_input_ds, adj_matrix_input_ws, static_attribute_features_input]
 
         return input, output
 
@@ -665,10 +665,26 @@ class CNN2dWithAddInput(NN):
                 conv2d_layer1 = tf.keras.layers.Conv2D(filters=num_filter, padding='VALID',
                                                        kernel_size=(filter_size),
                                                        strides=stride, dilation_rate=dilation_rate,
+                                                       #kernel_regularizer = tf.keras.regularizers.l2(self.hyper.l2_rate_kernel),
+                                                       #activity_regularizer = tf.keras.regularizers.l2(self.hyper.l2_rate_act),
                                                        input_shape=sensor_data_input.shape)
 
                 sensor_data_input2 = sensor_data_input
 
+                '''
+                # Added 1D-Conv Layer to provide information across time steps in the first layer
+                #conv_layer1dres = tf.keras.layers.Conv1D(filters=self.input_shape[1], padding='VALID', kernel_size=1,
+                #                                      strides=1)
+                conv_layer1dres = FilterRestricted1DConvLayer(kernel_size=(1,61, 61), padding='VALID',strides=1, name="1DConvContext")
+                # inp = tf.squeeze(input)
+                reshape = tf.keras.layers.Reshape((self.input_shape[0][0], self.input_shape[0][1]))
+                inp = reshape(sensor_data_input)
+                #inp = tf.expand_dims(inp,0)
+                #output = tf.transpose(output, perm=[0, 2, 1])
+                temp = conv_layer1dres(inp)
+                temp = tf.expand_dims(temp, -1)
+                sensor_data_input2 = tf.concat([sensor_data_input, temp], axis=3)
+                '''
                 x = conv2d_layer1(sensor_data_input2)
             else:
                 # https://github.com/hfawaz/dl-4-tsc/blob/master/classifiers/resnet.py
@@ -687,12 +703,18 @@ class CNN2dWithAddInput(NN):
                 '''
                 conv2d_layer = tf.keras.layers.Conv2D(filters=num_filter, padding='VALID',
                                                         kernel_size=(filter_size),
-                                                        strides=stride)
+                                                        strides=stride,
+                    #kernel_regularizer = tf.keras.regularizers.l2(self.hyper.l2_rate_kernel),
+                    #activity_regularizer = tf.keras.regularizers.l2(self.hyper.l2_rate_act)
+                                                      )
 
                 '''
                 conv2d_layer = CasualDilated2DConvLayer(filters=num_filter, padding='VALID',
                                                       kernel_size=(filter_size),
                                                       strides=stride, dilation_rate=dilation_rate,)
+                conv2d_layer = FilterRestricted1DConvLayer(filters=61, padding='VALID',
+                                                      kernel_size=(1,61,61),
+                                                      strides=1, dilation_rate=1,)
                 '''
                 x = conv2d_layer(x)
 
@@ -710,12 +732,20 @@ class CNN2dWithAddInput(NN):
         # Add static attribute features
         if self.hyper.learn_node_attribute_features == "True":
             print('Adding FC layers for learning features based on one-hot-vectors for each data stream')
+            case_dependent_matrix_input = tf.tile(case_dependent_vector_input,
+                                                  [1, 61])
+            # case_dependent_matrix_input = case_dependent_matrix_input / tf.reduce_sum(case_dependent_matrix_input)
+            reshape = tf.keras.layers.Reshape((61, 61))
+            case_dependent_matrix_input = reshape(case_dependent_matrix_input)
+            # case_dependent_matrix_input = tf.expand_dims(case_dependent_matrix_input, 0)
+            static_attribute_features_input_ = tf.concat([static_attribute_features_input, case_dependent_matrix_input], axis=1)
+
             adding_noise = tf.keras.layers.GaussianNoise(stddev=self.hyper.dropout_rate)
             #static_attribute_features_input_ = adding_noise(static_attribute_features_input)
             static_attribute_features_input_ = tf.keras.layers.TimeDistributed(
                 tf.keras.layers.Dense(units=16, activation=tf.keras.activations.relu),
-                name="FC_One-hot-Encoding" + str(16) + "U")(static_attribute_features_input)
-            static_attribute_features_input_ = tf.keras.layers.Dropout(rate=0.2)(static_attribute_features_input_)
+                name="FC_One-hot-Encoding" + str(16) + "U")(static_attribute_features_input_)
+            static_attribute_features_input_ = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(static_attribute_features_input_)
             static_attribute_features_input_ = tf.keras.layers.Permute((2, 1))(static_attribute_features_input_)
         ''' ZU TESTZWECKEN:
         static_attribute_features_input_Add = tf.concat([tf.expand_dims(case_dependent_vector_input,-1), static_attribute_features_input], axis=2)
@@ -726,7 +756,7 @@ class CNN2dWithAddInput(NN):
         case_dependent_vector_input_o = tf.keras.layers.Permute((2, 1))(static_attribute_features_input_Add)
         '''
         if self.hyper.use_owl2vec_node_features == "True":
-            print("Hier!")
+            print("Owl2vec node features used!")
             '''
             static_attribute_features_input_ = tf.keras.layers.Permute((2, 1))(static_attribute_features_input)
             static_attribute_features_input_ = tf.keras.layers.TimeDistributed(
@@ -738,7 +768,7 @@ class CNN2dWithAddInput(NN):
             adding_noise = tf.keras.layers.GaussianNoise(stddev=self.hyper.dropout_rate)
             static_attribute_features_input_ = adding_noise(static_attribute_features_input)
             #static_attribute_features_input_ = static_attribute_features_input
-            static_attribute_features_input_ = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate+0.4)(static_attribute_features_input_)
+            static_attribute_features_input_ = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(static_attribute_features_input_)
 
         # Hier einkommentieren, wenn Node Features als Input zur attribute-wise aggregation verwendet werden sollen
         #x = tf.concat([x, static_attribute_features_input_], axis=1)
@@ -753,11 +783,13 @@ class CNN2dWithAddInput(NN):
             for num_units in layers_fc:
                 x = tf.keras.layers.BatchNormalization()(x)
                 x = tf.keras.layers.TimeDistributed(
-                    tf.keras.layers.Dense(units=num_units, activation=tf.keras.activations.relu),
-                    name="FC_FeatureWise_Aggreg_Layer_" + str(num_units) + "U")(x)
+                    tf.keras.layers.Dense(units=num_units, activation=tf.keras.activations.relu,
+                    #kernel_regularizer = tf.keras.regularizers.l2(self.hyper.l2_rate_kernel),
+                    #activity_regularizer = tf.keras.regularizers.l2(self.hyper.l2_rate_act)
+                    ), name="FC_FeatureWise_Aggreg_Layer_" + str(num_units) + "U")(x)
                 x = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(x)
             x = tf.keras.layers.Permute((2, 1))(x)  # transpose
-
+        print("self.hyper.use_graph_conv_after2dCNNFC_context_fusion: ",self.hyper.use_graph_conv_after2dCNNFC_context_fusion)
         if self.hyper.use_graph_conv_after2dCNNFC_context_fusion == "True":
             print('Adding GraphConv layers for learning state of other relevant attributes ')
             if self.hyper.learn_node_attribute_features == "True" or self.hyper.use_owl2vec_node_features == "True":
@@ -806,16 +838,19 @@ class CNN2dWithAddInput(NN):
                                 #attn_heads=attn_heads,
                                 #concat_heads=concat_heads,
                                 dropout_rate=self.hyper.dropout_rate,
-                                kernel_regularizer=tf.keras.regularizers.l2(0.001),
+                                #kernel_regularizer=tf.keras.regularizers.l2(self.hyper.l2_rate_kernel),
                                 #attn_kernel_regularizer=tf.keras.regularizers.l2(l2_reg),
                                 #bias_regularizer=tf.keras.regularizers.l2(l2_reg)
                                                          )([output, adj_matrix_input])
                     else:
-                        adj_matrix_input_ = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate+0.2)(adj_matrix_input)
+                        #adj_matrix_input_ = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate+0.2)(adj_matrix_input, training=True)
                         # kernel_regularizer=tf.keras.regularizers.l2(0.01)
-                        output = spektral.layers.GCNConv(channels=channels, activation=None, kernel_regularizer=tf.keras.regularizers.l2(0.001))([output, adj_matrix_input_])
+                        output = spektral.layers.GCNConv(channels=channels, activation=None,
+                                                         #kernel_regularizer=tf.keras.regularizers.l2(self.hyper.l2_rate_kernel),
+                                                         #activity_regularizer=tf.keras.regularizers.l2(self.hyper.l2_rate_act)
+                                                         )([output, adj_matrix_input])
                     output = tf.keras.layers.LeakyReLU()(output)
-                    output = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate+0.1)(output)
+                    output = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(output)
 
             output = tf.transpose(output, perm=[0, 2, 1])
 
@@ -866,16 +901,44 @@ class CNN2dWithAddInput(NN):
 
                 # build context module:
                 output = tf.transpose(x, perm=[0, 2, 1])
-
+                output = spektral.layers.GCNConv(channels=128, activation=None)([output, adj_matrix_input])
                 output = tf.keras.layers.BatchNormalization()(output)
+                output = tf.keras.layers.ReLU()(output)
+                output = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(output)
+                output = spektral.layers.GCNConv(channels=64, activation=None)([output, adj_matrix_input])
+                output = tf.keras.layers.BatchNormalization()(output)
+                output = tf.keras.layers.ReLU()(output)
+                output = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(output)
                 output = spektral.layers.GCNConv(channels=32, activation=None)([output, adj_matrix_input])
+                output = tf.keras.layers.BatchNormalization()(output)
+                output = tf.keras.layers.ReLU()(output)
+                output = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(output)
+                output = tf.transpose(output, perm=[0, 2, 1])
+                '''
+                output = tf.concat([output, static_attribute_features_input_], axis=1)
+                case_dependent_matrix_input = tf.tile(case_dependent_vector_input,[1, 61])
+                # case_dependent_matrix_input = case_dependent_matrix_input / tf.reduce_sum(case_dependent_matrix_input)
+                reshape = tf.keras.layers.Reshape((61, 61))
+                case_dependent_matrix_input = reshape(case_dependent_matrix_input)
+                #case_dependent_matrix_input = tf.expand_dims(case_dependent_matrix_input, 0)
+                output = tf.concat([output, case_dependent_matrix_input], axis=1)
+                '''
+                output = tf.keras.layers.Multiply()([output, case_dependent_vector_input])
+                output = tf.transpose(output, perm=[0, 2, 1])
+
+                o2 = spektral.layers.GlobalSumPool()(output)
+                #o2 = spektral.layers.GlobalAttentionPool(channels=64)(output)
+                '''
+                output = tf.keras.layers.BatchNormalization()(output)
+                output = spektral.layers.GCNConv(channels=128, activation=None)([output, adj_matrix_input])
                 output = tf.keras.layers.LeakyReLU()(output)
                 output = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(output)
                 output = tf.keras.layers.BatchNormalization()(output)
                 output = spektral.layers.GCNConv(channels=32, activation=None)([output, adj_matrix_input])
                 output = tf.keras.layers.LeakyReLU()(output)
                 output = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(output)
-
+                o2 = spektral.layers.GlobalSumPool()(output)
+                '''
                 '''
                 # Block 1
                 output = tf.keras.layers.BatchNormalization()(output)
@@ -1036,9 +1099,10 @@ class CNN2dWithAddInput(NN):
                 output = tf.keras.layers.ReLU()(output)
                 #output = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(output)
                 '''
+
                 #output = tf.keras.layers.Concatenate()([output_1, output_2, output_3, output_4, output_5])
                 #o2 = spektral.layers.GlobalAvgPool()(output)
-                o2 = spektral.layers.GlobalSumPool()(output)
+                #o2 = spektral.layers.GlobalSumPool()(output)
                 #o2 = spektral.layers.GlobalAttnSumPool()(output)
 
 
@@ -1210,7 +1274,7 @@ class BaselineOverwriteSimilarity(NN):
 
         # regardless of the configured number of layers, add a layer with
         # a single neuron that provides the indicator function output.
-        output = tf.keras.layers.Dense(units=1, activation=tf.keras.activations.sigmoid)(layer_input)
+        output = tf.keras.layers.Dense(units=1, activation=tf.keras.activations.sigmoid, use_bias=False)(layer_input)
 
         self.model = tf.keras.Model(inputs=layer_input, outputs=output)
 
@@ -1240,6 +1304,220 @@ class CasualDilated2DConvLayer(tf.keras.layers.Layer):
         feature_map = tf.nn.conv2d(input_, self.kernel_weights,
                                        strides=self.strides, padding="VALID",
                                        dilations=self.dilation_rate)
+        return feature_map
+
+    def compute_output_shape(self, input_shape):
+        return input_shape
+
+class FilterRestricted1DConvLayer(tf.keras.layers.Layer):
+    # WIP: provides to use strides and dilation rate (not possible in keras version).
+    # Only provides dilation, but no casual padding (as this is not provided for 2D conv
+    def __init__(self,kernel_size,padding, strides, input_shape_=None, **kwargs):
+        super(FilterRestricted1DConvLayer, self).__init__()
+        self.padding = padding
+        self.kernel_size = kernel_size # (filter_width, num_channel_input, num_filters) / (1,61,61)
+        self.strides = strides
+        #self.dilation_rate = dilation_rate
+        self.input_shape_ = input_shape_
+
+    def build(self, input_shape):
+        self.kernel_weights = self.add_weight(name='kernel_weights',
+                                              shape=self.kernel_size,
+                                              initializer=tf.keras.initializers.glorot_uniform,
+                                              trainable=True)
+        self.masking = a = tf.Variable(tf.constant([[0.,1,1,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0],
+ [1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0],
+ [1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0],
+ [0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0],
+ [0,0,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0],
+ [0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0],
+ [0,0,0,0,0,0,0,0,0,0,0,1,1,1,1,0,1,1,1,1,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0],
+ [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,1,1,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0],
+ [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,
+  0,0,0,0,0,0,0,0,0,0,0,0,0],
+ [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,1,
+  0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0],
+ [0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,1,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0],
+ [0,0,0,0,0,0,1,0,0,0,1,0,0,0,0,1,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0],
+ [0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,1,
+  0,0,0,0,0,0,0,0,0,0,0,0,0],
+ [0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,1,0,1,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,1,
+  0,0,0,0,0,0,0,0,0,0,0,0,0],
+ [0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,1,0,0,1,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,1,
+  0,0,0,0,0,0,0,0,0,0,0,0,0],
+ [1,1,1,0,0,0,0,0,0,1,1,1,1,1,1,0,1,1,1,1,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0],
+ [0,0,0,0,0,0,1,0,0,0,0,0,1,0,0,1,0,0,0,1,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0],
+ [0,0,0,0,0,0,1,0,0,0,0,0,0,1,0,1,0,0,0,1,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0],
+ [0,0,0,0,0,0,1,0,0,0,0,0,0,0,1,1,0,0,0,1,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0],
+ [0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,1,1,1,1,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0],
+ [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,
+  1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0],
+ [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,0,
+  0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0],
+ [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,
+  0,1,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0],
+ [0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0],
+ [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0],
+ [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,0,
+  0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0],
+ [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0],
+ [0,0,0,1,1,1,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,1,1,
+  0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0],
+ [0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,
+  0,1,0,1,0,1,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0],
+ [0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,1,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0],
+ [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,1,0,1,1,0,0,0,1,1,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0],
+ [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,1,0,0,1,1,0,0,0,1,1,0,0,0,0,1,0,0,1,
+  0,0,0,0,0,0,0,0,0,0,0,0,0],
+ [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0],
+ [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,1,1,1,0,1,0,1,1,1,1,0,0,0,0,1,0,0,1,
+  0,0,0,0,0,0,0,0,0,0,0,0,0],
+ [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,1,1,0,1,0,0,0,0,1,1,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0],
+ [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  1,0,0,0,0,0,0,0,1,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0],
+ [0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  1,0,0,0,1,1,0,0,0,1,0,1,0,1,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0],
+ [0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  1,0,0,0,1,1,0,0,0,1,0,1,1,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0],
+ [0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,1,1,1,1,0,1,1,0,0,0,0,1,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0],
+ [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,1,1,0,1,1,0,0,0,1,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0],
+ [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0],
+ [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0],
+ [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0],
+ [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,1,1,0,0,
+  1,1,1,0,0,0,0,0,0,0,0,0,0],
+ [0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,1,0,1,0,0,0,0,0,0,0,1,0,1,0,1,0,0,
+  0,0,0,1,0,0,0,0,0,0,0,0,0],
+ [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1,1,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0],
+ [0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,
+  0,0,0,0,0,0,0,0,0,0,0,0,0],
+ [0,0,0,0,0,0,0,0,1,0,0,0,1,1,1,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,1,0,
+  0,0,0,1,0,0,0,0,0,0,0,0,0],
+ [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0],
+ [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0],
+ [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0],
+ [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,1,
+  0,0,0,0,1,0,1,1,0,1,0,1,0],
+ [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,1,0,0,1,1,0,1,0,1,0],
+ [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,1,0,0],
+ [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,1,1,0,0,1,0,0,0,1,0],
+ [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,1,1,0,1,0,0,0,0,1,0],
+ [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,1],
+ [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,1,1,0,0,0,0,0,0,0,0],
+ [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,1,0,0,0,0,0,1,1],
+ [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,1,1,0,1,1,0,0,1,0,1],
+ [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+  0,0,0,0,0,0,0,0,1,0,1,1,0]]), trainable=False)
+
+        super(FilterRestricted1DConvLayer, self).build(input_shape)
+
+    # noinspection PyMethodOverridingd
+    def call(self, input_):
+        masked_weights = tf.math.multiply(self.kernel_weights, tf.expand_dims(self.masking,0))
+        #tf.print("masked_weights", tf.shape(masked_weights))
+        feature_map = tf.nn.conv1d(input_, masked_weights,
+                                       stride=self.strides, padding="VALID")\
+                                    #, data_format='NWC', dilations=self.dilation_rate)
         return feature_map
 
     def compute_output_shape(self, input_shape):

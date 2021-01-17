@@ -64,12 +64,12 @@
     [1,1],
     [1,1]
   ],
-    "useAttributeWiseAggregation": "False",
+    "useAttributeWiseAggregation": "True",
       "cnn2d_AttributeWiseAggregation": [
     512,
     256,
     128      ],
   "useFilterwise1DConvBefore2DConv": "True",
-    "useFactoryStructureFusion": "False",
-    "use_owl2vec_node_features": "False"
+  "useFactoryStructureFusion": "False",
+  "use_owl2vec_node_features": "True"
 }
