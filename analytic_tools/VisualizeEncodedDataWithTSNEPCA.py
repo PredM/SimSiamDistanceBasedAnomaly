@@ -1,7 +1,8 @@
 import os
 import sys
 
-from configuration.Enums import ArchitectureVariant
+
+
 
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 
@@ -15,13 +16,17 @@ from neural_network.SNN import initialise_snn
 
 from configuration.Configuration import Configuration
 
+from configuration.Enums import BatchSubsetType, LossFunction, BaselineAlgorithm, SimpleSimilarityMeasure, \
+    ArchitectureVariant, ComplexSimilarityMeasure, TrainTestSplitMode, AdjacencyMatrixPreprossingCNN2DWithAddInput,\
+    NodeFeaturesForGraphVariants
+
 # In progress. For visualization of encoded data of an SNN using T-SNE or PCA.
 if __name__ == '__main__':
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
     # Config relevant for cnnwithclassattention
     use_channelwiseEncoded_for_cnnwithclassattention = True
-    use_each_sensor_as_single_example = True  # default: false
+    use_each_sensor_as_single_example = False  # default: false
 
     use_channelcontextEncoded_for_cnnwithclassattention = True
 
@@ -29,6 +34,8 @@ if __name__ == '__main__':
     use_sim_matrix = False  # default false
 
     encode_test_data = False
+
+    save_encoded_data = True
 
     config = Configuration()
     config.architecture_variant = ArchitectureVariant.STANDARD_SIMPLE
@@ -54,7 +61,7 @@ if __name__ == '__main__':
             print("config.use_same_feature_weights_for_unsimilar_pairs should be False during TSNE Plot!")
 
     # As TSNE Input either a distance matrix or
-    if use_sim_matrix == True:
+    if use_sim_matrix:
         sim_matrix = dataset.get_similarity_matrix(architecture, encode_test_data=encode_test_data)
         distance_matrix = 1 - sim_matrix
     else:
@@ -70,6 +77,12 @@ if __name__ == '__main__':
         x_test_encoded = dataset.x_test
         x_train_labels = dataset.y_train_strings
         x_test_labels = dataset.y_test_strings
+
+    if save_encoded_data:
+        print("Storing encoded data as x_train_encoded.npy and x_test_encoded.npy")
+        np.save('x_train_encoded.npy', x_train_encoded)
+        np.save('x_test_encoded.npy', x_test_encoded)
+        print("Encoded data was saved!")
 
     if encode_test_data:
         print("Loaded encoded data: ", x_train_encoded.shape, " ", x_test_encoded.shape)
@@ -92,7 +105,10 @@ if __name__ == '__main__':
         numOfClasses = le.classes_.size
         # print("Number of classes detected: ", numOfClasses, ". \nAll classes: ", le.classes_)
         unique_labels_EncodedAsNumber = le.transform(le.classes_)  # each label encoded as number
-        x_trainTest_labels_EncodedAsNumber = le.transform(x_train_labels)
+        if encode_test_data:
+            x_trainTest_labels_EncodedAsNumber = le.transform(x_test_train_labels)
+        else:
+            x_trainTest_labels_EncodedAsNumber = le.transform(x_train_labels)
 
     # Converting / reshaping 3d encoded features to 2d (required as TSNE/PCA input)
     data4TSNE = None
@@ -133,11 +149,15 @@ if __name__ == '__main__':
             data4TSNE = distance_matrix
         print("data4TSNE:", data4TSNE.shape)
     else:
-        num_of_flatten_features = x_train_encoded.shape[1] * x_train_encoded.shape[2]
-        data4TSNE = np.zeros((x_train_encoded.shape[0], num_of_flatten_features))
-        for i in range(x_train_encoded.shape[0]):
-            x = np.reshape(x_train_encoded[i, :, :], (x_train_encoded.shape[1] * x_train_encoded.shape[2]), 1)
-            data4TSNE[i, :] = x
+        if architecture.hyper.encoder_variant in ['cnn', 'graphcnn2d']:
+            x_train_encoded = np.squeeze(x_train_encoded)
+            data4TSNE = x_train_encoded
+        else:
+            num_of_flatten_features = x_train_encoded.shape[1] * x_train_encoded.shape[2]
+            data4TSNE = np.zeros((x_train_encoded.shape[0], num_of_flatten_features))
+            for i in range(x_train_encoded.shape[0]):
+                x = np.reshape(x_train_encoded[i, :, :], (x_train_encoded.shape[1] * x_train_encoded.shape[2]), 1)
+                data4TSNE[i, :] = x
     '''
     x_train_encoded_reshapedAs2d = x_train_encoded.reshape(
         [x_train_encoded.shape[0], x_train_encoded.shape[1] * x_train_encoded.shape[2]])
@@ -150,18 +170,31 @@ if __name__ == '__main__':
     # x_testTrain_encoded_reshapedAs2d = np.concatenate((x_train_encoded_reshapedAs2d, x_test_encoded_reshapedAs2d),
     #                                                  axis=0)
 
+    if encode_test_data == True:
+        x_test_encoded = np.squeeze(x_test_encoded)
+        data4TSNE = np.concatenate((data4TSNE, x_test_encoded),axis=0)
+
     # Reducing dimensionality with TSNE or PCA
     # metrics: manhattan, euclidean, cosine
     if architecture.hyper.encoder_variant in ['cnnwithclassattention', 'cnn1dwithclassattention']:
         if use_sim_matrix:
-            X_embedded = TSNE(n_components=2, perplexity=50.0, learning_rate=10, early_exaggeration=30, n_iter=10000,
-                              random_state=123, metric="precomputed").fit_transform(data4TSNE)
+            tsne_embedder = TSNE(n_components=2, perplexity=50.0, learning_rate=10, early_exaggeration=30, n_iter=10000,
+                              random_state=123, metric="precomputed")
+            #X_embedded = TSNE(n_components=2, perplexity=50.0, learning_rate=10, early_exaggeration=30, n_iter=10000,
+            #                  random_state=123, metric="precomputed").fit_transform(data4TSNE)
         else:
-            X_embedded = TSNE(n_components=2, perplexity=50.0, learning_rate=10, early_exaggeration=30, n_iter=10000,
-                              random_state=123, metric='manhattan').fit_transform(data4TSNE)
+            tsne_embedder = TSNE(n_components=2, perplexity=50.0, learning_rate=10, early_exaggeration=30, n_iter=10000,
+                              random_state=123, metric='manhattan')
+            #X_embedded = TSNE(n_components=2, perplexity=50.0, learning_rate=10, early_exaggeration=30, n_iter=10000,
+            #                  random_state=123, metric='manhattan').fit_transform(data4TSNE)
     else:
-        X_embedded = TSNE(n_components=2, perplexity=50.0, learning_rate=10, early_exaggeration=10, n_iter=10000,
-                          random_state=123, metric='manhattan').fit_transform(data4TSNE)
+        tsne_embedder = TSNE(n_components=2, perplexity=50.0, learning_rate=10, early_exaggeration=10, n_iter=10000,
+                          random_state=123, metric='manhattan')
+        #X_embedded = TSNE(n_components=2, perplexity=50.0, learning_rate=10, early_exaggeration=10, n_iter=10000,
+        #                  random_state=123, metric='manhattan').fit_transform(data4TSNE)
+
+        X_embedded =tsne_embedder.fit_transform(data4TSNE)
+
     # X_embedded = TSNE(n_components=2, random_state=123).fit_transform(data4TSNE)
     # X_embedded = PCA(n_components=2, random_state=123).fit_transform(data4TSNE)
 
