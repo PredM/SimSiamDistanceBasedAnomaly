@@ -290,7 +290,8 @@ class Evaluator:
         y_true_array = np.stack(self.y_true, axis=0)
         y_pred_array = np.stack(self.y_pred, axis=0)
         report = metrics.classification_report(y_true_array, y_pred_array,
-                                               labels=list(self.dataset.y_test_strings_unique))
+                                               labels=list(self.dataset.y_test_strings_unique),
+                                               digits=4)
 
         if not self.dataset.is_third_party_dataset:
             failure_detected_correct_sum = self.failure_results['Correct'].sum()
