@@ -72,7 +72,7 @@ class Hyperparameters:
         self.use_graph_conv_after2dCNNFC_resNetBlock = None
         self.use_graph_conv_after2dCNNFC_SkipCon = None
         self.use_graph_conv_after2dCNNFC_GAT_instead_GCN = None
-        self.use_owl2vec_node_features = None
+        self.use_owl2vec_node_features_in_graph_layers = None
         self.provide_output_for_on_top_network = None
         self.use_case_of_on_top_network = None
         self.l1_rate_act = None
@@ -83,6 +83,10 @@ class Hyperparameters:
         self.l2_rate = None
         self.useFilterwise1DConvBefore2DConv = None
         self.useFactoryStructureFusion = None
+        self.use_FiLM_after_2Conv = None
+        self.use_owl2vec_node_features_as_input_AttributeWiseAggregation = None
+        self.use_GCNGlobAtt_Fusion = None
+        self.graph_conv_channels_context = None
 
     def set_time_series_properties(self, dataset):
         self.time_series_length = dataset.time_series_length
@@ -153,7 +157,10 @@ class Hyperparameters:
 
         if self.encoder_variant in ["graphcnn2d"]:
             self.useFactoryStructureFusion = data['useFactoryStructureFusion']
-            self.use_owl2vec_node_features = data['use_owl2vec_node_features']
+            self.use_owl2vec_node_features_in_graph_layers = data['use_owl2vec_node_features_in_graph_layers']
+            self.use_owl2vec_node_features_as_input_AttributeWiseAggregation = data["use_owl2vec_node_features_as_input_AttributeWiseAggregation"]
+            self.use_GCNGlobAtt_Fusion = data["use_GCNGlobAtt_Fusion"]
+            self.use_linear_transformation_in_context = data["use_linear_transformation_in_context"]
 
         if self.encoder_variant in ["cnn2dwithaddinput"]:
             self.useAttributeWiseAggregation = data['useAttributeWiseAggregation']
@@ -174,6 +181,11 @@ class Hyperparameters:
             self.provide_output_for_on_top_network = data["provide_output_for_on_top_network"]
             self.use_case_of_on_top_network = data["use_case_of_on_top_network"]
             self.ffnn_layers = data["ffnn_layers"]
+            self.use_FiLM_after_2Conv = data["use_FiLM_after_2Conv"]
+            self.use_owl2vec_node_features_as_input_AttributeWiseAggregation = data["use_owl2vec_node_features_as_input_AttributeWiseAggregation"]
+            self.graph_conv_channels_context = data["graph_conv_channels_context"]
+            self.use_linear_transformation_in_context = data["use_linear_transformation_in_context"]
+            self.use_owl2vec_node_features_in_graph_layers = data["use_owl2vec_node_features_in_graph_layers"]
 
             self.l1_rate_act = data["l1_rate_act"]
             self.l1_rate_kernel = data["l1_rate_kernel"]

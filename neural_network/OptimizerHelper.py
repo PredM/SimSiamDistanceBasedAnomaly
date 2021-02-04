@@ -43,6 +43,8 @@ class OptimizerHelper:
 
                 if self.config.use_margin_reduction_based_on_label_sim:
                     sim = self.get_similarity_between_two_label_string(query_classes, neg_pair_wbce=True)
+                    #true_similarities = true_similarities * sim
+                    #print("true_similarities: ", true_similarities)
                     loss = self.weighted_binary_crossentropy(y_true=true_similarities, y_pred=pred_similarities,
                                                              weight=sim)
                 else:
@@ -151,8 +153,12 @@ class OptimizerHelper:
 
             if neg_pair_wbce and sim < 1:
                 sim = 1 - sim
-
-            pairwise_class_label_sim[pair_index] = sim
+            ''' Reduce similarity value for failure paris
+            if a == "no_failure" and b == "no_failure":
+                pairwise_class_label_sim[pair_index] = 1
+            else:
+                pairwise_class_label_sim[pair_index] = 0.95
+            '''
 
         return pairwise_class_label_sim
 

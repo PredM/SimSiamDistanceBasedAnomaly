@@ -20,9 +20,6 @@
   "cnn_strides": [
   ],
   "fc_after_cnn1d_layers": [
-    1024,
-    768,
-    512
   ],
   "cnn2d_layers": [
     128,
@@ -65,10 +62,12 @@
     [1,1],
     [1,1]
   ],
-  "useAttributeWiseAggregation": "True",
+  "useAttributeWiseAggregation": "False",
     "cnn2d_AttributeWiseAggregation": [
     128,
     64,
     32
-  ]
+  ],
+    "useFilterwise1DConvBefore2DConv": "False",
+  "use_owl2vec_node_features_as_input_AttributeWiseAggregation": "False"
 }

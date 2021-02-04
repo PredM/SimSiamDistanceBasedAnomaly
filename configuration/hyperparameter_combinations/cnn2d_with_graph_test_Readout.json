@@ -6,7 +6,7 @@
   "epochs_current": 0,
   "learning_rate": 0.001,
   "gradient_cap": -1,
-  "dropout_rate": 0.05,
+  "dropout_rate": 0.5,
   "ffnn_layers": [
     64,
     16
@@ -19,8 +19,8 @@
   ],
   "graph_conv_channels": [
     256,
-    128,
-    64
+    256,
+    256
   ],
   "global_attention_pool_channels": [
     64
@@ -53,11 +53,11 @@
     "useAttributeWiseAggregation": "True",
       "cnn2d_AttributeWiseAggregation": [
     384,
-    256,
-        128
+    256
       ],
   "useFilterwise1DConvBefore2DConv": "False",
   "useFactoryStructureFusion": "False",
+  "use_GCNGlobAtt_Fusion": "False",
   "use_owl2vec_node_features_in_graph_layers": "True",
   "use_owl2vec_node_features_as_input_AttributeWiseAggregation": "True"
 }

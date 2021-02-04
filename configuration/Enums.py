@@ -77,6 +77,7 @@ class AdjacencyMatrixPreprossingCNN2DWithAddInput(Enum):
     ADJ_MATRIX_CONTEXT_GCN = 0
     ADJ_MATRIX_STRICT_GCN = 1
     ADJ_MATRIX_STRICT_WITH_CONTEXT_DIFF_GCN = 2
+    ADJ_MATRIX_BLANK_FOR_FAST_COMPUTATION = 3
 
 class NodeFeaturesForGraphVariants(Enum):
     # The type of node features used
@@ -90,3 +91,4 @@ class AdjacencyMatrixType(Enum):
     ADJ_MAT_TYPE_AS_ONE_GRAPH_SPARSE = 0
     ADJ_MAT_TYPE_AS_ONE_GRAPH_WS_FULLY = 1
     ADJ_MAT_TYPE_FIRST_VARIANT = 2
+    ADJ_MAT_TYPE_FULLY_CONNECTED = 3

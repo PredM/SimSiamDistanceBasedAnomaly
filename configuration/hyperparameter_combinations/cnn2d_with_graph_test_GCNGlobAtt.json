@@ -18,12 +18,11 @@
   "cnn_strides": [
   ],
   "graph_conv_channels": [
-    256,
-    128,
-    64
+    126,
+    126,126
   ],
   "global_attention_pool_channels": [
-    64
+    126
   ],
   "cnn2d_layers": [
     128,
@@ -53,11 +52,12 @@
     "useAttributeWiseAggregation": "True",
       "cnn2d_AttributeWiseAggregation": [
     384,
-    256,
-        128
+    256
       ],
   "useFilterwise1DConvBefore2DConv": "False",
   "useFactoryStructureFusion": "False",
+  "use_GCNGlobAtt_Fusion": "True",
   "use_owl2vec_node_features_in_graph_layers": "True",
-  "use_owl2vec_node_features_as_input_AttributeWiseAggregation": "True"
+  "use_owl2vec_node_features_as_input_AttributeWiseAggregation": "True",
+  "use_linear_transformation_in_context": "False"
 }

@@ -29,6 +29,9 @@ class Evaluator:
         self.y_true = []
         self.y_pred = []
 
+        # Sklearn classification report as dictonary
+        self.report_dict = None
+
         if not self.dataset.is_third_party_dataset:
             self.unique_test_failures = np.unique(self.dataset.failure_times_test)
             idx = np.where(np.char.find(self.unique_test_failures, 'noFailure') >= 0)
@@ -292,6 +295,9 @@ class Evaluator:
         report = metrics.classification_report(y_true_array, y_pred_array,
                                                labels=list(self.dataset.y_test_strings_unique),
                                                digits=4)
+        self.report_dict = metrics.classification_report(y_true_array, y_pred_array,
+                                               labels=list(self.dataset.y_test_strings_unique),
+                                               digits=4, output_dict=True)
 
         if not self.dataset.is_third_party_dataset:
             failure_detected_correct_sum = self.failure_results['Correct'].sum()

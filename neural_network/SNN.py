@@ -16,6 +16,8 @@ from neural_network.SimpleSimilarityMeasure import SimpleSimilarityMeasure
 def initialise_snn(config: Configuration, dataset, training, for_cbs=False, group_id=''):
     var = config.architecture_variant
     av = ArchitectureVariant
+    tf.random.set_seed(2021)
+    np.random.seed(2021)
 
     if training and av.is_simple(var) or not training and var == av.STANDARD_SIMPLE:
         print('Creating standard SNN with simple similarity measure: ', config.simple_measure)
@@ -76,7 +78,8 @@ class SimpleSNN(AbstractSimilarityMeasure):
         return input_pairs
 
     # Reshapes and adds auxiliary input for special encoder variants
-    def reshape_and_add_aux_input(self, input_pairs, batch_size, aux_input=None, aux_input_adj=None):
+    def reshape_and_add_aux_input(self, input_pairs, batch_size, aux_input=None, aux_input_adj_1=None,
+                                  aux_input_adj_2=None, aux_input_adj_3=None):
 
         input_pairs = self.reshape(input_pairs)
 
@@ -90,8 +93,12 @@ class SimpleSNN(AbstractSimilarityMeasure):
                 else:
                     aux_input = np.zeros((2 * batch_size, self.hyper.time_series_depth), dtype='float32')
 
-                if aux_input_adj is None:
-                    aux_input_adj = np.zeros(
+                if aux_input_adj_1 is None:
+                    aux_input_adj_1 = np.zeros(
+                        (2 * batch_size, self.hyper.time_series_depth, self.hyper.time_series_depth), dtype='float32')
+                    aux_input_adj_2 = np.zeros(
+                        (2 * batch_size, self.hyper.time_series_depth, self.hyper.time_series_depth), dtype='float32')
+                    aux_input_adj_3 = np.zeros(
                         (2 * batch_size, self.hyper.time_series_depth, self.hyper.time_series_depth), dtype='float32')
 
                 for index in range(batch_size):
@@ -100,10 +107,14 @@ class SimpleSNN(AbstractSimilarityMeasure):
 
                     aux_input[2 * index + 1] = self.dataset.get_masking_float(self.dataset.y_train_strings[index],
                                                                               self.config.use_additional_strict_masking_for_attribute_sim)
-
-                    aux_input_adj[2 * index] = self.dataset.get_adj_matrix(self.dataset.y_train_strings[index])
-                    aux_input_adj[2 * index + 1] = self.dataset.get_adj_matrix(self.dataset.y_train_strings[index])
-                    #print(self.dataset.y_train_strings[index], "aux_input_adj[2 * index]: ", aux_input_adj[2 * index])
+                    aux_input_adj = self.dataset.get_adj_matrix(self.dataset.y_train_strings[index])
+                    aux_input_adj_1[2 * index] = aux_input_adj[:, :, 0]
+                    aux_input_adj_1[2 * index + 1] = aux_input_adj[:, :, 0]
+                    aux_input_adj_2[2 * index] = aux_input_adj[:, :, 1]
+                    aux_input_adj_2[2 * index + 1] = aux_input_adj[:, :, 1]
+                    aux_input_adj_3[2 * index] = aux_input_adj[:, :, 2]
+                    aux_input_adj_3[2 * index + 1] = aux_input_adj[:, :, 2]
+                    # print(self.dataset.y_train_strings[index], "aux_input_adj[2 * index]: ", aux_input_adj[2 * index])
                     # print("self.dataset.y_train_strings")
                     # print("index: ", index, )
                 # print("aux_input: ", aux_input.shape)
@@ -116,10 +127,14 @@ class SimpleSNN(AbstractSimilarityMeasure):
                         aux_input[2 * index] = aux_input[2 * index]
                         aux_input[2 * index + 1] = aux_input[2 * index]
                         # print("index: ", index, )
-                        aux_input_adj[2 * index] = aux_input_adj[2 * index]
-                        aux_input_adj[2 * index +1] = aux_input_adj[2 * index]
+                        aux_input_adj_1[2 * index] = aux_input_adj_1[2 * index]
+                        aux_input_adj_1[2 * index + 1] = aux_input_adj_1[2 * index]
+                        aux_input_adj_2[2 * index] = aux_input_adj_2[2 * index]
+                        aux_input_adj_2[2 * index + 1] = aux_input_adj_2[2 * index]
+                        aux_input_adj_3[2 * index] = aux_input_adj_3[2 * index]
+                        aux_input_adj_3[2 * index + 1] = aux_input_adj_3[2 * index]
 
-            input_pairs = [input_pairs, aux_input, aux_input_adj]
+            input_pairs = [input_pairs, aux_input, aux_input_adj_1, aux_input_adj_2, aux_input_adj_3]
 
         return input_pairs
 
@@ -202,8 +217,11 @@ class SimpleSNN(AbstractSimilarityMeasure):
             if self.hyper.encoder_variant == 'cnn2dwithaddinput':
                 subsection_examples = batch[0][index:index + batch_size]
                 subsection_aux_input = batch[1][index:index + batch_size]
-                subsection_aux_input_adj = batch[2][index:index + batch_size]
-                subsection_batch = [subsection_examples, subsection_aux_input, subsection_aux_input_adj]
+                subsection_aux_input_adj_1 = batch[2][index:index + batch_size]
+                subsection_aux_input_adj_2 = batch[3][index:index + batch_size]
+                subsection_aux_input_adj_3 = batch[4][index:index + batch_size]
+                subsection_batch = [subsection_examples, subsection_aux_input, subsection_aux_input_adj_1,
+                                    subsection_aux_input_adj_2, subsection_aux_input_adj_3]
             else:
                 subsection_batch = batch[index:index + batch_size]
 
@@ -235,20 +253,13 @@ class SimpleSNN(AbstractSimilarityMeasure):
         if self.hyper.encoder_variant in ['graphcnn2d', 'graphattributeconvolution']:
             examples_in_batch = batch.shape[0] // 2
             asaf_with_batch_dim = self.dataset.get_static_attribute_features(batchsize=batch.shape[0])
-            batch = [batch, self.dataset.graph_adjacency_matrix_attributes, self.dataset.graph_adjacency_matrix_ws, asaf_with_batch_dim]
+            batch = [batch, self.dataset.graph_adjacency_matrix_attributes_preprocessed, self.dataset.graph_adjacency_matrix_ws_preprocessed, asaf_with_batch_dim]
 
         elif self.hyper.encoder_variant == 'cnn2dwithaddinput':
             examples_in_batch = batch[0].shape[0] // 2
             # Add static attribute features
-            #print("batch[0]: ", batch[0].shape, "batch[1]: ", batch[1].shape, "batch[2]: ", batch[2].shape)
-            #Add batch dimension to input static attribute features
-            '''
-            asaf_with_batch_dim = np.expand_dims(self.dataset.additional_static_attribute_features,-1)
-            asaf_with_batch_dim = np.repeat(asaf_with_batch_dim, batch[0].shape[0], axis=2)
-            asaf_with_batch_dim = np.reshape(asaf_with_batch_dim,(batch[0].shape[0],self.dataset.additional_static_attribute_features.shape[0],self.dataset.additional_static_attribute_features.shape[1]))
-            '''
-            asaf_with_batch_dim = self.dataset.get_static_attribute_features(batchsize=batch.shape[0])
-            batch = [batch[0], batch[1], batch[2], asaf_with_batch_dim]
+            asaf_with_batch_dim = self.dataset.get_static_attribute_features(batchsize=batch[0].shape[0])
+            batch = [batch[0], batch[1], batch[2], batch[3],batch[4], asaf_with_batch_dim]
             #print("batch[0]: ", batch[0].shape, "batch[1]: ", batch[1].shape, "batch[2]: ", batch[2].shape, "batch[3]: ", batch[3].shape)
         else:
             examples_in_batch = batch.shape[0] // 2
@@ -271,6 +282,8 @@ class SimpleSNN(AbstractSimilarityMeasure):
             # Output of encoder are encoded time series and additional things e.g., weights vectors
             a = context_vectors[0][2 * pair_index, :, :]
             b = context_vectors[0][2 * pair_index + 1, :, :]
+            #a = context_vectors[2 * pair_index, :, :]
+            #b = context_vectors[2 * pair_index + 1, :, :]
 
             if self.config.useFeatureWeightedSimilarity:
                 a_weights = context_vectors[1][2 * pair_index, :]
@@ -352,7 +365,8 @@ class SimpleSNN(AbstractSimilarityMeasure):
             elif self.hyper.encoder_variant == 'graphcnn2d':
                 subsection_batch = raw_data[index:index + batch_size]
                 asaf_with_batch_dim = self.dataset.get_static_attribute_features(batchsize=batch_size)
-                subsection_batch = [subsection_batch, self.dataset.graph_adjacency_matrix_attributes, self.dataset.graph_adjacency_matrix_ws, asaf_with_batch_dim]
+                subsection_batch = [subsection_batch, self.dataset.graph_adjacency_matrix_attributes_preprocessed,
+                                    self.dataset.graph_adjacency_matrix_ws_preprocessed, asaf_with_batch_dim]
             else:
                 subsection_batch = raw_data[index:index + batch_size]
 
@@ -441,9 +455,14 @@ class SimpleSNN(AbstractSimilarityMeasure):
             num_of_features = self.dataset.feature_names_all.shape[0]
             if self.config.use_additional_strict_masking_for_attribute_sim:
                 self.encoder = CNN2dWithAddInput(self.hyper,
-                                                 [input_shape_encoder, self.hyper.time_series_depth * 2, self.hyper.time_series_depth,(self.dataset.owl2vec_embedding_dim,num_of_features)])
+                                                 [input_shape_encoder, self.hyper.time_series_depth * 2,
+                                                  self.hyper.time_series_depth,self.hyper.time_series_depth,self.hyper.time_series_depth,
+                                                  (self.dataset.owl2vec_embedding_dim,num_of_features)])
             else:
-                self.encoder = CNN2dWithAddInput(self.hyper, [input_shape_encoder, self.hyper.time_series_depth, self.hyper.time_series_depth,(self.dataset.owl2vec_embedding_dim,num_of_features)])
+                self.encoder = CNN2dWithAddInput(self.hyper, [input_shape_encoder, self.hyper.time_series_depth,
+                                                              self.hyper.time_series_depth,self.hyper.time_series_depth,
+                                                              self.hyper.time_series_depth,
+                                                              (self.dataset.owl2vec_embedding_dim,num_of_features)])
         elif self.hyper.encoder_variant == 'rnn':
             self.encoder = RNN(self.hyper, input_shape_encoder)
         elif self.hyper.encoder_variant == 'dummy':
@@ -500,10 +519,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
                         self.complex_sim_measure = Cnn2DWithAddInput_Network_OnTop(self.hyper,
                                                                                    [1, 1, input_shape_masking_vec])
                     elif use_case == "global":
-                        self.complex_sim_measure = Cnn2DWithAddInput_Network_OnTop(self.hyper, [input_shape_dis_vec,
-                                                                                            input_shape_masking_vec,
-                                                                                            input_shape_adj_matrix,
-                                                                                            input_shape_owl2vec_matrix])
+                        self.complex_sim_measure = Cnn2DWithAddInput_Network_OnTop(self.hyper,[61*3])
 
                     elif use_case == "graph":
                         self.complex_sim_measure = Cnn2DWithAddInput_Network_OnTop(self.hyper, [input_shape_dis_vec,
@@ -515,6 +531,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
                             deep_feature_size = last_chancel_size_GCN*2
                         else:
                             deep_feature_size = last_attfeaturewise_fc_layer_size*2
+                        deep_feature_size= 64 #537
                         self.complex_sim_measure = Cnn2DWithAddInput_Network_OnTop(self.hyper,
                                                                                    [deep_feature_size,
                                                                                     # [last_chancel_size_GCN * 2 + 61 + 16,
@@ -564,14 +581,15 @@ class SNN(SimpleSNN):
             b = context_vectors[0][2 * pair_index + 1, :]
             # w = context_vectors[1][2 * pair_index, :]
             if self.hyper.provide_output_for_on_top_network == "True":
+                #o1, case_dependent_vector_input_o, adj_matrix_input_1, adj_matrix_input_2, adj_matrix_input_3,static_attribute_features_input, o2
                 a = context_vectors[0][2 * pair_index, :]
                 b = context_vectors[0][2 * pair_index + 1, :]
                 masking_vec = context_vectors[1][2 * pair_index, :]
                 adj_matrix = context_vectors[2][2 * pair_index, :]
-                owl2vec_features = context_vectors[3][2 * pair_index, :]
-                if self.hyper.useAddContextForSim == "True":
-                    a_2 = context_vectors[4][2 * pair_index, :]
-                    b_2 = context_vectors[4][2 * pair_index + 1, :]
+                owl2vec_features = context_vectors[5][2 * pair_index, :]
+                #if self.hyper.useAddContextForSim == "True":
+                    #a_2 = context_vectors[6][2 * pair_index, :]
+                    #b_2 = context_vectors[6][2 * pair_index + 1, :]
 
         else:
             a = context_vectors[2 * pair_index, :, :]
@@ -633,13 +651,16 @@ class SNN(SimpleSNN):
         elif self.config.complex_measure == ComplexSimilarityMeasure.GRAPH_SIM:
             combined_context_input = tf.concat([a, b], axis=0)
             combined_context_input = tf.transpose(combined_context_input, perm=[1, 0])
-            combined_input = [combined_context_input, self.dataset.graph_adjacency_matrix_attributes, self.dataset.graph_adjacency_matrix_ws]
+            combined_input = [combined_context_input, self.dataset.graph_adjacency_matrix_attributes_preprocessed,
+                              self.dataset.graph_adjacency_matrix_ws_preprocessed]
 
             complex_measure_output = self.complex_sim_measure.model(combined_input, training=self.training)
             sim = complex_measure_output
 
         elif self.config.complex_measure == ComplexSimilarityMeasure.CNN2DWAddInp:
             use_case =self.hyper.use_case_of_on_top_network
+            a = tf.squeeze(a)
+            b = tf.squeeze(b)
             # Work in Progress
             # Following use cases are available:
             # nw_approach: applies the NeuralWarp approach on an input of size (Attributes, deep features)
@@ -648,10 +669,10 @@ class SNN(SimpleSNN):
             # graph: gets distance vectors for every data stream (node) to predict the final similarity
 
             #Prepare Input
-            if use_case != "nw_approach":
+            #if use_case != "nw_approach":
                 #abs_distance = tf.expand_dims(abs_distance,0)
-                owl2vec_features = tf.expand_dims(owl2vec_features, 0)
-                masking_vec = tf.expand_dims(masking_vec, 0)
+            #    owl2vec_features = tf.expand_dims(owl2vec_features, 0)
+            #    masking_vec = tf.expand_dims(masking_vec, 0)
 
             if use_case == "graph":
                 ffnn_input = tf.concat([a, b], axis=0)
@@ -661,16 +682,25 @@ class SNN(SimpleSNN):
                 #im = dis2_sim_max
 
             elif use_case == "global":
-                '''
-                abs_distance = tf.expand_dims(abs_distance, 0)
-                input_nn = [abs_distance, masking_vec, adj_matrix, owl2vec_features]
+                print("Gloabal")
+                abs_distance = tf.abs(a - b)
+                attributewise_summed_abs_difference = tf.reduce_mean(abs_distance, axis=0)
+                attributewise_summed_abs_difference_max = tf.reduce_max(abs_distance, axis=0)
+                attributewise_summed_abs_difference_min = tf.reduce_max(abs_distance, axis=0)
+
+                #masking_vec = tf.reverse(masking_vec, [-1])
+                attributewise_summed_abs_difference = tf.multiply(attributewise_summed_abs_difference,masking_vec)
+                attributewise_summed_abs_difference_max = tf.multiply(attributewise_summed_abs_difference_max, masking_vec)
+                attributewise_summed_abs_difference_min = tf.multiply(attributewise_summed_abs_difference_min, masking_vec)
+                input_nn = tf.concat([attributewise_summed_abs_difference, attributewise_summed_abs_difference_max, attributewise_summed_abs_difference_min], axis=0)
+                #input_nn = attributewise_summed_abs_difference
+                input_nn = tf.expand_dims(input_nn, 0)
                 sim = self.complex_sim_measure.model(input_nn, training=self.training)
                 sim = tf.squeeze(sim)
-                diff_ = tf.abs(diff - sim)
-                abs_distance = weight_matrix * diff_
+                #diff_ = tf.abs(diff - sim)
+                #abs_distance = weight_matrix * diff_
+                #sim = tf.exp(-tf.reduce_mean(abs_distance))
 
-                sim = tf.exp(-tf.reduce_mean(abs_distance))
-                '''
 
             elif use_case == "weight":
                 ### Distance Calculation
@@ -720,82 +750,189 @@ class SNN(SimpleSNN):
                 sim = sim_w
 
             elif use_case == "nw_approach":
-                # NeuralWarp approach applied on deed encoded features
-                # Prepare NN input
+                # NeuralWarp approach applied on deep encoded features
+                a = tf.squeeze(a)
+                b = tf.squeeze(b)
+                #tf.print("a shape: ", tf.shape(a))
                 ffnn_input = tf.concat([a, b], axis=0)
+                assert (61 == ffnn_input.shape[1])
+                # Shape: (2*NodeFeatures,Attributs)
 
-                #masking_vecs = tf.reshape(tf.tile(masking_vec, [61]), [61, 61])
+                # Prepare Masking Vec for additional input
+                masking_vecs = tf.reshape(tf.tile(masking_vec, [61]), [61, 61])
                 #ffnn_input = tf.concat([ffnn_input,masking_vecs],axis=0)
-
-                # mask input:
-                #ffnn_input = tf.multiply(ffnn_input, masking_vec)
 
                 # Adding a mean pooled graph
                 '''
                 a_mean = tf.reduce_mean(a, axis=1)
-                a_means = tf.reshape(tf.tile(a_mean, [61]), [32, 61])
+                a_means = tf.reshape(tf.tile(a_mean, [61]), [64, 61])
                 b_mean = tf.reduce_mean(b, axis=1)
-                b_means = tf.reshape(tf.tile(b_mean, [61]), [32, 61])
+                b_means = tf.reshape(tf.tile(b_mean, [61]), [64, 61])
                 global_diff = tf.abs(a_means - b_means)
                 global_diff = tf.reduce_mean(global_diff)
                 ffnn_input = tf.concat([a_means, ffnn_input], axis=0)
                 ffnn_input = tf.concat([ffnn_input, b_means], axis=0)
                 '''
-                '''
-                owl2vec_features_ = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate+0.5)(
-                    owl2vec_features)
-                #ffnn_input = tf.concat([masking_vecs, owl2vec_features_], axis=0)
-                ffnn_input = tf.concat([ffnn_input, owl2vec_features_], axis=0)
-                '''
-                #ffnn_input = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(ffnn_input)
-                ffnn_input = tf.expand_dims(ffnn_input, axis=0)
-
-                # Predict the "relevance" of distance for every attribute (data stream) w.r.t. current masking vector
-                ffnn_output = self.complex_sim_measure.model(tf.transpose(ffnn_input), training=self.training)
-                ffnn_output = tf.transpose(ffnn_output)
-
                 # Generate weight matrix and calculate (weighted) distance
+                '''
                 weight_matrix = tf.reshape(tf.tile(masking_vec, [a.shape[0]]), [a.shape[0], a.shape[1]])
                 a_weights_sum = tf.reduce_sum(weight_matrix)
                 a_weights_sum = tf.add(a_weights_sum, tf.keras.backend.epsilon())
                 weight_matrix = weight_matrix / a_weights_sum
+                '''
+
                 # Calculate distance
-                diff = tf.abs(a - b)
-                #diff = tf.norm(a - b, ord='euclidean')
-                #tf.print("diff final:", diff)
-                abs_distance = weight_matrix * diff
-                #abs_distance = diff
+                dis = tf.abs(a - b)
+                #Euclid.: diff = tf.sqrt(tf.square(a - b))
+                #abs_distance = dis * weight_matrix
+                abs_distance = tf.squeeze(dis)
+                assert (61 == abs_distance.shape[1])
 
                 attributewise_summed_abs_difference = tf.expand_dims(tf.reduce_sum(abs_distance, axis=0), axis=-1)
-                # abs_distance shape: [A, 1]
+                assert ([61,1] == attributewise_summed_abs_difference.shape)
+                # Shape: (NodeFeatures,1) /  [A, 1]
+                #tf.print("attributewise_summed_abs_difference shape: ", tf.shape(attributewise_summed_abs_difference))
+
+                # Weight each distance value according to mean of unmasked attributes
+                #attributewise_summed_abs_difference = tf.multiply(tf.transpose(attributewise_summed_abs_difference), tf.squeeze((masking_vec / (tf.reduce_sum(masking_vec)))))
+                #attributewise_summed_abs_difference = attributewise_summed_abs_difference + tf.keras.backend.epsilon()
+                #ffnn_input = tf.concat([masking_vecs, owl2vec_features, attributewise_summed_abs_difference], axis=0)
+                #attributewise_summed_abs_difference = tf.transpose(attributewise_summed_abs_difference)
+                assert ([61, 1] == attributewise_summed_abs_difference.shape)
+
+                # Concatanation of input, dimension must be: (Batchsize = 61, num of features)
+                #ffnn_input = tf.concat([masking_vecs, tf.transpose(owl2vec_features), attributewise_summed_abs_difference], axis=1)
+                # Input shape: ^^ [61,61], [61,16], [61,1],
+                #ffnn_input = tf.concat([masking_vecs, tf.transpose(owl2vec_features)], axis=1)
+
+                #Axis0 concated input nees to tansposed
+                #ffnn_input = tf.concat([masking_vecs, owl2vec_features], axis=0)
+                #ffnn_input = tf.concat([ffnn_input_ab, owl2vec_features], axis=0)
+                #ffnn_input = tf.concat([ffnn_input, masking_vecs], axis=0)
+                ffnn_input = abs_distance
+                ffnn_input = tf.transpose(ffnn_input)
+
+                # Check input dimension
+                assert (61 == ffnn_input.shape[0])
+                # Predict the "relevance" of distance for every attribute (data stream) w.r.t. current masking vector
+                ffnn_output = self.complex_sim_measure.model(ffnn_input, training=self.training)
+                assert ([61, 1] == ffnn_output.shape)
+                # Masking the output
+                ffnn_output = tf.transpose(tf.multiply(masking_vec, tf.transpose(ffnn_output)))
+                assert ([61,1] == ffnn_output.shape)
+
+                #new loss
+                '''
+                goldstandard = tf.multiply(ffnn_output,masking_vec)
+                goldstandard = goldstandard *2
+                mse = tf.keras.losses.MeanSquaredError()
+                kl = tf.keras.losses.KLDivergence()
+                mse_ = mse(masking_vec, ffnn_output)
+                masking_vec_norm = masking_vec/tf.reduce_sum(masking_vec)
+                ffnn_output_norm = ffnn_output/tf.reduce_sum(ffnn_output)
+                attributewise_summed_abs_difference_norm = attributewise_summed_abs_difference / tf.reduce_sum(attributewise_summed_abs_difference)
+                masking_vec_inverse = tf.where(masking_vec==0, 1,0)
+                masking_vec_inverse_norm = masking_vec_inverse/tf.reduce_sum(masking_vec_inverse)
+                kl_=kl(masking_vec_norm, ffnn_output_norm)
+                # TODO in Loss eibauen: geringe Ähnlichkeit in diesen Attributen macht nur Sinn, bei positiven Paar, bei negativem Paar wäre müsste es hohe Distanz in den relevanten Attributen gut
+                #kl2_ = kl(masking_vec_inverse_norm, attributewise_summed_abs_difference_norm)
+                #kl_ = kl_ *0.5
+                #tf.print("kl_: ", kl_)
+                #tf.print("kl2_: ", kl2_)
+                #kl_ = kl_*0.1
+                #kl2_ = kl2_ * 0.1
+
+                self.complex_sim_measure.model.add_loss(lambda:kl_)
+                #self.complex_sim_measure.model.add_loss(lambda: kl2_)
+                '''
 
                 # Normalize predicted relevance vector
-                ffnn_output = ffnn_output/a_weights_sum
+                #ffnn_output = ffnn_output/a_weights_sum
 
                 # Scale / Weight (due to multiplication) the distance of between every attribute
                 # with the predicted "weight" for each attribute w.r.t to the masking vector
                 warped_dists = tf.multiply(attributewise_summed_abs_difference, ffnn_output)
+                assert ([61, 1] == warped_dists.shape)
+
                 # Mask distances that are not relevant
-                warped_dists_masked = tf.multiply(warped_dists, masking_vec)
+                #norm2 = tf.norm(masking_vec, ord=2, axis=0)
+                #norm2 = masking_vec / tf.norm(masking_vec, ord=2)
+
+                warped_dists_masked = tf.multiply(tf.transpose(warped_dists), masking_vec )
+                #tf.print("warped_dists_masked: ", tf.shape(warped_dists_masked))
+                assert ([1,61] == warped_dists_masked.shape)
+
+                #tf.print("warped_dists_masked: ", warped_dists_masked)
                 ''' DEBUG:
-                tf.print("a:", a,output_stream=sys.stdout)
-                tf.print("b:", b,output_stream=sys.stdout)
+                                attributewise_summed_abs_difference_idx = tf.argsort(
+                    attributewise_summed_abs_difference, axis=0,direction='DESCENDING', name="attributewise_summed_abs_difference_idx"
+                )
+                ffnn_output_idx = tf.argsort(
+                    ffnn_output, axis=0,direction='DESCENDING', name="abs_distance_idx"
+                )
+                warped_dists_idx = tf.argsort(
+                    warped_dists, axis=0,direction='ASCENDING', name="ffnn_output_idx"
+                )
+                masking_idx = tf.argsort(
+                    masking_vec, axis=0, direction='ASCENDING', name="masking_vec_idx"
+                )
+                warped_dists_masked_idx = tf.argsort(
+                    warped_dists_masked, axis=0, direction='ASCENDING', name="warped_dists_masked_idx"
+                )
+                #tf.print("a:", a,output_stream=sys.stdout)
+                #tf.print("b:", b,output_stream=sys.stdout)
+                #tf.print("a_2:", a_2, output_stream=sys.stdout)
+                #tf.print("b_2:", b_2, output_stream=sys.stdout)
+                tf.print("owl2vec:", tf.shape(owl2vec_features), owl2vec_features, output_stream=sys.stdout)
+                tf.print("Masking vecs:", masking_vecs, output_stream=sys.stdout)
                 tf.print("FFNN Input:", ffnn_input, output_stream=sys.stdout)
-                tf.print("FFNN Output:", ffnn_output, output_stream=sys.stdout)
-                tf.print("Mask:", masking_vec, output_stream=sys.stdout)
-                tf.print("Distance warped: ", tf.reduce_sum(warped_dists),"Distance masked :",tf.reduce_sum(warped_dists_masked), "Abs.: ", tf.reduce_sum(abs_distance),output_stream=sys.stdout)
+                tf.print("FFNN Output:", tf.transpose(ffnn_output), output_stream=sys.stdout, summarize=-1)
+                tf.print("abs_distance", abs_distance, output_stream=sys.stdout)
+                tf.print("Mask:", masking_vec, output_stream=sys.stdout, summarize=-1)
+                tf.print("Distance warped: ", tf.reduce_sum(warped_dists), "Abs.: ", tf.reduce_mean(abs_distance),output_stream=sys.stdout)
                 tf.print("Adj Matrix:", adj_matrix, output_stream=sys.stdout)
-                tf.print("Distance per attribute:", attributewise_summed_abs_difference,output_stream=sys.stdout)
+                tf.print("Distance per attribute.T:", tf.transpose(attributewise_summed_abs_difference),output_stream=sys.stdout, summarize=-1)
+                tf.print("Distance per attribute warped.T:", tf.transpose(warped_dists),output_stream=sys.stdout, summarize=-1)
+                tf.print("attributewise_summed_abs_difference_idx.T:", tf.transpose(attributewise_summed_abs_difference_idx), output_stream=sys.stdout, summarize=-1)
+                tf.print("warped_dists_masked.T:", tf.transpose(warped_dists_masked), output_stream=sys.stdout, summarize=-1)
+                tf.print("warped_dists_masked_idx.T:", tf.transpose(warped_dists_masked_idx), output_stream=sys.stdout, summarize=-1)
+                feature_names_tf = tf.convert_to_tensor(self.dataset.feature_names_all)
+                tf.print("ffnn_output_idx.T:", tf.transpose(ffnn_output_idx), output_stream=sys.stdout, summarize=-1)
+                tf.print("warped_dists_idx:", tf.transpose(warped_dists_idx), output_stream=sys.stdout, summarize=-1)
+                tf.print("Feature w. smallest dist. attr_sum_absdiff_idx.T:", tf.transpose(
+                    tf.gather(tf.reshape(feature_names_tf, [-1]), attributewise_summed_abs_difference_idx)),
+                         output_stream=sys.stdout, summarize=-1)
+                tf.print("Feature w. highest rel. ffnn_output_idx.T:", tf.transpose(
+                    tf.gather(tf.reshape(feature_names_tf, [-1]), ffnn_output_idx)),
+                         output_stream=sys.stdout, summarize=-1)
+                tf.print("Feature w. smallest dist. warped_dists_idx.T:", tf.transpose(
+                    tf.gather(tf.reshape(feature_names_tf, [-1]), warped_dists_idx)),
+                         output_stream=sys.stdout, summarize=-1)
+                tf.print("Feature w. smallest dist. warped_dists_masked_idx.T:", tf.transpose(
+                    tf.gather(tf.reshape(feature_names_tf, [-1]), warped_dists_masked_idx)),
+                         output_stream=sys.stdout, summarize=-1)
+                masking_vec_idx = tf.expand_dims(masking_vec,-1)
+                expertselectedfeatures = tf.transpose(
+                    tf.gather(tf.reshape(feature_names_tf, [-1]), tf.where(tf.cast(masking_vec, tf.int32))))
+                #tf.print("masking_vec_idx shape: ", tf.shape(masking_vec_idx))
+                #tf.print("expertselectedfeatures shape: ", tf.shape(expertselectedfeatures))
+                #tf.print("tf.cast(masking_vec_idx, tf.int32) shape: ", tf.shape(tf.cast(masking_vec_idx, tf.int32)))
+                tf.print("Expert Selected Features:", expertselectedfeatures, output_stream=sys.stdout)
+                #tf.print("Same in most relevant: ", tf.sets.intersection(
+                #    tf.expand_dims(masking_idx[:3], -1), tf.expand_dims(warped_dists_idx[:3],-1), validate_indices=False
+                #),
+                #         output_stream=sys.stdout)
+                tf.print("FINAL SIM:",  tf.exp(-tf.reduce_sum(warped_dists_masked)), output_stream=sys.stdout)
                 tf.print("--------------------------",output_stream=sys.stdout)
                 '''
                 #1000000 # needed in the case that distances are two small for similarity converting
                 if self.training == False:
-                    sim = tf.exp(-tf.reduce_sum(warped_dists*self.config.distance_scaling_parameter_for_cnn2dwithAddInput_ontopNN))  # 10000
+                    sim = tf.exp(-tf.reduce_mean(warped_dists_masked*self.config.distance_scaling_parameter_for_cnn2dwithAddInput_ontopNN))  # 10000
                 else:
-                    sim = tf.exp(-tf.reduce_sum(warped_dists))
+                    sim = tf.exp(-tf.reduce_mean(warped_dists_masked))
 
-            #sim = tf.exp(-abs_distance)
-            #tf.print("sim: ", sim)
+            else:
+                raise ValueError('Use Case not implemented:', use_case)
 
         else:
             raise ValueError('Complex similarity measure not implemented:', self.config.complex_measure)
@@ -808,6 +945,20 @@ class SNN(SimpleSNN):
         print('')
         self.complex_sim_measure.print_model_info()
         print('')
+
+    def l2norm_embed(x):
+        norm2 = tf.norm(x, ord=2, axis=1)
+        norm2 = tf.reshape(norm2, [-1, 1])
+        l2norm = x / norm2
+        return l2norm
+
+    def l2norm(x):
+        norm2 = tf.norm(x, ord=2, axis=1)
+        return norm2
+
+    def l1norm(x):
+        norm1 = tf.norm(x, ord=1, axis=1)
+        return norm1
 
 
 class FastSimpleSNN(SimpleSNN):

@@ -70,7 +70,12 @@ class SimpleSimilarityMeasure:
                 distance_con = tf.reduce_mean(diff_con)
                 if self.w is None:
                     self.w = 0.5
-                    distance = self.w * distance + (1 - self.w) * distance_con
+                    #distance = self.w * distance + (1 - self.w) * distance_con
+
+                    distance2 = distance + distance_con
+                    #tf.print("Sum: ", distance2, "dis_node: ", distance, "dis_graph: ", distance_con)
+                    distance = distance2
+
                     # new
                     #distance = distance * distance_con
                     #distance = (distance/(distance + distance_con)) * distance + (distance_con/(distance + distance_con)) * distance_con # cnn2d-wAddInputGraph-GCN64-LeakyRelu-SumPool_newDistanceMEasure_HIER_RICHTIG-ANDERER-WIE-NORMAL

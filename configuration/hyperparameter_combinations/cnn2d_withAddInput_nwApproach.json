@@ -85,6 +85,7 @@
   "useAttributeWiseAggregation": "True",
   "useAddContextForSim": "True",
   "useAddContextForSim_LearnOrFixWeightVale": "True",
+      "useFilterwise1DConvBefore2DConv": "False",
   "use_additional_strict_masking": "True",
   "use_graph_conv_for_context_fusion": "False",
   "use_dilated_factor_for_conv": "False",

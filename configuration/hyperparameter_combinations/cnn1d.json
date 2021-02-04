@@ -3,13 +3,12 @@
   "batch_size": 64,
   "epochs": 400000,
   "epochs_current": 0,
-  "learning_rate": 0.001,
+  "learning_rate": 0.0001,
   "gradient_cap": -1,
   "dropout_rate": 0.05,
   "ffnn_layers": [
     32,
-    16,
-    1
+    8
   ],
   "cnn_layers": [
     256,
@@ -17,7 +16,7 @@
     32
   ],
   "cnn_kernel_length": [
-    7,
+    5,
     5,
     3
   ],

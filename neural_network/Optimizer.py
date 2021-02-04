@@ -108,11 +108,18 @@ class SNNOptimizer(Optimizer):
                  label in model_input_class_strings],
                 dtype='float32')
             model_aux_input_adj = np.array([self.dataset.get_adj_matrix(label) for label in model_input_class_strings], dtype='float32')
+            #print("model_aux_input_adj shape.: ", model_aux_input_adj.shape)
 
         # Reshape (and integrate model_aux_input) if necessary for encoder variant
         # batch_size and index are irrelevant because not used if aux_input is passed
-        model_input = self.architecture.reshape_and_add_aux_input(model_input, 0, aux_input=model_aux_input,
-                                                                  aux_input_adj=model_aux_input_adj)
+        if self.architecture.hyper.encoder_variant in ['cnn2dwithaddinput']:
+            model_input = self.architecture.reshape_and_add_aux_input(model_input, 0, aux_input=model_aux_input,
+                                                                      aux_input_adj_1=model_aux_input_adj[:, :, :, 0],
+                                                                      aux_input_adj_2=model_aux_input_adj[:, :, :, 1],
+                                                                      aux_input_adj_3=model_aux_input_adj[:, :, :, 2])
+        else:
+            model_input = self.architecture.reshape_and_add_aux_input(model_input, 0, aux_input=model_aux_input,
+                                                                  aux_input_adj_1=model_aux_input_adj)
 
         batch_loss = self.optimizer_helper.update_single_model(model_input, true_similarities,
                                                                query_classes=model_input_class_strings)

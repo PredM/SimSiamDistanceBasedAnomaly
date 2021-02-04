@@ -61,7 +61,7 @@ class GeneralConfiguration:
 
         # Path and file name to the specific model that should be used for testing and live classification
         # Folder where the models are stored is prepended below
-        self.filename_model_to_use = 'temp_snn_model_01-16_19-05-36_epoch-2075'
+        self.filename_model_to_use = 'temp_snn_model_02-03_02-41-01_epoch-3653'
 
         ##
         # Debugging - Don't use for feature implementation
@@ -125,7 +125,7 @@ class ModelConfiguration:
         # If !use_individual_hyperparameters interpreted as a single json file, else as a folder
         # which contains json files named after the cases they should be used for
         # If no file with this name is present the 'default.json' Config will be used
-        self.hyper_file = self.hyper_file_folder + 'cnn2d_with_graph_test.json'  #cnn2d_withAddInput_ContextStrang.json  'cnn2d_with_graph-26-10.json'  #cnn2d_with_graph_test.json #cnn2d_withAddInput_nwApproach.json
+        #self.hyper_file = self.hyper_file_folder + 'cnn2d_withAddInput_Graph_o1_GlobAtt_o2_2.json'  #cnn2d_withAddInput_ContextStrang.json  'cnn2d_with_graph-26-10.json'  #cnn2d_with_graph_test.json #cnn2d_withAddInput_nwApproach.json
 
         ##
         # Various settings influencing the similarity calculation
@@ -186,7 +186,7 @@ class TrainingConfiguration:
         self.margin_of_loss_function = 2
 
         # Scalar margin h for triplet loss function
-        self.triplet_loss_margin_h = 0.1
+        self.triplet_loss_margin_h = 3
 
         # Reduce margin of constrative_loss or in case of binary cross entropy loss
         # smooth negative examples by half of the sim between different labels
@@ -218,12 +218,14 @@ class TrainingConfiguration:
         # How many model checkpoints are kept
         self.model_files_stored = 10001
 
-        # Select which adjacency matrix is used as based
+        # Select which adjacency matrix is used
         self.adj_matrix_type = AdjacencyMatrixType.ADJ_MAT_TYPE_AS_ONE_GRAPH_SPARSE
 
         # Define how the adjacency matrix is computed for cnn2dwithAddInput
         self.use_predefined_adj_matrix_as_base_for_preprocessing = True
-        self.use_GCN_adj_matrix_preprocessing = False
+        self.use_GCN_adj_matrix_preprocessing = True
+        self.use_GCN_adj_matrix_preprocessing_sym = False
+        self.add_selfloop_to_adj_matrix = False
         self.adj_matrix_preprocessing = AdjacencyMatrixPreprossingCNN2DWithAddInput.ADJ_MATRIX_CONTEXT_GCN
 
 
@@ -249,13 +251,25 @@ class InferenceConfiguration:
         # If enabled the similarity assessment of the test dataset to the training datset will be split into chunks
         # Possibly necessary due to VRam limitation
         self.split_sim_calculation = True  # default False
-        self.sim_calculation_batch_size = 64
+        self.sim_calculation_batch_size = 128
 
         # If enabled the model is printed as model.png
         self.print_model = True
 
         # In case of too small distance values (resulting in 1.0) through similarity transformation
         self.distance_scaling_parameter_for_cnn2dwithAddInput_ontopNN = 1.0
+
+        # With TrainSelectAndTest is used, how many models (ascending from the best loss) should be tested? (ca. 8 min per test)
+        self.number_of_selection_tests = 7#12#10#7
+        # Point at which a multiple is used for the next loss. Must be higher than half of number_of_selection_tests.
+        # If it is the same number, this option is deactivated
+        self.number_of_selection_tests_for_previous_models = 5#3#3#5
+
+        # Num of Runs (Train,Select and Test) are should be performed
+        #self.num_of_train_select_test_runs = 1
+
+        # Use valid data set instead of test (e.g., during inference)
+        self.use_valid_instead_of_test = False                                                           # default False
 
 
 class ClassificationConfiguration:
@@ -415,7 +429,8 @@ class StaticConfiguration:
         self.data_folder_prefix = '../../../../data/pklein/PredMSiamNN/data/'
 
         # Folder where the trained models are saved to during learning process
-        self.models_folder = self.data_folder_prefix + 'trained_models/'
+        self.hyper_file = self.hyper_file_folder + 'cnn2d_withAddInput_GraphMasking/Proposed_Model_IJCNN21_woGCN_ReplacedWFC.json'  #cnn2d_withAddInput_ContextStrang.json  'cnn2d_with_graph-26-10.json'  #cnn2d_with_graph_test.json #cnn2d_withAddInput_nwApproach.json
+        self.models_folder = self.data_folder_prefix + 'trained_models6/'
 
         # noinspection PyUnresolvedReferences
         self.directory_model_to_use = self.models_folder + self.filename_model_to_use + '/'
@@ -451,6 +466,8 @@ class StaticConfiguration:
             self.graph_adjacency_matrix_attributes_file = self.training_data_folder + 'adjacency_matrix_v3_fullGraph_wsFullyConnected.CSV'
         elif self.adj_matrix_type == AdjacencyMatrixType.ADJ_MAT_TYPE_FIRST_VARIANT:
             self.graph_adjacency_matrix_attributes_file = self.training_data_folder + 'adjacency_matrix.CSV'
+        elif self.adj_matrix_type == AdjacencyMatrixType.ADJ_MAT_TYPE_FULLY_CONNECTED:
+            self.graph_adjacency_matrix_attributes_file = self.training_data_folder + 'adjacency_matrix_all_attributes_allOne.csv'
         else:
             raise AttributeError('Unknown adj. matrix variant:', self.adj_matrix_type)
         #self.graph_adjacency_matrix_attributes_file = self.training_data_folder + 'adjacency_matrix_v3_fullGraph_sparse.CSV' #'adjacency_matrix.CSV'#'adjacency_matrix_v3_fullGraph_sparse.CSV' #'adjacency_matrix_all_attributes_allOne.csv'
@@ -637,6 +654,12 @@ class Configuration(
         print("")
         print("Graph Input related:")
         print("- adj_matrix_type: ", self.adj_matrix_type)
+        print("- use_predefined_adj_matrix_as_base_for_preprocessing: ", self.use_predefined_adj_matrix_as_base_for_preprocessing)
+        print("- use_GCN_adj_matrix_preprocessing: ", self.use_GCN_adj_matrix_preprocessing)
+        print("- use_GCN_adj_matrix_preprocessing_sym: ", self.use_GCN_adj_matrix_preprocessing_sym)
+        print("- add_selfloop_to_adj_matrix: ", self.add_selfloop_to_adj_matrix)
+        print("- adj_matrix_preprocessing: ", self.adj_matrix_preprocessing)
+
         print("Static Node Features: ")
         print("use_additional_static_node_features_for_graphNN: " ,self.use_additional_static_node_features_for_graphNN)
         print("")
@@ -657,6 +680,7 @@ class Configuration(
         print("- case_base_for_inference: ", self.case_base_for_inference)
         print("- split_sim_calculation: ", self.split_sim_calculation)
         print("- sim_calculation_batch_size: ", self.sim_calculation_batch_size)
+        print("- number_of_selection_tests: ", self.number_of_selection_tests)
         print("--- ---")
 
 

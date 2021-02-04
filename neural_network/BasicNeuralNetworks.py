@@ -335,8 +335,13 @@ class CNN2D(NN):
 
         if len(self.hyper.cnn_layers) < 1:
             print('Attention: No 1d conv layer on top of 2d conv is used!')
-
+        print("self.input_shape: ", self.input_shape)
         input = tf.keras.Input(shape=(self.input_shape[0][0], self.input_shape[0][1], 1), name="Input0")
+        # Ohne Graph einkommentieren: input = tf.keras.Input(shape=(self.input_shape[0], self.input_shape[1], 1), name="Input0")
+        adj_matrix_input_ds = tf.keras.layers.Input(shape=self.input_shape[1], name="AdjMatDS") # auskommentieren für 2d_variante ohne Graph
+        adj_matrix_input_ws = tf.keras.layers.Input(shape=self.input_shape[2], name="AdjMatWS") # auskommentieren für 2d_variante ohne Graph
+        static_attribute_features_input = tf.keras.layers.Input(shape=self.input_shape[3],
+                                                                name="StaticAttributeFeatures") # auskommentieren für 2d_variante ohne Graph
 
         layer_properties_2d = list(
             zip(self.hyper.cnn2d_layers, self.hyper.cnn2d_kernel_length, self.hyper.cnn2d_strides))
@@ -418,6 +423,10 @@ class CNN2D(NN):
 
         x = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(x)
 
+        if self.hyper.use_owl2vec_node_features_as_input_AttributeWiseAggregation == "True":
+            print("Owl2vec are concataneted with the output of the 2d conv block (and should be used as additional input for the attribute-wise aggregation")
+            x = tf.concat([x, static_attribute_features_input], axis=1)
+
         # Attribute-wise feature aggregation via (time-distributed) fully-connected layers
         if self.hyper.useAttributeWiseAggregation == "True":
             print('Adding FC layers for attribute wise feature merging/aggregation')
@@ -448,7 +457,9 @@ class CNN2D(NN):
 
         output = x
 
-        return input, output
+        # Redefine input of madel as normal input + additional adjacency matrix input
+        #return input, output                                                                               # einkommentieren für 2d_variante ohne Graph
+        return  [input, adj_matrix_input_ds, adj_matrix_input_ws, static_attribute_features_input], output  # auskommentieren für 2d_variante ohne Graph
 
 
 class GraphCNN2D(CNN2D):
@@ -470,12 +481,16 @@ class GraphCNN2D(CNN2D):
         else:
             # Define additional input over which the adjacency matrix is provided
             # As shown here: https://graphneural.network/getting-started/, "," is necessary
-            adj_matrix_input_ds = tf.keras.layers.Input(shape=self.input_shape[1], name="AdjMatDS")
-            adj_matrix_input_ws = tf.keras.layers.Input(shape=self.input_shape[2], name="AdjMatWS")
-            static_attribute_features_input = tf.keras.layers.Input(shape=self.input_shape[3], name="StaticAttributeFeatures")
+            #input = [input, adj_matrix_input_ds, adj_matrix_input_ws, static_attribute_features_input]
+            adj_matrix_input_ds = input[1]
+            adj_matrix_input_ws = input[2]
+            static_attribute_features_input = input[3]
+            #adj_matrix_input_ds = tf.keras.layers.Input(shape=self.input_shape[1], name="AdjMatDS")
+            #adj_matrix_input_ws = tf.keras.layers.Input(shape=self.input_shape[2], name="AdjMatWS")
+            #static_attribute_features_input = tf.keras.layers.Input(shape=self.input_shape[3], name="StaticAttributeFeatures")
 
             # Concat time series features with additional static node features
-            if self.hyper.use_owl2vec_node_features == "True":
+            if self.hyper.use_owl2vec_node_features_in_graph_layers == "True":
                 output = tf.concat([output, static_attribute_features_input], axis=1)
 
             # print('Shape of output before transpose:', output.shape)
@@ -484,22 +499,82 @@ class GraphCNN2D(CNN2D):
             # Here: Nodes = Attributes (univariate time series), Features = Time steps
             # Shape of output: ([batch], Time steps, Attributes, so we must "switch" the second and third dimension
             output = tf.transpose(output, perm=[0, 2, 1])
+            if self.hyper.use_GCNGlobAtt_Fusion == "True":
+                for index, channels in enumerate(self.hyper.graph_conv_channels):
 
-            for channels in self.hyper.graph_conv_channels:
-                output = tf.keras.layers.BatchNormalization()(output)
-                #output = spektral.layers.GCNConv(channels=channels, activation="relu")([output, adj_matrix_input_ds])
-                output = spektral.layers.GATConv(channels=channels, activation="relu")([output, adj_matrix_input_ds])
-                output_GCN_ds = output
-                #output = tf.abs(tf.add(output2, output))
-                #output = tf.keras.layers.BatchNormalization()(output)
-                #output = tf.keras.layers.ReLU()(output)
-                #output = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(output)
-
-            if self.hyper.useFactoryStructureFusion == "False":
+                    if self.hyper.use_linear_transformation_in_context == "True":
+                        output_L = LinearTransformationLayer(size=(output.shape[2], channels))(output)
+                    output = spektral.layers.GCNConv(channels=channels, activation=None)([output, adj_matrix_input_ds])
+                    if self.hyper.use_linear_transformation_in_context == "True":
+                        output = tf.keras.layers.Add()([output, output_L])
+                    output = tf.keras.layers.BatchNormalization()(output)
+                    output = tf.keras.layers.ReLU()(output)
+                    #output = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate / 2)(output)
+                    # Add Owl2Vec
+                    if index < len(self.hyper.graph_conv_channels)-1:
+                        output = tf.transpose(output, perm=[0, 2, 1])
+                        output = tf.concat([output, static_attribute_features_input], axis=1)
+                        output = tf.transpose(output, perm=[0, 2, 1])
+                    #output = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate/2)(output)
+                    #output = spektral.layers.GATConv(channels=channels, activation="relu")([output, adj_matrix_input_ds])
+                    #output_GCN_ds = output
                 for channels in self.hyper.global_attention_pool_channels:
-                    output = spektral.layers.GlobalAttentionPool(channels)(output_GCN_ds)
-                    #output = spektral.layers.GlobalSumPool()(output)
-            else:
+                    output = spektral.layers.GlobalAttentionPool(channels)(output)
+                    #output = output # tf.keras.layers.Flatten(output)
+
+
+            else: # Readout Version
+                #''' Readout layer
+                output_L = LinearTransformationLayer(size=(272,256))(output)
+                output = spektral.layers.GCNConv(channels=self.hyper.graph_conv_channels[0], activation=None)([output, adj_matrix_input_ds])
+                output = tf.keras.layers.Add()([output, output_L])
+                output = tf.keras.layers.ReLU()(output)
+                #output = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate / 2)(output)
+                output_glob_mean = spektral.layers.GlobalAvgPool()(output)
+                output_glob_max = spektral.layers.GlobalMaxPool()(output)
+                output_1 = tf.keras.layers.Concatenate()([output_glob_mean, output_glob_max])
+                # Add Owl2Vec
+                output = tf.transpose(output, perm=[0, 2, 1])
+                output = tf.concat([output, static_attribute_features_input], axis=1)
+                output = tf.transpose(output, perm=[0, 2, 1])
+                output_GCN2_L = LinearTransformationLayer(size=(272, 256))(output)
+                output_GCN2 = spektral.layers.GCNConv(channels=self.hyper.graph_conv_channels[1], activation=None)(
+                    [output, adj_matrix_input_ds])
+                output_GCN2 = tf.keras.layers.Add()([output_GCN2, output_GCN2_L])
+                output_GCN2 = tf.keras.layers.ReLU()(output_GCN2)
+                #output_GCN2 = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate / 2)(output_GCN2)
+                output_glob_mean_2 = spektral.layers.GlobalAvgPool()(output_GCN2)
+                output_glob_max_2 = spektral.layers.GlobalMaxPool()(output_GCN2)
+                output_2 = tf.keras.layers.Concatenate()([output_glob_mean_2, output_glob_max_2])
+
+                # Add Owl2Vec
+                output_GCN2 = tf.transpose(output_GCN2, perm=[0, 2, 1])
+                output_GCN2 = tf.concat([output_GCN2, static_attribute_features_input], axis=1)
+                output_GCN2 = tf.transpose(output_GCN2, perm=[0, 2, 1])
+                output_GCN3_L = LinearTransformationLayer(size=(272, 256))(output_GCN2)
+                output_GCN3 = spektral.layers.GCNConv(channels=self.hyper.graph_conv_channels[1], activation=None)(
+                    [output_GCN2, adj_matrix_input_ds])
+                output_GCN3 = tf.keras.layers.Add()([output_GCN3, output_GCN3_L])
+                output_GCN3 = tf.keras.layers.ReLU()(output_GCN3)
+                #output_GCN3 = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate / 2)(output_GCN3)
+                output_glob_mean_3 = spektral.layers.GlobalAvgPool()(output_GCN3)
+                output_glob_max_3 = spektral.layers.GlobalMaxPool()(output_GCN3)
+                output_3 = tf.keras.layers.Concatenate()([output_glob_mean_3, output_glob_max_3])
+
+                output = tf.keras.layers.Add()([output_1,output_2])
+
+                #output = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate/2)(output)
+                output = tf.keras.layers.BatchNormalization()(output)
+                output = tf.keras.layers.Dense(units=512, activation="relu")(output)
+                #output = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate / 2)(output)
+                output = tf.keras.layers.BatchNormalization()(output)
+                output = tf.keras.layers.Dense(units=256, activation="relu")(output)
+                #output = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate / 2)(output)
+                #output = tf.keras.layers.Dense(units=64, activation="relu")(output)
+
+                #'''
+
+            if self.hyper.useFactoryStructureFusion == "True":
                 # WORK IN PROGRESS:
                 # enables pooling of data stream nodes according the factory structure ( can be used instead GlobalSumPool)
                 # Allocate data streams to workstations
@@ -517,7 +592,11 @@ class GraphCNN2D(CNN2D):
                 workstation_attributes_idx.append(txt19)
 
                 output_data_stream_level = output_GCN_ds
-                output_data_stream_level_pooled = spektral.layers.GlobalAttentionPool(channels)(output_GCN_ds)
+                #output_data_stream_level_pooled = spektral.layers.GlobalAttentionPool(channels)(output_GCN_ds)
+                # Readout layer
+                output_glob_mean_ds = spektral.layers.GlobalAvgPool()(output_data_stream_level)
+                output_glob_max_ds = spektral.layers.GlobalMaxPool()(output_data_stream_level)
+                output_data_stream_level_pooled = tf.keras.layers.Concatenate()([output_glob_mean_ds, output_glob_max_ds])
 
                 for workstation in range(5):
                     #indices_of_attributes = tf.slice(indices_of_attributes,[workstation,0],[workstation, 61])
@@ -546,10 +625,14 @@ class GraphCNN2D(CNN2D):
                 output = tf.keras.layers.Concatenate()(workstation_representation_pooled)
                 output_workstation_level = tf.transpose(output, perm=[0, 2, 1])
                 output_GCN_ws = spektral.layers.GCNConv(channels=channels, activation="relu")([output_workstation_level, adj_matrix_input_ws])
-                #output = tf.abs(tf.add(output_workstation_level, output_GCN_ws))
+                # Readout layer
+                output_glob_mean_ws = spektral.layers.GlobalAvgPool()(output_GCN_ws)
+                output_glob_max_ws = spektral.layers.GlobalMaxPool()(output_GCN_ws)
+                output_factory_level = tf.keras.layers.Concatenate()([output_glob_mean_ws, output_glob_max_ws])
+                output = tf.add(output_factory_level, output_data_stream_level_pooled)
                 #output = spektral.layers.GlobalSumPool()(output)
-                output_factory_level = spektral.layers.GlobalAttentionPool(channels)(output_GCN_ws)
-                output = output_factory_level
+                #output_factory_level = spektral.layers.GlobalAttentionPool(channels)(output_GCN_ws)
+                #output = output_factory_level
 
                 # Use different level (failure dependent?) for similarity calculation
                 '''
@@ -559,8 +642,8 @@ class GraphCNN2D(CNN2D):
                 output = tf.keras.layers.Concatenate()([output_workstation_level_flatten,output_factory_level_flatten, output_data_stream_level_pooled_flatten])
                 '''
 
-            # Redefine input of madel as normal input + additional adjacency matrix input
-            input = [input, adj_matrix_input_ds, adj_matrix_input_ws, static_attribute_features_input]
+                # Redefine input of madel as normal input + additional adjacency matrix input
+                #input = [input, adj_matrix_input_ds, adj_matrix_input_ws, static_attribute_features_input]
 
         return input, output
 
@@ -616,8 +699,10 @@ class CNN2dWithAddInput(NN):
                                            name="SensorDataInput")
         case_dependent_vector_input_i = tf.keras.Input(self.input_shape[1], name="MaskingVectorInput")
         masking_vec_len = self.input_shape[1]
-        adj_matrix_input = tf.keras.layers.Input(shape=(self.input_shape[2],), name="AdjacencyMatrix")
-        static_attribute_features_input = tf.keras.layers.Input(shape=self.input_shape[3], name="StaticAttributeFeatures")
+        adj_matrix_input_1 = tf.keras.layers.Input(shape=(self.input_shape[2],), name="AdjacencyMatrix_1")
+        adj_matrix_input_2 = tf.keras.layers.Input(shape=(self.input_shape[3],), name="AdjacencyMatrix_2")
+        adj_matrix_input_3 = tf.keras.layers.Input(shape=(self.input_shape[4],), name="AdjacencyMatrix_3")
+        static_attribute_features_input = tf.keras.layers.Input(shape=self.input_shape[5], name="StaticAttributeFeatures")
 
         # Splitting masking vectors in normal and strict
         if self.hyper.use_additional_strict_masking == 'True':
@@ -638,7 +723,7 @@ class CNN2dWithAddInput(NN):
         print("learnFeatureWeights: False Feature weights are similar to masking vector")
         # case_dependent_vector_input_o = tf.keras.layers.GaussianNoise(0.3)(case_dependent_vector_input_strict)
         # case_dependent_vector_input_o = tf.multiply(case_dependent_vector_input_o, case_dependent_vector_input_strict)
-        case_dependent_vector_input_o = case_dependent_vector_input_strict
+        case_dependent_vector_input_o = case_dependent_vector_input
 
         self.hyper.abcnn1 = None
 
@@ -656,11 +741,10 @@ class CNN2dWithAddInput(NN):
 
             # first layer must be handled separately because the input shape parameter must be set
             if self.hyper.use_dilated_factor_for_conv == "True":
-                #stride = (1, 1)
                 print("use stride: ", stride)
             else:
                 dilation_rate = (1,1)
-            print("filter_size: ", filter_size," - stride: ", stride, " - dilation_rate: ", dilation_rate)
+            #print("filter_size: ", filter_size," - stride: ", stride, " - dilation_rate: ", dilation_rate)
             if i == 0:
                 conv2d_layer1 = tf.keras.layers.Conv2D(filters=num_filter, padding='VALID',
                                                        kernel_size=(filter_size),
@@ -727,13 +811,28 @@ class CNN2dWithAddInput(NN):
         #reshape = tf.keras.layers.Reshape((x.shape[1], x.shape[2]))
         x = reshape(x)
 
+        if self.hyper.use_FiLM_after_2Conv == "True":
+            print("FiLM Modulation with context Mask input after 2d conv layers is used")
+            beta_0 = tf.keras.layers.Dense(units=64, activation=tf.keras.activations.relu,
+                                           name = "Beta" + str(64) + "U")(case_dependent_vector_input)
+            beta_1 = tf.keras.layers.Dense(units=61, activation=tf.keras.activations.relu,
+                                           name="Beta" + str(61) + "U")(beta_0)
+            gamma_0 = tf.keras.layers.Dense(units=64, activation=tf.keras.activations.relu,
+                                           name = "Gamma" + str(64) + "U")(case_dependent_vector_input)
+            gamma_1 = tf.keras.layers.Dense(units=61, activation=tf.keras.activations.relu,
+                                           name="Gamma" + str(61) + "U")(gamma_0)
+            beta_1 = tf.keras.layers.Multiply()([beta_1, case_dependent_vector_input])
+            gamma_1 = tf.keras.layers.Multiply()([gamma_1, case_dependent_vector_input])
+            tns = tf.concat([gamma_1, beta_1], axis=1)
+            x = FiLM()([x, tns])
+
+
         x = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(x)
 
         # Add static attribute features
         if self.hyper.learn_node_attribute_features == "True":
             print('Adding FC layers for learning features based on one-hot-vectors for each data stream')
-            case_dependent_matrix_input = tf.tile(case_dependent_vector_input,
-                                                  [1, 61])
+            case_dependent_matrix_input = tf.tile(case_dependent_vector_input,[1, 61])
             # case_dependent_matrix_input = case_dependent_matrix_input / tf.reduce_sum(case_dependent_matrix_input)
             reshape = tf.keras.layers.Reshape((61, 61))
             case_dependent_matrix_input = reshape(case_dependent_matrix_input)
@@ -765,13 +864,14 @@ class CNN2dWithAddInput(NN):
             static_attribute_features_input_ = tf.keras.layers.Dropout(rate=0.1)(static_attribute_features_input_)
             static_attribute_features_input_ = tf.keras.layers.Permute((2, 1))(static_attribute_features_input_)
             '''
-            adding_noise = tf.keras.layers.GaussianNoise(stddev=self.hyper.dropout_rate)
-            static_attribute_features_input_ = adding_noise(static_attribute_features_input)
-            #static_attribute_features_input_ = static_attribute_features_input
-            static_attribute_features_input_ = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(static_attribute_features_input_)
+            #adding_noise = tf.keras.layers.GaussianNoise(stddev=self.hyper.dropout_rate)
+            #static_attribute_features_input_ = adding_noise(static_attribute_features_input)
+            static_attribute_features_input_ = static_attribute_features_input
+            #static_attribute_features_input_ = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(static_attribute_features_input_)
 
-        # Hier einkommentieren, wenn Node Features als Input zur attribute-wise aggregation verwendet werden sollen
-        #x = tf.concat([x, static_attribute_features_input_], axis=1)
+        if self.hyper.use_owl2vec_node_features_as_input_AttributeWiseAggregation == "True":
+            print("Owl2vec are concataneted with the output of the 2d conv block (and should be used as additional input for the attribute-wise aggregation")
+            x = tf.concat([x, static_attribute_features_input], axis=1)
 
         # Attribute-wise feature aggregation via (time-distributed) fully-connected layers
         if self.hyper.useAttributeWiseAggregation == "True":
@@ -783,11 +883,11 @@ class CNN2dWithAddInput(NN):
             for num_units in layers_fc:
                 x = tf.keras.layers.BatchNormalization()(x)
                 x = tf.keras.layers.TimeDistributed(
-                    tf.keras.layers.Dense(units=num_units, activation=tf.keras.activations.relu,
-                    #kernel_regularizer = tf.keras.regularizers.l2(self.hyper.l2_rate_kernel),
-                    #activity_regularizer = tf.keras.regularizers.l2(self.hyper.l2_rate_act)
+                    tf.keras.layers.Dense(units=num_units, activation="relu"
                     ), name="FC_FeatureWise_Aggreg_Layer_" + str(num_units) + "U")(x)
-                x = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(x)
+                #x = tf.keras.layers.BatchNormalization()(x)
+                #x = tf.keras.layers.ReLU()(x)
+                #x = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(x)
             x = tf.keras.layers.Permute((2, 1))(x)  # transpose
         print("self.hyper.use_graph_conv_after2dCNNFC_context_fusion: ",self.hyper.use_graph_conv_after2dCNNFC_context_fusion)
         if self.hyper.use_graph_conv_after2dCNNFC_context_fusion == "True":
@@ -806,14 +906,14 @@ class CNN2dWithAddInput(NN):
                 #print("index:", index)
                 if self.hyper.use_graph_conv_after2dCNNFC_resNetBlock == True:
                     output = tf.keras.layers.BatchNormalization()(output)
-                    output2 = spektral.layers.GCNConv(channels=channels, activation=None)([output, adj_matrix_input])
-                    output = spektral.layers.GCNConv(channels=channels, activation=None)([output, adj_matrix_input])
+                    output2 = spektral.layers.GCNConv(channels=channels, activation=None)([output, adj_matrix_input_1])
+                    output = spektral.layers.GCNConv(channels=channels, activation=None)([output, adj_matrix_input_1])
                     # output = tf.keras.layers.BatchNormalization()(output)
                     # output = spektral.layers.GCNConv(channels=64, activation='relu')([output, adj_matrix_input])
                     output = tf.keras.layers.LeakyReLU()(output)
 
                     output = tf.keras.layers.BatchNormalization()(output)
-                    output = spektral.layers.GCNConv(channels=channels, activation=None)([output, adj_matrix_input])
+                    output = spektral.layers.GCNConv(channels=channels, activation=None)([output, adj_matrix_input_1])
                     output = tf.keras.layers.LeakyReLU()(output)
                     output = tf.keras.layers.Add()([output, output2])
 
@@ -827,7 +927,7 @@ class CNN2dWithAddInput(NN):
 
                     output = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(output)
                 else:
-                    output = tf.keras.layers.BatchNormalization()(output)
+                    #output = tf.keras.layers.BatchNormalization()(output)
                     if self.hyper.use_graph_conv_after2dCNNFC_GAT_instead_GCN == "True":
                         #l2_reg = 1e-5
                         attn_heads = 3
@@ -841,16 +941,21 @@ class CNN2dWithAddInput(NN):
                                 #kernel_regularizer=tf.keras.regularizers.l2(self.hyper.l2_rate_kernel),
                                 #attn_kernel_regularizer=tf.keras.regularizers.l2(l2_reg),
                                 #bias_regularizer=tf.keras.regularizers.l2(l2_reg)
-                                                         )([output, adj_matrix_input])
+                                                         )([output, adj_matrix_input_1])
                     else:
                         #adj_matrix_input_ = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate+0.2)(adj_matrix_input, training=True)
                         # kernel_regularizer=tf.keras.regularizers.l2(0.01)
+                        if self.hyper.use_linear_transformation_in_context == "True":
+                            output_L = LinearTransformationLayer(size=(output.shape[2], channels))(output)
                         output = spektral.layers.GCNConv(channels=channels, activation=None,
                                                          #kernel_regularizer=tf.keras.regularizers.l2(self.hyper.l2_rate_kernel),
                                                          #activity_regularizer=tf.keras.regularizers.l2(self.hyper.l2_rate_act)
-                                                         )([output, adj_matrix_input])
+                                                         )([output, adj_matrix_input_1])
+                        output = tf.keras.layers.BatchNormalization()(output)
+                        if self.hyper.use_linear_transformation_in_context == "True":
+                            output = tf.keras.layers.Add()([output, output_L])
                     output = tf.keras.layers.LeakyReLU()(output)
-                    output = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(output)
+                    #output = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(output)
 
             output = tf.transpose(output, perm=[0, 2, 1])
 
@@ -861,10 +966,11 @@ class CNN2dWithAddInput(NN):
             print('Providing output o1 for a weighted distance measure based on number of relevant attributes')
             # Output 1, used for weighted distance measure
             if self.hyper.use_graph_conv_after2dCNNFC_context_fusion == "True":
+                #Einkommentieren, wenn univariate Zeitreihen mit ausgegeben werden sollen: output = tf.concat([output, x], axis=1)
                 o1 = tf.keras.layers.Multiply()([output, case_dependent_vector_input_strict])
                 #x = output
             else:
-                o1 = tf.keras.layers.Multiply()([x, case_dependent_vector_input])
+                o1 = tf.keras.layers.Multiply()([x, case_dependent_vector_input_strict])
 
         # Using an additional context vector that is calculated on the previously defined output
         if self.hyper.useAddContextForSim == "True":
@@ -897,219 +1003,221 @@ class CNN2dWithAddInput(NN):
             # Context Module: connect only features from relevant attributes
 
             if self.hyper.use_graph_conv_for_context_fusion == "True":
-                # Graph Sensor Data Stream Concatatanation
+                # FiLM test:
+                '''
+                beta_0 = tf.keras.layers.Dense(units=64, activation=tf.keras.activations.relu,
+                                               name="Beta-Context" + str(64) + "U")(case_dependent_vector_input)
+                beta_1 = tf.keras.layers.Dense(units=61, activation=tf.keras.activations.relu,
+                                               name="BetaContext" + str(61) + "U")(beta_0)
+                gamma_0 = tf.keras.layers.Dense(units=64, activation=tf.keras.activations.relu,
+                                                name="GammaContext" + str(64) + "U")(case_dependent_vector_input)
+                gamma_1 = tf.keras.layers.Dense(units=61, activation=tf.keras.activations.relu,
+                                                name="GammaContext" + str(61) + "U")(gamma_0)
+                beta_1 = tf.keras.layers.Multiply()([beta_1, case_dependent_vector_input])
+                gamma_1 = tf.keras.layers.Multiply()([gamma_1, case_dependent_vector_input])
+                tns = tf.concat([gamma_1, beta_1], axis=1)
+                x = FiLM()([x, tns])
+                '''
 
-                # build context module:
+                '''READOUT_VARIANT_START
                 output = tf.transpose(x, perm=[0, 2, 1])
-                output = spektral.layers.GCNConv(channels=128, activation=None)([output, adj_matrix_input])
+                ### READ OUT VARIANT
                 output = tf.keras.layers.BatchNormalization()(output)
-                output = tf.keras.layers.ReLU()(output)
-                output = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(output)
-                output = spektral.layers.GCNConv(channels=64, activation=None)([output, adj_matrix_input])
-                output = tf.keras.layers.BatchNormalization()(output)
-                output = tf.keras.layers.ReLU()(output)
-                output = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(output)
-                output = spektral.layers.GCNConv(channels=32, activation=None)([output, adj_matrix_input])
-                output = tf.keras.layers.BatchNormalization()(output)
-                output = tf.keras.layers.ReLU()(output)
-                output = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(output)
-                output = tf.transpose(output, perm=[0, 2, 1])
-                '''
-                output = tf.concat([output, static_attribute_features_input_], axis=1)
-                case_dependent_matrix_input = tf.tile(case_dependent_vector_input,[1, 61])
-                # case_dependent_matrix_input = case_dependent_matrix_input / tf.reduce_sum(case_dependent_matrix_input)
-                reshape = tf.keras.layers.Reshape((61, 61))
-                case_dependent_matrix_input = reshape(case_dependent_matrix_input)
-                #case_dependent_matrix_input = tf.expand_dims(case_dependent_matrix_input, 0)
-                output = tf.concat([output, case_dependent_matrix_input], axis=1)
-                '''
-                output = tf.keras.layers.Multiply()([output, case_dependent_vector_input])
-                output = tf.transpose(output, perm=[0, 2, 1])
+                output_L = LinearTransformationLayer(size=(output.shape[2], 128))(output)
+                output_GCN1 = spektral.layers.GCNConv(channels=128, activation=None)([output, adj_matrix_input_1])
+                output_GCN1 = tf.keras.layers.Add()([output_GCN1, output_L])
+                output_GCN1 = tf.keras.layers.ReLU()(output_GCN1)
 
-                o2 = spektral.layers.GlobalSumPool()(output)
-                #o2 = spektral.layers.GlobalAttentionPool(channels=64)(output)
-                '''
-                output = tf.keras.layers.BatchNormalization()(output)
-                output = spektral.layers.GCNConv(channels=128, activation=None)([output, adj_matrix_input])
-                output = tf.keras.layers.LeakyReLU()(output)
-                output = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(output)
-                output = tf.keras.layers.BatchNormalization()(output)
-                output = spektral.layers.GCNConv(channels=32, activation=None)([output, adj_matrix_input])
-                output = tf.keras.layers.LeakyReLU()(output)
-                output = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(output)
-                o2 = spektral.layers.GlobalSumPool()(output)
-                '''
-                '''
-                # Block 1
-                output = tf.keras.layers.BatchNormalization()(output)
-                output2 = spektral.layers.GCNConv(channels=32, activation=None)([output, adj_matrix_input])
-                output = spektral.layers.GCNConv(channels=32, activation=None)([output, adj_matrix_input])
-                #output = tf.keras.layers.BatchNormalization()(output)
-                #output = spektral.layers.GCNConv(channels=64, activation='relu')([output, adj_matrix_input])
-                output = tf.keras.layers.LeakyReLU()(output)
+                output_GCN1_ = tf.transpose(output_GCN1, perm=[0, 2, 1])
+                output_GCN1_withOwl2vec = tf.concat([output_GCN1_, static_attribute_features_input], axis=1)
+                #output_GCN1_ = output_GCN1_withOwl2vec # tf.keras.layers.Multiply()([output_GCN1_withOwl2vec, case_dependent_vector_input])
+                output_GCN1_ = tf.transpose(output_GCN1_withOwl2vec, perm=[0, 2, 1])
+                output_GCN1_ = output_GCN1_
+                # Readout layer
+                output_glob_mean = tf.reduce_sum(output_GCN1_, axis=1) / tf.reduce_sum(case_dependent_vector_input)
+                output_glob_max = tf.reduce_max(output_GCN1_, axis=1)
+                #output_glob_mean = spektral.layers.GlobalAvgPool()(output_GCN1_)
+                #output_glob_max = spektral.layers.GlobalMaxPool()(output_GCN1_)
+                output_1 = tf.keras.layers.Concatenate()([output_glob_mean, output_glob_max])
 
-                output = tf.keras.layers.BatchNormalization()(output)
-                output = spektral.layers.GCNConv(channels=32, activation=None)([output, adj_matrix_input])
-                output = tf.keras.layers.LeakyReLU()(output)
-                output = tf.keras.layers.Add()([output, output2])
-                output = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(output)
-                output_1 = output
+                output_GCN1_ = tf.keras.layers.BatchNormalization()(output_GCN1_)
+                output_L = LinearTransformationLayer(size=(output_GCN1_.shape[2], 128))(output_GCN1_)
+                output_GCN2 = spektral.layers.GCNConv(channels=128, activation=None)([output_GCN1_, adj_matrix_input_1])
+                output_GCN2 = tf.keras.layers.Add()([output_GCN2, output_L])
+                output_GCN2 = tf.keras.layers.ReLU()(output_GCN2)
+                output_GCN2_ = tf.transpose(output_GCN2, perm=[0, 2, 1])
+                output_GCN2_withOwl2vec = tf.concat([output_GCN2_, static_attribute_features_input], axis=1)
+                output_GCN2_ = tf.keras.layers.Multiply()([output_GCN2_withOwl2vec, case_dependent_vector_input])
+                output_GCN2_ = tf.transpose(output_GCN2_, perm=[0, 2, 1])
+                output_glob_mean_2 = tf.reduce_sum(output_GCN2_, axis=1) / tf.reduce_sum(case_dependent_vector_input)
+                output_glob_max_2 = tf.reduce_max(output_GCN2_, axis=1)
+                #output_glob_mean_2 = spektral.layers.GlobalAvgPool()(output_GCN2_)
+                #output_glob_max_2 = spektral.layers.GlobalMaxPool()(output_GCN2_)
+                output_2 = tf.keras.layers.Concatenate()([output_glob_mean_2, output_glob_max_2])
 
-                # Block 2
-                output = tf.keras.layers.BatchNormalization()(output)
-                output2 = spektral.layers.GCNConv(channels=32, activation=None)([output, adj_matrix_input])
-                output = spektral.layers.GCNConv(channels=32, activation=None)([output, adj_matrix_input])
+                output_GCN2_ = tf.keras.layers.BatchNormalization()(output_GCN2_)
+                output_L = LinearTransformationLayer(size=(output_GCN2_.shape[2], 128))(output_GCN2_)
+                output_GCN3 = spektral.layers.GCNConv(channels=128, activation=None)([output_GCN2_, adj_matrix_input_2])
+                output_GCN3 = tf.keras.layers.Add()([output_GCN3, output_L])
+                output_GCN3 = tf.keras.layers.ReLU()(output_GCN3)
+                output_GCN3_ = tf.transpose(output_GCN3, perm=[0, 2, 1])
+                output_GCN3_withOwl2vec = tf.concat([output_GCN3_, static_attribute_features_input], axis=1)
+                output_GCN3_ = tf.keras.layers.Multiply()([output_GCN3_withOwl2vec, case_dependent_vector_input_strict])
+                output_GCN3_ = tf.transpose(output_GCN3_, perm=[0, 2, 1])
+                output_glob_mean_3 = tf.reduce_sum(output_GCN3_, axis=1) / tf.reduce_sum(case_dependent_vector_input_strict)
+                output_glob_max_3 = tf.reduce_max(output_GCN3_, axis=1)
+                # output_glob_mean_3 = spektral.layers.GlobalAvgPool()(output_GCN3_)
+                # output_glob_max_3 = spektral.layers.GlobalMaxPool()(output_GCN3_)
+                output_3 = tf.keras.layers.Concatenate()([output_glob_mean_3, output_glob_max_3])
+
+                output_GCN3_ = tf.keras.layers.BatchNormalization()(output_GCN3_)
+                output_L = LinearTransformationLayer(size=(output_GCN3_.shape[2], 128))(output_GCN3_)
+                output_GCN4 = spektral.layers.GCNConv(channels=128, activation=None)([output_GCN3_, adj_matrix_input_2])
+                output_GCN4 = tf.keras.layers.Add()([output_GCN4, output_L])
+                output_GCN4 = tf.keras.layers.ReLU()(output_GCN4)
+                output_GCN4_ = tf.transpose(output_GCN4, perm=[0, 2, 1])
+                output_GCN4_withOwl2vec = tf.concat([output_GCN4_, static_attribute_features_input], axis=1)
+                output_GCN4_ = tf.keras.layers.Multiply()([output_GCN4_withOwl2vec, case_dependent_vector_input_strict])
+                output_GCN4_ = tf.transpose(output_GCN4_, perm=[0, 2, 1])
+                output_glob_mean_4 = tf.reduce_sum(output_GCN4_, axis=1) / tf.reduce_sum(case_dependent_vector_input_strict)
+                output_glob_max_4 = tf.reduce_max(output_GCN4_, axis=1)
+                # output_glob_mean_4 = spektral.layers.GlobalAvgPool()(output_GCN4_)
+                # output_glob_max_4 = spektral.layers.GlobalMaxPool()(output_GCN4_)
+                output_4 = tf.keras.layers.Concatenate()([output_glob_mean_4, output_glob_max_4])
+
+                # Prepare FC Input
+                output = tf.keras.layers.Add()([output_1, output_2,output_3, output_4])
+                layer_input_masking_vec_ = tf.keras.layers.Flatten()(case_dependent_vector_input)
+                output_ = tf.keras.layers.Flatten()(output)
+
+                #output = tf.keras.layers.Add()([output_1, output_2])
+                #output = tf.keras.layers.Add()([output_1, output_2])
+                output = tf.keras.layers.Concatenate()([output_, case_dependent_vector_input])
                 # output = tf.keras.layers.BatchNormalization()(output)
-                # output = spektral.layers.GCNConv(channels=64, activation='relu')([output, adj_matrix_input])
-                output = tf.keras.layers.LeakyReLU()(output)
-                #output = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(output)
-
-                output = tf.keras.layers.BatchNormalization()(output)
-                # output = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(output)
-                output = spektral.layers.GCNConv(channels=32, activation=None)([output, adj_matrix_input])
-                output = tf.keras.layers.LeakyReLU()(output)
-                output = tf.keras.layers.Add()([output, output2])
-                output = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(output)
-                output_2 = output
-
-                # Block 3
-                output = tf.keras.layers.BatchNormalization()(output)
-                output2 = spektral.layers.GCNConv(channels=32, activation=None)([output, adj_matrix_input])
-                output = spektral.layers.GCNConv(channels=32, activation=None)([output, adj_matrix_input])
+                output = tf.keras.layers.Dense(units=256, activation="relu")(output)
                 # output = tf.keras.layers.BatchNormalization()(output)
-                # output = spektral.layers.GCNConv(channels=64, activation='relu')([output, adj_matrix_input])
-                output = tf.keras.layers.LeakyReLU()(output)
+                o2 = tf.keras.layers.Dense(units=128, activation="relu")(output)
+                '''
 
+
+                ''' Graph Sensor Data Stream Concatatanation
+                x = tf.concat([x, static_attribute_features_input], axis=1)
+                output = tf.transpose(x, perm=[0, 2, 1])
                 output = tf.keras.layers.BatchNormalization()(output)
-                # output = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(output)
-                output = spektral.layers.GCNConv(channels=32, activation=None)([output, adj_matrix_input])
-                output = tf.keras.layers.LeakyReLU()(output)
-                output = tf.keras.layers.Add()([output, output2])
-                output = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(output)
-                output_3 = output
-
-
-                # Block 4
+                output = spektral.layers.GCNConv(channels=128, activation="relu")([output, adj_matrix_input_1])
                 output = tf.keras.layers.BatchNormalization()(output)
-                output2 = spektral.layers.GCNConv(channels=32, activation=None)([output, adj_matrix_input])
-                output = spektral.layers.GCNConv(channels=32, activation=None)([output, adj_matrix_input])
-                # output = tf.keras.layers.BatchNormalization()(output)
-                # output = spektral.layers.GCNConv(channels=64, activation='relu')([output, adj_matrix_input])
-                output = tf.keras.layers.LeakyReLU()(output)
-
+                output = spektral.layers.GCNConv(channels=64, activation="relu")([output, adj_matrix_input_1])
                 output = tf.keras.layers.BatchNormalization()(output)
-                # output = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(output)
-                output = spektral.layers.GCNConv(channels=32, activation=None)([output, adj_matrix_input])
-                output = tf.keras.layers.LeakyReLU()(output)
-                output = tf.keras.layers.Add()([output, output2])
-                output = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(output)
-                output_4 = output
-
-                # Block 5
-                output = tf.keras.layers.BatchNormalization()(output)
-                output2 = spektral.layers.GCNConv(channels=32, activation=None)([output, adj_matrix_input])
-                output = spektral.layers.GCNConv(channels=32, activation=None)([output, adj_matrix_input])
-                # output = tf.keras.layers.BatchNormalization()(output)
-                # output = spektral.layers.GCNConv(channels=64, activation='relu')([output, adj_matrix_input])
-                output = tf.keras.layers.LeakyReLU()(output)
-
-                output = tf.keras.layers.BatchNormalization()(output)
-                # output = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(output)
-                output = spektral.layers.GCNConv(channels=32, activation=None)([output, adj_matrix_input])
-                output = tf.keras.layers.LeakyReLU()(output)
-                output = tf.keras.layers.Add()([output, output2])
-                output = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(output)
-                output_5 = output
-                output = tf.keras.layers.Add()([output, output_1, output_2, output_3, output_4])
+                output = spektral.layers.GCNConv(channels=64, activation="relu")([output, adj_matrix_input_2])
+                #output = spektral.layers.GCNConv(channels=64, activation=None)([output, adj_matrix_input_1])
                 
-                # Block 6
-                output = tf.keras.layers.BatchNormalization()(output)
-                output2 = spektral.layers.GCNConv(channels=32, activation=None)([output, adj_matrix_input])
-                output = spektral.layers.GCNConv(channels=32, activation=None)([output, adj_matrix_input])
-                # output = tf.keras.layers.BatchNormalization()(output)
-                # output = spektral.layers.GCNConv(channels=64, activation='relu')([output, adj_matrix_input])
-                output = tf.keras.layers.LeakyReLU()(output)
+                #output = tf.keras.layers.Dense(units=64, activation=None)(output)
+                o2 = tf.transpose(output, perm=[0, 2, 1])
 
-                output = tf.keras.layers.BatchNormalization()(output)
-                # output = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(output)
-                output = spektral.layers.GCNConv(channels=32, activation=None)([output, adj_matrix_input])
-                output = tf.keras.layers.LeakyReLU()(output)
-                output = tf.keras.layers.Add()([output, output2])
-                output = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(output)
-                output_6 = output
+                o2 = tf.keras.layers.Multiply()([o2,case_dependent_vector_input])
+                o2 = tf.transpose(o2, perm=[0, 2, 1])
+                #o2 = tf.transpose(o2, perm=[0, 2, 1])
+                o2 = spektral.layers.GlobalAttentionPool(64)(o2)
+                #linear_transformation = LinearTransformationLayer(size=(61,61))
+                #linear_transformation = LinearTransformationLayer(size=(64, 61))
+                #o2=linear_transformation(o2)
+                #o2 = tf.keras.activations.sigmoid(o2)
+                #o1 = tf.keras.activations.sigmoid(o1)
+                #o2 = tf.concat([x, o2], axis=1)
+                #'''
 
-                # Block 7
+                ''' NEUE VARIANTE:
+                if self.hyper.use_owl2vec_node_features_in_graph_layers == "True":
+                    x = tf.concat([x, static_attribute_features_input], axis=1)
+                output = tf.transpose(x, perm=[0, 2, 1])
                 output = tf.keras.layers.BatchNormalization()(output)
-                output2 = spektral.layers.GCNConv(channels=32, activation=None)([output, adj_matrix_input])
-                output = spektral.layers.GCNConv(channels=32, activation=None)([output, adj_matrix_input])
-                # output = tf.keras.layers.BatchNormalization()(output)
-                # output = spektral.layers.GCNConv(channels=64, activation='relu')([output, adj_matrix_input])
-                output = tf.keras.layers.LeakyReLU()(output)
-
-                output = tf.keras.layers.BatchNormalization()(output)
-                # output = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(output)
-                output = spektral.layers.GCNConv(channels=32, activation=None)([output, adj_matrix_input])
-                output = tf.keras.layers.LeakyReLU()(output)
-                output = tf.keras.layers.Add()([output, output2])
-                output = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(output)
-                output_7 = output
-
-                # Block 8
-                output = tf.keras.layers.BatchNormalization()(output)
-                output2 = spektral.layers.GCNConv(channels=32, activation=None)([output, adj_matrix_input])
-                output = spektral.layers.GCNConv(channels=32, activation=None)([output, adj_matrix_input])
-                # output = tf.keras.layers.BatchNormalization()(output)
-                # output = spektral.layers.GCNConv(channels=64, activation='relu')([output, adj_matrix_input])
-                output = tf.keras.layers.LeakyReLU()(output)
-
-                output = tf.keras.layers.BatchNormalization()(output)
-                # output = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(output)
-                output = spektral.layers.GCNConv(channels=32, activation=None)([output, adj_matrix_input])
-                output = tf.keras.layers.LeakyReLU()(output)
-                output = tf.keras.layers.Add()([output, output2])
-                output = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(output)
-                output_8 = output
-
-                # Block 9
-                output = tf.keras.layers.BatchNormalization()(output)
-                output2 = spektral.layers.GCNConv(channels=32, activation=None)([output, adj_matrix_input])
-                output = spektral.layers.GCNConv(channels=32, activation=None)([output, adj_matrix_input])
-                # output = tf.keras.layers.BatchNormalization()(output)
-                # output = spektral.layers.GCNConv(channels=64, activation='relu')([output, adj_matrix_input])
-                output = tf.keras.layers.LeakyReLU()(output)
-
-                output = tf.keras.layers.BatchNormalization()(output)
-                # output = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(output)
-                output = spektral.layers.GCNConv(channels=32, activation=None)([output, adj_matrix_input])
-                output = tf.keras.layers.LeakyReLU()(output)
-                output = tf.keras.layers.Add()([output, output2])
-                output = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(output)
-                output_9 = output
-
-                output = tf.keras.layers.Add()([output, output_1, output_2, output_3, output_4, output_5, output_6, output_7,output_8])
-                '''
-                '''
-                output = spektral.layers.GCNConv(channels=128, activation=None)([output, adj_matrix_input])
-                output = tf.keras.layers.BatchNormalization()(output)
+                if self.hyper.use_linear_transformation_in_context == "True":
+                    output_L = LinearTransformationLayer(size=(output.shape[2], self.hyper.graph_conv_channels_context[0]))(output)
+                output = spektral.layers.GCNConv(channels=self.hyper.graph_conv_channels_context[0], activation=None)([output, adj_matrix_input_1])
+                if self.hyper.use_linear_transformation_in_context == "True":
+                    output = tf.keras.layers.Add()([output, output_L])
                 output = tf.keras.layers.ReLU()(output)
-                #output = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(output)
-    
-                output = spektral.layers.GCNConv(channels=64, activation=None)([output, adj_matrix_input])
+                # output = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate / 2)(output)
+                # Add Owl2Vec
+                if self.hyper.use_owl2vec_node_features_in_graph_layers == "True":
+                    output = tf.transpose(output, perm=[0, 2, 1])
+                    output = tf.concat([output, static_attribute_features_input], axis=1)
+                    output = tf.transpose(output, perm=[0, 2, 1])
+
                 output = tf.keras.layers.BatchNormalization()(output)
+                if self.hyper.use_linear_transformation_in_context == "True":
+                    output_L = LinearTransformationLayer(size=(output.shape[2], self.hyper.graph_conv_channels_context[1]))(output)
+                output = spektral.layers.GCNConv(channels=self.hyper.graph_conv_channels_context[1], activation=None)([output, adj_matrix_input_1])
+                if self.hyper.use_linear_transformation_in_context == "True":
+                    output = tf.keras.layers.Add()([output, output_L])
                 output = tf.keras.layers.ReLU()(output)
-                #output = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(output)
+                # output = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate / 2)(output)
+                # Add Owl2Vec
+                if self.hyper.use_owl2vec_node_features_in_graph_layers == "True":
+                    output = tf.transpose(output, perm=[0, 2, 1])
+                    output = tf.concat([output, static_attribute_features_input], axis=1)
+                    output = tf.transpose(output, perm=[0, 2, 1])
+
+                output = tf.keras.layers.BatchNormalization()(output)
+                if self.hyper.use_linear_transformation_in_context == "True":
+                    output_L = LinearTransformationLayer(size=(output.shape[2], self.hyper.graph_conv_channels_context[2]))(output)
+                output = spektral.layers.GCNConv(channels=self.hyper.graph_conv_channels_context[2], activation=None)([output, adj_matrix_input_2])
+                if self.hyper.use_linear_transformation_in_context == "True":
+                    output = tf.keras.layers.Add()([output, output_L])
+                output = tf.keras.layers.ReLU()(output)
+                # output = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate / 2)(output)
+                o2 = tf.transpose(output, perm=[0, 2, 1])
                 '''
 
-                #output = tf.keras.layers.Concatenate()([output_1, output_2, output_3, output_4, output_5])
-                #o2 = spektral.layers.GlobalAvgPool()(output)
-                #o2 = spektral.layers.GlobalSumPool()(output)
-                #o2 = spektral.layers.GlobalAttnSumPool()(output)
 
+                #cnn2d_withAddInput_Graph_o1_GlobAtt_o2.json:
+                if self.hyper.use_owl2vec_node_features_in_graph_layers == "True":
+                    output = tf.concat([output, static_attribute_features_input], axis=1)
+                output = tf.transpose(output, perm=[0, 2, 1])
 
-                #spektral.layers.GlobalAvgPool()(output)
-                #output = tf.keras.layers.BatchNormalization()(o2)
-                #output = tf.keras.layers.Dense(64,activation=None)(output)
-                #o2 = tf.keras.layers.LeakyReLU()(output)
+                if self.hyper.use_linear_transformation_in_context == "True":
+                    output_L = LinearTransformationLayer(size=(output.shape[2], self.hyper.graph_conv_channels_context[0]))(output)
+                output = spektral.layers.GCNConv(channels=self.hyper.graph_conv_channels_context[0], activation=None)([output, adj_matrix_input_1])
+                output = tf.keras.layers.BatchNormalization()(output)
+                if self.hyper.use_linear_transformation_in_context == "True":
+                    output = tf.keras.layers.Add()([output, output_L])
+                output = tf.keras.layers.LeakyReLU()(output)
+                # Add Owl2Vec
+                if self.hyper.use_owl2vec_node_features_in_graph_layers == "True":
+                    output = tf.transpose(output, perm=[0, 2, 1])
+                    output = tf.concat([output, static_attribute_features_input], axis=1)
+                    output = tf.transpose(output, perm=[0, 2, 1])
+
+                if self.hyper.use_linear_transformation_in_context == "True":
+                    output_L = LinearTransformationLayer(size=(output.shape[2], self.hyper.graph_conv_channels_context[1]))(output)
+                output = spektral.layers.GCNConv(channels=self.hyper.graph_conv_channels_context[1], activation=None)([output, adj_matrix_input_2])
+                output = tf.keras.layers.BatchNormalization()(output)
+                if self.hyper.use_linear_transformation_in_context == "True":
+                    output = tf.keras.layers.Add()([output, output_L])
+                output = tf.keras.layers.LeakyReLU()(output)
+
+                x = tf.transpose(output, perm=[0, 2, 1])
+                o2 = tf.keras.layers.Multiply()([x, case_dependent_vector_input])
+                o2 = tf.transpose(o2, perm=[0, 2, 1])
+
+                o2 = spektral.layers.GlobalAttentionPool(self.hyper.graph_conv_channels_context[1])(o2)
+                ''' Hier kommt "eingenes" GlobalAttentionPooling'''
+                '''
+                features_layer = tf.keras.layers.Dense(64, name="features_layer")
+                attention_layer = tf.keras.layers.Dense(64, activation="sigmoid", name="attn_layer")
+                attention_layer2 = tf.keras.layers.Dense(64, activation="sigmoid", name="attn_layer2")
+
+                inputs_linear = features_layer(o2) # 128x61x64
+                attn = attention_layer(case_dependent_vector_input) # 128x64
+                attn = tf.expand_dims(attn, 1) # 128x1x64
+                attn2 = attention_layer2(o2)  # 128x64
+                attn = (attn + attn2) /2
+        
+                masked_inputs = inputs_linear * attn # tf.keras.layers.Multiply()([inputs_linear, attn])
+                o2 = tf.keras.backend.sum(masked_inputs, axis=-2)
+                '''
+                # output = output # tf.keras.layers.Flatten(output)
+                # '''
                 o2 = tf.expand_dims(o2, -1)
             else:
                 # FC Version
@@ -1122,7 +1230,7 @@ class CNN2dWithAddInput(NN):
                     c = tf.keras.layers.Dense(units=num_units, activation=tf.keras.activations.relu,
                                               name="FC_Layer_Context_" + str(num_units) + "U")(c)
                     c = tf.keras.layers.BatchNormalization()(c)
-                    c = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(c)
+                    #c = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(c)
                 o2 = tf.keras.layers.Reshape([layers_fc[len(layers_fc) - 1], 1])(c)
 
         else:
@@ -1137,32 +1245,33 @@ class CNN2dWithAddInput(NN):
             # w: weight value (scalar) how much the similiarity for each failuremode should be based on invidivual features (x) or context (c)
             # debug: used for debugging
             if self.hyper.useAddContextForSim_LearnOrFixWeightVale == "True":
-                self.model = tf.keras.Model(inputs=[sensor_data_input, case_dependent_vector_input_i, adj_matrix_input, static_attribute_features_input],
+                self.model = tf.keras.Model(inputs=[sensor_data_input, case_dependent_vector_input_i, adj_matrix_input_1, adj_matrix_input_2, adj_matrix_input_3, static_attribute_features_input],
                                             outputs=[o1, case_dependent_vector_input_o, o2, w])
             else:
                 if self.hyper.use_univariate_output_for_weighted_sim == "True":
                     if self.hyper.provide_output_for_on_top_network == "True":
-                        print("Dieses Modell!")
+                        print("Modell Output: [o2, case_dependent_vector_input_o, adj_matrix_input_1, adj_matrix_input_2, adj_matrix_input_3, static_attribute_features_input]")
                         self.model = tf.keras.Model(
-                            inputs=[sensor_data_input, case_dependent_vector_input_i, adj_matrix_input,
+                            inputs=[sensor_data_input, case_dependent_vector_input_i, adj_matrix_input_1, adj_matrix_input_2, adj_matrix_input_3,
                                     static_attribute_features_input],
-                            outputs=[o1, case_dependent_vector_input_o, adj_matrix_input,
-                                     static_attribute_features_input, o2])
+                            outputs=[o2, case_dependent_vector_input_o, adj_matrix_input_1, adj_matrix_input_2, adj_matrix_input_3,
+                                     static_attribute_features_input])
                     else:
-                        self.model = tf.keras.Model(inputs=[sensor_data_input, case_dependent_vector_input_i, adj_matrix_input, static_attribute_features_input],
+                        print("Modell Output: [o1, case_dependent_vector_input_o, o2]")
+                        self.model = tf.keras.Model(inputs=[sensor_data_input, case_dependent_vector_input_i, adj_matrix_input_1, adj_matrix_input_2, adj_matrix_input_3, static_attribute_features_input],
                                                     outputs=[o1, case_dependent_vector_input_o, o2])
                 else:
                     self.model = tf.keras.Model(
-                        inputs=[sensor_data_input, case_dependent_vector_input_i, adj_matrix_input, static_attribute_features_input],
+                        inputs=[sensor_data_input, case_dependent_vector_input_i, adj_matrix_input_1, adj_matrix_input_2, adj_matrix_input_3, static_attribute_features_input],
                         outputs=[o2])
 
         else:
             if self.hyper.provide_output_for_on_top_network == "True":
-                self.model = tf.keras.Model(inputs=[sensor_data_input, case_dependent_vector_input_i, adj_matrix_input,
+                self.model = tf.keras.Model(inputs=[sensor_data_input, case_dependent_vector_input_i, adj_matrix_input_1, adj_matrix_input_2, adj_matrix_input_3,
                                                     static_attribute_features_input],
-                                            outputs=[o1, case_dependent_vector_input_o, adj_matrix_input, static_attribute_features_input])
+                                            outputs=[o1, case_dependent_vector_input_o, adj_matrix_input_1, adj_matrix_input_2, adj_matrix_input_3, static_attribute_features_input])
             else:
-                self.model = tf.keras.Model(inputs=[sensor_data_input, case_dependent_vector_input_i, adj_matrix_input, static_attribute_features_input],
+                self.model = tf.keras.Model(inputs=[sensor_data_input, case_dependent_vector_input_i, adj_matrix_input_1, adj_matrix_input_2, adj_matrix_input_3, static_attribute_features_input],
                                         outputs=[o1, case_dependent_vector_input_o])
         '''
         self.intermediate_layer_model = tf.keras.Model(inputs=case_dependent_vector_input,
@@ -1576,11 +1685,13 @@ class Cnn2DWithAddInput_Network_OnTop(NN):
             layer_input_dis1 = tf.keras.Input(shape=self.input_shape[0], name="Input_dist_1")
             layer_input_dis2 = tf.keras.Input(shape=self.input_shape[1], name="Input_dist_2")
             layer_input_masking_vec = tf.keras.Input(shape=self.input_shape[2], name="Input_masking_vec")
-        if use_case == "nw_approach":
+        elif use_case == "global":
+            layer_input_features = tf.keras.Input(shape=self.input_shape[0], name="Input_features_1")
+        elif use_case == "nw_approach":
             layer_input_features = tf.keras.Input(shape=self.input_shape[0], name="Input_features_1")
             #layer_input_masking_vec = tf.keras.Input(shape=self.input_shape[1], name="Input_masking_vec")
             #layer_input_owl2vec_matrix = tf.keras.Input(shape=self.input_shape[1], name="Input_owl2vec_matrix")
-        if use_case == "graph":
+        elif use_case == "graph":
             layer_input_abs_distance = tf.keras.Input(shape=self.input_shape[0], name="Input_dist_vec")
             layer_input_masking_vec = tf.keras.Input(shape=self.input_shape[1], name="Input_masking_vec")
             layer_input_adj_matrix = tf.keras.Input(shape=self.input_shape[2], name="Input_adj_matrix")
@@ -1639,7 +1750,7 @@ class Cnn2DWithAddInput_Network_OnTop(NN):
 
         elif use_case == "dummy":
             output = layer_input_abs_distance
-        elif use_case == "nw_approach":
+        elif use_case == "nw_approach" or "global":
 
             layers = self.hyper.ffnn_layers.copy()
 
@@ -1678,9 +1789,78 @@ class Cnn2DWithAddInput_Network_OnTop(NN):
         if use_case == "simple":
             self.model = tf.keras.Model(
                 inputs=[layer_input_dis1, layer_input_dis2, layer_input_masking_vec], outputs=output)
-        if use_case == "nw_approach":
+        if use_case == "nw_approach" or "global":
             self.model = tf.keras.Model(
                 inputs=[layer_input_features], outputs=output)
         else:
             self.model = tf.keras.Model(inputs=[layer_input_abs_distance, layer_input_masking_vec, layer_input_adj_matrix,
                                             layer_input_owl2vec_matrix], outputs=output)
+
+class LinearTransformationLayer(tf.keras.layers.Layer):
+    # This Layer provides a linear transformation, e.g. used as last layer in Conditional Simialrty Networks or in addition to a GCN Layer
+    def __init__(self,size, input_shape_=None, **kwargs):
+        super(LinearTransformationLayer, self).__init__()
+        self.size = size
+        self.input_shape_ = input_shape_
+
+    def build(self, input_shape):
+        self.weightmatrix = self.add_weight(name='linear_transformation_weights',
+                                              shape=self.size,
+                                              initializer=tf.keras.initializers.glorot_uniform,
+                                              trainable=True)
+
+        super(LinearTransformationLayer, self).build(input_shape)
+
+    # noinspection PyMethodOverridingd
+    def call(self, input_):
+        #linear_transformed_input = tf.matmul(input_, self.weightmatrix)
+        #linear_transformed_input = tf.math.multiply(input_, self.weightmatrix)
+        linear_transformed_input = tf.matmul(input_, self.weightmatrix)
+        return linear_transformed_input
+
+    def compute_output_shape(self, input_shape):
+        return input_shape
+
+class FiLM(tf.keras.layers.Layer):
+
+    def __init__(self, **kwargs):
+        super(FiLM, self).__init__(**kwargs)
+
+    def build(self, input_shape):
+        assert isinstance(input_shape, list)
+        feature_map_shape, FiLM_tns_shape = input_shape
+        self.height = feature_map_shape[1]
+        self.width = feature_map_shape[2]
+        self.n_feature_maps = feature_map_shape[-1]
+        tf.print("self.height: ", self.height, "self.width: ", self.width, "self.n_feature_maps: ", self.n_feature_maps)
+        #assert(int(2 * self.n_feature_maps)==FiLM_tns_shape[1])
+        super(FiLM, self).build(input_shape)
+
+    def call(self, x):
+        assert isinstance(x, list)
+        conv_output, FiLM_tns = x
+
+        # Duplicate in order to apply to entire feature maps
+        # Taken from https://github.com/GuessWhatGame/neural_toolbox/blob/master/film_layer.py
+        #tf.print("FiLM_tns shape: ", tf.shape(FiLM_tns))
+        #tf.print("conv_output shape: ", tf.shape(conv_output))
+        FiLM_tns = tf.keras.backend.expand_dims(FiLM_tns, axis=[1])
+        #FiLM_tns = tf.keras.backend.expand_dims(FiLM_tns, axis=[1])
+        #tf.print("FiLM_tns shape: ", tf.shape(FiLM_tns))
+        #FiLM_tns = K.tile(FiLM_tns, [1, self.height, self.width, 1])
+        FiLM_tns = tf.keras.backend.tile(FiLM_tns, [1,  self.height,1])
+        #tf.print("FiLM_tns shape after tile: ", tf.shape(FiLM_tns))
+
+        # Split into gammas and betas
+        gammas = FiLM_tns[:, :, :self.n_feature_maps]
+        #gammas = FiLM_tns[:, :, :]
+        betas = FiLM_tns[:, :, self.n_feature_maps:]
+        #betas = FiLM_tns[:, :, :]
+
+        # Apply affine transformation
+        #return conv_output + betas
+        return (1 + gammas) * conv_output + betas
+
+    def compute_output_shape(self, input_shape):
+        assert isinstance(input_shape, list)
+        return input_shape[0]

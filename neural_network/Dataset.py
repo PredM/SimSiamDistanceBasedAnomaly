@@ -38,7 +38,7 @@ class Dataset:
 
 class FullDataset(Dataset):
 
-    def __init__(self, dataset_folder, config: Configuration, training):
+    def __init__(self, dataset_folder, config: Configuration, training, model_selection = False):
         super().__init__(dataset_folder, config)
 
         self.x_test = None
@@ -46,6 +46,7 @@ class FullDataset(Dataset):
         self.y_test_strings = None
         self.num_test_instances = None
         self.training = training
+        self.model_selection = model_selection
 
         # total number of classes
         self.num_classes = None
@@ -96,8 +97,10 @@ class FullDataset(Dataset):
 
         # np array containing the adjacency information of features used by the graph cnn2d encoder
         # loaded from config.graph_adjacency_matrix_file
-        self.graph_adjacency_matrix_attributes = None   # lowest level, all attributes are considered
-        self.graph_adjacency_matrix_ws = None           # intermediate level, workstation relations are modeled
+        self.graph_adjacency_matrix_attributes = None               # lowest level, all attributes are considered
+        self.graph_adjacency_matrix_attributes_preprocessed = None  # gcn_preprocessed version
+        self.graph_adjacency_matrix_ws = None                       # intermediate level, workstation relations are modeled
+        self.graph_adjacency_matrix_ws_preprocessed = None          # gcn_preprocessed version
         self.graph_pooling_relation_attr2ws_file = None                # ?
         self.additional_static_attribute_features = None
         self.owl2vec_embedding_dim = None
@@ -106,20 +109,39 @@ class FullDataset(Dataset):
 
     def load_files(self):
 
-        self.x_train = np.load(self.dataset_folder + 'train_features.npy')  # data training
-        self.y_train_strings = np.expand_dims(np.load(self.dataset_folder + 'train_labels.npy'), axis=-1)
+        self.x_train = np.load(self.dataset_folder + 'train_features_new2.npy')  # data training
+        self.y_train_strings = np.expand_dims(np.load(self.dataset_folder + 'train_labels_new2.npy'), axis=-1)
 
-        self.x_test = np.load(self.dataset_folder + 'test_features.npy')  # data testing
-        self.y_test_strings = np.expand_dims(np.load(self.dataset_folder + 'test_labels.npy'), axis=-1)
+
+        if self.model_selection == True:
+            # Validation data set is loaded
+            self.x_test = np.load(self.dataset_folder + 'valid_features_new2.npy')  # data testing
+            self.y_test_strings = np.expand_dims(np.load(self.dataset_folder + 'valid_labels_new2.npy'), axis=-1)
+        else:
+            self.x_test = np.load(self.dataset_folder + 'test_features.npy')  # data testing
+            self.y_test_strings = np.expand_dims(np.load(self.dataset_folder + 'test_labels.npy'), axis=-1)
+
+        if self.config.use_valid_instead_of_test == True:
+            self.x_test = np.load(self.dataset_folder + 'valid_features_new2.npy')  # data testing
+            self.y_test_strings = np.expand_dims(np.load(self.dataset_folder + 'valid_labels_new2.npy'), axis=-1)
 
         self.feature_names_all = np.load(self.dataset_folder + 'feature_names.npy',
                                          allow_pickle=True)  # names of the features (3. dim)
 
         if not self.is_third_party_dataset:
-            self.window_times_train = np.expand_dims(np.load(self.dataset_folder + 'train_window_times.npy'), axis=-1)
-            self.failure_times_train = np.expand_dims(np.load(self.dataset_folder + 'train_failure_times.npy'), axis=-1)
-            self.window_times_test = np.expand_dims(np.load(self.dataset_folder + 'test_window_times.npy'), axis=-1)
-            self.failure_times_test = np.expand_dims(np.load(self.dataset_folder + 'test_failure_times.npy'), axis=-1)
+            self.window_times_train = np.expand_dims(np.load(self.dataset_folder + 'train_window_times_new2.npy'),axis=-1)
+            self.failure_times_train = np.expand_dims(np.load(self.dataset_folder + 'train_failure_times_new2.npy'),axis=-1)
+            if self.model_selection == True:
+                # Validation data set is loaded
+                self.window_times_test = np.expand_dims(np.load(self.dataset_folder + 'valid_window_times_new2.npy'), axis=-1)
+                self.failure_times_test = np.expand_dims(np.load(self.dataset_folder + 'valid_failure_times_new2.npy'), axis=-1)
+            else:
+                self.window_times_test = np.expand_dims(np.load(self.dataset_folder + 'test_window_times.npy'), axis=-1)
+                self.failure_times_test = np.expand_dims(np.load(self.dataset_folder + 'test_failure_times.npy'),axis=-1)
+            if self.config.use_valid_instead_of_test == True:
+                # Validation data set is loaded
+                self.window_times_test = np.expand_dims(np.load(self.dataset_folder + 'valid_window_times_new2.npy'),axis=-1)
+                self.failure_times_test = np.expand_dims(np.load(self.dataset_folder + 'valid_failure_times_new2.npy'), axis=-1)
 
     def load(self, print_info=True):
         self.load_files()
@@ -243,27 +265,36 @@ class FullDataset(Dataset):
                 'Ordering of features in the adjacency matrix (index) does not match the one in the dataset.')
 
         self.graph_adjacency_matrix_attributes = adj_matrix_attr_df.values.astype(dtype=np.float)
-        #self.graph_adjacency_matrix_attributes = self.graph_adjacency_matrix_attributes + np.eye(61, dtype=int)
-        #print(self.graph_adjacency_matrix_attributes)
+
+        #Add self loop:
+        if self.config.add_selfloop_to_adj_matrix:
+            self.graph_adjacency_matrix_attributes = self.graph_adjacency_matrix_attributes + np.eye(61)
+        # Preprocess the adj matrix for using a GCN
         if self.config.use_GCN_adj_matrix_preprocessing:
-            self.graph_adjacency_matrix_attributes = utils.gcn_filter(self.graph_adjacency_matrix_attributes, symmetric=True)
+            self.graph_adjacency_matrix_attributes_preprocessed = utils.gcn_filter(self.graph_adjacency_matrix_attributes,
+                                                                      symmetric=self.config.use_GCN_adj_matrix_preprocessing_sym)
 
         # Load adjacency matrix for workstations
         adj_matrix_df = pd.read_csv(self.config.graph_adjacency_matrix_ws_file, sep=';', index_col=0)
         self.graph_adjacency_matrix_ws = adj_matrix_df.values.astype(dtype=np.float)
 
+        # Preprocess the adj matrix for using a GCN
+        if self.config.use_GCN_adj_matrix_preprocessing:
+            self.graph_adjacency_matrix_ws_preprocessed = utils.gcn_filter(self.graph_adjacency_matrix_ws,
+                                                                      symmetric=self.config.use_GCN_adj_matrix_preprocessing_sym)
+
     def load_workstation_attribute_membership(self):
         # Load a mapping from a data stream to its workstation (can be used for pooling after GNN-layer)
-        att_matrix_df = pd.read_csv(self.config.graph_attr_to_workstation_relation_file, sep=';', index_col=0)
+        ws_matrix_df = pd.read_csv(self.config.graph_attr_to_workstation_relation_file, sep=';', index_col=0)
 
-        col_values = att_matrix_df.columns.values
-        index_values = att_matrix_df.index.values
+        col_values = ws_matrix_df.columns.values
+        index_values = ws_matrix_df.index.values
 
         if not np.array_equal(col_values, self.feature_names_all):
             raise ValueError(
                 'Ordering of features in the adjacency matrix (columns) does not match the one in the dataset.')
 
-        self.graph_pooling_relation_attr2ws_file = att_matrix_df.values.astype(dtype=np.float)
+        self.graph_pooling_relation_attr2ws_file = ws_matrix_df.values.astype(dtype=np.float)
         #print("TXT15: ", np.where(self.graph_attribute_file[4, :]==1))
         #print("TXT16: ", np.where(self.graph_attribute_file[3, :]==1))
         #print("TXT17: ", np.where(self.graph_attribute_file[2, :]==1))
@@ -341,89 +372,105 @@ class FullDataset(Dataset):
     # returns a boolean matrix with values depending on whether the attribute at this index is relevant
     # for the class of the passed label
     def get_adj_matrix(self, class_label):
-        # Use masking vectors to generated adj. matrix relevant to a class label
-        masking = self.get_masking(class_label, self.config.use_additional_strict_masking_for_attribute_sim)
-        if self.config.use_additional_strict_masking_for_attribute_sim == False:
-            strict_mask = masking
-            context_mask = masking
+        adj_matrix_input = np.zeros((61, 61, 3))
+        if self.config.adj_matrix_preprocessing == 3:
+            adj_matrix_input = np.zeros((61, 61, 3))
         else:
-            strict_mask = masking[0]
-            context_mask = masking[1]
-        symmetric = None
-        #strict_mask = self.apply_masking_regularization(strict_mask, class_label, rate=0.1)
-        #context_mask = self.apply_masking_regularization(context_mask, class_label, rate=0.1)
+            # Use masking vectors to generated adj. matrix relevant to a class label
+            masking = self.get_masking(class_label, self.config.use_additional_strict_masking_for_attribute_sim)
+            if self.config.use_additional_strict_masking_for_attribute_sim == False:
+                strict_mask = masking
+                context_mask = masking
+            else:
+                strict_mask = masking[0]
+                context_mask = masking[1]
+            symmetric = None
+            #strict_mask = self.apply_masking_regularization(strict_mask, class_label, rate=0.1)
+            #context_mask = self.apply_masking_regularization(context_mask, class_label, rate=0.1)
 
-        if self.config.use_predefined_adj_matrix_as_base_for_preprocessing == True:
-            adj_mat = self.graph_adjacency_matrix_attributes
-            symmetric = True
-        else:
-            adj_mat = np.ones((61, 61))  # context_mask.shape[0]
-            symmetric = True
-
-        if self.config.adj_matrix_preprocessing == 0:
-            # Strategy 1: Masking out any irrelevant relationships based on labeled specific predefined context
-            # If based on ones(x,x): adj. matrix of a fully connected graph (which connects every feature / attribute
-            # with each other) is created based on labeled specific predefined context
-            adj_mat = np.multiply(adj_mat, context_mask)
-            adj_mat = np.multiply(adj_mat.T, context_mask).T
-            #symmetric = True
-        elif self.config.adj_matrix_preprocessing == 1:
-            # Strategy 2:
-            # Strict features are fully connected
-            #adj_mat = np.ones((61, 61)) # context_mask.shape[0]
-            adj_mat = np.multiply(adj_mat, strict_mask)
-            adj_mat = np.multiply(adj_mat.T, strict_mask).T
-            # Context features are connected to them ( use as input for learning their representation)
-            diff_features = np.subtract(context_mask, strict_mask,dtype=np.float32)
-            #for i in range(61):
-            #    adj_mat[i, :] = adj_mat[i, :] + diff_features
-            adj_mat = np.add(adj_mat,diff_features) # row-wise addition of difference vector
-            # removing wrongly added rows
-            adj_mat = np.multiply(adj_mat.T, strict_mask).T
-            #symmetric = True
-        elif self.config.adj_matrix_preprocessing == 2:
-            # Strategy 3:
-            # Strict features are fully connected
-            #adj_mat = np.ones((61, 61)) # context_mask.shape[0]
-            adj_mat = np.multiply(adj_mat, strict_mask)
-            adj_mat = np.multiply(adj_mat.T, strict_mask).T
-            # Context features are connected to them ( use as input for learning their representation)
-            diff_features = np.subtract(context_mask, strict_mask,dtype=np.float32)
-            #for i in range(61):
-            #    adj_mat[i, :] = adj_mat[i, :] + diff_features
-            adj_mat = np.add(adj_mat.T,diff_features).T # column-wise addition of difference vector
-            # removing wrongly added rows
-            adj_mat = np.multiply(adj_mat, strict_mask)
-            #symmetric = True
-
-        if class_label == "no_failure":
             if self.config.use_predefined_adj_matrix_as_base_for_preprocessing == True:
                 adj_mat = self.graph_adjacency_matrix_attributes
+                symmetric = True
             else:
-                #adj_mat = adj_mat
-                adj_mat = self.graph_adjacency_matrix_attributes
-                #adj_mat = np.ones((61, 61))  # context_mask.shape[0]
-        else:
-            #remove self connection from self generated adj matrixes
-            identity_matrix = np.identity(61)
-            identity_matrix[identity_matrix > 0] = -1
-            self_con_remove = identity_matrix + np.ones((61, 61))
-            adj_mat = adj_mat * self_con_remove
+                adj_mat = np.ones((61, 61))  # context_mask.shape[0]
+                symmetric = True
 
-        #adj_mat = self.graph_adjacency_matrix_attributes
-        import tensorflow as tf
-        #adj_mat = tf.nn.dropout(adj_mat, rate = 0.1, seed = 1).numpy()
+            if self.config.adj_matrix_preprocessing == 0:
+                # Strategy 1: Masking out any irrelevant relationships based on labeled specific predefined context
+                # If based on ones(x,x): adj. matrix of a fully connected graph (which connects every feature / attribute
+                # with each other) is created based on labeled specific predefined context
+                adj_mat = np.multiply(adj_mat, context_mask)
+                adj_mat = np.multiply(adj_mat.T, context_mask).T
+                #symmetric = True
+            elif self.config.adj_matrix_preprocessing == 1:
+                # Strategy 2:
+                # Strict features are fully connected
+                #adj_mat = np.ones((61, 61)) # context_mask.shape[0]
+                adj_mat = np.multiply(adj_mat, strict_mask)
+                adj_mat = np.multiply(adj_mat.T, strict_mask).T
+                # Context features are connected to them ( use as input for learning their representation)
+                diff_features = np.subtract(context_mask, strict_mask,dtype=np.float32)
+                #for i in range(61):
+                #    adj_mat[i, :] = adj_mat[i, :] + diff_features
+                adj_mat = np.add(adj_mat,diff_features) # row-wise addition of difference vector
+                # removing wrongly added rows
+                adj_mat = np.multiply(adj_mat.T, strict_mask).T
+                #symmetric = True
+            elif self.config.adj_matrix_preprocessing == 2:
+                # Strategy 3:
+                # Strict features are fully connected
+                #adj_mat = np.ones((61, 61)) # context_mask.shape[0]
+                adj_mat = np.multiply(adj_mat, strict_mask)
+                adj_mat = np.multiply(adj_mat.T, strict_mask).T
+                # Context features are connected to them ( use as input for learning their representation)
+                diff_features = np.subtract(context_mask, strict_mask,dtype=np.float32)
+                #for i in range(61):
+                #    adj_mat[i, :] = adj_mat[i, :] + diff_features
+                adj_mat = np.add(adj_mat.T,diff_features).T # column-wise addition of difference vector
+                # removing wrongly added rows
+                adj_mat = np.multiply(adj_mat, strict_mask)
+                #symmetric = True
 
-        # Pre-process adj. matrix for GCN Layer
-        #print("Before adj_mat ", adj_mat.shape, " of ", class_label, ": ", adj_mat)
-        #adj_mat = self.graph_adjacency_matrix_attributes
-        if self.config.use_GCN_adj_matrix_preprocessing:
-            adj_mat = utils.gcn_filter(adj_mat, symmetric=symmetric)
-        #GAT Layer - braucht normal kein Preprocessing
-        #adj_mat = utils.normalized_adjacency(adj_mat, symmetric=symmetric)
-        #print("After adj_mat ",adj_mat.shape," of ", class_label, ": ", adj_mat)
+            if class_label == "no_failure":
+                if self.config.use_predefined_adj_matrix_as_base_for_preprocessing == True:
+                    adj_mat = self.graph_adjacency_matrix_attributes
+                else:
+                    #adj_mat = adj_mat
+                    adj_mat = self.graph_adjacency_matrix_attributes
+                    #adj_mat = np.ones((61, 61))  # context_mask.shape[0]
+            else:
+                #remove self connection from self generated adj matrixes
+                identity_matrix = np.identity(61)
+                identity_matrix[identity_matrix > 0] = -1
+                self_con_remove = identity_matrix + np.ones((61, 61))
+                adj_mat = adj_mat * self_con_remove
 
-        return adj_mat
+            #adj_mat = self.graph_adjacency_matrix_attributes
+            import tensorflow as tf
+            #adj_mat = tf.nn.dropout(adj_mat, rate = 0.1, seed = 1).numpy()
+
+            # Pre-process adj. matrix for GCN Layer
+            #print("Before adj_mat ", adj_mat.shape, " of ", class_label, ": ", adj_mat)
+            #adj_mat = self.graph_adjacency_matrix_attributes
+            if self.config.use_GCN_adj_matrix_preprocessing:
+                adj_mat = utils.gcn_filter(adj_mat, symmetric=symmetric)
+            #GAT Layer - braucht normal kein Preprocessing
+            #adj_mat = utils.normalized_adjacency(adj_mat, symmetric=symmetric)
+            #print("After adj_mat ",adj_mat.shape," of ", class_label, ": ", adj_mat)
+            adj_mat = self.graph_adjacency_matrix_attributes_preprocessed # + np.identity(61)
+            adj_matrix_input[:,:,0] = adj_mat
+            #Context:
+            adj_mat_context = np.multiply(self.graph_adjacency_matrix_attributes, context_mask)
+            adj_mat_context = np.multiply(adj_mat_context.T, context_mask).T
+            adj_mat_context = utils.gcn_filter(adj_mat_context, symmetric=self.config.use_GCN_adj_matrix_preprocessing_sym)
+            adj_matrix_input[:, :, 1] = adj_mat_context
+            #Strict
+            adj_mat_strict = np.multiply(self.graph_adjacency_matrix_attributes, strict_mask)
+            adj_mat_strict = np.multiply(adj_mat_strict.T, strict_mask).T
+            adj_mat_strict = utils.gcn_filter(adj_mat_strict, symmetric=self.config.use_GCN_adj_matrix_preprocessing_sym)
+            adj_matrix_input[:, :, 2] = adj_mat_strict
+            #print("adj_matrix_input:", adj_matrix_input.shape)
+        return adj_matrix_input
 
     def apply_masking_regularization(self, maskingvector, label, rate=0.1):
         if maskingvector is not None:

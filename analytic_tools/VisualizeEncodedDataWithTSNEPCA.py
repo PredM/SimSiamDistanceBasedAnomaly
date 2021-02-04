@@ -33,7 +33,7 @@ if __name__ == '__main__':
     # TSNE Embeddings are learned on a sim matrix, not on embeddings itself
     use_sim_matrix = False  # default false
 
-    encode_test_data = False
+    encode_test_data = True
 
     save_encoded_data = True
 
@@ -45,6 +45,7 @@ if __name__ == '__main__':
         dataset = FullDataset(config.training_data_folder, config, training=False)
     # config.case_base_folder
     dataset.load()
+    '''
     print("130:", dataset.y_train_strings[130])
     print("200:", dataset.y_train_strings[200])
     print("700:", dataset.y_train_strings[700])
@@ -53,6 +54,7 @@ if __name__ == '__main__':
     print("550:", dataset.y_train_strings[550])
     print("790:", dataset.y_train_strings[790])
     print("730:", dataset.y_train_strings[730])
+    '''
 
     architecture = initialise_snn(config, dataset, False)
 
@@ -80,9 +82,12 @@ if __name__ == '__main__':
 
     if save_encoded_data:
         print("Storing encoded data as x_train_encoded.npy and x_test_encoded.npy")
-        np.save('x_train_encoded.npy', x_train_encoded)
+        if config.case_base_for_inference:
+            np.save('x_train_encoded_case_base.npy', x_train_encoded)
+        else:
+            np.save('x_train_encoded.npy', x_train_encoded)
         np.save('x_test_encoded.npy', x_test_encoded)
-        print("Encoded data was saved!")
+        print("Encoded data was saved! Train shape: ", x_train_encoded.shape, " , test shape: ", x_test_encoded.shape)
 
     if encode_test_data:
         print("Loaded encoded data: ", x_train_encoded.shape, " ", x_test_encoded.shape)

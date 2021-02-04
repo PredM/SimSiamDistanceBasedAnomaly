@@ -51,6 +51,15 @@ class Inference:
         self.evaluator.calculate_results()
         self.evaluator.print_results(elapsed_time)
 
+        if self.dataset.is_third_party_dataset == False:
+            f1_health = self.evaluator.report_dict['no_failure']['f1-score']
+            f1_weighted_avg = self.evaluator.report_dict['weighted avg']['f1-score']
+            model_score = (f1_health + f1_weighted_avg)/2
+        else:
+            f1_weighted_avg = self.evaluator.report_dict['weighted avg']['f1-score']
+            model_score = f1_weighted_avg
+        return model_score
+
 
 def main():
     config = Configuration()
