@@ -23,6 +23,12 @@ def main():
     rp: RocketRepresentation = RocketRepresentation(config, dataset)
     rp.create_representation(for_case_base=True)
 
+    dataset = FullDataset(config.training_data_folder, config, training=False, model_selection=True)
+    dataset.load()
+
+    rp: RocketRepresentation = RocketRepresentation(config, dataset)
+    rp.create_representation(for_valid=True)
+
 
 if __name__ == '__main__':
     try:

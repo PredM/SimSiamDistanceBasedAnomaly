@@ -177,7 +177,7 @@ class RocketRepresentation(Representation):
         return pd.DataFrame(data=list_of_examples)
 
     # dataset_folder as parameter in oder to distinguish between normal training data and case base
-    def create_representation(self, for_case_base=False):
+    def create_representation(self, for_case_base=False, for_valid=False):
         rocket = Rocket(num_kernels=self.config.rocket_kernels,
                         normalise=False, random_state=self.config.rocket_random_seed)
 
@@ -213,10 +213,20 @@ class RocketRepresentation(Representation):
         self.x_test_features = rocket.transform(x_test_df).values
         print('\nFinished fitting the test dataset. Shape:', self.x_test_features.shape)
 
-        np.save(self.dataset.dataset_folder + self.config.rocket_features_train_file, self.x_train_features)
-        print('\nSaved the train dataset. Shape:', self.x_train_features.shape)
-        np.save(self.dataset.dataset_folder + self.config.rocket_features_test_file, self.x_test_features)
-        print('\nSaved the train dataset. Shape:', self.x_test_features.shape)
+        if for_valid == True:
+            #print("Saved as: ", self.dataset.dataset_folder + self.config.rocket_features_train_file)
+            np.save(self.dataset.dataset_folder + self.config.rocket_features_train_file, self.x_train_features)
+            #print('\nSaved the train dataset. Shape:', self.x_train_features.shape)
+            print("Saved as: ", self.dataset.dataset_folder + self.config.rocket_features_valid_file)
+            np.save(self.dataset.dataset_folder + self.config.rocket_features_valid_file, self.x_test_features)
+            print('\nSaved the train dataset. Shape:', self.x_test_features.shape)
+        else:
+            print("Saved as: ",self.dataset.dataset_folder + self.config.rocket_features_train_file)
+            np.save(self.dataset.dataset_folder + self.config.rocket_features_train_file, self.x_train_features)
+            print('\nSaved the train dataset. Shape:', self.x_train_features.shape)
+            print("Saved as: ", self.dataset.dataset_folder + self.config.rocket_features_test_file)
+            np.save(self.dataset.dataset_folder + self.config.rocket_features_test_file, self.x_test_features)
+            print('\nSaved the train dataset. Shape:', self.x_test_features.shape)
 
     def load(self):
 
