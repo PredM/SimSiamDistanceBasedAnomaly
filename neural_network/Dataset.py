@@ -6,7 +6,7 @@ import pandas as pd
 from sklearn import preprocessing
 from spektral import utils
 
-from configuration.Enums import AdjacencyMatrixPreprossingCNN2DWithAddInput, NodeFeaturesForGraphVariants
+from configuration.Enums import AdjacencyMatrixPreprossingCNN2DWithAddInput, NodeFeaturesForGraphVariants, FtDataSetVersion
 
 from configuration.Configuration import Configuration
 
@@ -108,40 +108,59 @@ class FullDataset(Dataset):
         self.is_third_party_dataset = True if self.config.data_folder_prefix != '../../../../data/pklein/PredMSiamNN/data/' else False
 
     def load_files(self):
+        # In difference to 2020 version, 2021 considers a validation set
+        if self.config.ft_data_set_version == FtDataSetVersion.FT_DataSet_2021:
+            self.x_train = np.load(self.dataset_folder + 'train_features_new2.npy')  # data training
+            self.y_train_strings = np.expand_dims(np.load(self.dataset_folder + 'train_labels_new2.npy'), axis=-1)
 
-        self.x_train = np.load(self.dataset_folder + 'train_features_new2.npy')  # data training
-        self.y_train_strings = np.expand_dims(np.load(self.dataset_folder + 'train_labels_new2.npy'), axis=-1)
+            if self.model_selection == True:
+                # Validation data set is loaded
+                self.x_test = np.load(self.dataset_folder + 'valid_features_new2.npy')  # data testing
+                self.y_test_strings = np.expand_dims(np.load(self.dataset_folder + 'valid_labels_new2.npy'), axis=-1)
+            else:
+                self.x_test = np.load(self.dataset_folder + 'test_features.npy')  # data testing
+                self.y_test_strings = np.expand_dims(np.load(self.dataset_folder + 'test_labels.npy'), axis=-1)
 
+            if self.config.use_valid_instead_of_test == True:
+                self.x_test = np.load(self.dataset_folder + 'valid_features_new2.npy')  # data testing
+                self.y_test_strings = np.expand_dims(np.load(self.dataset_folder + 'valid_labels_new2.npy'), axis=-1)
 
-        if self.model_selection == True:
-            # Validation data set is loaded
-            self.x_test = np.load(self.dataset_folder + 'valid_features_new2.npy')  # data testing
-            self.y_test_strings = np.expand_dims(np.load(self.dataset_folder + 'valid_labels_new2.npy'), axis=-1)
-        else:
+            self.feature_names_all = np.load(self.dataset_folder + 'feature_names.npy',
+                                             allow_pickle=True)  # names of the features (3. dim)
+
+            if not self.is_third_party_dataset:
+                self.window_times_train = np.expand_dims(np.load(self.dataset_folder + 'train_window_times_new2.npy'),axis=-1)
+                self.failure_times_train = np.expand_dims(np.load(self.dataset_folder + 'train_failure_times_new2.npy'),axis=-1)
+                if self.model_selection == True:
+                    # Validation data set is loaded
+                    self.window_times_test = np.expand_dims(np.load(self.dataset_folder + 'valid_window_times_new2.npy'), axis=-1)
+                    self.failure_times_test = np.expand_dims(np.load(self.dataset_folder + 'valid_failure_times_new2.npy'), axis=-1)
+                else:
+                    self.window_times_test = np.expand_dims(np.load(self.dataset_folder + 'test_window_times.npy'), axis=-1)
+                    self.failure_times_test = np.expand_dims(np.load(self.dataset_folder + 'test_failure_times.npy'),axis=-1)
+                if self.config.use_valid_instead_of_test == True:
+                    # Validation data set is loaded
+                    self.window_times_test = np.expand_dims(np.load(self.dataset_folder + 'valid_window_times_new2.npy'),axis=-1)
+                    self.failure_times_test = np.expand_dims(np.load(self.dataset_folder + 'valid_failure_times_new2.npy'), axis=-1)
+
+        elif self.config.ft_data_set_version == FtDataSetVersion.FT_DataSet_2020:
+            self.x_train = np.load(self.dataset_folder + 'train_features.npy')  # data training
+            self.y_train_strings = np.expand_dims(np.load(self.dataset_folder + 'train_labels.npy'), axis=-1)
+
             self.x_test = np.load(self.dataset_folder + 'test_features.npy')  # data testing
             self.y_test_strings = np.expand_dims(np.load(self.dataset_folder + 'test_labels.npy'), axis=-1)
 
-        if self.config.use_valid_instead_of_test == True:
-            self.x_test = np.load(self.dataset_folder + 'valid_features_new2.npy')  # data testing
-            self.y_test_strings = np.expand_dims(np.load(self.dataset_folder + 'valid_labels_new2.npy'), axis=-1)
+            self.feature_names_all = np.load(self.dataset_folder + 'feature_names.npy',
+                                             allow_pickle=True)  # names of the features (3. dim)
 
-        self.feature_names_all = np.load(self.dataset_folder + 'feature_names.npy',
-                                         allow_pickle=True)  # names of the features (3. dim)
-
-        if not self.is_third_party_dataset:
-            self.window_times_train = np.expand_dims(np.load(self.dataset_folder + 'train_window_times_new2.npy'),axis=-1)
-            self.failure_times_train = np.expand_dims(np.load(self.dataset_folder + 'train_failure_times_new2.npy'),axis=-1)
-            if self.model_selection == True:
-                # Validation data set is loaded
-                self.window_times_test = np.expand_dims(np.load(self.dataset_folder + 'valid_window_times_new2.npy'), axis=-1)
-                self.failure_times_test = np.expand_dims(np.load(self.dataset_folder + 'valid_failure_times_new2.npy'), axis=-1)
-            else:
+            if not self.is_third_party_dataset:
+                self.window_times_train = np.expand_dims(np.load(self.dataset_folder + 'train_window_times.npy'),
+                                                         axis=-1)
+                self.failure_times_train = np.expand_dims(np.load(self.dataset_folder + 'train_failure_times.npy'),
+                                                          axis=-1)
                 self.window_times_test = np.expand_dims(np.load(self.dataset_folder + 'test_window_times.npy'), axis=-1)
-                self.failure_times_test = np.expand_dims(np.load(self.dataset_folder + 'test_failure_times.npy'),axis=-1)
-            if self.config.use_valid_instead_of_test == True:
-                # Validation data set is loaded
-                self.window_times_test = np.expand_dims(np.load(self.dataset_folder + 'valid_window_times_new2.npy'),axis=-1)
-                self.failure_times_test = np.expand_dims(np.load(self.dataset_folder + 'valid_failure_times_new2.npy'), axis=-1)
+                self.failure_times_test = np.expand_dims(np.load(self.dataset_folder + 'test_failure_times.npy'),
+                                                         axis=-1)
 
     def load(self, print_info=True):
         self.load_files()
