@@ -386,6 +386,9 @@ class FullDataset(Dataset):
             masking = np.concatenate((masking[0], masking[1]))
         else:
             masking = self.class_label_to_masking_vector.get(class_label)
+
+        if self.config.use_masking_regularization:
+            masking = self.apply_masking_regularization(masking)
         return masking
 
     # returns a boolean matrix with values depending on whether the attribute at this index is relevant
@@ -403,6 +406,7 @@ class FullDataset(Dataset):
             else:
                 strict_mask = masking[0]
                 context_mask = masking[1]
+            ''' #del4Pub
             symmetric = None
             #strict_mask = self.apply_masking_regularization(strict_mask, class_label, rate=0.1)
             #context_mask = self.apply_masking_regularization(context_mask, class_label, rate=0.1)
@@ -476,14 +480,15 @@ class FullDataset(Dataset):
             #GAT Layer - braucht normal kein Preprocessing
             #adj_mat = utils.normalized_adjacency(adj_mat, symmetric=symmetric)
             #print("After adj_mat ",adj_mat.shape," of ", class_label, ": ", adj_mat)
+            '''
             adj_mat = self.graph_adjacency_matrix_attributes_preprocessed # + np.identity(61)
             adj_matrix_input[:,:,0] = adj_mat
-            #Context:
+            # Mask Adj Mat according context attributes:
             adj_mat_context = np.multiply(self.graph_adjacency_matrix_attributes, context_mask)
             adj_mat_context = np.multiply(adj_mat_context.T, context_mask).T
             adj_mat_context = utils.gcn_filter(adj_mat_context, symmetric=self.config.use_GCN_adj_matrix_preprocessing_sym)
             adj_matrix_input[:, :, 1] = adj_mat_context
-            #Strict
+            # Mask Adj Mat according strict attributes:
             adj_mat_strict = np.multiply(self.graph_adjacency_matrix_attributes, strict_mask)
             adj_mat_strict = np.multiply(adj_mat_strict.T, strict_mask).T
             adj_mat_strict = utils.gcn_filter(adj_mat_strict, symmetric=self.config.use_GCN_adj_matrix_preprocessing_sym)
@@ -492,6 +497,7 @@ class FullDataset(Dataset):
         return adj_matrix_input
 
     def apply_masking_regularization(self, maskingvector, label, rate=0.1):
+        #WIP / del4Pub
         if maskingvector is not None:
             if label == "no_failure":
                 # Add nodes first and then remove nodes
@@ -520,6 +526,7 @@ class FullDataset(Dataset):
         asaf_with_batch_dim = np.repeat(asaf_with_batch_dim, batchsize, axis=2)
         asaf_with_batch_dim = np.transpose(asaf_with_batch_dim, axes=[2, 0, 1])
         return asaf_with_batch_dim
+
     def get_masked_example_group(self, test_example, group_id):
 
         if group_id not in self.group_id_to_masking_vector:
