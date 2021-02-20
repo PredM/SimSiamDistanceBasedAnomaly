@@ -335,13 +335,17 @@ class CNN2D(NN):
 
         if len(self.hyper.cnn_layers) < 1:
             print('Attention: No 1d conv layer on top of 2d conv is used!')
-        print("self.input_shape: ", self.input_shape)
-        input = tf.keras.Input(shape=(self.input_shape[0][0], self.input_shape[0][1], 1), name="Input0")
-        # Ohne Graph einkommentieren: input = tf.keras.Input(shape=(self.input_shape[0], self.input_shape[1], 1), name="Input0")
-        adj_matrix_input_ds = tf.keras.layers.Input(shape=self.input_shape[1], name="AdjMatDS") # auskommentieren für 2d_variante ohne Graph
-        adj_matrix_input_ws = tf.keras.layers.Input(shape=self.input_shape[2], name="AdjMatWS") # auskommentieren für 2d_variante ohne Graph
-        static_attribute_features_input = tf.keras.layers.Input(shape=self.input_shape[3],
-                                                                name="StaticAttributeFeatures") # auskommentieren für 2d_variante ohne Graph
+
+        # Define model's input dependent on the concrete encoder variant used
+        if self.hyper.encoder_variant in ['cnn2d']:
+            input = tf.keras.Input(shape=(self.input_shape[0], self.input_shape[1], 1), name="Input0")
+        elif self.hyper.encoder_variant in ['graphcnn2d']:
+            input = tf.keras.Input(shape=(self.input_shape[0][0], self.input_shape[0][1], 1), name="Input0")
+            adj_matrix_input_ds = tf.keras.layers.Input(shape=self.input_shape[1], name="AdjMatDS")
+            adj_matrix_input_ws = tf.keras.layers.Input(shape=self.input_shape[2], name="AdjMatWS")
+            static_attribute_features_input = tf.keras.layers.Input(shape=self.input_shape[3], name="StaticAttributeFeatures")
+        else:
+            print("Encoder variant not implemented: ", self.hyper.encoder_variant)
 
         layer_properties_2d = list(
             zip(self.hyper.cnn2d_layers, self.hyper.cnn2d_kernel_length, self.hyper.cnn2d_strides))
@@ -375,12 +379,10 @@ class CNN2D(NN):
                 else:
                     sensor_data_input2 = input
                     # Add First 2DConv Layer
-                conv_layer1 = tf.keras.layers.Conv2D(filters=num_filter, padding='VALID',
-                                                     kernel_size=(filter_size), strides=stride, input_shape=input.shape, name="2DConv-"+str(i))
+                conv_layer1 = tf.keras.layers.Conv2D(filters=num_filter, padding='VALID', kernel_size=(filter_size), strides=stride, input_shape=input.shape, name="2DConv-"+str(i))
                 x = conv_layer1(sensor_data_input2)
             else:
-                conv_layer = tf.keras.layers.Conv2D(filters=num_filter, padding='VALID',
-                                                    kernel_size=(filter_size), strides=stride, name="2DConv"+str(i))
+                conv_layer = tf.keras.layers.Conv2D(filters=num_filter, padding='VALID', kernel_size=(filter_size), strides=stride, name="2DConv"+str(i))
                 x = conv_layer(x)
 
             x = tf.keras.layers.BatchNormalization()(x)
@@ -388,34 +390,15 @@ class CNN2D(NN):
 
         # x = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(x)
 
-        # Skip Connection / Shortcut
-        ''' Für Testzwecke
-        #https: // engmrk.com / residual - networks - resnets /
-        x = tf.keras.layers.Conv2D(1, (1, 1), strides=(1, 1),
-                                          kernel_initializer='he_normal',
-                                          name="testddddd" + '1')(x)
-        x = tf.keras.layers.BatchNormalization()(x)
-
+        # Skip Connection / Shortcut (for testing purposes)
+        ''' 
         shortcut = tf.keras.layers.Conv2D(1, (23, 1), strides=(8,1),
                                  kernel_initializer='he_normal',
                                  name="Shortcut" + '1')(input)
-        shortcut2 = tf.keras.layers.Conv2D(1, (23, 1), strides=(8,1),
-                                 kernel_initializer='he_normal',
-                                 name="Shortcut" + '2')(input)
-        shortcut3 = tf.keras.layers.Conv2D(1, (23, 1), strides=(8,1),
-                                 kernel_initializer='he_normal',
-                                 name="Shortcut" + '3')(input)
-        shortcut = tf.keras.layers.Concatenate()([shortcut,shortcut2,shortcut3],)
-        shortcut = tf.keras.layers.BatchNormalization( name="BN" + '1')(shortcut)
-        #shortcut = tf.keras.layers.Lambda(lambda x: x[:, :-2], name='slice')(shortcut)
-        #reshape = tf.keras.layers.Reshape((123, 61))
-        #shortcut = reshape(shortcut)
-        #shortcut = tf.squeeze(shortcut)
+        shortcut = tf.keras.layers.BatchNormalization( name="BN-SC" + '1')(shortcut)
 
         x = tf.keras.layers.Add()([x, shortcut])
-        #x = tf.keras.layers.add()([x, shortcut])
-        '''
-
+        ''' # Reminder remove "x = reshape(x)" below
 
         # reshape necessary to provide a 3d instead of 4 dim for the FFNN or 1D Conv operations on top
         reshape = tf.keras.layers.Reshape((x.shape[1]*self.hyper.cnn2d_layers[-1], x.shape[2]))
@@ -424,7 +407,7 @@ class CNN2D(NN):
         x = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(x)
 
         if self.hyper.use_owl2vec_node_features_as_input_AttributeWiseAggregation == "True":
-            print("Owl2vec are concataneted with the output of the 2d conv block (and should be used as additional input for the attribute-wise aggregation")
+            print("Owl2vec are concataneted with the output of the 2d conv block (and can be used as additional input for the attribute-wise aggregation")
             x = tf.concat([x, static_attribute_features_input], axis=1)
 
         # Attribute-wise feature aggregation via (time-distributed) fully-connected layers
@@ -457,10 +440,13 @@ class CNN2D(NN):
 
         output = x
 
-        # Redefine input of madel as normal input + additional adjacency matrix input
-        #return input, output                                                                               # einkommentieren für 2d_variante ohne Graph
-        return  [input, adj_matrix_input_ds, adj_matrix_input_ws, static_attribute_features_input], output  # auskommentieren für 2d_variante ohne Graph
-
+        # Define model's input and output dependent on the concrete encoder variant used
+        if self.hyper.encoder_variant in ['cnn2d']:
+            return input, output
+        elif self.hyper.encoder_variant in ['graphcnn2d']:
+            return [input, adj_matrix_input_ds, adj_matrix_input_ws, static_attribute_features_input], output
+        else:
+            print("Encoder variant not implemented: ", self.hyper.encoder_variant)
 
 class GraphCNN2D(CNN2D):
 
@@ -481,13 +467,9 @@ class GraphCNN2D(CNN2D):
         else:
             # Define additional input over which the adjacency matrix is provided
             # As shown here: https://graphneural.network/getting-started/, "," is necessary
-            #input = [input, adj_matrix_input_ds, adj_matrix_input_ws, static_attribute_features_input]
             adj_matrix_input_ds = input[1]
             adj_matrix_input_ws = input[2]
             static_attribute_features_input = input[3]
-            #adj_matrix_input_ds = tf.keras.layers.Input(shape=self.input_shape[1], name="AdjMatDS")
-            #adj_matrix_input_ws = tf.keras.layers.Input(shape=self.input_shape[2], name="AdjMatWS")
-            #static_attribute_features_input = tf.keras.layers.Input(shape=self.input_shape[3], name="StaticAttributeFeatures")
 
             # Concat time series features with additional static node features
             if self.hyper.use_owl2vec_node_features_in_graph_layers == "True":
@@ -525,6 +507,7 @@ class GraphCNN2D(CNN2D):
 
             else: # Readout Version
                 #''' Readout layer
+                # WORK IN PROGRESS
                 output_L = LinearTransformationLayer(size=(272,256))(output)
                 output = spektral.layers.GCNConv(channels=self.hyper.graph_conv_channels[0], activation=None)([output, adj_matrix_input_ds])
                 output = tf.keras.layers.Add()([output, output_L])
@@ -571,7 +554,6 @@ class GraphCNN2D(CNN2D):
                 output = tf.keras.layers.Dense(units=256, activation="relu")(output)
                 #output = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate / 2)(output)
                 #output = tf.keras.layers.Dense(units=64, activation="relu")(output)
-
                 #'''
 
             if self.hyper.useFactoryStructureFusion == "True":
@@ -721,8 +703,6 @@ class CNN2dWithAddInput(NN):
         layers = self.hyper.cnn2d_layers
 
         print("learnFeatureWeights: False Feature weights are similar to masking vector")
-        # case_dependent_vector_input_o = tf.keras.layers.GaussianNoise(0.3)(case_dependent_vector_input_strict)
-        # case_dependent_vector_input_o = tf.multiply(case_dependent_vector_input_o, case_dependent_vector_input_strict)
         case_dependent_vector_input_o = case_dependent_vector_input
 
         self.hyper.abcnn1 = None
@@ -755,7 +735,7 @@ class CNN2dWithAddInput(NN):
 
                 sensor_data_input2 = sensor_data_input
 
-                '''
+                ''' #Del4Pub
                 # Added 1D-Conv Layer to provide information across time steps in the first layer
                 #conv_layer1dres = tf.keras.layers.Conv1D(filters=self.input_shape[1], padding='VALID', kernel_size=1,
                 #                                      strides=1)
@@ -771,20 +751,29 @@ class CNN2dWithAddInput(NN):
                 '''
                 x = conv2d_layer1(sensor_data_input2)
             else:
-                # https://github.com/hfawaz/dl-4-tsc/blob/master/classifiers/resnet.py
-                '''
-                prev_num_filter = layer_properties[i-1][0]
-                conv_x = tf.keras.layers.Conv2D(filters=prev_num_filter, kernel_size=8, padding='same')(x)
-                conv_x = tf.keras.layers.BatchNormalization()(conv_x)
-                conv_x = tf.keras.layers.Activation('relu')(conv_x)
 
-                conv_y = tf.keras.layers.Conv2D(filters=prev_num_filter, kernel_size=5, padding='same')(conv_x)
-                conv_y = tf.keras.layers.BatchNormalization()(conv_y)
+                ''' ResNet Component / Layer (for testing purposes)
+                # Because of graphic card memory restriction (OOM) only applied after the second layer
+                if i >= 2:
+                    # https://github.com/hfawaz/dl-4-tsc/blob/master/classifiers/resnet.py
+                    prev_num_filter = layer_properties[i-1][0]
+                    conv_x = tf.keras.layers.Conv2D(filters=prev_num_filter, kernel_size=[8,1], padding='same')(x)
+                    conv_x = tf.keras.layers.BatchNormalization()(conv_x)
+                    conv_x = tf.keras.layers.Activation('relu')(conv_x)
 
+                    conv_y = tf.keras.layers.Conv2D(filters=prev_num_filter, kernel_size=[5,1], padding='same')(conv_x)
+                    conv_y = tf.keras.layers.BatchNormalization()(conv_y)
+                    conv_y = tf.keras.layers.Activation('relu')(conv_y)
 
-                output_block_1 = tf.keras.layers.add([conv_y, x])
-                x = tf.keras.layers.Activation('relu')(output_block_1)
-                '''
+                    conv_z = tf.keras.layers.Conv2D(filters=prev_num_filter, kernel_size=[3, 1], padding='same')(conv_y)
+
+                    # expand channels for the sum
+                    shortcut_y = tf.keras.layers.Conv2D(filters=prev_num_filter, kernel_size=[1, 1], padding='same')(x)
+                    shortcut_y = tf.keras.layers.BatchNormalization()(shortcut_y)
+
+                    output_block_1 = tf.keras.layers.add([shortcut_y, conv_z])
+                    x = tf.keras.layers.Activation('relu')(output_block_1)
+               '''
                 conv2d_layer = tf.keras.layers.Conv2D(filters=num_filter, padding='VALID',
                                                         kernel_size=(filter_size),
                                                         strides=stride,
@@ -792,8 +781,8 @@ class CNN2dWithAddInput(NN):
                     #activity_regularizer = tf.keras.regularizers.l2(self.hyper.l2_rate_act)
                                                       )
 
-                '''
-                conv2d_layer = CasualDilated2DConvLayer(filters=num_filter, padding='VALID',
+                ''' #del4Pub
+                conv2d_layer = Dilated2DConvLayer(filters=num_filter, padding='VALID',
                                                       kernel_size=(filter_size),
                                                       strides=stride, dilation_rate=dilation_rate,)
                 conv2d_layer = FilterRestricted1DConvLayer(filters=61, padding='VALID',
@@ -812,6 +801,7 @@ class CNN2dWithAddInput(NN):
         x = reshape(x)
 
         if self.hyper.use_FiLM_after_2Conv == "True":
+            # Del4Pub
             print("FiLM Modulation with context Mask input after 2d conv layers is used")
             beta_0 = tf.keras.layers.Dense(units=64, activation=tf.keras.activations.relu,
                                            name = "Beta" + str(64) + "U")(case_dependent_vector_input)
@@ -846,7 +836,7 @@ class CNN2dWithAddInput(NN):
                 name="FC_One-hot-Encoding" + str(16) + "U")(static_attribute_features_input_)
             static_attribute_features_input_ = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(static_attribute_features_input_)
             static_attribute_features_input_ = tf.keras.layers.Permute((2, 1))(static_attribute_features_input_)
-        ''' ZU TESTZWECKEN:
+        ''' ZU TESTZWECKEN: #del4Pub
         static_attribute_features_input_Add = tf.concat([tf.expand_dims(case_dependent_vector_input,-1), static_attribute_features_input], axis=2)
         static_attribute_features_input_Add = tf.keras.layers.TimeDistributed(
             tf.keras.layers.Dense(units=1, activation=tf.keras.activations.relu),
@@ -856,7 +846,7 @@ class CNN2dWithAddInput(NN):
         '''
         if self.hyper.use_owl2vec_node_features == "True":
             print("Owl2vec node features used!")
-            '''
+            ''' #del4Pub
             static_attribute_features_input_ = tf.keras.layers.Permute((2, 1))(static_attribute_features_input)
             static_attribute_features_input_ = tf.keras.layers.TimeDistributed(
                 tf.keras.layers.Dense(units=16, activation=tf.keras.activations.relu),
@@ -889,6 +879,8 @@ class CNN2dWithAddInput(NN):
                 #x = tf.keras.layers.ReLU()(x)
                 #x = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(x)
             x = tf.keras.layers.Permute((2, 1))(x)  # transpose
+
+        # Applying Graph Convolutions to encoded time series
         print("self.hyper.use_graph_conv_after2dCNNFC_context_fusion: ",self.hyper.use_graph_conv_after2dCNNFC_context_fusion)
         if self.hyper.use_graph_conv_after2dCNNFC_context_fusion == "True":
             print('Adding GraphConv layers for learning state of other relevant attributes ')
@@ -951,6 +943,7 @@ class CNN2dWithAddInput(NN):
                                                          #kernel_regularizer=tf.keras.regularizers.l2(self.hyper.l2_rate_kernel),
                                                          #activity_regularizer=tf.keras.regularizers.l2(self.hyper.l2_rate_act)
                                                          )([output, adj_matrix_input_1])
+                        #output = spektral.layers.DiffusionConv(channels=self.hyper.graph_conv_channels_context[0], K=5, activation=None)([output, adj_matrix_input_1])
                         output = tf.keras.layers.BatchNormalization()(output)
                         if self.hyper.use_linear_transformation_in_context == "True":
                             output = tf.keras.layers.Add()([output, output_L])
@@ -959,24 +952,21 @@ class CNN2dWithAddInput(NN):
 
             output = tf.transpose(output, perm=[0, 2, 1])
 
-
-        #x = tf.concat([output, x], axis=1)
-        #x = tf.keras.layers.Add()([output, x])
+        # Providing "univariate" Output o1
         if self.hyper.use_univariate_output_for_weighted_sim == "True":
             print('Providing output o1 for a weighted distance measure based on number of relevant attributes')
             # Output 1, used for weighted distance measure
             if self.hyper.use_graph_conv_after2dCNNFC_context_fusion == "True":
-                #Einkommentieren, wenn univariate Zeitreihen mit ausgegeben werden sollen: output = tf.concat([output, x], axis=1)
+                # Einkommentieren, wenn univariate Zeitreihen mit ausgegeben werden sollen: output = tf.concat([output, x], axis=1)
                 o1 = tf.keras.layers.Multiply()([output, case_dependent_vector_input_strict])
-                #x = output
             else:
                 o1 = tf.keras.layers.Multiply()([x, case_dependent_vector_input_strict])
 
-        # Using an additional context vector that is calculated on the previously defined output
+        # Generating an additional "context" vector (o2) by using FC or GCN layers.
         if self.hyper.useAddContextForSim == "True":
             print('Additional feature restricted content vector is used')
 
-            # Learn a weight value how much the context should be considered in sim against single feature weighted
+            # Learn a weight value how much the context should be considered in sim against single feature weighted (Used in IoTStream Version)
             if self.hyper.useAddContextForSim_LearnOrFixWeightVale == "True":
                 print('Learn weight value how much context is considered for each failure mode')
                 layers_fc = self.hyper.cnn2d_learnWeightForContextUsedInSim.copy()
@@ -1003,22 +993,7 @@ class CNN2dWithAddInput(NN):
             # Context Module: connect only features from relevant attributes
 
             if self.hyper.use_graph_conv_for_context_fusion == "True":
-                # FiLM test:
-                '''
-                beta_0 = tf.keras.layers.Dense(units=64, activation=tf.keras.activations.relu,
-                                               name="Beta-Context" + str(64) + "U")(case_dependent_vector_input)
-                beta_1 = tf.keras.layers.Dense(units=61, activation=tf.keras.activations.relu,
-                                               name="BetaContext" + str(61) + "U")(beta_0)
-                gamma_0 = tf.keras.layers.Dense(units=64, activation=tf.keras.activations.relu,
-                                                name="GammaContext" + str(64) + "U")(case_dependent_vector_input)
-                gamma_1 = tf.keras.layers.Dense(units=61, activation=tf.keras.activations.relu,
-                                                name="GammaContext" + str(61) + "U")(gamma_0)
-                beta_1 = tf.keras.layers.Multiply()([beta_1, case_dependent_vector_input])
-                gamma_1 = tf.keras.layers.Multiply()([gamma_1, case_dependent_vector_input])
-                tns = tf.concat([gamma_1, beta_1], axis=1)
-                x = FiLM()([x, tns])
-                '''
-
+                # del4Pub
                 '''READOUT_VARIANT_START
                 output = tf.transpose(x, perm=[0, 2, 1])
                 ### READ OUT VARIANT
@@ -1169,8 +1144,9 @@ class CNN2dWithAddInput(NN):
                 o2 = tf.transpose(output, perm=[0, 2, 1])
                 '''
 
-
+                #TODO: Loop einbauen basierend auf Hyperparameter
                 #cnn2d_withAddInput_Graph_o1_GlobAtt_o2.json:
+                #'''
                 if self.hyper.use_owl2vec_node_features_in_graph_layers == "True":
                     output = tf.concat([output, static_attribute_features_input], axis=1)
                 output = tf.transpose(output, perm=[0, 2, 1])
@@ -1178,6 +1154,7 @@ class CNN2dWithAddInput(NN):
                 if self.hyper.use_linear_transformation_in_context == "True":
                     output_L = LinearTransformationLayer(size=(output.shape[2], self.hyper.graph_conv_channels_context[0]))(output)
                 output = spektral.layers.GCNConv(channels=self.hyper.graph_conv_channels_context[0], activation=None)([output, adj_matrix_input_1])
+                #output = spektral.layers.DiffusionConv(channels=self.hyper.graph_conv_channels_context[0], K=3, activation=None)([output, adj_matrix_input_1])
                 output = tf.keras.layers.BatchNormalization()(output)
                 if self.hyper.use_linear_transformation_in_context == "True":
                     output = tf.keras.layers.Add()([output, output_L])
@@ -1191,17 +1168,19 @@ class CNN2dWithAddInput(NN):
                 if self.hyper.use_linear_transformation_in_context == "True":
                     output_L = LinearTransformationLayer(size=(output.shape[2], self.hyper.graph_conv_channels_context[1]))(output)
                 output = spektral.layers.GCNConv(channels=self.hyper.graph_conv_channels_context[1], activation=None)([output, adj_matrix_input_2])
+                #output = spektral.layers.DiffusionConv(channels=self.hyper.graph_conv_channels_context[0], K=3,activation=None)([output, adj_matrix_input_2])
                 output = tf.keras.layers.BatchNormalization()(output)
                 if self.hyper.use_linear_transformation_in_context == "True":
                     output = tf.keras.layers.Add()([output, output_L])
                 output = tf.keras.layers.LeakyReLU()(output)
 
                 x = tf.transpose(output, perm=[0, 2, 1])
+                #'''
                 o2 = tf.keras.layers.Multiply()([x, case_dependent_vector_input])
                 o2 = tf.transpose(o2, perm=[0, 2, 1])
 
                 o2 = spektral.layers.GlobalAttentionPool(self.hyper.graph_conv_channels_context[1])(o2)
-                ''' Hier kommt "eingenes" GlobalAttentionPooling'''
+                ''' Hier kommt "eingenes" GlobalAttentionPooling''' #del4Pub
                 '''
                 features_layer = tf.keras.layers.Dense(64, name="features_layer")
                 attention_layer = tf.keras.layers.Dense(64, activation="sigmoid", name="attn_layer")
@@ -1220,10 +1199,9 @@ class CNN2dWithAddInput(NN):
                 # '''
                 o2 = tf.expand_dims(o2, -1)
             else:
-                # FC Version
+                # FC Version (IoTStream Version)
                 # gate: only values from relevant sensors:
                 c = tf.keras.layers.Multiply()([x, case_dependent_vector_input])
-                # OLD CODE for FC Context:
                 c = tf.keras.layers.Flatten()(c)
 
                 for num_units in layers_fc:
@@ -1239,12 +1217,13 @@ class CNN2dWithAddInput(NN):
         # Create Model:
         if self.hyper.useAddContextForSim == "True":
             # Output:
-            # o1: encoded time series as timeSteps x attributes Matrix (if useChannelWiseAggregation==False, else features x attributes Matrix
+            # o1: encoded time series as [timeSteps x attributes] Matrix (if useChannelWiseAggregation==False, else features x attributes Matrix
             # case_dependent_vector_input_o: same as masking vector if learnFeatureWeights==False, else values weights learned (but not for 0s)
-            # o2: context vector, FC Layer on masked output (only relevant attributes considered)
+            # o2: context vector, FC / GCN Layer on masked output (only relevant attributes considered)
             # w: weight value (scalar) how much the similiarity for each failuremode should be based on invidivual features (x) or context (c)
             # debug: used for debugging
             if self.hyper.useAddContextForSim_LearnOrFixWeightVale == "True":
+                print("Modell Output: [o1, case_dependent_vector_input_o, o2, w]")
                 self.model = tf.keras.Model(inputs=[sensor_data_input, case_dependent_vector_input_i, adj_matrix_input_1, adj_matrix_input_2, adj_matrix_input_3, static_attribute_features_input],
                                             outputs=[o1, case_dependent_vector_input_o, o2, w])
             else:
@@ -1261,23 +1240,26 @@ class CNN2dWithAddInput(NN):
                         self.model = tf.keras.Model(inputs=[sensor_data_input, case_dependent_vector_input_i, adj_matrix_input_1, adj_matrix_input_2, adj_matrix_input_3, static_attribute_features_input],
                                                     outputs=[o1, case_dependent_vector_input_o, o2])
                 else:
+                    print("Modell Output: [o2]")
                     self.model = tf.keras.Model(
                         inputs=[sensor_data_input, case_dependent_vector_input_i, adj_matrix_input_1, adj_matrix_input_2, adj_matrix_input_3, static_attribute_features_input],
                         outputs=[o2])
 
         else:
             if self.hyper.provide_output_for_on_top_network == "True":
+                print("Modell Output: [o1, case_dependent_vector_input_o, adj_matrix_input_1, adj_matrix_input_2, adj_matrix_input_3, static_attribute_features_input]")
                 self.model = tf.keras.Model(inputs=[sensor_data_input, case_dependent_vector_input_i, adj_matrix_input_1, adj_matrix_input_2, adj_matrix_input_3,
                                                     static_attribute_features_input],
                                             outputs=[o1, case_dependent_vector_input_o, adj_matrix_input_1, adj_matrix_input_2, adj_matrix_input_3, static_attribute_features_input])
             else:
+                print("Modell Output: [o1, case_dependent_vector_input_o]")
                 self.model = tf.keras.Model(inputs=[sensor_data_input, case_dependent_vector_input_i, adj_matrix_input_1, adj_matrix_input_2, adj_matrix_input_3, static_attribute_features_input],
                                         outputs=[o1, case_dependent_vector_input_o])
         '''
         self.intermediate_layer_model = tf.keras.Model(inputs=case_dependent_vector_input,
                                                       outputs=self.model.get_layer("reshape").output)
         '''
-
+    #del4Pub
     def kl_divergence_regularizer(self, inputs):
         means = tf.keras.backend.mean(inputs, axis=0)
         return 0.1 * (tf.keras.losses.kullback_leibler_divergence(0.5, means)
@@ -1369,7 +1351,6 @@ class DUMMY(NN):
         output = input
         self.model = tf.keras.Model(inputs=input, outputs=output, name='Dummy')
 
-
 class BaselineOverwriteSimilarity(NN):
 
     # This model can be used in combination with standard_SNN and with feature rep. overwritten input
@@ -1387,11 +1368,10 @@ class BaselineOverwriteSimilarity(NN):
 
         self.model = tf.keras.Model(inputs=layer_input, outputs=output)
 
-class CasualDilated2DConvLayer(tf.keras.layers.Layer):
-    # WIP: provides to use strides and dilation rate (not possible in keras version).
-    # Only provides dilation, but no casual padding (as this is not provided for 2D conv
-    def __init__(self,filters,padding, kernel_size, strides, dilation_rate, input_shape_=None, **kwargs):
-        super(CasualDilated2DConvLayer, self).__init__()
+class Dilated2DConvLayer(tf.keras.layers.Layer):
+    # WIP: provides the opportunity to use strides and dilation rate combined (not possible in keras version, compress time series with deeper layers).
+    def __init__(self, filters, padding, kernel_size, strides, dilation_rate, input_shape_=None, **kwargs):
+        super(Dilated2DConvLayer, self).__init__()
         self.filters = filters
         self.padding = padding
         self.kernel_size = kernel_size
@@ -1405,7 +1385,7 @@ class CasualDilated2DConvLayer(tf.keras.layers.Layer):
                                               shape=self.kernel_size,
                                               initializer=tf.keras.initializers.glorot_uniform,
                                               trainable=True)
-        super(CasualDilated2DConvLayer, self).build(input_shape)
+        super(Dilated2DConvLayer, self).build(input_shape)
 
     # noinspection PyMethodOverridingd
     def call(self, input_):
@@ -1419,8 +1399,8 @@ class CasualDilated2DConvLayer(tf.keras.layers.Layer):
         return input_shape
 
 class FilterRestricted1DConvLayer(tf.keras.layers.Layer):
-    # WIP: provides to use strides and dilation rate (not possible in keras version).
-    # Only provides dilation, but no casual padding (as this is not provided for 2D conv
+    # Work in Progress (WIP del4pub)
+    # This 1D Conv is restricted to only consider input for each data
     def __init__(self,kernel_size,padding, strides, input_shape_=None, **kwargs):
         super(FilterRestricted1DConvLayer, self).__init__()
         self.padding = padding
@@ -1633,6 +1613,7 @@ class FilterRestricted1DConvLayer(tf.keras.layers.Layer):
         return input_shape
 
 class GraphConvResBlock(tf.keras.layers.Layer):
+    # Work in Progress (WIP del4pub)
     def __init__(self, channels,dropout_rate, activation=None, input_shape_=None, **kwargs):
         super(GraphConvResBlock, self).__init__()
         self.channels = channels
@@ -1647,6 +1628,7 @@ class GraphConvResBlock(tf.keras.layers.Layer):
 
     # noinspection PyMethodOverridingd
     def call(self, input_WithAdj):
+        # Work in Progress Reminder: Layer Anordnung prüfen
         input_ = input_WithAdj[0]
         adj_matrix_input = input_WithAdj[1]
         # Apply 2 Graph Convolution Layer on the input
@@ -1669,8 +1651,8 @@ class GraphConvResBlock(tf.keras.layers.Layer):
     def compute_output_shape(self, input_shape):
         return input_shape
 
-
 class Cnn2DWithAddInput_Network_OnTop(NN):
+    # Work in Progress (WIP del4pub)
     # This model can be used in combination with standard_SNN cnn2d_withAddInput and with feature rep. overwritten input
     def __init__(self, hyperparameters, input_shape):
         super().__init__(hyperparameters, input_shape)
@@ -1822,7 +1804,7 @@ class LinearTransformationLayer(tf.keras.layers.Layer):
         return input_shape
 
 class FiLM(tf.keras.layers.Layer):
-
+    # Work in Progress (WIP del4pub)
     def __init__(self, **kwargs):
         super(FiLM, self).__init__(**kwargs)
 
@@ -1832,7 +1814,7 @@ class FiLM(tf.keras.layers.Layer):
         self.height = feature_map_shape[1]
         self.width = feature_map_shape[2]
         self.n_feature_maps = feature_map_shape[-1]
-        tf.print("self.height: ", self.height, "self.width: ", self.width, "self.n_feature_maps: ", self.n_feature_maps)
+        tf.print("FiLM Layer used with self.height: ", self.height, "self.width: ", self.width, "self.n_feature_maps: ", self.n_feature_maps)
         #assert(int(2 * self.n_feature_maps)==FiLM_tns_shape[1])
         super(FiLM, self).build(input_shape)
 
