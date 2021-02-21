@@ -4,7 +4,7 @@ import pandas as pd
 
 from configuration.Enums import BatchSubsetType, LossFunction, BaselineAlgorithm, SimpleSimilarityMeasure, \
     ArchitectureVariant, ComplexSimilarityMeasure, TrainTestSplitMode, AdjacencyMatrixPreprossingCNN2DWithAddInput,\
-    NodeFeaturesForGraphVariants, AdjacencyMatrixType
+    NodeFeaturesForGraphVariants, AdjacencyMatrixType, FtDataSetVersion
 
 
 ####
@@ -25,7 +25,7 @@ class BaselineConfiguration:
         # Output interval of how many examples have been compared so far. < 0 for no output
         self.baseline_temp_output_interval = -1
 
-        self.baseline_use_relevant_only = True
+        self.baseline_use_relevant_only = False
         self.baseline_algorithm = BaselineAlgorithm.FEATURE_BASED_ROCKET
 
         # Should the case base representation be based on a fitting to the full training dataset?
@@ -61,7 +61,7 @@ class GeneralConfiguration:
 
         # Path and file name to the specific model that should be used for testing and live classification
         # Folder where the models are stored is prepended below
-        self.filename_model_to_use = 'temp_snn_model_02-03_02-41-01_epoch-3653'
+        self.filename_model_to_use = 'temp_snn_model_02-05_01-47-05_epoch-730'
 
         ##
         # Debugging - Don't use for feature implementation
@@ -79,6 +79,8 @@ class GeneralConfiguration:
         # since this should result in a performance improvements
         self.batch_wise_handler_execution = False  # Default: False
 
+        # Select the FT data set version: 2021 considers a holdout set (valid) whereas 2020 only has train and test sets
+        self.ft_data_set_version = FtDataSetVersion.FT_DataSet_2021
 
 class ModelConfiguration:
 
@@ -108,7 +110,7 @@ class ModelConfiguration:
         # Only use euclidean_dis for TRAINING with contrastive loss
         self.simple_measure = SimpleSimilarityMeasure.ABS_MEAN
 
-        self.complex_measure = ComplexSimilarityMeasure.CNN2DWAddInp
+        self.complex_measure = ComplexSimilarityMeasure.BASELINE_OVERWRITE
 
         ###
         # Hyperparameters
@@ -125,7 +127,7 @@ class ModelConfiguration:
         # If !use_individual_hyperparameters interpreted as a single json file, else as a folder
         # which contains json files named after the cases they should be used for
         # If no file with this name is present the 'default.json' Config will be used
-        #self.hyper_file = self.hyper_file_folder + 'cnn2d_withAddInput_Graph_o1_GlobAtt_o2_2.json'  #cnn2d_withAddInput_ContextStrang.json  'cnn2d_with_graph-26-10.json'  #cnn2d_with_graph_test.json #cnn2d_withAddInput_nwApproach.json
+        self.hyper_file = self.hyper_file_folder + 'cnn1d_with_fc.json'
 
         ##
         # Various settings influencing the similarity calculation
@@ -150,6 +152,9 @@ class ModelConfiguration:
         # Using the more restrictive features as additional masking vector for feature sim calculation
         # in cnn_with_add_input
         self.use_additional_strict_masking_for_attribute_sim = True  # default: False
+
+        # Changes the masks to generate noise and provide overfitting (for test purposes)
+        self.use_masking_regularization = False # default: False
 
         # Option to simulate a retrieval situation (during training) where only the weights of the
         # example from the case base/training data set are known:
@@ -227,7 +232,6 @@ class TrainingConfiguration:
         self.use_GCN_adj_matrix_preprocessing_sym = False
         self.add_selfloop_to_adj_matrix = False
         self.adj_matrix_preprocessing = AdjacencyMatrixPreprossingCNN2DWithAddInput.ADJ_MATRIX_CONTEXT_GCN
-
 
 class InferenceConfiguration:
 
@@ -429,8 +433,7 @@ class StaticConfiguration:
         self.data_folder_prefix = '../../../../data/pklein/PredMSiamNN/data/'
 
         # Folder where the trained models are saved to during learning process
-        self.hyper_file = self.hyper_file_folder + 'cnn2d_withAddInput_GraphMasking/Proposed_Model_IJCNN21_woGCN_ReplacedWFC.json'  #cnn2d_withAddInput_ContextStrang.json  'cnn2d_with_graph-26-10.json'  #cnn2d_with_graph_test.json #cnn2d_withAddInput_nwApproach.json
-        self.models_folder = self.data_folder_prefix + 'trained_models6/'
+        self.models_folder = self.data_folder_prefix + 'trained_models/'
 
         # noinspection PyUnresolvedReferences
         self.directory_model_to_use = self.models_folder + self.filename_model_to_use + '/'
@@ -486,8 +489,9 @@ class StaticConfiguration:
         self.ts_fresh_unfiltered_file_scaled = "ts_fresh_extracted_features_unfiltered_min_max_scaled.npy"
 
         # Rocket feature files
-        self.rocket_features_train_file = 'rocket_features_train.npy'
-        self.rocket_features_test_file = 'rocket_features_test.npy'
+        self.rocket_features_train_file = 'rocket_features_train_new2.npy'
+        self.rocket_features_test_file = 'rocket_features_test_new2.npy'
+        self.rocket_features_valid_file = 'rocket_features_valid_new2.npy'
 
         # Select specific dataset with given parameter
         # Preprocessing however will include all defined datasets
@@ -646,6 +650,7 @@ class Configuration(
         print("- use_additional_strict_masking_for_attribute_sim: ",
               self.use_additional_strict_masking_for_attribute_sim)
         print("- use_same_feature_weights_for_unsimilar_pairs: ", self.use_same_feature_weights_for_unsimilar_pairs)
+        print("- use_masking_regularization: ", self.use_masking_regularization)
         print("")
         print("Similarity Measure related:")
         print("- useFeatureWeightedSimilarity: ", self.useFeatureWeightedSimilarity)

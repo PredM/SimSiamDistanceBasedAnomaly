@@ -1,11 +1,11 @@
 {
   "encoder_variant": "cnn2dwithaddinput",
   "batch_size": 64,
-  "epochs": 3000,
+  "epochs": 25000,
   "epochs_current": 0,
   "learning_rate": 0.001,
   "gradient_cap": -1,
-  "dropout_rate": 0.05,
+  "dropout_rate": 0.1,
   "l1_rate_act": 0.0001,
   "l1_rate_kernel": 0.001,
   "l2_rate_act": 0.001,
@@ -87,14 +87,9 @@
     32,
     16
   ],
-  "graph_conv_channels_context": [
-      128,
-      128,
-      64
-    ],
   "useAttributeWiseAggregation": "True",
   "useAddContextForSim": "True",
-  "useAddContextForSim_LearnOrFixWeightVale": "False",
+  "useAddContextForSim_LearnOrFixWeightVale": "True",
   "use_additional_strict_masking": "True",
   "useFilterwise1DConvBefore2DConv": "False",
   "use_FiLM_after_2Conv": "False",
@@ -110,7 +105,5 @@
   "use_graph_conv_after2dCNNFC_GAT_instead_GCN": "False",
   "provide_output_for_on_top_network": "False",
   "use_case_of_on_top_network": "graph",
-  "use_linear_transformation_in_context": "False",
-  "use_owl2vec_node_features_in_graph_layers": "False",
   "test": "True"
 }

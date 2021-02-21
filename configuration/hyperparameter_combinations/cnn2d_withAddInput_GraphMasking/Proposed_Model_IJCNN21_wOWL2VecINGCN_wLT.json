@@ -1,7 +1,8 @@
 {
+    "notes": "using Graph Layer instead of FC for Context",
   "encoder_variant": "cnn2dwithaddinput",
   "batch_size": 64,
-  "epochs": 3000,
+  "epochs": 5000,
   "epochs_current": 0,
   "learning_rate": 0.001,
   "gradient_cap": -1,
@@ -66,8 +67,7 @@
   ],
   "cnn2d_AttributeWiseAggregation": [
     128,
-    64,
-    32
+    64
   ],
   "cnn2d_contextModule": [
     256,
@@ -79,38 +79,35 @@
     16
   ],
     "graph_conv_channels": [
-      32,
-      32,
-      32
+      128
+    ],
+      "graph_conv_channels_context": [
+      64,
+        64
     ],
   "nw_approach": [
     32,
     16
   ],
-  "graph_conv_channels_context": [
-      128,
-      128,
-      64
-    ],
   "useAttributeWiseAggregation": "True",
   "useAddContextForSim": "True",
   "useAddContextForSim_LearnOrFixWeightVale": "False",
   "use_additional_strict_masking": "True",
   "useFilterwise1DConvBefore2DConv": "False",
-  "use_FiLM_after_2Conv": "False",
-  "use_graph_conv_for_context_fusion": "False",
+  "use_FiLM_after_2Conv": "True",
+  "use_graph_conv_for_context_fusion": "True",
   "use_dilated_factor_for_conv": "False",
   "use_univariate_output_for_weighted_sim": "True",
   "learn_node_attribute_features": "False",
-  "use_owl2vec_node_features": "False",
-  "use_owl2vec_node_features_as_input_AttributeWiseAggregation": "False",
-  "use_graph_conv_after2dCNNFC_context_fusion": "False",
+  "use_owl2vec_node_features": "True",
+  "use_graph_conv_after2dCNNFC_context_fusion": "True",
   "use_graph_conv_after2dCNNFC_resNetBlock": "False",
   "use_graph_conv_after2dCNNFC_SkipCon": "False",
   "use_graph_conv_after2dCNNFC_GAT_instead_GCN": "False",
   "provide_output_for_on_top_network": "False",
   "use_case_of_on_top_network": "graph",
-  "use_linear_transformation_in_context": "False",
-  "use_owl2vec_node_features_in_graph_layers": "False",
+  "use_owl2vec_node_features_as_input_AttributeWiseAggregation": "True",
+  "use_linear_transformation_in_context": "True",
+  "use_owl2vec_node_features_in_graph_layers": "True",
   "test": "True"
 }

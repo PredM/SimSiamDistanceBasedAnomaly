@@ -496,56 +496,71 @@ class FullDataset(Dataset):
             #print("adj_matrix_input:", adj_matrix_input.shape)
         return adj_matrix_input
 
-    def apply_masking_regularization(self, maskingvector, label, rate=0.15):
-        #WIP / del4Pub
-        maskingvector_strict = maskingvector[61:]
-        maskingvector_context = maskingvector[:61]
-        if maskingvector is not None:
-            if label == "no_failure":
-                num_rnd_con = int(np.sum(maskingvector_context)*(rate))
-                num_rnd_strict = int(np.sum(maskingvector_strict) * (rate))
-                print("No_Failure num_rnd_con: ", num_rnd_con, " | num_rnd_strict: ", num_rnd_strict)
-                # Get relevant indexes:
-                relevant_idx_con = np.where(maskingvector_context == 1)
-                irrelevant_idx_con = np.where(maskingvector_context == 0)
-                # Randomly select indexes to remove or add:
-                #print("relevant_idx_con", relevant_idx_con)
-                indices_remove_con = np.random.choice(np.squeeze(relevant_idx_con), replace=False, size=num_rnd_con)
-                indices_add_con = np.random.choice(np.squeeze(irrelevant_idx_con), replace=False, size=num_rnd_con)
-                # Remove indexes from context and masking vector
-                maskingvector_context[indices_remove_con] = 0
-                maskingvector_strict[indices_remove_con] = 0
-                # Add indexes to context vector
-                maskingvector_context[indices_add_con] = 1
-                relevant_idx_con_after_processing = np.where(maskingvector_context == 1)
-                indices_add_strict = np.random.choice(np.squeeze(relevant_idx_con_after_processing), replace=False, size=num_rnd_strict)
-                maskingvector_strict[indices_add_strict] = 1
-                #print("maskingvector: ", maskingvector)
+    def apply_masking_regularization(self, maskingvector, label, idx_change_rate=0.1, failure_rate_multiplier=3, context_remove_rate_reducer=2, apply_rate=0.5):
+        # WIP / del4Pub
+        # idx_change_rate: value how many entries are changed from a masking vector
+        # apply_rate: probability for applying a randomly changed mask (higher means more often)
+        # failure_rate_multiplier: since small amount of data streams considered for failure examples, a small rate
+        # results in no random changes, E.g. 3 would applied as follows: 3*idx_change_rate
+        # context_remove_rate_reducer: can be used to reduce the number of removed entries. E.g., 2 would only remove the half
+
+        if np.random.binomial(1, apply_rate) == 1:
+            maskingvector_strict = maskingvector[61:]
+            maskingvector_context = maskingvector[:61]
+            if maskingvector is not None:
+                if label == "no_failure":
+                    # idx_change_rate=0.1: con:4,strict:1
+                    # idx_change_rate=0.15: con:6,strict:2
+                    num_rnd_con = int(np.sum(maskingvector_context) * (idx_change_rate))
+                    num_rnd_strict = int(np.sum(maskingvector_strict) * (idx_change_rate))
+                    #print("No_Failure num_rnd_con: ", num_rnd_con, " | num_rnd_strict: ", num_rnd_strict)
+                    # Get relevant indexes:
+                    relevant_idx_con = np.where(maskingvector_context == 1)
+                    irrelevant_idx_con = np.where(maskingvector_context == 0)
+                    # Randomly select indexes to remove or add:
+                    #print("relevant_idx_con", relevant_idx_con)
+                    indices_remove_con = np.random.choice(np.squeeze(relevant_idx_con), replace=False, size=int(num_rnd_con/context_remove_rate_reducer))
+                    indices_add_con = np.random.choice(np.squeeze(irrelevant_idx_con), replace=False, size=num_rnd_con)
+                    # Remove indexes from context and strict masking vector
+                    maskingvector_context[indices_remove_con] = 0
+                    maskingvector_strict[indices_remove_con] = 0
+                    # Add random context indexes to strict masking
+                    relevant_idx_con_after_processing = np.where(maskingvector_context == 1)
+                    indices_add_strict = np.random.choice(np.squeeze(relevant_idx_con_after_processing), replace=False, size=num_rnd_strict)
+                    maskingvector_strict[indices_add_strict] = 1
+                    # Add indexes to context vector (so that only indexes selected as context are used as additional strict masking)
+                    maskingvector_context[indices_add_con] = 1
+                    #print("maskingvector: ", maskingvector)
+                else:
+                    # Add nodes first and then remove nodes
+                    # strict entries are not removed
+                    num_rnd_con = int(np.sum(maskingvector_context) * (idx_change_rate * failure_rate_multiplier))
+                    num_rnd_strict = int(np.sum(maskingvector_strict) * (idx_change_rate * failure_rate_multiplier))
+                    if num_rnd_con == 0:
+                        num_rnd_con = 1
+                    if num_rnd_strict == 0:
+                        num_rnd_strict = 1
+                    #print("FAILUE: num_rnd_con: ", num_rnd_con, " | num_rnd_strict: ", num_rnd_strict)
+                    # Get relevant indexes:
+                    maskingvector_context_ = maskingvector_context ^ maskingvector_strict # bitwise_xor
+                    relevant_idx_con = np.where(maskingvector_context_ == 1) # strict entries are not removed from context
+                    irrelevant_idx_con = np.where(maskingvector_context == 0)
+                    # Randomly select indexes to remove or add:
+                    #print("relevant_idx_con", relevant_idx_con)
+                    indices_remove_con = np.random.choice(np.squeeze(relevant_idx_con), replace=False, size=int(num_rnd_con/context_remove_rate_reducer))
+                    indices_add_con = np.random.choice(np.squeeze(irrelevant_idx_con), replace=False, size=num_rnd_con)
+                    # Remove indexes from context and strict masking vector
+                    maskingvector_context[indices_remove_con] = 0
+                    maskingvector_strict[indices_remove_con] = 0
+                    # Add random context indexes to strict masking
+                    relevant_idx_con_after_processing = np.where(maskingvector_context == 1)
+                    indices_add_strict = np.random.choice(np.squeeze(relevant_idx_con_after_processing), replace=False, size=num_rnd_strict)
+                    maskingvector_strict[indices_add_strict] = 1
+                    # Add indexes to context vector (so that only indexes selected as context are used as additional strict masking)
+                    maskingvector_context[indices_add_con] = 1
+                    #print("maskingvector: ", maskingvector)
             else:
-                # Add nodes first and then remove nodes
-                # strict entries are not removed
-                num_rnd_con = int(np.sum(maskingvector_context)*(rate*4))
-                num_rnd_strict = int(np.sum(maskingvector_strict) * (rate*4))
-                print("FAILUE: num_rnd_con: ", num_rnd_con, " | num_rnd_strict: ", num_rnd_strict)
-                # Get relevant indexes:
-                maskingvector_context_ = maskingvector_context ^ maskingvector_strict # bitwise_xor
-                relevant_idx_con = np.where(maskingvector_context_ == 1) # strict entries are not removed from context
-                irrelevant_idx_con = np.where(maskingvector_context == 0)
-                # Randomly select indexes to remove or add:
-                #print("relevant_idx_con", relevant_idx_con)
-                indices_remove_con = np.random.choice(np.squeeze(relevant_idx_con), replace=False, size=num_rnd_con)
-                indices_add_con = np.random.choice(np.squeeze(irrelevant_idx_con), replace=False, size=num_rnd_con)
-                # Remove indexes from context and masking vector
-                maskingvector_context[indices_remove_con] = 0
-                maskingvector_strict[indices_remove_con] = 0
-                # Add indexes to context vector
-                maskingvector_context[indices_add_con] = 1
-                relevant_idx_con_after_processing = np.where(maskingvector_context == 1)
-                indices_add_strict = np.random.choice(np.squeeze(relevant_idx_con_after_processing), replace=False, size=num_rnd_strict)
-                maskingvector_strict[indices_add_strict] = 1
-                #print("maskingvector: ", maskingvector)
-        else:
-            print("maskingvector is none")
+                print("maskingvector is none")
 
         return maskingvector
 

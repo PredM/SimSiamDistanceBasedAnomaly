@@ -62,11 +62,15 @@
     [1,1],
     [1,1]
   ],
+    "fc_after_cnn1d_layers": [
+    256,
+    128,
+    64
+  ],
   "useAttributeWiseAggregation": "False",
     "cnn2d_AttributeWiseAggregation": [
     128,
-    64,
-    32
+    64
   ],
     "useFilterwise1DConvBefore2DConv": "False",
   "use_owl2vec_node_features_as_input_AttributeWiseAggregation": "False"

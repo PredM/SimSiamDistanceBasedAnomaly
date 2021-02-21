@@ -92,3 +92,9 @@ class AdjacencyMatrixType(Enum):
     ADJ_MAT_TYPE_AS_ONE_GRAPH_WS_FULLY = 1
     ADJ_MAT_TYPE_FIRST_VARIANT = 2
     ADJ_MAT_TYPE_FULLY_CONNECTED = 3
+
+class FtDataSetVersion(Enum):
+    # The type of Fischertechnik Factory Model Data Set is used
+    FT_DataSet_2020 = 0
+    FT_DataSet_2021 = 1
+    FT_DataSet_2021_FewShotK3 = 2
