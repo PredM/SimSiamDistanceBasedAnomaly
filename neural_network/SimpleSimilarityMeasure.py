@@ -45,7 +45,7 @@ class SimpleSimilarityMeasure:
         return weight_matrix
 
     # Siamese Deep Similarity as defined in NeuralWarp
-    # Mean absolute difference of all time stamp combinations
+    # Mean absolute difference (L1, Manhattan Distance)
     @tf.function
     def abs_mean(self, a, b):
 
@@ -59,30 +59,27 @@ class SimpleSimilarityMeasure:
             #a = a / tf.sqrt(tf.math.reduce_sum(tf.square(a), axis=1, keepdims=True) + 1e-8)
             #b = b / tf.sqrt(tf.math.reduce_sum(tf.square(b), axis=1, keepdims=True) + 1e-8)
             diff = tf.abs(a - b)
-            # feature weighted distance:
+            # feature (data stream) weighted distance:
             distance = tf.reduce_mean(weight_matrix * diff)
-            # distance = tf.reduce_sum(weight_matrix * diff)
-            # tf. print("self.a_weights: ", tf.reduce_sum(self.a_weights))
 
             if use_additional_sim:
                 # calculate context distance
                 diff_con = tf.abs(self.a_context - self.b_context)
                 distance_con = tf.reduce_mean(diff_con)
+
+                # Combine attribute weighted distance with contextual distance:
                 if self.w is None:
-                    self.w = 0.5
+                    # Other option define fix w value
+                    #self.w = 0.5
                     #distance = self.w * distance + (1 - self.w) * distance_con
 
                     distance2 = distance + distance_con
                     #tf.print("Sum: ", distance2, "dis_node: ", distance, "dis_graph: ", distance_con)
                     distance = distance2
 
-                    # new
-                    #distance = distance * distance_con
-                    #distance = (distance/(distance + distance_con)) * distance + (distance_con/(distance + distance_con)) * distance_con # cnn2d-wAddInputGraph-GCN64-LeakyRelu-SumPool_newDistanceMEasure_HIER_RICHTIG-ANDERER-WIE-NORMAL
-                    # end new
                 else:
+                    # Used in iotstream paper
                     # weight both distances
-                    # tf.print("w: ",self.w)
                     distance = self.w * distance + (1 - self.w) * distance_con
                     distance = tf.squeeze(distance)
                     #tf.print("w: ", self.w, "dis1: ",distance, "dis2: ",distance_con)
@@ -103,39 +100,45 @@ class SimpleSimilarityMeasure:
         use_weighted_sim = self.a_weights is not None and self.b_weights is not None
         use_additional_sim = self.a_context is not None and self.b_context is not None
 
+        # Combine attribute weighted distance with contextual distance:
         if use_weighted_sim:
             # Note: only one weight vector is used (a_weights) to simulate a retrieval situation
             # where only weights of the case are known
             weight_matrix = self.get_weight_matrix(a)
             q = a - b
             weighted_dist = tf.sqrt(tf.reduce_sum(weight_matrix * q * q))
-            diff = weighted_dist
+            e_dis = weighted_dist
             if use_additional_sim:
                 if self.w is None:
-                    self.w = 0.01
                     #tf.print("self.a_context: ", self.a_context)
                     #tf.print("self.b_context: ", self.b_context)
+
                     # calculate context distance
-                    diff_con = tf.norm(self.a_context - self.b_context, ord='euclidean')
-                    distance_con = tf.reduce_mean(diff_con)
-                    # weight both distances
-                    distance_con = distance_con + tf.keras.backend.epsilon()
-                    diff = diff + tf.keras.backend.epsilon()
-                    distance = self.w * diff + (1 - self.w) * distance_con
-                    diff = tf.squeeze(distance)
+                    contextual_dis = tf.norm(self.a_context - self.b_context, ord='euclidean')
+                    contextual_dis = tf.reduce_mean(contextual_dis)
+
+                    e_dis = contextual_dis + weighted_dist
+
+                    # Other option: weight both distances based on a fixed value w
+                    #self.w = 0.5
+                    #contextual_dis = contextual_dis + tf.keras.backend.epsilon()
+                    #weighted_dist = weighted_dist + tf.keras.backend.epsilon()
+                    #distance = self.w * weighted_dist + (1 - self.w) * contextual_dis
+                    #e_dis = tf.squeeze(distance)
+
                     #tf.print("w: ", self.w, "dis1: ",distance, "dis2: ",distance_con)
                 else:
-                    # weight both distances
+                    # weight both distances based on a learned value w
                     #tf.print("w: ", self.w)
-                    diff_con = tf.norm(self.a_context - self.b_context, ord='euclidean')
-                    distance = self.w * diff + (1 - self.w) * diff_con
-                    diff = tf.squeeze(distance)
+                    contextual_dis = tf.norm(self.a_context - self.b_context, ord='euclidean')
+                    e_dis = self.w * weighted_dist + (1 - self.w) * contextual_dis
+                    e_dis = tf.squeeze(e_dis)
                     # tf.print("w: ", self.w, "dis1: ",distance, "dis2: ",distance_con)
         else:
-            diff = tf.norm(a - b, ord='euclidean')
+            e_dis = tf.norm(a - b, ord='euclidean')
         #diff= diff + tf.keras.backend.epsilon()
         #tf.print("diff final:", diff)
-        return diff
+        return e_dis
 
     # Euclidean distance converted to a similarity
     @tf.function

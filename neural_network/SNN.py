@@ -279,22 +279,24 @@ class SimpleSNN(AbstractSimilarityMeasure):
 
         # Parsing the input (e.g., two 1d or 2d vectors depending on which encoder is used) to calculate distance / sim
         if self.encoder.hyper.encoder_variant == 'cnn2dwithaddinput':
-            # Output of encoder are encoded time series and additional things e.g., weights vectors
-            a = context_vectors[0][2 * pair_index, :, :]
-            b = context_vectors[0][2 * pair_index + 1, :, :]
-            #a = context_vectors[2 * pair_index, :, :]
-            #b = context_vectors[2 * pair_index + 1, :, :]
+            if self.encoder.hyper.use_univariate_output_for_weighted_sim == "False":
+                a = context_vectors[2 * pair_index, :, :]
+                b = context_vectors[2 * pair_index + 1, :, :]
+            else:
+                # Output of encoder are encoded time series and additional things e.g., weights vectors
+                a = context_vectors[0][2 * pair_index, :, :]
+                b = context_vectors[0][2 * pair_index + 1, :, :]
 
-            if self.config.useFeatureWeightedSimilarity:
-                a_weights = context_vectors[1][2 * pair_index, :]
-                b_weights = context_vectors[1][2 * pair_index + 1, :]
-            if self.encoder.hyper.useAddContextForSim == 'True':
-                a_context = context_vectors[2][2 * pair_index, :]
-                b_context = context_vectors[2][2 * pair_index + 1, :]
-            if self.encoder.hyper.useAddContextForSim_LearnOrFixWeightVale == 'True':
-                w = context_vectors[3][2 * pair_index, :]
-                # debug output:
-                # tf.print("context_vectors[3][2 * pair_index, :]", context_vectors[4][2 * pair_index, :])
+                if self.config.useFeatureWeightedSimilarity:
+                    a_weights = context_vectors[1][2 * pair_index, :]
+                    b_weights = context_vectors[1][2 * pair_index + 1, :]
+                if self.encoder.hyper.useAddContextForSim == 'True':
+                    a_context = context_vectors[2][2 * pair_index, :]
+                    b_context = context_vectors[2][2 * pair_index + 1, :]
+                if self.encoder.hyper.useAddContextForSim_LearnOrFixWeightVale == 'True':
+                    w = context_vectors[3][2 * pair_index, :]
+                    # debug output:
+                    # tf.print("context_vectors[3][2 * pair_index, :]", context_vectors[4][2 * pair_index, :])
 
         # Results of this encoder are one dimensional: ([batch], features)
         elif self.encoder.hyper.encoder_variant in ['graphcnn2d', 'graphattributeconvolution']:
@@ -454,7 +456,14 @@ class SimpleSNN(AbstractSimilarityMeasure):
                     'Configuration setting whether to use strict masking must match the hyperparameters definied in the json file.')
             num_of_features = self.dataset.feature_names_all.shape[0]
             if self.config.use_additional_strict_masking_for_attribute_sim:
-                self.encoder = CNN2dWithAddInput(self.hyper,
+                if self.config.use_additional_static_node_features_for_graphNN == 1: # using one-hot-vectors
+                    self.encoder = CNN2dWithAddInput(self.hyper,
+                                                     [input_shape_encoder, self.hyper.time_series_depth * 2,
+                                                      self.hyper.time_series_depth, self.hyper.time_series_depth,
+                                                      self.hyper.time_series_depth,
+                                                      (self.hyper.time_series_depth, self.hyper.time_series_depth)])
+                else:
+                    self.encoder = CNN2dWithAddInput(self.hyper,
                                                  [input_shape_encoder, self.hyper.time_series_depth * 2,
                                                   self.hyper.time_series_depth,self.hyper.time_series_depth,self.hyper.time_series_depth,
                                                   (self.dataset.owl2vec_embedding_dim,num_of_features)])
@@ -658,6 +667,7 @@ class SNN(SimpleSNN):
             sim = complex_measure_output
 
         elif self.config.complex_measure == ComplexSimilarityMeasure.CNN2DWAddInp:
+            #WIP del4Pub
             use_case =self.hyper.use_case_of_on_top_network
             a = tf.squeeze(a)
             b = tf.squeeze(b)

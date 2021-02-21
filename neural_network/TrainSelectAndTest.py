@@ -122,6 +122,7 @@ def main():
     print('---------------------------------------------')
     print()
     num_of_selection_tests = config.number_of_selection_tests
+    config.use_masking_regularization = False
     score_valid_to_model_loss = {}
     for i in range(num_of_selection_tests):
         loss_of_selected_model = change_model(config, start_time_string, num_of_selction_iteration=i)
@@ -169,8 +170,9 @@ def main():
 
 
 if __name__ == '__main__':
+    num_of_runs = 3
     try:
-        for run in range(3):
+        for run in range(num_of_runs):
             print("Experiment ", run, " started!")
             main()
             print("Experiment ", run, " finished!")
