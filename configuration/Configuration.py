@@ -264,10 +264,7 @@ class InferenceConfiguration:
         self.distance_scaling_parameter_for_cnn2dwithAddInput_ontopNN = 1.0
 
         # With TrainSelectAndTest is used, how many models (ascending from the best loss) should be tested? (ca. 8 min per test)
-        self.number_of_selection_tests = 7#12#10#7
-        # Point at which a multiple is used for the next loss. Must be higher than half of number_of_selection_tests.
-        # If it is the same number, this option is deactivated
-        self.number_of_selection_tests_for_previous_models = 5#3#3#5
+        self.number_of_selection_tests = 6
 
         # Num of Runs (Train,Select and Test) are should be performed
         #self.num_of_train_select_test_runs = 1
@@ -430,7 +427,8 @@ class StaticConfiguration:
         self.data_folder_prefix = '../data/'
         # Prefix for the 3w dataset
         # self.data_folder_prefix = '../data/additional_datasets/3w_dataset/'
-        self.data_folder_prefix = '../../../../data/pklein/PredMSiamNN/data/'
+        #self.data_folder_prefix = '../../../../data/pklein/PredMSiamNN/data/'
+        self.data_folder_prefix = '../data/'
 
         # Folder where the trained models are saved to during learning process
         self.models_folder = self.data_folder_prefix + 'trained_models/'

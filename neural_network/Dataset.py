@@ -496,7 +496,7 @@ class FullDataset(Dataset):
             #print("adj_matrix_input:", adj_matrix_input.shape)
         return adj_matrix_input
 
-    def apply_masking_regularization(self, maskingvector, label, idx_change_rate=0.1, failure_rate_multiplier=3, context_remove_rate_reducer=2, apply_rate=0.5):
+    def apply_masking_regularization(self, maskingvector, label, idx_change_rate=0.1, failure_rate_multiplier=3, context_remove_rate_reducer=3, apply_rate=0.5):
         # WIP / del4Pub
         # idx_change_rate: value how many entries are changed from a masking vector
         # apply_rate: probability for applying a randomly changed mask (higher means more often)

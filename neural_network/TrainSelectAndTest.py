@@ -66,11 +66,9 @@ def change_model(config: Configuration, start_time_string, num_of_selction_itera
         loss_list = (list(loss_to_dir.keys()))
         loss_list.sort()
         min_loss = min(list(loss_to_dir.keys()))
-        if num_of_selction_iteration < config.number_of_selection_tests_for_previous_models:
-            selected_loss = loss_list[num_of_selction_iteration]
-        else:
-            idx = (num_of_selction_iteration - config.number_of_selection_tests_for_previous_models) * num_of_selction_iteration
-            selected_loss = loss_list[idx]
+
+        selected_loss = loss_list[num_of_selction_iteration]
+
         config.filename_model_to_use = loss_to_dir.get(selected_loss)
         config.directory_model_to_use = config.models_folder + config.filename_model_to_use + '/'
 
