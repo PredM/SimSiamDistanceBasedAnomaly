@@ -71,5 +71,9 @@
     128      ],
   "useFilterwise1DConvBefore2DConv": "True",
     "useFactoryStructureFusion": "False",
-    "use_owl2vec_node_features": "False"
+    "use_owl2vec_node_features": "False",
+  "use_owl2vec_node_features_in_graph_layers": "False",
+  "use_owl2vec_node_features_as_input_AttributeWiseAggregation": "False",
+  "use_GCNGlobAtt_Fusion":"True",
+  "use_linear_transformation_in_context":"False"
 }

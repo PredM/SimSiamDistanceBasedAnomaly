@@ -77,6 +77,9 @@
     32,
     16
   ],
+        "graph_conv_channels_context": [
+          64
+    ],
     "graph_conv_channels": [
       128,
       64,
@@ -99,5 +102,9 @@
   "provide_output_for_on_top_network": "False",
   "use_case_of_on_top_network": "nw_approach",
   "useFilterwise1DConvBefore2DConv": "False",
+  "use_FiLM_after_2Conv":  "False",
+  "use_owl2vec_node_features_in_graph_layers": "False",
+  "use_owl2vec_node_features_as_input_AttributeWiseAggregation": "False",
+  "use_linear_transformation_in_context":"False",
   "test": "True"
 }

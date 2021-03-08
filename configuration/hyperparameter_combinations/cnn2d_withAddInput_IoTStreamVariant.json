@@ -78,14 +78,14 @@
     32,
     16
   ],
+
+      "graph_conv_channels_context": [
+    ],
     "graph_conv_channels": [
-      32,
-      32,
-      32
+
     ],
   "nw_approach": [
-    32,
-    16
+
   ],
   "useAttributeWiseAggregation": "True",
   "useAddContextForSim": "True",
@@ -105,5 +105,7 @@
   "use_graph_conv_after2dCNNFC_GAT_instead_GCN": "False",
   "provide_output_for_on_top_network": "False",
   "use_case_of_on_top_network": "graph",
+  "use_linear_transformation_in_context":"False",
+  "use_owl2vec_node_features_in_graph_layers": "False",
   "test": "True"
 }
