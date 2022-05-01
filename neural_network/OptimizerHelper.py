@@ -22,6 +22,7 @@ class OptimizerHelper:
                                                            clipnorm=self.hyper.gradient_cap)
         else:
             self.adam_optimizer = tf.keras.optimizers.Adam(learning_rate=self.hyper.learning_rate)
+            #self.adam_optimizer = tf.keras. optimizers.SGD(learning_rate=self.hyper.learning_rate, momentum=0.5, nesterov=False, name="SGD")
 
         self.trainable_variables = None
 
@@ -36,15 +37,13 @@ class OptimizerHelper:
         with tf.GradientTape() as tape:
             pred_similarities = self.model.get_sims_for_batch(model_input)
 
-            # print(pred_similarities[0:5])
-
             # Calculate the loss based on configuration
             if self.config.type_of_loss_function == LossFunction.BINARY_CROSS_ENTROPY:
 
                 if self.config.use_margin_reduction_based_on_label_sim:
                     sim = self.get_similarity_between_two_label_string(query_classes, neg_pair_wbce=True)
                     #true_similarities = true_similarities * sim
-                    #print("true_similarities: ", true_similarities)
+                    #print("sim: ",sim.shape, sim)
                     loss = self.weighted_binary_crossentropy(y_true=true_similarities, y_pred=pred_similarities,
                                                              weight=sim)
                 else:
@@ -72,6 +71,23 @@ class OptimizerHelper:
                     loss = self.triplet_loss(pred_similarities, classes=sim)
                 else:
                     loss = self.triplet_loss(pred_similarities)
+
+            elif self.config.type_of_loss_function == LossFunction.SIMPLE_SIAM_LOSS:
+                #print("pred_similarities[0] shape: ", pred_similarities[0].shape) # (64, 1, 1)
+                #print("pred_similarities[1] shape: ", pred_similarities[1].shape) # (64, 1, 100)
+                if type(pred_similarities) is tuple:
+                    l1 = self.simple_siam_loss(y_pred=pred_similarities[0])
+                    l2 = tf.squeeze(self.memory_loss(pred_similarities[1]))
+                    tf.print("SimSiamLoss: ", l1, "MemoryLoss: ", l2)
+                    loss =  l1 +  l2
+                else:
+                    loss = self.simple_siam_loss(y_pred=pred_similarities)
+                    #print("LOSS:",loss)
+                #print("Memory Loss: ", self.memory_loss(pred_similarities[1]))
+
+            elif self.config.type_of_loss_function == LossFunction.COSINE_LOSS:
+                    #cosine_loss = tf.keras.losses.CosineSimilarity(axis=1)
+                    loss = -tf.reduce_mean(pred_similarities) #cosine_loss(true_similarities, y_pred=pred_similarities)
             else:
                 raise AttributeError(
                     'Unknown loss function:', self.config.type_of_loss_function)
@@ -123,18 +139,47 @@ class OptimizerHelper:
         margin_square = tf.square(tf.maximum(margin - y_pred, 0))
         return tf.keras.backend.mean(y_true * square_pred + (1 - y_true) * margin_square)
 
+    def simple_siam_loss(self,y_pred):
+        '''
+        z = tf.stop_gradient(z)
+        p = tf.math.l2_normalize(p, axis=1)
+        z = tf.math.l2_normalize(z, axis=1)
+        return - tf.reduce_mean(tf.reduce_sum((p * z), axis=1))
+        '''
+        # PLEASE NOT: LOSS IS CONVERTED AS NEGATIVE VALUE !!! (mimizing negative cosine similarity is maximising cosine similarity!)
+        return tf.reduce_mean(y_pred) * (-1)
+    def memory_loss(self, memory_accesses):
+        summed_acces_per_memory_entry = tf.reduce_mean(memory_accesses, axis=0)
+        num_of_memory_entires = summed_acces_per_memory_entry.shape[1]
+        #tf.print("summed_acces_per_memory_entry shape: ", summed_acces_per_memory_entry.shape)
+        summed_acces_per_memory_entry_norm = summed_acces_per_memory_entry / tf.reduce_sum(summed_acces_per_memory_entry)
+        mem_zeros = tf.zeros((summed_acces_per_memory_entry.shape[1])) + (1/num_of_memory_entires) * 64 # (1 / num of memory entries) multiplied with accesses (batch size)
+        mem_zeros_norm = mem_zeros / tf.reduce_sum(mem_zeros)
+        means = tf.reduce_mean(summed_acces_per_memory_entry)
+        means_desired = tf.reduce_mean(mem_zeros_norm)
+        kl_loss = tf.keras.losses.kullback_leibler_divergence(mem_zeros_norm, summed_acces_per_memory_entry_norm)
+        # Loss fosters memory access to be 1 or 0 / Makes here no sense
+        loss_sparse_access = tf.reduce_mean((-memory_accesses) * tf.math.log(memory_accesses + 1e-12))
+        tf.print("Real mean: ", means, "Sum: ", tf.reduce_sum(summed_acces_per_memory_entry_norm), " | Desired mean: ",means_desired, " | kl_loss: ", kl_loss, " | loss sparse access: ", loss_sparse_access)
+        return kl_loss #+ loss_sparse_access
+
     # noinspection PyMethodMayBeStatic
     def weighted_binary_crossentropy(self, y_true, y_pred, weight=None):
         """
         Weighted BCE that smoothes only the wrong example according to interclass similarities
         """
-        weight = 1.0 if weight is None else weight
+        # Reminder: can not used in our context return tf.nn.weighted_cross_entropy_with_logits(tf.cast(y_true, dtype=tf.double), tf.cast(y_pred,dtype=tf.double), pos_weight=tf.constant(1.0, dtype=tf.double), name=None)
 
+        weight = 1.0 if weight is None else weight
+        #print("weight", weight)
         y_true = K.clip(tf.convert_to_tensor(y_true, dtype=tf.float32), K.epsilon(), 1 - K.epsilon())
         y_pred = K.clip(y_pred, K.epsilon(), 1 - K.epsilon())
-        # org: logloss = -(y_true * K.log(y_pred) * weight + (1 - y_true) * K.log(1 - y_pred))
-        logloss = -(y_true * K.log(y_pred) + (1 - y_true + (weight / 2)) * K.log(1 - y_pred))
+        #logloss = -(y_true * K.log(y_pred) * weight + (1 - y_true) * K.log(1 - y_pred))
+        #logloss = -(y_true * K.log(y_pred) + (1 - y_true + (weight / 2)) * K.log(1 - y_pred))
+        logloss = y_true * -K.log(y_pred) * weight + (1 - y_true) * - K.log(1 - y_pred)
+
         return K.mean(logloss, axis=-1)
+
 
     # wbce = weighted_binary_cross_entropy
     def get_similarity_between_two_label_string(self, classes, neg_pair_wbce=False):
@@ -153,12 +198,15 @@ class OptimizerHelper:
 
             if neg_pair_wbce and sim < 1:
                 sim = 1 - sim
-            ''' Reduce similarity value for failure paris
-            if a == "no_failure" and b == "no_failure":
-                pairwise_class_label_sim[pair_index] = 1
+            #Reduce similarity value for failure paris
+            #print("a: ", a)
+            #print("a: ", b)
+            #if (a == "no_failure" and b != "no_failure") or (a != "no_failure" and b == "no_failure"):
+            if (a == "no_failure" and b == "no_failure"):
+                pairwise_class_label_sim[pair_index] = 10
             else:
-                pairwise_class_label_sim[pair_index] = 0.95
-            '''
+                pairwise_class_label_sim[pair_index] = 1.0
+
 
         return pairwise_class_label_sim
 

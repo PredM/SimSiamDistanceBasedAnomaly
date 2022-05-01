@@ -127,8 +127,12 @@ class TSFreshRepresentation(Representation):
 
     # TODO: Clean up variable names
     def load(self):
-        filtered_features = (pd.read_pickle(self.dataset.dataset_folder + self.config.ts_fresh_filtered_file))
-        unfiltered_features = (pd.read_pickle(self.dataset.dataset_folder + self.config.ts_fresh_unfiltered_file))
+        #filtered_features = (pd.read_pickle(self.dataset.dataset_folder + self.config.ts_fresh_filtered_file))
+        #unfiltered_features = (pd.read_pickle(self.dataset.dataset_folder + self.config.ts_fresh_unfiltered_file))
+        #
+        '''
+        filtered_features = (pd.read_pickle(self.config.data_folder_prefix + 'training_data/' + self.config.ts_fresh_filtered_file))
+        unfiltered_features = (pd.read_pickle(self.config.data_folder_prefix + 'training_data/' + self.config.ts_fresh_unfiltered_file))
 
         # Attributes selected after TSFresh significance test on case base
         self.relevant_features = filtered_features.columns
@@ -137,16 +141,68 @@ class TSFreshRepresentation(Representation):
         self.x_test_features = filtered_test_examples_df.values
         self.x_train_features = filtered_features.values
 
+        print("self.x_test_features.shape:",self.x_test_features.shape)
+        print("self.x_train_features.shape:", self.x_train_features.shape)
+        from sklearn.preprocessing import MinMaxScaler
+        scaler = MinMaxScaler()
+        print(scaler.fit(self.x_train_features))
+
+        print(scaler.data_max_)
+
+        self.x_train_features = scaler.transform(self.x_train_features)
+        self.x_test_features = scaler.transform(self.x_test_features)
+        print("self.x_test_features.shape after transform:",self.x_test_features.shape)
+        print("self.x_train_features.shape  after transform:", self.x_train_features.shape)
+        '''
+        path1 = self.config.data_folder_prefix + 'training_data/' +"ts_fresh_extracted_features_filtered_min_max_scaled.npy"
+        path2 = self.config.data_folder_prefix + 'training_data/' +"ts_fresh_extracted_features_unfiltered_min_max_scaled.npy"
+        self.x_test_features = np.load(path2)
+        self.x_train_features = np.load(path1)
+        print("TSFresh x_train_features shape: ", self.x_train_features.shape)
+        #
+        #np.save(path2, self.x_test_features)
+
+
     def get_masking(self, train_example_index):
         class_label_train_example = self.dataset.y_train_strings[train_example_index]
         relevant_features_for_case = self.config.get_relevant_features_case(class_label_train_example)
+        print("self.relevant_features: ", self.relevant_features)
         masking = np.zeros(len(self.relevant_features))
+
+        for i, x in enumerate(self.relevant_features):
+            print(x.split('__')[0])
 
         idx = [i for i, x in enumerate(self.relevant_features) if x.split('__')[0] in relevant_features_for_case]
         masking[idx] = 1
 
         return masking
 
+    def convert_into_dataset(self):
+
+        # print("representation.x_train_features.shape:", self.feature_representation.x_train_features.shape)
+        # Set type to float32
+        self.x_train_features = self.x_train_features.astype('float32')
+        self.x_test_features = self.x_test_features.astype('float32')
+
+        dataset = self.dataset
+
+        # 1. Reshape the represetation input according our format; adding 1 dimension for "features" instead data streams
+        # 2. Overwrite the sensor raw data with the feature representation
+        print("self.x_train_features shape: ", self.x_train_features.shape)
+        dataset.x_train = (self.x_train_features[:, :]).reshape(
+            self.x_train_features[:, :].shape[0],
+            self.x_train_features[:, :].shape[1], 1)  # (example,features)
+        dataset.x_test = (self.x_test_features[:, :]).reshape(
+            self.x_test_features[:, :].shape[0],
+            self.x_test_features[:, :].shape[1], 1)  # (example,features)
+
+        # Updating dataset entries that are relevant for creating the networks input
+        dataset.time_series_length = self.x_train_features[:, :].shape[1]  # amount of features
+        dataset.time_series_depth = 1  # only one type of feature is used
+
+        # print("new shape of self.dataset.x_train:", dataset.x_train.shape)
+        # print("new shape of self.dataset.x_test:", dataset.x_test.shape)
+        return dataset
 
 class RocketRepresentation(Representation):
 

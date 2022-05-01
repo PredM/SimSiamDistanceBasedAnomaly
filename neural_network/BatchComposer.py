@@ -71,6 +71,9 @@ class BatchComposer:
             if self.config.use_sim_value_for_neg_pair:
                 sim = self.dataset.get_sim_label_pair(neg_pair[0], neg_pair[1], 'train')
                 subset_true_similarities.append(sim)
+            elif BatchSubsetType.ONLY_NO_FAILURE_PAIRS:
+                #print("added 1")
+                subset_true_similarities.append(1.0)
             else:
                 subset_true_similarities.append(0.0)
 
@@ -130,6 +133,24 @@ class BatchComposer:
                     # Return if pair matches the is_positive criterion, else draw another one
                     if not np.array_equal(self.y[first_idx], self.y[second_idx]):
                         return first_idx, second_idx
+
+        elif type == BatchSubsetType.ONLY_NO_FAILURE_PAIRS:
+            first_idx = np.random.randint(0, self.num_instances, size=1)[0]
+            second_idx = np.random.randint(0, self.num_instances, size=1)[0]
+            #'''
+            while True:
+                first_idx = np.random.randint(0, self.num_instances, size=1)[0]
+                class_of_first = np.nonzero(self.y[first_idx] == 1)[0][0]
+                examples_with_same = self.mapping.get(self.dataset.one_hot_index_to_string.get(class_of_first))
+                second_idx = np.random.choice(examples_with_same, 1)[0]
+                class_of_second = np.nonzero(self.y[second_idx] == 1)[0][0]
+                #print("class_of_first: ", self.dataset.one_hot_index_to_string.get(class_of_first), class_of_first)
+                #print("class_of_second: ", self.dataset.one_hot_index_to_string.get(class_of_second), class_of_second)
+                if class_of_first == 0: #(0 = no_failure) in FT, but 12 in W3
+                    #print("NoFailurePair!")
+                    return first_idx, second_idx
+            #'''
+            return first_idx, second_idx
         else:
             raise NotImplementedError('Unknown batch subset type:', type)
 

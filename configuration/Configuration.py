@@ -30,7 +30,7 @@ class BaselineConfiguration:
 
         # Should the case base representation be based on a fitting to the full training dataset?
         # True = Fit representation using full training dataset / Default: False = Fit representation on case base only.
-        self.force_fit_on_full_training_data = False
+        self.force_fit_on_full_training_data = True
 
         ##
         # Rocket
@@ -61,7 +61,7 @@ class GeneralConfiguration:
 
         # Path and file name to the specific model that should be used for testing and live classification
         # Folder where the models are stored is prepended below
-        self.filename_model_to_use = 'temp_snn_model_02-05_01-47-05_epoch-730'
+        self.filename_model_to_use = 'temp_snn_model_04-06_08-14-35_epoch-39'
 
         ##
         # Debugging - Don't use for feature implementation
@@ -97,7 +97,7 @@ class ModelConfiguration:
         ##
 
         # Selection which basic architecture is used, see enum class for details
-        self.architecture_variant = ArchitectureVariant.STANDARD_SIMPLE
+        self.architecture_variant = ArchitectureVariant.STANDARD_COMPLEX
 
         ##
         # Determines how the similarity between two embedding vectors is determined (when a simple architecture is used)
@@ -108,9 +108,9 @@ class ModelConfiguration:
 
         # Attention: Implementation expects a simple measure to return a similarity in the interval of [0,1]!
         # Only use euclidean_dis for TRAINING with contrastive loss
-        self.simple_measure = SimpleSimilarityMeasure.ABS_MEAN
+        self.simple_measure = SimpleSimilarityMeasure.COSINE
 
-        self.complex_measure = ComplexSimilarityMeasure.BASELINE_OVERWRITE
+        self.complex_measure = ComplexSimilarityMeasure.SIMPLE_SIAM
 
         ###
         # Hyperparameters
@@ -127,7 +127,7 @@ class ModelConfiguration:
         # If !use_individual_hyperparameters interpreted as a single json file, else as a folder
         # which contains json files named after the cases they should be used for
         # If no file with this name is present the 'default.json' Config will be used
-        self.hyper_file = self.hyper_file_folder + 'cnn1d_with_fc.json'
+        #self.hyper_file = self.hyper_file_folder + 'cnn1d_with_fc.json'
 
         ##
         # Various settings influencing the similarity calculation
@@ -185,21 +185,21 @@ class TrainingConfiguration:
         self.features_used = None
 
         # TODO Distance-Based Logistic Loss
-        self.type_of_loss_function = LossFunction.BINARY_CROSS_ENTROPY
+        self.type_of_loss_function = LossFunction.SIMPLE_SIAM_LOSS
 
         # Settings for constrative_loss
         self.margin_of_loss_function = 2
 
         # Scalar margin h for triplet loss function
-        self.triplet_loss_margin_h = 3
+        self.triplet_loss_margin_h = 0.5
 
         # Reduce margin of constrative_loss or in case of binary cross entropy loss
         # smooth negative examples by half of the sim between different labels
         self.use_margin_reduction_based_on_label_sim = False  # default: False
 
         self.use_early_stopping = True
-        self.early_stopping_epochs_limit = 500
-        self.early_stopping_loss_minimum = -1  # Default: -1.0 (no effect), CNN2D_with_add_Input: BCE:0.03, MSE:0.01
+        self.early_stopping_epochs_limit = 100
+        self.early_stopping_loss_minimum = -1.00  # Default: -1.0 (no effect), CNN2D_with_add_Input: BCE:0.03, MSE:0.01
 
         # Parameter to control if and when a test is conducted through training
         self.use_inference_test_during_training = False  # default False
@@ -208,10 +208,26 @@ class TrainingConfiguration:
         # Definition of batch compositions
         # Key = Enum for selecting how the pairs are chosen, value = size of the subset of this type, must add up to 1.0
         # The same number of positive and negative pairs are generated for each type
+        '''
         self.batch_distribution = {
             BatchSubsetType.DISTRIB_BASED_ON_DATASET: 0.5,
             BatchSubsetType.EQUAL_CLASS_DISTRIB: 0.5
         }
+        '''
+        self.batch_distribution = {
+            BatchSubsetType.ONLY_NO_FAILURE_PAIRS: 1,
+        }
+
+        self.use_pairwise_sim_siam = True
+
+        self.stop_gradient = False
+
+        self.evaluate_attribute_and_use_KG = True
+
+        self.plot_embeddings_via_TSNE = False
+
+        self.plot_train_test = False
+
 
         # Use a custom similarity values instead of 0 for unequal / negative pairs during batch creation
         # These are based on the similarity matrices loaded in the dataset
@@ -221,7 +237,7 @@ class TrainingConfiguration:
         self.output_interval = 1
 
         # How many model checkpoints are kept
-        self.model_files_stored = 10001
+        self.model_files_stored = 101
 
         # Select which adjacency matrix is used
         self.adj_matrix_type = AdjacencyMatrixType.ADJ_MAT_TYPE_AS_ONE_GRAPH_SPARSE
@@ -247,7 +263,7 @@ class InferenceConfiguration:
         # similarity assessment during inference.
         # Please note that the case base extraction only reduces the training data but fully copies the test data
         # so all test example will still be evaluated even if this is enabled
-        self.case_base_for_inference = True  # default: False
+        self.case_base_for_inference = False  # default: False
 
         # Parameter to control the size / number of the queries used for evaluation
         self.inference_with_failures_only = False  # default: False
@@ -264,7 +280,10 @@ class InferenceConfiguration:
         self.distance_scaling_parameter_for_cnn2dwithAddInput_ontopNN = 1.0
 
         # With TrainSelectAndTest is used, how many models (ascending from the best loss) should be tested? (ca. 8 min per test)
-        self.number_of_selection_tests = 6
+        self.number_of_selection_tests = 7#12#10#7
+        # Point at which a multiple is used for the next loss. Must be higher than half of number_of_selection_tests.
+        # If it is the same number, this option is deactivated
+        self.number_of_selection_tests_for_previous_models = 5#3#3#5
 
         # Num of Runs (Train,Select and Test) are should be performed
         #self.num_of_train_select_test_runs = 1
@@ -424,14 +443,39 @@ class StaticConfiguration:
         # Note: Folder of used model specified in GeneralConfiguration
 
         # Default prefix for main dataset
-        self.data_folder_prefix = '../data/'
+        self.data_folder_prefix = '../dataXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX/'
         # Prefix for the 3w dataset
         # self.data_folder_prefix = '../data/additional_datasets/3w_dataset/'
         #self.data_folder_prefix = '../../../../data/pklein/PredMSiamNN/data/'
+        #self.data_folder_prefix = '../../../../data/pklein/PredMSiamNN/data/'
         self.data_folder_prefix = '../data/'
+        #3W self.data_folder_prefix = '/../../../../../data/datasets/PredMSiamNN/data/3rd_party/3w_dataset/'
 
         # Folder where the trained models are saved to during learning process
-        self.models_folder = self.data_folder_prefix + 'trained_models/'
+        self.hyper_file = self.hyper_file_folder + 'cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2.json'#'cnn1d_with_fc_simsiam_128-32.json'  #cnn2d_with_graph_test_GCNGlobAtt_simSiam.json #cnn2d_withAddInput_ContextStrang.json  'cnn2d_with_graph-26-10.json'  #cnn2d_with_graph_test.json #cnn2d_withAddInput_nwApproach.json
+        #3W self.models_folder = '../../../../data/pklein/PredMSiamNN/data/' + 'trained_model2/' #
+        self.models_folder = self.data_folder_prefix + 'trained_models5/'
+        self.save_results_as_file = True
+        self.curr_run_identifier = self.hyper_file.split("/")[-1].split(".")[0]
+        self.use_train_FaF_in_eval = True
+
+        # Matches each time step with each time step from the other encoding which is implemented as a subtraction
+        # of the attention weights multiplied with the other time series
+        self.use_time_step_matching_simple_similarity = False
+        self.simple_measures_matching = ['euclidean', 'dot_product', 'cosine', 'absmean']
+        self.simple_measure_matching = self.simple_measures_matching[3]
+
+        # how often should the pairwise matching occur:
+        self.num_of_matching_iterations = 25
+
+        # Aggregator affects output for previous layers
+        # none = 2d output [T,C] , sum or mean = 1d vector with channel length
+        self.simple_matching_aggregators = ['none_attention_only', 'none', 'sum', 'mean']
+        self.simple_matching_aggregator = self.simple_matching_aggregators[0]
+
+        self.distance_scaling_parameter_for_atttenionbased_loss = 10.0
+        self.attion_multiplicator_scaling_parameter_for_atttenionbased_loss = 2.0
+
 
         # noinspection PyUnresolvedReferences
         self.directory_model_to_use = self.models_folder + self.filename_model_to_use + '/'
@@ -462,7 +506,7 @@ class StaticConfiguration:
 
         # CSV file containing the adjacency information of features used by the graph cnn2d encoder
         if self.adj_matrix_type == AdjacencyMatrixType.ADJ_MAT_TYPE_AS_ONE_GRAPH_SPARSE:
-            self.graph_adjacency_matrix_attributes_file = self.training_data_folder + 'adjacency_matrix_v3_fullGraph_sparse.CSV'
+            self.graph_adjacency_matrix_attributes_file = self.training_data_folder + 'adjmat_new.csv' #'adjacency_matrix_v3_fullGraph_sparse.CSV'
         elif self.adj_matrix_type == AdjacencyMatrixType.ADJ_MAT_TYPE_AS_ONE_GRAPH_WS_FULLY:
             self.graph_adjacency_matrix_attributes_file = self.training_data_folder + 'adjacency_matrix_v3_fullGraph_wsFullyConnected.CSV'
         elif self.adj_matrix_type == AdjacencyMatrixType.ADJ_MAT_TYPE_FIRST_VARIANT:
@@ -521,6 +565,12 @@ class StaticConfiguration:
         self.bmx055_VSG_acc = self.pathPrefix + 'raw_data/bmx055-VSG-acc.txt'
         self.bmx055_VSG_gyr = self.pathPrefix + 'raw_data/bmx055-VSG-gyr.txt'
         self.bmx055_VSG_mag = self.pathPrefix + 'raw_data/bmx055-VSG-mag.txt'
+
+        self.attribute_to_iri_mapping_file = self.training_data_folder + 'knowledge/feature_2_iri.json'
+        self.component_to_iri_mapping_file = self.training_data_folder + 'knowledge/component_2_iri.json'
+        self.ftonto_file_name = "FTOnto_with_PredM_w_Inferred" # "FTOnto_29-12-2020" #"FTonto_with_PredM" #"FTOnto_29-12-2020"
+        self.ftonto_file = self.training_data_folder + 'knowledge/' + self.ftonto_file_name + '.owl'
+        self.adj_mat_file = "AdjMat_FTOnto_29-12-2020.xlsx"
 
 
 class Configuration(
@@ -685,6 +735,21 @@ class Configuration(
         print("- sim_calculation_batch_size: ", self.sim_calculation_batch_size)
         print("- number_of_selection_tests: ", self.number_of_selection_tests)
         print("--- ---")
+        print("Time Step Matching related:")
+        print("- use_time_step_matching_simple_similarity: ", self.use_time_step_matching_simple_similarity)
+        print("- simple_measure_matching: ", self.simple_measure_matching)
+        print("- num_of_matching_iterations: ", self.num_of_matching_iterations)
+        print("- simple_matching_aggregator: ", self.simple_matching_aggregator)
+        print("--- ---")
+        print("Anomaly Detection related:")
+        print("- stop gradient active: ", self.stop_gradient)
+        print("- use_pairwise_sim_siam: ",self.use_pairwise_sim_siam)
+        print("- evaluate_attribute_and_use_KG: ", self.evaluate_attribute_and_use_KG)
+        print("- plot_embeddings_via_TSNE: ", self.plot_embeddings_via_TSNE)
+        print("- plot plot_train_test: ", self.plot_train_test)
+        print("--- ---")
+        print()
+
 
 
 def gen_timestamp(label: str, start: str, end: str, failure_time: str):

@@ -42,7 +42,8 @@ class Inference:
             # check similarities of all pairs and record the index of the closest training series
 
             sims_are_distance_values = True if self.config.simple_measure in [
-                SimpleSimilarityMeasure.EUCLIDEAN_DIS] else False
+                #SimpleSimilarityMeasure.EUCLIDEAN_DIS, SimpleSimilarityMeasure.COSINE
+            ] else False
             self.evaluator.add_single_example_results(sims, idx_test, sims_are_distance_values)
 
         # inference finished

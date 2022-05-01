@@ -6,6 +6,7 @@ import tensorflow as tf
 #tf.config.run_functions_eagerly(True)
 
 from configuration.Hyperparameter import Hyperparameters
+from neural_network.attn_augconv import augmented_conv2d
 
 
 class NN:
@@ -42,7 +43,7 @@ class NN:
         if type(self) in [CNN, RNN, CNN2D, CNN2dWithAddInput, GraphCNN2D, TypeBasedEncoder, DUMMY,
                           AttributeConvolution]:
             prefix = 'encoder'
-        elif type(self) in [BaselineOverwriteSimilarity, FFNN, GraphSimilarity, Cnn2DWithAddInput_Network_OnTop]:
+        elif type(self) in [BaselineOverwriteSimilarity, FFNN, GraphSimilarity, Cnn2DWithAddInput_Network_OnTop, FFNN_SimpleSiam_Prediction_MLP]:
             prefix = 'complex_sim'
         else:
             raise AttributeError('Can not import models of type', type(self))
@@ -169,15 +170,32 @@ class CNN(NN):
     def __init__(self, hyperparameters, input_shape):
         super().__init__(hyperparameters, input_shape)
 
+    def residual_module(self,layer_in, n_filters):
+        merge_input = layer_in
+        # check if the number of filters needs to be increase, assumes channels last format
+        if layer_in.shape[-1] != n_filters:
+            merge_input = tf.keras.layers.Conv1D(n_filters, (1), padding='same', activation='relu', kernel_initializer='he_normal')(
+                layer_in)
+        # conv1
+        conv1 = tf.keras.layers.Conv1D(n_filters, (3), padding='same', activation='relu', kernel_initializer='he_normal')(layer_in)
+        # conv2
+        conv2 = tf.keras.layers.Conv1D(n_filters, (3), padding='same', activation='linear', kernel_initializer='he_normal')(conv1)
+        # add filters, assumes filters/channels last
+        layer_out = tf.keras.layers.add([conv2, merge_input])
+        # activation function
+        layer_out = tf.keras.layers.Activation('relu')(layer_out)
+        return layer_out
+
     def create_model(self):
         print('Creating CNN encoder')
-        model = tf.keras.Sequential(name='CNN')
-
+        #model = tf.keras.Sequential(name='CNN')
+        input = tf.keras.Input(shape=self.input_shape, name="Input")
+        x = input
         layers = self.hyper.cnn_layers
 
         if len(layers) < 1:
             print('CNN encoder with less than one layer is not possible')
-            sys.exit(1)
+            #sys.exit(1)
 
         if self.hyper.fc_after_cnn1d_layers is not None and len(self.hyper.fc_after_cnn1d_layers) < 1:
             print('Adding FC with less than one layer is not possible')
@@ -192,31 +210,46 @@ class CNN(NN):
             if i == 0:
                 conv_layer = tf.keras.layers.Conv1D(filters=num_filter, padding='VALID', kernel_size=filter_size,
                                                     strides=stride, input_shape=self.input_shape)
+                x = conv_layer(x)
+
             else:
                 conv_layer = tf.keras.layers.Conv1D(filters=num_filter, padding='VALID', kernel_size=filter_size,
                                                     strides=stride)
+                x = conv_layer(x)
+            #model.add(conv_layer)
+            #model.add(tf.keras.layers.BatchNormalization())
+            #model.add(tf.keras.layers.ReLU())
+            x = tf.keras.layers.ReLU()(x)
+            x = tf.keras.layers.BatchNormalization()(x)
+            #x = self.residual_module(x, num_filter)
 
-            model.add(conv_layer)
-            model.add(tf.keras.layers.BatchNormalization())
-            model.add(tf.keras.layers.ReLU())
-
-        model.add(tf.keras.layers.Dropout(rate=self.hyper.dropout_rate))
+        #model.add(tf.keras.layers.Dropout(rate=self.hyper.dropout_rate))
+        x = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(x)
+        #model.add(tf.keras.layers.TimeDistributed(tf.keras.layers.Dense(units=32, activation=tf.keras.activations.relu), name="FC_TimeStepWise_Aggreg_Layer_32"))
 
         if self.hyper.fc_after_cnn1d_layers is not None:
             print('Adding FC layers')
             layers_fc = self.hyper.fc_after_cnn1d_layers.copy()
 
-            model.add(tf.keras.layers.Flatten())
+            #model.add(tf.keras.layers.Flatten())
+            x = tf.keras.layers.Flatten()(x)
+            #x = Memory(100, 32)(x)
+            #x_flatten = x
             for num_units in layers_fc:
-                model.add(tf.keras.layers.BatchNormalization())
-                model.add(tf.keras.layers.Dense(units=num_units, activation=tf.keras.activations.relu))
-
+                #model.add(tf.keras.layers.BatchNormalization())
+                #model.add(tf.keras.layers.Dense(units=num_units, activation=tf.keras.activations.relu))
+                x = tf.keras.layers.BatchNormalization()(x)
+                x = tf.keras.layers.Dense(units=num_units, activation=tf.keras.activations.relu)(x)
+            #x_ = tf.keras.layers.Dense(units=128)(x_flatten) # residual connection
+            #x = tf.keras.layers.Add()([x_,x])
             # Normalize final output as recommended in Roy et al (2019) Siamese Networks: The Tale of Two Manifolds
             # model.add(tf.keras.layers.BatchNormalization())
             # model.add(tf.keras.layers.Softmax()) # Martin et al. (2017) ICCBR
-            model.add(tf.keras.layers.Reshape((model.layers[len(model.layers) - 1].output.shape[1], 1)))
-
-        self.model = model
+            #model.add(tf.keras.layers.Reshape((model.layers[len(model.layers) - 1].output.shape[1], 1)))
+            #x = Memory(10, 32)(x)
+            output = tf.expand_dims(x,-1)
+        self.model = tf.keras.Model(inputs=input, outputs=[output])
+        #self.model = model
 
 
 class AttributeConvolution(NN):
@@ -339,6 +372,7 @@ class CNN2D(NN):
         # Define model's input dependent on the concrete encoder variant used
         if self.hyper.encoder_variant in ['cnn2d']:
             input = tf.keras.Input(shape=(self.input_shape[0], self.input_shape[1], 1), name="Input0")
+
         elif self.hyper.encoder_variant in ['graphcnn2d']:
             input = tf.keras.Input(shape=(self.input_shape[0][0], self.input_shape[0][1], 1), name="Input0")
             adj_matrix_input_ds = tf.keras.layers.Input(shape=self.input_shape[1], name="AdjMatDS")
@@ -379,10 +413,10 @@ class CNN2D(NN):
                 else:
                     sensor_data_input2 = input
                     # Add First 2DConv Layer
-                conv_layer1 = tf.keras.layers.Conv2D(filters=num_filter, padding='VALID', kernel_size=(filter_size), strides=stride, input_shape=input.shape, name="2DConv-"+str(i))
+                conv_layer1 = tf.keras.layers.Conv2D(filters=num_filter, padding='VALID', kernel_size=(filter_size), strides=stride, input_shape=input.shape, use_bias=True, name="2DConv-"+str(i))
                 x = conv_layer1(sensor_data_input2)
             else:
-                conv_layer = tf.keras.layers.Conv2D(filters=num_filter, padding='VALID', kernel_size=(filter_size), strides=stride, name="2DConv"+str(i))
+                conv_layer = tf.keras.layers.Conv2D(filters=num_filter, padding='VALID', kernel_size=(filter_size), strides=stride, use_bias=True, name="2DConv"+str(i))
                 x = conv_layer(x)
 
             x = tf.keras.layers.BatchNormalization()(x)
@@ -419,7 +453,7 @@ class CNN2D(NN):
             for num_units in layers_fc:
                 x = tf.keras.layers.BatchNormalization()(x)
                 x = tf.keras.layers.TimeDistributed(
-                    tf.keras.layers.Dense(units=num_units, activation=tf.keras.activations.relu),
+                    tf.keras.layers.Dense(units=num_units, activation=tf.keras.activations.relu, use_bias=True,),
                     name="FC_FeatureWise_Aggreg_Layer_" + str(num_units) + "U")(x)
             x = tf.keras.layers.Permute((2, 1))(x)  # transpose
 
@@ -470,6 +504,8 @@ class GraphCNN2D(CNN2D):
             adj_matrix_input_ds = input[1]
             adj_matrix_input_ws = input[2]
             static_attribute_features_input = input[3]
+            print("adj_matrix_input_ds: ", adj_matrix_input_ds, "adj_matrix_input_ws: ", adj_matrix_input_ws, "static_attribute_features_input: ", static_attribute_features_input)
+            output_new2 = tf.transpose(output, perm=[0, 2, 1])
 
             # Concat time series features with additional static node features
             if self.hyper.use_owl2vec_node_features_in_graph_layers == "True":
@@ -481,16 +517,19 @@ class GraphCNN2D(CNN2D):
             # Here: Nodes = Attributes (univariate time series), Features = Time steps
             # Shape of output: ([batch], Time steps, Attributes, so we must "switch" the second and third dimension
             output = tf.transpose(output, perm=[0, 2, 1])
+            print("self.hyper.graph_conv_channels: ", self.hyper.graph_conv_channels)
             if self.hyper.use_GCNGlobAtt_Fusion == "True":
                 for index, channels in enumerate(self.hyper.graph_conv_channels):
 
                     if self.hyper.use_linear_transformation_in_context == "True":
                         output_L = LinearTransformationLayer(size=(output.shape[2], channels))(output)
-                    output = spektral.layers.GCNConv(channels=channels, activation=None)([output, adj_matrix_input_ds])
+                    output = spektral.layers.GCNConv(channels=channels, activation=None, use_bias=True)([output, adj_matrix_input_ds])
+                    #output = spektral.layers.GATConv(channels=channels, attn_heads=3, concat_heads=False, dropout_rate=0.1, activation=None)([output, adj_matrix_input_ds])
                     if self.hyper.use_linear_transformation_in_context == "True":
                         output = tf.keras.layers.Add()([output, output_L])
                     output = tf.keras.layers.BatchNormalization()(output)
                     output = tf.keras.layers.ReLU()(output)
+                    #output_new = output
                     #output = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate / 2)(output)
                     # Add Owl2Vec
                     if index < len(self.hyper.graph_conv_channels)-1:
@@ -502,7 +541,24 @@ class GraphCNN2D(CNN2D):
                     #output_GCN_ds = output
                 for channels in self.hyper.global_attention_pool_channels:
                     output = spektral.layers.GlobalAttentionPool(channels)(output)
+                    #tf.print("output shape: ", output.shape)
+                    #print("output shape: ", output.shape)
+                    #output = tf.keras.layers.Dense(256)(output)
                     #output = output # tf.keras.layers.Flatten(output)
+
+                    # Global attention pooling to deactivate the bias
+                    '''
+                    features_layer = tf.keras.layers.Dense(channels, name="features_layer")
+                    attention_layer = tf.keras.layers.Dense(channels, activation="sigmoid", name="attn_layer")
+                    inputs_linear = features_layer(output)  # 128x61x64
+                    attn = attention_layer(output)  # 128x64
+                    print("inputs_linear shape: ", inputs_linear.shape, "attn shape:",attn.shape)
+                    masked_inputs = inputs_linear * attn  # tf.keras.layers.Multiply()([inputs_linear, attn])
+                    output = tf.keras.backend.sum(masked_inputs, axis=-2)
+                    print("masked_inputs shape: ", inputs_linear.shape, "output shape:", output.shape)
+                    #output = tf.expand_dims(output, -1)
+                    print("output fin shape:", output.shape)
+                    '''
 
 
             else: # Readout Version
@@ -627,8 +683,8 @@ class GraphCNN2D(CNN2D):
                 # Redefine input of madel as normal input + additional adjacency matrix input
                 #input = [input, adj_matrix_input_ds, adj_matrix_input_ws, static_attribute_features_input]
 
-        return input, output
-
+        return input, [output, output_new2, input[0]]
+        #return input, [output,output,output]
 
 class GraphSimilarity(NN):
 
@@ -795,9 +851,33 @@ class CNN2dWithAddInput(NN):
             x = tf.keras.layers.ReLU()(x)
             #x = tf.keras.layers.SpatialDropout2D(rate=self.hyper.dropout_rate)(x)
 
+        # TEST TO USE ROCKET Strategy
+        '''
+        #  Global Max Pooling per Filter
+        x_1 = tf.keras.layers.MaxPool2D(pool_size=(123,1))(x)
+        #x_1 = tf.keras.layers.GlobalMaxPooling2D()(x)
+        #y = tf.keras.layers.GlobalAveragePooling2D()(x)
+        # Pool positive portion of values
+        x_2 = tf.where(x>0, 1, 0)
+        x_2_sum = tf.reduce_sum(x_2, axis=1)/123
+        x_2_sum = tf.expand_dims(x_2_sum, 1)
+        #x_2_sum = LinearTransformationLayer2(size=(1,123,61,16))(x)
+
+        #Concat
+        x = tf.keras.layers.Concatenate(axis=-1)([x_1, x_2_sum])
+        x = tf.transpose(x, perm=[0, 3, 2, 1])
+        # [None, 2, 61, 1]
+        #x = tf.reshape(x, (None, 2, 61))
+
+        reshape = tf.keras.layers.Reshape((self.hyper.cnn2d_layers[-1]*2, 61))
+        # reshape = tf.keras.layers.Reshape((x.shape[1], x.shape[2]))
+        x = reshape(x)
+
+        #x = tf.squeeze(x)
+        '''
         # x = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(x)
-        reshape = tf.keras.layers.Reshape((x.shape[1] * self.hyper.cnn2d_layers[-1], x.shape[2]))
-        #reshape = tf.keras.layers.Reshape((x.shape[1], x.shape[2]))
+        #reshape = tf.keras.layers.Reshape((x.shape[1] * self.hyper.cnn2d_layers[-1], x.shape[2]))
+        reshape = tf.keras.layers.Reshape((x.shape[1], x.shape[2]))
         x = reshape(x)
 
         if self.hyper.use_FiLM_after_2Conv == "True":
@@ -1185,6 +1265,7 @@ class CNN2dWithAddInput(NN):
                 features_layer = tf.keras.layers.Dense(64, name="features_layer")
                 attention_layer = tf.keras.layers.Dense(64, activation="sigmoid", name="attn_layer")
                 attention_layer2 = tf.keras.layers.Dense(64, activation="sigmoid", name="attn_layer2")
+                attention_layer3 = tf.keras.layers.Dense(64, activation="sigmoid", name="attn_layer3")
 
                 inputs_linear = features_layer(o2) # 128x61x64
                 attn = attention_layer(case_dependent_vector_input) # 128x64
@@ -1194,9 +1275,9 @@ class CNN2dWithAddInput(NN):
         
                 masked_inputs = inputs_linear * attn # tf.keras.layers.Multiply()([inputs_linear, attn])
                 o2 = tf.keras.backend.sum(masked_inputs, axis=-2)
-                '''
+
                 # output = output # tf.keras.layers.Flatten(output)
-                # '''
+                 '''
                 o2 = tf.expand_dims(o2, -1)
             else:
                 # FC Version (IoTStream Version)
@@ -1364,7 +1445,7 @@ class BaselineOverwriteSimilarity(NN):
 
         # regardless of the configured number of layers, add a layer with
         # a single neuron that provides the indicator function output.
-        output = tf.keras.layers.Dense(units=1, activation=tf.keras.activations.sigmoid, use_bias=False)(layer_input)
+        output = tf.keras.layers.Dense(units=1, activation=tf.keras.activations.sigmoid, use_bias=True)(layer_input)
 
         self.model = tf.keras.Model(inputs=layer_input, outputs=output)
 
@@ -1795,6 +1876,7 @@ class LinearTransformationLayer(tf.keras.layers.Layer):
 
     # noinspection PyMethodOverridingd
     def call(self, input_):
+        tf.print(input_)
         #linear_transformed_input = tf.matmul(input_, self.weightmatrix)
         #linear_transformed_input = tf.math.multiply(input_, self.weightmatrix)
         linear_transformed_input = tf.matmul(input_, self.weightmatrix)
@@ -1846,3 +1928,909 @@ class FiLM(tf.keras.layers.Layer):
     def compute_output_shape(self, input_shape):
         assert isinstance(input_shape, list)
         return input_shape[0]
+
+class LinearTransformationLayer2(tf.keras.layers.Layer):
+    # This Layer provides a linear transformation, e.g. used as last layer in Conditional Simialrty Networks or in addition to a GCN Layer
+    def __init__(self,size, input_shape_=None, **kwargs):
+        super(LinearTransformationLayer2, self).__init__()
+        self.size = size
+        self.input_shape_ = input_shape_
+
+    def build(self, input_shape):
+        self.weightmatrix = self.add_weight(name='linear_transformation_weights',
+                                              shape=self.size,
+                                              initializer=tf.keras.initializers.ones,
+                                              trainable=False)
+
+        super(LinearTransformationLayer2, self).build(input_shape)
+
+    # noinspection PyMethodOverridingd
+    def call(self, input_):
+        #linear_transformed_input = tf.matmul(input_, self.weightmatrix)
+        #linear_transformed_input = tf.math.multiply(input_, self.weightmatrix)
+        linear_transformed_input = tf.matmul(input_, (self.weightmatrix/123))
+        return linear_transformed_input
+
+    def compute_output_shape(self, input_shape):
+        return input_shape
+
+class FFNN_BarlowTwin_MLP_Dummy(NN):
+    # This is an encoder without any learnable parameter and without any input transformation
+
+    def __init__(self, hyperparameters, input_shape):
+        super().__init__(hyperparameters, input_shape)
+
+    def create_model(self):
+        print('Creating a keras model without any parameter, input is the same as its output, no transformations: ',
+              self.input_shape)
+        input = tf.keras.Input(shape=(self.input_shape), name="Input0")
+        output = input
+        self.model = tf.keras.Model(inputs=input, outputs=output, name='Dummy')
+
+class FFNN_SimpleSiam_Prediction_MLP(NN):
+    def __init__(self, hyperparameters, input_shape):
+        super().__init__(hyperparameters, input_shape)
+
+    def create_model(self):
+        print('Creating FFNN Simple Siam Prediction MLP for input shape: ', self.input_shape)
+
+        layers = self.hyper.ffnn_layers.copy()
+
+        if len(layers) < 1:
+            print('FFNN with less than one layer is not possible')
+            sys.exit(1)
+
+        input = tf.keras.Input(shape=self.input_shape, name="FFNN_PredictionMLP-Input")
+
+        x = input
+        ''''''
+        x = tf.keras.layers.Dropout(rate = 0.1)(x)
+
+        print("Note that Prediction MLP in Simple Siam should be a bottleneck structure!")
+        for units in layers:
+            #x_1_ = tf.keras.layers.Dense(units=units, activation=tf.keras.activations.relu)(x)
+            x_1_ = tf.keras.layers.Dense(units=units)(x)
+            # Activation changed from relu to leakyrelu because of dying neurons
+            #x_1_ = tf.keras.layers.LeakyReLU()(x_1_)
+            x_1_ = tf.keras.layers.ReLU()(x_1_)
+            x_1_ = tf.keras.layers.BatchNormalization()(x_1_)
+            #x_1_ = tf.math.l2_normalize(x_1_, axis=1)
+
+
+        output = tf.keras.layers.Dense(units=128)(x_1_)
+        #x = tf.keras.layers.Reshape((last_layer_size, 1))(x)
+        #output = tf.expand_dims(x_1_,-1)
+
+        ### Autoencoder
+        '''
+        x_1_ae = tf.keras.layers.Dense(units=7564)(input)
+        x_1_ae = tf.keras.layers.ReLU()(x_1_ae)
+        x_1_ae = tf.keras.layers.BatchNormalization()(x_1_ae)
+        x_1_ae = tf.keras.layers.Reshape((124, 61))(x_1_ae)
+        x_1_ae = tf.expand_dims(x_1_ae,-1)
+
+
+        conv2d_trans_layer1 = tf.keras.layers.Conv2DTranspose(filters=128,
+                                                              strides=[2,1],
+                                                              kernel_size=[5,1], padding='same',
+                                                              activation='relu')
+        conv2d_trans_layer2 = tf.keras.layers.Conv2DTranspose(filters=64,
+                                                              strides=[2,1],
+                                                              kernel_size=[5,1], padding='valid',
+                                                              activation='relu')
+        conv2d_trans_layer3 = tf.keras.layers.Conv2DTranspose(filters=32,
+                                                              strides=[2,1],
+                                                              kernel_size=[4,1], padding='valid',
+                                                              activation='relu')
+        conv2d_trans_layer4 = tf.keras.layers.Conv2DTranspose(filters=1,
+                                                              strides=[1,1],
+                                                              kernel_size=[1,1], padding='same',
+                                                              activation='relu')
+        conv2d_trans_layer5 = tf.keras.layers.Conv2DTranspose(filters=1,
+                                                              strides=[1,1],
+                                                              kernel_size=[1,1], padding='same',
+                                                              activation='relu')
+
+        x_1_ae = conv2d_trans_layer1(x_1_ae)
+        x_1_ae = conv2d_trans_layer2(x_1_ae)
+        x_1_ae = conv2d_trans_layer3(x_1_ae)
+        x_1_ae = conv2d_trans_layer4(x_1_ae)
+        '''
+        #self.model = tf.keras.Model(inputs=input, outputs=[output, x_1_ae])
+        self.model = tf.keras.Model(inputs=input, outputs=output)
+
+class FFNN_SimpleSiam_Prediction_MLP_VariationExtraction(NN):
+
+    def __init__(self, hyperparameters, input_shape):
+        super().__init__(hyperparameters, input_shape)
+
+    def create_model(self):
+        print('Creating FFNN Simple Siam Prediction MLP for input shape: ', self.input_shape)
+
+        layers = self.hyper.ffnn_layers.copy()
+
+        if len(layers) < 1:
+            print('FFNN with less than one layer is not possible')
+            sys.exit(1)
+
+        input = tf.keras.Input(shape=self.input_shape, name="FFNN_PredictionMLP-Input")
+
+        x = input
+        ''''''
+        #x = tf.keras.layers.Dropout(rate = 0.1)(x)
+
+        print("Note that Prediction MLP in Simple Siam should be a bottleneck structure!")
+        for units in layers:
+            #x_1_ = tf.keras.layers.Dense(units=units, activation=tf.keras.activations.relu)(x)
+            x_1_ = tf.keras.layers.Dense(units=units, use_bias=True)(x)
+            # Activation changed from relu to leakyrelu because of dying neurons
+            #x_1_ = tf.keras.layers.LeakyReLU()(x_1_)
+            x_1_ = tf.keras.layers.ReLU()(x_1_)
+            x_1_ = tf.keras.layers.BatchNormalization()(x_1_)
+            #x_1_ = tf.math.l2_normalize(x_1_, axis=1)
+
+
+        x_1_ = tf.keras.layers.Dense(units=128, use_bias=True)(x_1_)
+        output = x_1_
+        #z = tf.keras.layers.Dense(units=128, use_bias=True)(x_1_)
+        #v_z = tf.keras.layers.Dense(units=128, use_bias=True)(x_1_)
+
+        #x = tf.keras.layers.Reshape((last_layer_size, 1))(x)
+        #output = tf.expand_dims(x_1_,-1)
+
+        ### Autoencoder
+        '''
+        x_1_ae = tf.keras.layers.Dense(units=7564)(input)
+        x_1_ae = tf.keras.layers.ReLU()(x_1_ae)
+        x_1_ae = tf.keras.layers.BatchNormalization()(x_1_ae)
+        x_1_ae = tf.keras.layers.Reshape((124, 61))(x_1_ae)
+        x_1_ae = tf.expand_dims(x_1_ae,-1)
+
+
+        conv2d_trans_layer1 = tf.keras.layers.Conv2DTranspose(filters=128,
+                                                              strides=[2,1],
+                                                              kernel_size=[5,1], padding='same',
+                                                              activation='relu')
+        conv2d_trans_layer2 = tf.keras.layers.Conv2DTranspose(filters=64,
+                                                              strides=[2,1],
+                                                              kernel_size=[5,1], padding='valid',
+                                                              activation='relu')
+        conv2d_trans_layer3 = tf.keras.layers.Conv2DTranspose(filters=32,
+                                                              strides=[2,1],
+                                                              kernel_size=[4,1], padding='valid',
+                                                              activation='relu')
+        conv2d_trans_layer4 = tf.keras.layers.Conv2DTranspose(filters=1,
+                                                              strides=[1,1],
+                                                              kernel_size=[1,1], padding='same',
+                                                              activation='relu')
+        conv2d_trans_layer5 = tf.keras.layers.Conv2DTranspose(filters=1,
+                                                              strides=[1,1],
+                                                              kernel_size=[1,1], padding='same',
+                                                              activation='relu')
+
+        x_1_ae = conv2d_trans_layer1(x_1_ae)
+        x_1_ae = conv2d_trans_layer2(x_1_ae)
+        x_1_ae = conv2d_trans_layer3(x_1_ae)
+        x_1_ae = conv2d_trans_layer4(x_1_ae)
+        '''
+        #self.model = tf.keras.Model(inputs=input, outputs=[output, x_1_ae])
+        self.model = tf.keras.Model(inputs=input, outputs=output)
+
+class FFNN_SimpleSiam_Prediction_MLP_Residual(NN):
+
+    def __init__(self, hyperparameters, input_shape):
+        super().__init__(hyperparameters, input_shape)
+
+    def create_model(self):
+        print('Creating FFNN Simple Siam Prediction MLP for input shape: ', self.input_shape)
+
+        layers = self.hyper.ffnn_layers.copy()
+
+        if len(layers) < 1:
+            print('FFNN with less than one layer is not possible')
+            sys.exit(1)
+
+        input = tf.keras.Input(shape=self.input_shape, name="FFNN_PredictionMLP-Input")
+
+        x = input
+        ''''''
+        #x = tf.keras.layers.Dropout(rate = 0.1)(x)
+
+        print("Note that Prediction MLP in Simple Siam should be a bottleneck structure!")
+        for units in layers:
+            #x_1_ = tf.keras.layers.Dense(units=units, activation=tf.keras.activations.relu)(x)
+            x_1_ = tf.keras.layers.Dense(units=units)(x)
+            x_1_ = tf.keras.layers.Dense(units=units)(x_1_)
+            # Activation changed from relu to leakyrelu because of dying neurons
+            #x_1_ = tf.keras.layers.LeakyReLU()(x_1_)
+            x_1_ = tf.keras.layers.ReLU()(x_1_)
+            x_1_ = tf.keras.layers.BatchNormalization()(x_1_)
+            #x_1_ = tf.math.l2_normalize(x_1_, axis=1)
+
+
+        x_1_ = tf.keras.layers.Dense(units=128, use_bias=True)(x_1_)
+        z = tf.keras.layers.Dense(units=128, use_bias=True)(x_1_)
+        v_z = tf.keras.layers.Dense(units=128, use_bias=True)(x_1_)
+
+        #x = tf.keras.layers.Reshape((last_layer_size, 1))(x)
+        #output = tf.expand_dims(x_1_,-1)
+
+        ### Autoencoder
+        '''
+        x_1_ae = tf.keras.layers.Dense(units=7564)(input)
+        x_1_ae = tf.keras.layers.ReLU()(x_1_ae)
+        x_1_ae = tf.keras.layers.BatchNormalization()(x_1_ae)
+        x_1_ae = tf.keras.layers.Reshape((124, 61))(x_1_ae)
+        x_1_ae = tf.expand_dims(x_1_ae,-1)
+
+
+        conv2d_trans_layer1 = tf.keras.layers.Conv2DTranspose(filters=128,
+                                                              strides=[2,1],
+                                                              kernel_size=[5,1], padding='same',
+                                                              activation='relu')
+        conv2d_trans_layer2 = tf.keras.layers.Conv2DTranspose(filters=64,
+                                                              strides=[2,1],
+                                                              kernel_size=[5,1], padding='valid',
+                                                              activation='relu')
+        conv2d_trans_layer3 = tf.keras.layers.Conv2DTranspose(filters=32,
+                                                              strides=[2,1],
+                                                              kernel_size=[4,1], padding='valid',
+                                                              activation='relu')
+        conv2d_trans_layer4 = tf.keras.layers.Conv2DTranspose(filters=1,
+                                                              strides=[1,1],
+                                                              kernel_size=[1,1], padding='same',
+                                                              activation='relu')
+        conv2d_trans_layer5 = tf.keras.layers.Conv2DTranspose(filters=1,
+                                                              strides=[1,1],
+                                                              kernel_size=[1,1], padding='same',
+                                                              activation='relu')
+
+        x_1_ae = conv2d_trans_layer1(x_1_ae)
+        x_1_ae = conv2d_trans_layer2(x_1_ae)
+        x_1_ae = conv2d_trans_layer3(x_1_ae)
+        x_1_ae = conv2d_trans_layer4(x_1_ae)
+        '''
+        #self.model = tf.keras.Model(inputs=input, outputs=[output, x_1_ae])
+        self.model = tf.keras.Model(inputs=input, outputs=output)
+
+class FFNN_SimpleSiam_Prediction_MLP_04_05(NN):
+
+    def __init__(self, hyperparameters, input_shape):
+        super().__init__(hyperparameters, input_shape)
+
+    def create_model(self):
+        print('Creating FFNN Simple Siam Prediction MLP for input shape: ', self.input_shape)
+
+        layers = self.hyper.ffnn_layers.copy()
+
+        if len(layers) < 1:
+            print('FFNN with less than one layer is not possible')
+            sys.exit(1)
+
+        input = tf.keras.Input(shape=self.input_shape[0], name="FFNN_PredictionMLP-Input")
+        input_2 = tf.keras.Input(shape=self.input_shape[1], name="FFNN_PredictionMLP-Input2")
+
+        x = input
+        #x_2 = input_2
+
+        print("Note that Prediction MLP in Simple Siam should be a bottleneck structure!")
+        for units in layers:
+            '''
+            attention_layer2 = tf.keras.layers.Dense(128, activation="sigmoid", name="attn_layer")
+            features_layer = tf.keras.layers.Dense(128, name="features_layer")
+            inputs_linear = features_layer(x)
+            attn = attention_layer2(x_2)
+
+            x = inputs_linear * attn
+            '''
+            x_1_ = tf.keras.layers.Dense(units=units, activation=tf.keras.activations.relu)(x)
+            x_1 = tf.keras.layers.BatchNormalization()(x_1_)
+            #'''
+            #input_2_ = tf.keras.layers.Dense(128, name="linear_1")(input_2)
+            #i_x2 = tf.keras.layers.Add()([x, input_2_])
+            x_2_ = tf.keras.layers.Dense(units=units, activation=tf.keras.activations.relu)(x)
+            x_2 = tf.keras.layers.BatchNormalization()(x_2_)
+            #input_2__ = tf.keras.layers.Dense(128, name="linear_2")(input_2)
+            #i_x3 = tf.keras.layers.Multiply()([x, input_2__])
+            x_3_ = tf.keras.layers.Dense(units=units, activation=tf.keras.activations.relu)(x)
+            x_3 = tf.keras.layers.BatchNormalization()(x_3_)
+            #'''
+
+        #dense = tf.keras.layers.Dense(units=128)
+        #output = dense(x_1)
+        #output_2 = dense(x_2)
+        #output_3 = dense(x_3)
+
+        #output = tf.keras.layers.Dense(units=128, activation='relu')(x_1)
+        #output = tf.keras.layers.Add()([output, x])
+        output = tf.keras.layers.Dense(units=128)(x_1)
+
+        #'''
+        #output_2 = tf.keras.layers.Dense(units=128, activation='relu' )(x_2)
+        output_2 = tf.keras.layers.Dense(units=128, )(x_2)
+        #output_2 = tf.keras.layers.Add()([output_2, x])
+
+        #output_3 = tf.keras.layers.Dense(units=128, activation='relu' )(x_3)
+        output_3 = tf.keras.layers.Dense(units=128, )(x_3)
+        #output_3 = tf.keras.layers.Multiply()([output_3, x])
+
+        '''
+        attention_layer1 = tf.keras.layers.Dense(128, activation="sigmoid", name="attn_layer1")
+        attention_layer2 = tf.keras.layers.Dense(128, activation="sigmoid", name="attn_layer2")
+        features_layer = tf.keras.layers.Dense(128, name="features_layer1")
+        features_layer2 = tf.keras.layers.Dense(128, name="features_layer2")
+        inputs_linear = features_layer(output)
+        inputs_linear2 = features_layer(output_2)
+        inputs_linear3 = features_layer(output_3)
+        attn = attention_layer2(input_2)
+        attn_o1 = attention_layer1(output)
+        
+
+        output_gated = inputs_linear * attn
+        output_gated2 = inputs_linear2 * attn
+        output_gated3 = inputs_linear3 * attn
+        output = tf.keras.layers.Add()([output_gated, output_gated2, output_gated3])
+        #output_3 = tf.keras.layers.Multiply()([output_3, x])
+        '''
+
+        #'''
+        '''
+        dense = tf.keras.layers.Dense(units=128)
+        output = dense(x)
+        output_2 = dense(x_2)
+        output_3 = dense(x_3)
+        '''
+
+        #output = tf.keras.layers.Dense(units=1, activation=tf.keras.activations.sigmoid)(x)
+
+        #self.model = tf.keras.Model(inputs=[input, input_2], outputs=[output,output_2,output_3,x_1_,x_2_,x_3_])
+        self.model = tf.keras.Model(inputs=[input, input_2], outputs=[output,output_2,output_3,x_1_,x_2_,x_3_])
+        #self.model = tf.keras.Model(inputs=[input, input_2], outputs=[output])
+
+class FFNN_SimpleSiam_Prediction_MLP_Backup_03_05(NN):
+#class FFNN_SimpleSiam_Prediction_MLP:
+    def __init__(self, hyperparameters, input_shape):
+        super().__init__(hyperparameters, input_shape)
+
+    def create_model(self):
+        print('Creating FFNN Simple Siam Prediction MLP for input shape: ', self.input_shape)
+
+        layers = self.hyper.ffnn_layers.copy()
+
+        if len(layers) < 1:
+            print('FFNN with less than one layer is not possible')
+            sys.exit(1)
+
+        input = tf.keras.Input(shape=self.input_shape[0], name="FFNN_PredictionMLP-Input")
+        input_2 = tf.keras.Input(shape=self.input_shape[1], name="FFNN_PredictionMLP-Input2")
+
+        x = input
+        #x_2 = input_2
+
+        print("Note that Prediction MLP in Simple Siam should be a bottleneck structure!")
+        for units in layers:
+            '''
+            attention_layer2 = tf.keras.layers.Dense(128, activation="sigmoid", name="attn_layer")
+            features_layer = tf.keras.layers.Dense(128, name="features_layer")
+            inputs_linear = features_layer(x)
+            attn = attention_layer2(x_2)
+
+            x = inputs_linear * attn
+            '''
+            x_1_ = tf.keras.layers.Dense(units=units, activation=tf.keras.activations.relu)(x)
+            x_1 = tf.keras.layers.BatchNormalization()(x_1_)
+            #'''
+            input_2_ = tf.keras.layers.Dense(128, name="linear_1")(input_2)
+            i_x2 = tf.keras.layers.Add()([x, input_2_])
+            x_2_ = tf.keras.layers.Dense(units=units, activation=tf.keras.activations.relu)(i_x2)
+            x_2 = tf.keras.layers.BatchNormalization()(x_2_)
+            input_2__ = tf.keras.layers.Dense(128, name="linear_2")(input_2)
+            i_x3 = tf.keras.layers.Multiply()([x, input_2__])
+            x_3_ = tf.keras.layers.Dense(units=units, activation=tf.keras.activations.relu)(i_x3)
+            x_3 = tf.keras.layers.BatchNormalization()(x_3_)
+            #'''
+
+        #dense = tf.keras.layers.Dense(units=128)
+        #output = dense(x_1)
+        #output_2 = dense(x_2)
+        #output_3 = dense(x_3)
+
+        output = tf.keras.layers.Dense(units=128, activation='relu')(x_1)
+        output = tf.keras.layers.Add()([output, x])
+        output = tf.keras.layers.Dense(units=128)(output)
+
+        #'''
+        output_2 = tf.keras.layers.Dense(units=128, activation='relu' )(x_2)
+        output_2 = tf.keras.layers.Add()([output_2, x])
+        output_2 = tf.keras.layers.Dense(units=128, )(output_2)
+
+        output_3 = tf.keras.layers.Dense(units=128, activation='relu' )(x_3)
+        output_3 = tf.keras.layers.Add()([output_3, x])
+        output_3 = tf.keras.layers.Dense(units=128, )(output_3)
+
+        #output_3 = tf.keras.layers.Multiply()([output_3, x])
+        #'''
+        '''
+        dense = tf.keras.layers.Dense(units=128)
+        output = dense(x)
+        output_2 = dense(x_2)
+        output_3 = dense(x_3)
+        '''
+
+        #output = tf.keras.layers.Dense(units=1, activation=tf.keras.activations.sigmoid)(x)
+
+        self.model = tf.keras.Model(inputs=[input, input_2], outputs=[output,output_2,output_3,x,i_x2,i_x3])
+        #self.model = tf.keras.Model(inputs=[input, input_2], outputs=[output])
+
+class FFNN_SimpleSiam_Prediction_MLP_VariationExtraction30_04_22(NN):
+
+    def __init__(self, hyperparameters, input_shape):
+        super().__init__(hyperparameters, input_shape)
+
+    def create_model(self):
+        print('Creating FFNN Simple Siam Prediction MLP for input shape: ', self.input_shape)
+
+        layers = self.hyper.ffnn_layers.copy()
+
+        if len(layers) < 1:
+            print('FFNN with less than one layer is not possible')
+            sys.exit(1)
+
+        input = tf.keras.Input(shape=self.input_shape, name="FFNN_PredictionMLP-Input")
+
+        z = input
+        ''''''
+        #x = tf.keras.layers.Dropout(rate = 0.05)(x)
+
+        print("Note that Prediction MLP in Simple Siam should be a bottleneck structure!")
+        initializer = tf.keras.initializers.RandomUniform(minval= -tf.math.sqrt(1/128), maxval=tf.math.sqrt(1/128))
+
+        #output = tf.keras.layers.Dense(units=128,use_bias=True)(x)
+
+        #x_1_ = tf.keras.layers.ReLU()(x_1_)
+        #x_1_r1 = tf.keras.layers.Dense(units=128)(x_1_)
+        #x_1_ = tf.keras.layers.Add()([x_1_r1, x_1_])
+        #output = tf.keras.layers.ReLU()(x_1_)
+
+        #for units in layers:
+        #res block 1
+        #'''
+
+        x_1_ = tf.keras.layers.Dense(units=256, use_bias=True)(z)
+        x_1_ = tf.keras.layers.ReLU()(x_1_)
+        #x_1_ = tf.keras.layers.BatchNormalization()(x_1_)
+        #x_1_ = tf.keras.layers.Dropout(rate=0.1)(x_1_)
+        f_x_1 = tf.keras.layers.Dense(units=128, use_bias=True)(x_1_)
+
+        x_2_ = tf.keras.layers.Dense(units=256, use_bias=True)(z)
+        x_2_ = tf.keras.layers.ReLU()(x_2_)
+        #x_1_ = tf.keras.layers.BatchNormalization()(x_1_)
+        #x_1_ = tf.keras.layers.Dropout(rate=0.1)(x_1_)
+        f_x_2 = tf.keras.layers.Dense(units=128, use_bias=True)(x_2_)
+
+        h_z =(1 + f_x_2) * z + f_x_1
+
+        #h_z = tf.keras.layers.Add()([f_x_1, z])
+
+        #features_layer = tf.keras.layers.Dense(128, name="features_layer")
+        #attention_layer = tf.keras.layers.Dense(128, activation="sigmoid", name="attn_layer")
+        #inputs_linear = features_layer(f_x_1)  # 128x61x64
+        #attn = attention_layer(z)  # 128x64
+        #f_x_1 = inputs_linear * attn
+        #z_ = tf.keras.layers.Dense(units=128, use_bias=True)(z)
+
+        #h_z = tf.keras.layers.BatchNormalization()(h_z)
+
+        '''
+        x_1_ = tf.keras.layers.Dense(units=256, use_bias=True)(h_z_1)
+        x_1_ = tf.keras.layers.ReLU()(x_1_)
+        f_x_2 = tf.keras.layers.Dense(units=128, use_bias=True)(x_1_)
+        #z_ = tf.keras.layers.Dense(units=128, use_bias=True)(h_z)
+        h_z_2 = tf.keras.layers.Add()([f_x_2, z])
+
+        x_1_ = tf.keras.layers.Dense(units=256, use_bias=True)(h_z_2)
+        x_1_ = tf.keras.layers.ReLU()(x_1_)
+        f_x_3 = tf.keras.layers.Dense(units=128, use_bias=True)(x_1_)
+        #z_ = tf.keras.layers.Dense(units=128, use_bias=True)(h_z)
+        h_z = tf.keras.layers.Add()([f_x_3, z])
+        '''
+        output = h_z
+        '''
+        h_z = tf.stack([h_z_1, h_z_2, h_z_3],axis=1)
+
+        # Global attention pooling to deactivate the bias
+
+        features_layer = tf.keras.layers.Dense(128, name="features_layer")
+        attention_layer = tf.keras.layers.Dense(128, activation="sigmoid", name="attn_layer")
+        inputs_linear = features_layer(h_z)  # 128x61x64
+        attn = attention_layer(h_z)  # 128x64
+        tf.print("h_z shape", h_z.shape, "inputs_linear shape: ", inputs_linear.shape, "attn shape:", attn.shape)
+        masked_inputs = inputs_linear * attn  # tf.keras.layers.Multiply()([inputs_linear, attn])
+        tf.print("masked_inputs shape", masked_inputs.shape)
+        masked_inputs = tf.keras.backend.sum(masked_inputs, axis=-2)
+        output = masked_inputs #
+        tf.print("masked_inputs shape", masked_inputs.shape)
+        print("masked_inputs shape: ", inputs_linear.shape, "output shape:", output.shape)
+        # output = tf.expand_dims(output, -1)
+        print("output fin shape:", output.shape)
+        '''
+
+
+        '''
+        x_1_ = tf.keras.layers.Dense(units=128, use_bias=True)(x_1___)
+        x_1_ = tf.keras.layers.ReLU()(x_1_)
+        x_1_ = tf.keras.layers.BatchNormalization()(x_1_)
+        x_1_r1 = tf.keras.layers.Dense(units=128, use_bias=True)(x_1_)
+        xxx = tf.keras.layers.Dense(units=128, use_bias=True)(x_1___)
+        x_1_ = tf.keras.layers.Add()([x_1_r1, xxx])
+        x_1___ = tf.keras.layers.ReLU()(x_1_)
+        x_1___ = tf.keras.layers.BatchNormalization()(x_1___)
+
+        x_1_ = tf.keras.layers.Dense(units=128, use_bias=True)(x_1___)
+        x_1_ = tf.keras.layers.ReLU()(x_1_)
+        x_1_ = tf.keras.layers.BatchNormalization()(x_1_)
+        x_1_r1 = tf.keras.layers.Dense(units=128, use_bias=True)(x_1_)
+        xxx = tf.keras.layers.Dense(units=128, use_bias=True)(x_1___)
+        x_1_ = tf.keras.layers.Add()([x_1_r1, xxx])
+        x_1___ = tf.keras.layers.ReLU()(x_1_)
+        x_1___ = tf.keras.layers.BatchNormalization()(x_1___)
+
+        x_1_ = tf.keras.layers.Dense(units=128, use_bias=True)(x_1___)
+        x_1_ = tf.keras.layers.ReLU()(x_1_)
+        x_1_ = tf.keras.layers.BatchNormalization()(x_1_)
+        x_1_r1 = tf.keras.layers.Dense(units=128, use_bias=True)(x_1_)
+        xxx = tf.keras.layers.Dense(units=128, use_bias=True)(x_1___)
+        x_1_ = tf.keras.layers.Add()([x_1_r1, xxx])
+        x_1___ = tf.keras.layers.ReLU()(x_1_)
+        x_1___ = tf.keras.layers.BatchNormalization()(x_1___)
+
+        x_1_ = tf.keras.layers.Dense(units=128, use_bias=True)(x_1___)
+        x_1_ = tf.keras.layers.ReLU()(x_1_)
+        x_1_ = tf.keras.layers.BatchNormalization()(x_1_)
+        x_1_r1 = tf.keras.layers.Dense(units=128, use_bias=True)(x_1_)
+        xxx = tf.keras.layers.Dense(units=128, use_bias=True)(x_1___)
+        x_1_ = tf.keras.layers.Add()([x_1_r1, xxx])
+        x_1___ = tf.keras.layers.ReLU()(x_1_)
+        x_1___ = tf.keras.layers.BatchNormalization()(x_1___)
+
+        x_1_ = tf.keras.layers.Dense(units=128, use_bias=True)(x_1___)
+        x_1_ = tf.keras.layers.ReLU()(x_1_)
+        x_1_ = tf.keras.layers.BatchNormalization()(x_1_)
+        x_1_r1 = tf.keras.layers.Dense(units=128, use_bias=True)(x_1_)
+        xxx = tf.keras.layers.Dense(units=128, use_bias=True)(x_1___)
+        x_1_ = tf.keras.layers.Add()([x_1_r1, xxx])
+        x_1___ = tf.keras.layers.ReLU()(x_1_)
+        x_1___ = tf.keras.layers.BatchNormalization()(x_1___)
+
+        x_1_ = tf.keras.layers.Dense(units=128, use_bias=True)(x_1___)
+        x_1_ = tf.keras.layers.ReLU()(x_1_)
+        x_1_ = tf.keras.layers.BatchNormalization()(x_1_)
+        x_1_r1 = tf.keras.layers.Dense(units=128, use_bias=True)(x_1_)
+        xxx = tf.keras.layers.Dense(units=128, use_bias=True)(x_1___)
+        x_1_ = tf.keras.layers.Add()([x_1_r1, xxx])
+        x_1___ = tf.keras.layers.ReLU()(x_1_)
+        x_1___ = tf.keras.layers.BatchNormalization()(x_1___)
+
+        x_1_ = tf.keras.layers.Dense(units=128, use_bias=True)(x_1___)
+        x_1_ = tf.keras.layers.ReLU()(x_1_)
+        x_1_ = tf.keras.layers.BatchNormalization()(x_1_)
+        x_1_r1 = tf.keras.layers.Dense(units=128, use_bias=True)(x_1_)
+        xxx = tf.keras.layers.Dense(units=128, use_bias=True)(x_1___)
+        x_1_ = tf.keras.layers.Add()([x_1_r1, xxx])
+        x_1___ = tf.keras.layers.ReLU()(x_1_)
+        x_1___ = tf.keras.layers.BatchNormalization()(x_1___)
+
+        x_1_ = tf.keras.layers.Dense(units=128, use_bias=True)(x_1___)
+        x_1_ = tf.keras.layers.ReLU()(x_1_)
+        x_1_ = tf.keras.layers.BatchNormalization()(x_1_)
+        x_1_r1 = tf.keras.layers.Dense(units=128, use_bias=True)(x_1_)
+        xxx = tf.keras.layers.Dense(units=128, use_bias=True)(x_1___)
+        x_1_ = tf.keras.layers.Add()([x_1_r1, xxx])
+        x_1___ = tf.keras.layers.ReLU()(x_1_)
+        x_1___ = tf.keras.layers.BatchNormalization()(x_1___)
+
+        x_1_ = tf.keras.layers.Dense(units=128, use_bias=True)(x_1___)
+        x_1_ = tf.keras.layers.ReLU()(x_1_)
+        x_1_ = tf.keras.layers.BatchNormalization()(x_1_)
+        x_1_r1 = tf.keras.layers.Dense(units=128, use_bias=True)(x_1_)
+        xxx = tf.keras.layers.Dense(units=128, use_bias=True)(x_1___)
+        x_1_ = tf.keras.layers.Add()([x_1_r1, xxx])
+        x_1___ = tf.keras.layers.ReLU()(x_1_)
+        x_1___ = tf.keras.layers.BatchNormalization()(x_1___)
+
+        x_1_ = tf.keras.layers.Dense(units=128, use_bias=True)(x_1___)
+        x_1_ = tf.keras.layers.ReLU()(x_1_)
+        x_1_ = tf.keras.layers.BatchNormalization()(x_1_)
+        x_1_r1 = tf.keras.layers.Dense(units=128, use_bias=True)(x_1_)
+        xxx = tf.keras.layers.Dense(units=128, use_bias=True)(x_1___)
+        x_1_ = tf.keras.layers.Add()([x_1_r1, xxx])
+        x_1___ = tf.keras.layers.ReLU()(x_1_)
+        output = tf.keras.layers.BatchNormalization()(x_1___)
+        '''
+
+        # Global attention pooling to deactivate the bias
+        '''
+        features_layer = tf.keras.layers.Dense(128, name="features_layer")
+        attention_layer = tf.keras.layers.Dense(128, activation="sigmoid", name="attn_layer")
+        inputs_linear = features_layer(x_1___)  # 128x61x64
+        attn = attention_layer(x_1___)  # 128x64
+        tf.print("inputs_linear shape: ", inputs_linear.shape, "attn shape:", attn.shape)
+        masked_inputs = inputs_linear * attn  # tf.keras.layers.Multiply()([inputs_linear, attn])
+        output = masked_inputs # tf.keras.backend.sum(masked_inputs, axis=-2)
+        print("masked_inputs shape: ", inputs_linear.shape, "output shape:", output.shape)
+        # output = tf.expand_dims(output, -1)
+        print("output fin shape:", output.shape)
+        '''
+
+        '''
+        #res block 2
+        x_1_ = tf.keras.layers.BatchNormalization()(x_1___)
+        x_1_ = tf.keras.layers.Dense(units=128, use_bias=True)(x_1_)
+        x_1_ = tf.keras.layers.ReLU()(x_1_)
+        x_1_ = tf.keras.layers.BatchNormalization()(x_1_)
+        x_1_r2 = tf.keras.layers.Dense(units=128, use_bias=True)(x_1_)
+        x_1_ = tf.keras.layers.Add()([x_1_r2, x_1___])
+        x_1____ = tf.keras.layers.ReLU()(x_1_)
+
+        # res block 3
+        x_1_ = tf.keras.layers.BatchNormalization()(x_1____)
+        x_1_ = tf.keras.layers.Dense(units=128, use_bias=True)(x_1_)
+        x_1_ = tf.keras.layers.ReLU()(x_1_)
+        x_1_ = tf.keras.layers.BatchNormalization()(x_1_)
+        x_1_r3 = tf.keras.layers.Dense(units=128, use_bias=True)(x_1_)
+        x_1_ = tf.keras.layers.Add()([x_1_r3, x_1____])
+        x_1_____ = tf.keras.layers.ReLU()(x_1_)
+        '''
+        #'''
+        #output = tf.keras.layers.Dense(units=128,)(x_1___)
+        #x = tf.keras.layers.Reshape((last_layer_size, 1))(x)
+        #output = tf.expand_dims(x_1_,-1)
+        #output = x_1___
+        self.model = tf.keras.Model(inputs=input, outputs=[output, f_x_1, f_x_2]) # [normal state w.o. variance, residual term]
+        #self.model = tf.keras.Model(inputs=input, outputs=[output, f_x_1]) # [normal state w.o. variance, residual term]
+
+class FFNN_SimpleSiam_Prediction_MLP_________(NN):
+
+    def __init__(self, hyperparameters, input_shape):
+        super().__init__(hyperparameters, input_shape)
+
+    def create_model(self):
+        print('Creating FFNN Simple Siam Prediction MLP for input shape: ', self.input_shape)
+
+        layers = self.hyper.ffnn_layers.copy()
+
+        if len(layers) < 1:
+            print('FFNN with less than one layer is not possible')
+            sys.exit(1)
+
+        input = tf.keras.Input(shape=self.input_shape, name="FFNN_PredictionMLP-Input")
+        input_2 = tf.keras.Input(shape=self.input_shape, name="FFNN_PredictionMLP-Input2")
+
+        x = input
+        y = input_2
+        #tf.stop_gradient(y)
+
+        x = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(x)
+        print("Note that Prediction MLP in Simple Siam should be a bottleneck structure!")
+        for units in layers:
+            encoder = tf.keras.layers.Dense(units=units, activation=tf.keras.activations.relu, use_bias=True)
+            #encoder = tf.keras.layers.Dense(units=128, activation=tf.keras.activations.relu, use_bias=True)
+
+            x1 = tf.keras.layers.Subtract()([y, x]) + 1
+            #x1 = tf.keras.layers.Concatenate()([x1, x])
+            x2 = tf.keras.layers.Add()([y, x])
+            #x2 = tf.keras.layers.Concatenate()([x2, x])
+            x3 = tf.keras.layers.Multiply()([y, x])
+            #x3 = tf.keras.layers.Concatenate()([x3, x])
+            #x_1__ = tf.keras.layers.Dense(units=units, activation=tf.keras.activations.relu, use_bias=True)(x1)
+            x_1__ = encoder(x3)
+            #x_1__ = encoder(x_1__)
+            #x_1 = tf.keras.layers.BatchNormalization()(x_1_)
+
+            #x_2__ = tf.keras.layers.Dense(units=units, activation=tf.keras.activations.relu, use_bias=True)(x2)
+            x_2__ = encoder(x3)
+            #x_2__ = encoder(x_2__)
+            #x_2 = tf.keras.layers.BatchNormalization()(x_2_)
+
+            #x_3__ = tf.keras.layers.Dense(units=units, activation=tf.keras.activations.relu, use_bias=True)(x3)
+            x_3__ = encoder(x3)
+            #x_3__ = encoder(x_3__)
+            #x_3 = tf.keras.layers.BatchNormalization()(x_3_)
+        '''
+        shared_mem = Memory(10, 128)
+        x_1__storred, w_hat1, mem_1 = shared_mem(x_1__)
+        x_2__storred, w_hat2, mem_2 = shared_mem(x_2__)
+        x_3__storred, w_hat3, mem_3 = shared_mem(x_3__)
+        '''
+
+        '''
+        output = tf.keras.layers.Dense(units=32, use_bias=True)(x_1)
+        output_2 = tf.keras.layers.Dense(units=32, use_bias=True)(x_2)
+        #output_2 = tf.keras.layers.Add()([output_2,x])
+        output_3 = tf.keras.layers.Dense(units=32, use_bias=True)(x_3)
+        #output_3 = tf.keras.layers.Multiply()([output_3, x])
+        '''
+
+        dense = tf.keras.layers.Dense(units=128, use_bias=True)
+        '''
+        x_1_ = tf.keras.layers.Concatenate()([x_1__, x_1__storred])
+        x_2_ = tf.keras.layers.Concatenate()([x_2__, x_2__storred])
+        x_3_ = tf.keras.layers.Concatenate()([x_3__, x_3__storred])
+        '''
+        x_1_ = x_1__
+        x_2_ = x_2__
+        x_3_ = x_3__
+
+        output = dense(x_1_)
+        output_2 = dense(x_2_)
+        output_3 = dense(x_3_)
+        '''
+        output = x_1__
+        output_2 = x_2__
+        output_3 = x_3__
+        '''
+
+
+        #output = tf.keras.layers.Dense(units=1, activation=tf.keras.activations.sigmoid)(x)
+
+        self.model = tf.keras.Model(inputs=[input, input_2], outputs=[output,output_2,output_3])
+        #self.model = tf.keras.Model(inputs=[input, input_2], outputs=[output,output_2,output_3,x_1__,x_2__,x_3__])
+        #self.model = tf.keras.Model(inputs=input, outputs=[output,output_2,output_3,x_1_,x_2_,x_3_])
+class FFNN_SimpleSiam_Prediction_MLP_23_05_21(NN):
+
+    def __init__(self, hyperparameters, input_shape):
+        super().__init__(hyperparameters, input_shape)
+
+    def create_model(self):
+        print('Creating FFNN Simple Siam Prediction MLP for input shape: ', self.input_shape)
+
+        layers = self.hyper.ffnn_layers.copy()
+
+        if len(layers) < 1:
+            print('FFNN with less than one layer is not possible')
+            sys.exit(1)
+
+        input = tf.keras.Input(shape=self.input_shape, name="FFNN_PredictionMLP-Input")
+        input_2 = tf.keras.Input(shape=self.input_shape, name="FFNN_PredictionMLP-Input2")
+
+        x = input
+        y = input_2
+
+        x = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(x)
+        print("Note that Prediction MLP in Simple Siam should be a bottleneck structure!")
+        for units in layers:
+            encoder2 = tf.keras.layers.Dense(units=units, activation=tf.keras.activations.relu, use_bias=True)
+            encoder = tf.keras.layers.Dense(units=128, activation=tf.keras.activations.relu, use_bias=True)
+
+            x1 = tf.keras.layers.Subtract()([y, x]) + 1
+            x1 = tf.keras.layers.Concatenate()([x1, x])
+            #x_1__ = tf.keras.layers.Dense(units=units, activation=tf.keras.activations.relu, use_bias=True)(x1)
+            x_1__ = encoder2(x1)
+            x_1__ = encoder(x_1__)
+            #x_1 = tf.keras.layers.BatchNormalization()(x_1_)
+            x2 = tf.keras.layers.Add()([y, x])
+            x2 = tf.keras.layers.Concatenate()([x2, x])
+            #x_2__ = tf.keras.layers.Dense(units=units, activation=tf.keras.activations.relu, use_bias=True)(x2)
+            x_2__ = encoder2(x2)
+            x_2__ = encoder(x_2__)
+            #x_2 = tf.keras.layers.BatchNormalization()(x_2_)
+            x3 = tf.keras.layers.Multiply()([y, x])
+            x3 = tf.keras.layers.Concatenate()([x3, x])
+            #x_3__ = tf.keras.layers.Dense(units=units, activation=tf.keras.activations.relu, use_bias=True)(x3)
+            x_3__ = encoder2(x3)
+            x_3__ = encoder(x_3__)
+            #x_3 = tf.keras.layers.BatchNormalization()(x_3_)
+
+        shared_mem = Memory(50, 128)
+        x_1__storred, w_hat1, mem_1 = shared_mem(x_1__)
+        x_2__storred, w_hat2, mem_2 = shared_mem(x_2__)
+        x_3__storred, w_hat3, mem_3 = shared_mem(x_3__)
+
+        '''
+        output = tf.keras.layers.Dense(units=32, use_bias=True)(x_1)
+        output_2 = tf.keras.layers.Dense(units=32, use_bias=True)(x_2)
+        #output_2 = tf.keras.layers.Add()([output_2,x])
+        output_3 = tf.keras.layers.Dense(units=32, use_bias=True)(x_3)
+        #output_3 = tf.keras.layers.Multiply()([output_3, x])
+        '''
+
+        dense = tf.keras.layers.Dense(units=128, use_bias=True)
+        x_1_ = tf.keras.layers.Concatenate()([x_1__, x_1__storred])
+        x_2_ = tf.keras.layers.Concatenate()([x_2__, x_2__storred])
+        x_3_ = tf.keras.layers.Concatenate()([x_3__, x_3__storred])
+        '''
+        x_1_ = x_1__
+        x_2_ = x_2__
+        x_3_ = x_3__
+        '''
+        output = dense(x_1_)
+        output_2 = dense(x_2_)
+        output_3 = dense(x_3_)
+        '''
+        output = x_1__
+        output_2 = x_2__
+        output_3 = x_3__
+        '''
+
+        #output = tf.keras.layers.Dense(units=1, activation=tf.keras.activations.sigmoid)(x)
+
+        self.model = tf.keras.Model(inputs=[input, input_2], outputs=[output,output_2,output_3,x_1__,x_2__,x_3__,w_hat1,w_hat2,w_hat3,mem_1,mem_2,mem_3])
+        #self.model = tf.keras.Model(inputs=input, outputs=[output,output_2,output_3,x_1_,x_2_,x_3_])
+
+class Memory(tf.keras.layers.Layer):
+    def __init__(self, memory_size, input_size, **kwargs):
+        super(Memory, self).__init__()
+        #self.memory_storage = None
+        self.memory_size = memory_size
+        self.input_size = input_size
+        # self.num_outputs = num_outputs
+
+    def build(self, input_shape):
+
+        self.memory_storage = self.add_weight(name='memoryStorage',
+                                              #shape=(100,16384),
+                                              shape=(self.memory_size,self.input_size),
+                                              initializer=tf.keras.initializers.glorot_uniform,
+                                              trainable=True)
+        super(Memory, self).build(input_shape)
+
+    def cosine_sim(self, x1, x2):
+        num = tf.linalg.matmul(x1, tf.transpose(x2, perm=[0, 1, 3, 2]), name='attention_num')
+        denom = tf.linalg.matmul(x1 ** 2, tf.transpose(x2, perm=[0, 1, 3, 2]) ** 2, name='attention_denum')
+        w = (num + 1e-12) / (denom + 1e-12)
+
+        return w
+    def call(self, input_):
+        #tf.print("input_: ", input_)
+        num = tf.linalg.matmul(input_, tf.transpose(self.memory_storage), name='attention_num')
+        denom = tf.linalg.matmul(input_ ** 2, tf.transpose(self.memory_storage) ** 2, name='attention_denum')
+
+        w = (num + 1e-12) / (denom + 1e-12)
+        #w = tf.keras.layers.Dropout(rate=0.1)(w)
+        attentiton_w = tf.nn.softmax(w) # Eq.4
+        #tf.print("attentiton_w: ", attentiton_w)
+        # Hard Shrinkage for Sparse Addressing
+        lam = 1 / self.memory_size
+        addr_num = tf.keras.activations.relu(attentiton_w - lam) * attentiton_w
+        addr_denum = tf.abs(attentiton_w - lam) + 1e-12
+        memory_addr = addr_num / addr_denum # Eq. 7
+        memory_addr = memory_addr
+        #tf.print("memory_addr: ",memory_addr)
+
+        # booster
+        #memory_addr = memory_addr * 20
+
+        # Set any values less 1e-12 or above  1-(1e-12) to these values
+        w_hat = tf.clip_by_value(memory_addr, 1e-12, 1-(1e-12))
+
+        #w_hat = memory_addr / tf.math.l2_normalize(memory_addr, axis=1) # written in text after Eq. 7
+        # Eq. 3:
+        z_hat = tf.linalg.matmul(w_hat, self.memory_storage)
+
+        #max_idx = tf.math.argmax(w_hat)
+        #tf.print("max_idx ", max_idx)
+        #z_hat = self.memory_storage[max_idx[0],:]
+        #z_hat = tf.expand_dims(z_hat, 0)
+        #
+        #tf.print("input_ ", tf.shape(input_))
+        #tf.print("w_hat ", tf.shape(w_hat))
+        #tf.print("w_hat ", w_hat)
+        #tf.print("z_hat ", tf.shape(z_hat))
+
+        #return z_hat
+        return z_hat, w_hat, self.memory_storage
+
+    def get_config(self):
+        config = super().get_config().copy()
+        config.update({
+            'memory_size': self.memory_size,
+            'input_size': self.input_size,
+        })
+        return config
+    def compute_output_shape(self, input_shape):
+        return (None, self.input_size)
+
+class NonNegative(tf.keras.constraints.Constraint):
+
+ def __call__(self, w):
+   return w * 0

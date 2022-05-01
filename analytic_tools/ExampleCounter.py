@@ -13,8 +13,9 @@ def main():
     config = Configuration()
 
     # import datasets
-    y_train = np.load(config.training_data_folder + "train_labels.npy")  # labels of the training data
-    y_test = np.load(config.training_data_folder + "test_labels.npy")  # labels of the training data
+    y_train = np.load(config.training_data_folder + "train_labels_new2.npy")  # labels of the training data
+    y_test = np.load(config.training_data_folder + "valid_labels_new2.npy")  # labels of the training data
+    pd.options.display.max_colwidth = 100
 
     # get unqiue classes and the number of examples in each
     y_train_single, y_train_counts = np.unique(y_train, return_counts=True)
@@ -49,7 +50,7 @@ def main():
     print('\n\n')
 
     # repeat the process for the case base
-    y_train = np.load(config.case_base_folder + "train_labels.npy")  # labels of the case base
+    y_train = np.load(config.case_base_folder + "train_labels_new2.npy")  # labels of the case base
     y_train_single, y_train_counts = np.unique(y_train, return_counts=True)
 
     x = np.stack((y_train_single, y_train_counts)).transpose()

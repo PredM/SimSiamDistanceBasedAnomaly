@@ -38,7 +38,7 @@ txt17_m2.finished;http://iot.uni-trier.de/FTOnto#BF_Motor_2
 txt17_o5;http://iot.uni-trier.de/FTOnto#BF_Valve_5
 txt17_o6;http://iot.uni-trier.de/FTOnto#BF_Valve_6
 txt17_o7;http://iot.uni-trier.de/FTOnto#BF_Valve_7
-txt17_o8;http://iot.uni-trier.de/FTOnto#BF_Lamp_8
+txt17_o8;http://iot.uni-trier.de/FTOnto#BF_Radiator_8
 txt18_i1;http://iot.uni-trier.de/FTOnto#VGR_Position_Switch_1
 txt18_i2;http://iot.uni-trier.de/FTOnto#VGR_Position_Switch_2
 txt18_i3;http://iot.uni-trier.de/FTOnto#VGR_Position_Switch_3

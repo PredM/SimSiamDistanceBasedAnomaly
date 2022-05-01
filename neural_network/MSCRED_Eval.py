@@ -1,0 +1,2012 @@
+import os
+import sys
+import tensorflow as tf
+from sklearn.metrics import classification_report
+from sklearn.metrics import precision_recall_fscore_support
+from sklearn.metrics import confusion_matrix
+gpus = tf.config.list_physical_devices('GPU')
+import jenkspy
+import pandas as pd
+from owlready2 import *
+from datetime import datetime
+from sklearn.manifold import TSNE
+
+tf.config.experimental.set_memory_growth(gpus[0], True)
+
+sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
+# suppress debugging messages of TensorFlow
+# os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+
+from configuration.ConfigChecker import ConfigChecker
+from configuration.Configuration import Configuration
+from neural_network.Dataset import FullDataset
+from neural_network.Optimizer import SNNOptimizer
+from neural_network.SNN import initialise_snn
+from neural_network.Inference import Inference
+from baseline.Representations import Representation
+import numpy as np
+from sklearn.metrics.pairwise import cosine_similarity, manhattan_distances, euclidean_distances
+import math
+from sklearn.metrics import roc_auc_score, auc, average_precision_score, precision_recall_curve
+from sklearn import preprocessing
+from sklearn.svm import OneClassSVM
+from matplotlib import pyplot
+from matplotlib import colors
+import itertools
+
+from configuration.Enums import BatchSubsetType, LossFunction, BaselineAlgorithm, SimpleSimilarityMeasure, \
+    ArchitectureVariant, ComplexSimilarityMeasure, TrainTestSplitMode, AdjacencyMatrixPreprossingCNN2DWithAddInput,\
+    NodeFeaturesForGraphVariants
+
+def reduce_fraction_of_anomalies_in_test_data(lables_test, feature_data_test, label_to_retain="no_failure",anomaly_fraction=0.1):
+    # Input labels as strings with size (e,1) and feature data with size (e, d)
+    # where e is the number of examples and d the number of feature dimensions
+    # Return both inputs without any labels beside the label given via parameter label_to_retain
+
+    # Get idx of examples with this label
+    example_idx_of_curr_label = np.squeeze(np.array(np.where(lables_test == label_to_retain)))
+    example_idx_of_opposite_labels = np.squeeze(np.array(np.where(lables_test != label_to_retain)))
+    #print("example_idx_of_curr_label: ", example_idx_of_curr_label)
+    #print("example_idx_of_opposite_labels: ", example_idx_of_opposite_labels)
+    num_of_no_failure_examples = example_idx_of_curr_label.shape[0]
+    num_of_failure_examples = example_idx_of_opposite_labels.shape[0]
+    print("Number of no_failure examples in test: ", num_of_no_failure_examples, "| Number of other (anomalous) examples: ", num_of_failure_examples)
+
+    # Reduce size of anomalies as fraction of original data
+    k = math.ceil(num_of_no_failure_examples*anomaly_fraction)
+    # Select k examples randomly
+    #print("example_idx_of_opposite_labels: shape: ", example_idx_of_opposite_labels.shape)
+    np.random.seed(seed=1234)
+    # Get unique entries
+    k_examples_of_opposite_label = np.random.choice(example_idx_of_opposite_labels, k)
+    k_examples_of_opposite_label = np.unique(k_examples_of_opposite_label)
+    while k_examples_of_opposite_label.shape[0] < k:
+        # print("k_examples_for_valid.shape[0]: ", k_examples_for_valid.shape[0]," vs. ", k)
+        k_examples_of_opposite_label_additional = np.random.choice(example_idx_of_opposite_labels,k - k_examples_of_opposite_label.shape[0])
+        k_examples_of_opposite_label = np.unique(np.concatenate((k_examples_of_opposite_label_additional, k_examples_of_opposite_label)))
+
+    # Are there any double entries
+    u, c = np.unique(k_examples_of_opposite_label, return_counts=True)
+    dup = u[c > 1]
+    print("Duplicate entries in random anomalies are possible: ", dup)
+
+    # Conact no_failure with selected anomalies
+    test_examples = np.concatenate((k_examples_of_opposite_label,example_idx_of_curr_label))
+    print("Number of overall test_examples considered for evaluation: ", test_examples.shape)
+
+    mask = np.isin(np.arange(feature_data_test.shape[0]), test_examples)
+    feature_data_test_reduced = feature_data_test[mask, :]
+    lables_test_reduced = lables_test[mask]
+    print("feature_data_test_reduced shape: ", feature_data_test_reduced.shape, "lables_test_reduced: ", lables_test_reduced.shape)
+    return lables_test_reduced, feature_data_test_reduced
+
+def remove_failure_examples(lables, feature_data, label_to_retain="no_failure"):
+    # Input labels as strings with size (e,1) and feature data with size (e, d)
+    # where e is the number of examples and d the number of feature dimensions
+    # Return both inputs without any labels beside the label given via parameter label_to_retain
+
+    # Get idx of examples with this label
+    example_idx_of_curr_label = np.where(lables == label_to_retain)
+    #feature_data = np.expand_dims(feature_data, -1)
+    feature_data = feature_data[example_idx_of_curr_label[0],:]
+    lables = lables[example_idx_of_curr_label]
+    return lables, feature_data
+
+def calculate_nn_distance(sim_mat_casebase_test, k=1):
+    # Returns the mean distance of the k nereast neighbors for each test example with size (a,)
+    # from a similarity matrix with size (a,b) where a is the number of test examples and b the number of train/case examples
+    # K nearest neighbor
+    if k == 1:
+        nn_distance = np.max(sim_mat_casebase_test, axis=1)
+    else:
+        idx = np.matrix.argsort(-sim_mat_casebase_test, axis=1)[:, :k]
+        sim_mat_casebase_test = sim_mat_casebase_test[
+            np.arange(sim_mat_casebase_test.shape[0])[:, None], idx]  # [np.ix_(np.arange(3389),np.squeeze(idx))]
+        nn_distance = np.mean(sim_mat_casebase_test, axis=1)
+    return nn_distance
+
+
+def calculate_nn_distance_attribute_wise(x_case_base, train_univar_encoded, k=1, measure='cosine'):
+    # Get NN example and calculate attributewise distances
+    sim_mat_train_train = get_Similarity_Matrix(valid_vector=x_case_base, test_vector=x_case_base, measure=measure)
+    idx_nn_no_failure = np.matrix.argsort(-sim_mat_train_train, axis=1)[:, :k]
+    idx_nn_no_failure = np.squeeze(idx_nn_no_failure)
+    distances_mean_per_attribute = np.zeros((61))
+
+    num_train_examples = train_univar_encoded.shape[0]
+    print("num_train_examples: ", num_train_examples)
+    print("idx_nn_no_failure shape: ", idx_nn_no_failure.shape)
+    print("sim_mat_train_train shape: ", sim_mat_train_train)
+    for train_example_idx in range(num_train_examples):
+        nn_woFailure = train_univar_encoded[idx_nn_no_failure[train_example_idx], :, :]
+        # Calculate attributewise distance
+        curr_example = train_univar_encoded[train_example_idx, :, :]
+        distance_abs = np.abs(nn_woFailure - curr_example)
+        nn_woFailure_norm = nn_woFailure/np.linalg.norm(nn_woFailure, ord=2, axis=1, keepdims=True)
+        curr_test_example_norm = nn_woFailure/np.linalg.norm(curr_example, ord=2, axis=1, keepdims=True)
+        distance_cosine = np.matmul(nn_woFailure_norm, np.transpose(curr_test_example_norm))
+        # Aggregate the distances along the attribute / data stream dimension
+        mean_distance_per_attribute_abs = np.mean(distance_abs, axis=1)
+        mean_distance_per_attribute_cosine = np.mean(distance_abs, axis=1)
+        distances_mean_per_attribute = distances_mean_per_attribute + mean_distance_per_attribute_cosine
+
+    # weight with number of examples
+    distances_mean_per_attribute = distances_mean_per_attribute / num_train_examples
+    print("distances_mean_per_attribute shape: ", distances_mean_per_attribute.shape)
+    return distances_mean_per_attribute
+
+def calculate_most_relevant_attributes(sim_mat_casebase_test, sim_mat_casebase_casebase, test_label, train_univar_encoded=None, test_univar_encoded=None, attr_names=None, k=1, x_test_raw=None, x_train_raw=None, y_pred_anomalies=None, treshold=0.0,dataset=None,snn=None,train_encoded_global=None):
+    #print("sim_mat_casebase_casebase shape: ", sim_mat_casebase_casebase.shape)
+    #print("sim_mat_casebase_test shape: ", sim_mat_casebase_test.shape, " | train_univar_encoded: ", train_univar_encoded.shape, " | test_univar_encoded: ", test_univar_encoded.shape, " | test_label: ", test_label.shape, " | attr_names: ", attr_names.shape)
+    # Get the idx from the nearest example without a failure
+    #sim_mat_casebase_test shape: (3389, 22763) | train_univar_encoded:  (22763, 61, 256) | test_univar_encoded: (3389, 61,256) | test_label:  (3389,) | attr_names: (61,)idx_nearest_neighbors shape(3389, 22763)
+
+    idx_nn_woFailure = np.matrix.argsort(-sim_mat_casebase_test, axis=1)[:, :k] # Output dim: (3389,1,61,128)
+    idx_nn_woFailure = np.squeeze(idx_nn_woFailure)
+    #print("idx_nn_woFailure shape: ", idx_nn_woFailure.shape)
+    num_test_examples = test_label.shape[0]
+    idx_2nn_woFailure = np.squeeze(np.matrix.argsort(-sim_mat_casebase_casebase, axis=1)[:, 1:2]) # Output dim:  (22763, 61, 128)
+    idx_3nn_woFailure = np.squeeze(np.matrix.argsort(-sim_mat_casebase_casebase, axis=1)[:, 2:3])  # Output dim:  (22763, 61, 128)
+    #print("idx_2nn_woFailure shape: ", idx_2nn_woFailure.shape)
+    # store anomaly values attribute-wise per example
+    store_relevant_attribut_idx = {}
+    store_relevant_attribut_dis = {}
+    store_relevant_attribut_name = {}
+    store_relevant_attribut_label= {} # stores the gold label of the test example
+    #### find example with most similar attributes
+    #'''
+    idx_nearest_neighbors = np.matrix.argsort(-sim_mat_casebase_test, axis=1)[:, :]
+    print("idx_nearest_neighbors shape ", idx_nearest_neighbors.shape)
+    for test_example_idx in range(num_test_examples):
+        print("###################################################################################")
+        print(" Example ",test_example_idx,"with label", test_label[test_example_idx])
+        if not test_label[test_example_idx] == "no_failure" or  (test_label[test_example_idx] == "no_failure" and y_pred_anomalies[test_example_idx]==1) :
+            counterfactuals_entires = {}
+            counterfactuals_numOfSymptoms = {}
+            # For every entry in case base, do the following:
+            for i in range(3): # sim_mat_casebase_test.shape[1]
+                #print("Nearest Neighbor",i ," of Train Example: ")
+                curr_idx = idx_nearest_neighbors[test_example_idx, i]
+                curr_sim = sim_mat_casebase_test[test_example_idx, curr_idx]
+                #if sim_mat_casebase_test[test_example_idx, curr_idx] > treshold:
+
+                if snn.hyper.encoder_variant in ["graphcnn2d"]:
+                    # calculate attribute-wise distance on encoded data
+                    curr_healthy_example_encoded = train_univar_encoded[curr_idx,:,:]
+                    curr_test_example = test_univar_encoded[test_example_idx,:,:]
+
+                    curr_distance_abs = np.abs(curr_healthy_example_encoded - curr_test_example)
+                    curr_mean_distance_per_attribute_abs = np.mean(curr_distance_abs, axis=1)
+                    idx_of_attribute_with_highest_distance_abs = np.argsort(-curr_mean_distance_per_attribute_abs)
+                    print("curr_idx:", curr_idx, "sim:", tf.print(curr_sim), "threshold:", treshold, "univar sim: ", tf.reduce_mean(curr_mean_distance_per_attribute_abs))
+
+                # calculate with raw data
+                curr_test_example_raw = x_test_raw[test_example_idx, :, :]
+                curr_healthy_example_raw = x_train_raw[curr_idx, :, :]
+                curr_distance_abs_raw = np.abs(curr_healthy_example_raw - curr_test_example_raw)
+                curr_mean_distance_per_attribute_abs_raw = np.mean(curr_distance_abs_raw, axis=0)
+                idx_of_attribute_with_highest_distance_abs_raw = np.argsort(-curr_mean_distance_per_attribute_abs_raw)
+
+                #print("Att enc: ", idx_of_attribute_with_highest_distance_abs[:5], " names: ", attr_names[idx_of_attribute_with_highest_distance_abs[:5]])
+                #print("Att raw: ", idx_of_attribute_with_highest_distance_abs_raw[:5], " names: ", attr_names[idx_of_attribute_with_highest_distance_abs_raw[:5]])
+                #print("Dis: ", curr_mean_distance_per_attribute_abs[idx_of_attribute_with_highest_distance_abs[:5]])
+
+                ###
+                #'''
+                if test_example_idx == 10000:#3047:
+                     print_it=True
+                     csfont = {'Times New Roman'}
+                else:
+                    print_it=False
+                #'''
+                '''
+                # Generate possible counterfactual examples by replacing single data streams
+                generated_versions = generated_possible_versions(np.expand_dims(curr_test_example_raw,0), np.expand_dims(curr_healthy_example_raw,0),print_it,i,attr_names)
+                generated_versions = generated_versions[1:,:]
+                encoded_variations = dataset.encode_single_example(snn, generated_versions) # Input format (batchsize, time, features)
+
+                if snn.hyper.encoder_variant in ["graphcnn2d"]:
+                    encoded_variations_global = encoded_variations[0]
+                    encoded_variations_local = np.squeeze(encoded_variations[1]) # intermediate output, univariate time series
+                    print("encoded_variations_global shape:", encoded_variations_global.shape,"| encoded_variations_local shape:", encoded_variations_local.shape)
+                else:
+                    # Loading encoded data previously created by the DatasetEncoder.py
+                    encoded_variations_global = np.squeeze(encoded_variations)
+                print("encoded_variations_global shape: ", encoded_variations_global.shape)
+                print("train_encoded_global shape: ", train_encoded_global.shape)
+
+                # same in the other direction
+                generated_versions_reverse = generated_possible_versions(np.expand_dims(curr_healthy_example_raw, 0), np.expand_dims(curr_test_example_raw, 0), print_it, i, attr_names, "_rev")
+                generated_versions_reverse = generated_versions_reverse[1:, :]
+                encoded_variations_reverse = dataset.encode_single_example(snn, generated_versions_reverse)  # Input format (batchsize, time, features)
+                if snn.hyper.encoder_variant in ["graphcnn2d"]:
+                    encoded_variations_global_reverse = encoded_variations_reverse[0]
+                    encoded_variations_local_reverse = np.squeeze(encoded_variations_reverse[1]) # intermediate output, univariate time series
+                    print("encoded_variations_global shape:", encoded_variations_global.shape,"| encoded_variations_local shape:", encoded_variations_local_reverse.shape)
+                else:
+                    # Loading encoded data previously created by the DatasetEncoder.py
+                    encoded_variations_global_reverse = np.squeeze(encoded_variations_reverse)
+                print("encoded_variations_global shape: ", encoded_variations_global_reverse.shape)
+                print("train_encoded_global shape: ", encoded_variations_global_reverse.shape)
+                '''
+                print("curr_test_example_raw shape: ", curr_test_example_raw.shape,
+                      "curr_healthy_example_raw shape: ", curr_healthy_example_raw.shape)
+                encoded_variations_global,encoded_variations_global_reverse = generate_and_encode(test_example_idx, curr_test_example_raw, curr_healthy_example_raw, i, attr_names, dataset, snn, print_it)
+
+                # similarity
+                print("-----")
+                sim_mat = get_Similarity_Matrix(encoded_variations_global, np.expand_dims(train_encoded_global[curr_idx,:],0 ), 'cosine')
+                sim_mat_reverse = get_Similarity_Matrix(encoded_variations_global_reverse, np.expand_dims(train_encoded_global[curr_idx, :], 0), 'cosine')
+                print("sim_mat org shape: ", sim_mat.shape," |", sim_mat_reverse.shape)
+                print("sim_mat: ", sim_mat)
+                sim_mat = np.squeeze(sim_mat)
+                sim_mat_reverse= np.squeeze(sim_mat_reverse)
+
+                if print_it == True:
+                    # print a bar chart with similarity changes after replacing the attributes
+                    height = (sim_mat - curr_sim)[np.argsort(sim_mat - curr_sim)]
+                    bars = attr_names[np.argsort(-sim_mat)]
+                    y_pos = np.arange(len(bars))
+                    pyplot.clf()
+                    pyplot.bar(y_pos, height)
+                    pyplot.xticks(y_pos, bars, fontname='Times New Roman')
+                    pyplot.savefig('Improvement_in_Sim_after_Replacement_' + str(i) + '.png')
+                    # horizonzal ordering
+                    pyplot.clf()
+                    pyplot.barh(y_pos, height)
+                    pyplot.yticks(y_pos, bars, fontname='Times New Roman')
+                    pyplot.savefig('Improvement_in_Sim_after_Replacement_' + str(i) + '.png')
+                    # same for reverse:
+                    height_reverse = (sim_mat_reverse - curr_sim)[np.argsort(sim_mat_reverse - curr_sim)]
+                    bars = attr_names[np.argsort(-sim_mat_reverse)]
+                    y_pos = np.arange(len(bars))
+                    pyplot.clf()
+                    pyplot.bar(y_pos, height_reverse)
+                    pyplot.xticks(y_pos, bars, fontname='Times New Roman')
+                    pyplot.savefig('Improvement_in_Sim_after_Replacement_' + str(i) + '_rev.png')
+                    # horizonzal ordering
+                    pyplot.clf()
+                    pyplot.barh(y_pos, height_reverse)
+                    pyplot.yticks(y_pos, bars, fontname='Times New Roman')
+                    pyplot.savefig('Improvement_in_Sim_after_Replacement_' + str(i) + '_rev.png')
+                has_improved = np.greater(sim_mat, curr_sim)
+                has_improved_reverse = np.less(sim_mat_reverse, curr_sim)
+                num_of_improvements = np.count_nonzero(has_improved == True)
+                num_of_improvements_reverse = np.count_nonzero(has_improved_reverse == True)
+                print("has_improved shape:", has_improved.shape," | rev: ", has_improved_reverse.shape)
+                print("num_of_improvements:", num_of_improvements, " | rev: ", num_of_improvements_reverse)
+                #print("has_improved found org: ", attr_names[has_improved])
+                #print("has_improved found rev: ", attr_names[has_improved_reverse])
+                #print("ranking of improvements org: ", attr_names[np.argsort(-sim_mat)])
+                #print("ranking of improvements rev: ", attr_names[np.argsort(-sim_mat_reverse)])
+                print("ranking of improvements with only improved ones org: ", attr_names[np.argsort(-sim_mat)][:num_of_improvements])
+                print("ranking of improvements with only improved ones rev: ", attr_names[np.argsort(sim_mat_reverse)][:num_of_improvements_reverse])
+
+                curr_test_example_raw_replaced = curr_test_example_raw.copy()
+
+                if has_improved == []:
+                    print("No attributes have improved the similarity to the healthy state. "
+                          "For this reason, the next nearest neighbor is used to find relevant datastreams/attributes.")
+                    continue
+                elif num_of_improvements > 3 and num_of_improvements_reverse > 3:
+                    # Jenks Natural Break:
+                    res = jenkspy.jenks_breaks(sim_mat[has_improved], nb_class=2)
+                    lower_bound_exclusive = res[-2]
+                    is_symptom = np.greater(sim_mat, lower_bound_exclusive)
+                    print("Jenks Natural Break found symptoms org: ", attr_names[is_symptom])
+
+                    res_rev = jenkspy.jenks_breaks(sim_mat_reverse[has_improved_reverse], nb_class=2)
+                    lower_bound_exclusive_rev = res[1]
+                    is_symptom_rev = np.less(sim_mat_reverse, lower_bound_exclusive_rev)
+                    print("Jenks Natural Break found symptoms rev: ", attr_names[is_symptom_rev])
+
+                    # Elbow
+                    scores_sorted = np.sort(-sim_mat[has_improved])
+                    diffs = scores_sorted[1:] - scores_sorted[0:-1]
+                    selected_index = np.argmin(diffs)
+                    #print("selected_index position for cut:", selected_index)
+                    print("Elbow selected (org) at index:",selected_index,"has symptoms:",attr_names[np.argsort(-sim_mat)[:selected_index + 1]])
+
+                    scores_sorted_rev = np.sort(sim_mat_reverse[has_improved_reverse])
+                    diffs_rev = scores_sorted_rev[1:] - scores_sorted_rev[0:-1]
+                    selected_index_rev = np.argmin(diffs_rev)
+                    # print("selected_index position for cut:", selected_index)
+                    print("Elbow selected (rev) at index:", selected_index_rev, "has symptoms:",
+                          attr_names[np.argsort(sim_mat_reverse)[:selected_index_rev + 1]])
+
+                    ## Access Adjacency Matrix to verify that context is equal for the predicted ones
+                    adj_mat = dataset.get_adj_matrix("no_failure")[:, :, 0]
+
+
+                    for found_relevant_data_strem in np.where(is_symptom == 1)[0]:
+                        neighbors = adj_mat[found_relevant_data_strem, :]
+                       #print("found_relevant_data_stream: ", found_relevant_data_strem," has neighbors:", neighbors)
+                        neighbors = np.where(neighbors>0.01,1,0)[0]
+                        print("found_relevant_data_strem: ", found_relevant_data_strem, "neighbors:", neighbors)
+                        print("Datastream: ", attr_names[found_relevant_data_strem], "Neigbors:", attr_names[neighbors])
+
+                        #replace
+                        curr_test_example_raw_replaced[:,found_relevant_data_strem] = curr_healthy_example_raw[:,found_relevant_data_strem]
+
+                else:
+                    print("Less than 3 improvements found. All considered as symptoms.")
+
+                #found new similarest normal for
+                encoded_variations_replaced = dataset.encode_single_example(snn, np.expand_dims(curr_test_example_raw_replaced,0),num_examples=1)
+                if snn.hyper.encoder_variant in ["graphcnn2d"]:
+                    encoded_variations_global_replaced = encoded_variations_replaced[0]
+                    encoded_variations_local_replaced = np.squeeze(encoded_variations_replaced[1]) # intermediate output, univariate time series
+                    print("encoded_variations_global_replaced shape:", encoded_variations_global_replaced.shape,"| encoded_variations_local_replaced shape:", encoded_variations_local_replaced.shape)
+                else:
+                    # Loading encoded data previously created by the DatasetEncoder.py
+                    encoded_variations_global_replaced = np.squeeze(encoded_variations_replaced)
+                print("encoded_variations_global_replaced shape: ", encoded_variations_global_replaced.shape)
+                print("train_encoded_global_replaced shape: ", encoded_variations_global_replaced.shape)
+
+                sim_mat_replaced = get_Similarity_Matrix(encoded_variations_global_replaced,train_encoded_global, 'cosine')
+                print("sim_mat_replaced: ", sim_mat_replaced.shape, "np.argsort(-sim_mat_replaced): ", np.argsort(np.squeeze(-sim_mat_replaced))[:3],"vs. curr idx:", curr_idx)
+                curr_idx_2 =  np.argsort(np.squeeze(-sim_mat_replaced))[0]
+                print("curr_idx_2:",curr_idx_2)
+                curr_healthy_example_raw_2 = x_train_raw[curr_idx_2, :, :]
+                #print("curr_healthy_example_raw_2: ",curr_healthy_example_raw_2)
+                #'''
+                print("curr_test_example_raw shape: ",curr_test_example_raw.shape,"curr_healthy_example_raw_2 shape: ",curr_healthy_example_raw_2.shape)
+                encoded_variations_global_rep, encoded_variations_global_reverse_rep = generate_and_encode(test_example_idx,
+                                                                                                   curr_test_example_raw,
+                                                                                                   np.squeeze(curr_healthy_example_raw_2),
+                                                                                                   i+10, attr_names,
+                                                                                                   dataset, snn,
+                                                                                                   print_it)
+                #'''
+                print("encoded_variations_global_rep shape:",encoded_variations_global_rep.shape,"encoded_variations_global_reverse_rep shape:",encoded_variations_global_reverse_rep.shape)
+                print("-----")
+                sim_mat = get_Similarity_Matrix(encoded_variations_global_rep, np.expand_dims(train_encoded_global[curr_idx_2,:],0 ), 'cosine')
+                #sim_mat_reverse = get_Similarity_Matrix(encoded_variations_global_reverse_rep, np.expand_dims(train_encoded_global[curr_idx_2, :], 0), 'cosine')
+                print("sim_mat shape: ", sim_mat.shape)
+                #print("sim_mat: ", sim_mat)
+                sim_mat = np.squeeze(sim_mat)
+                #sim_mat_reverse= np.squeeze(sim_mat_reverse)
+
+                if print_it == True:
+                    # print a bar chart with similarity changes after replacing the attributes
+                    height = (sim_mat - curr_sim)[np.argsort(sim_mat - curr_sim)]
+                    bars = attr_names[np.argsort(-sim_mat)]
+                    y_pos = np.arange(len(bars))
+                    pyplot.clf()
+                    pyplot.bar(y_pos, height)
+                    pyplot.xticks(y_pos, bars, fontname='Times New Roman')
+                    pyplot.savefig('Improvement_in_Sim_after_Replacement_' + str(i) + '.png')
+                    # horizonzal ordering
+                    pyplot.clf()
+                    pyplot.barh(y_pos, height)
+                    pyplot.yticks(y_pos, bars, fontname='Times New Roman')
+                    pyplot.savefig('Improvement_in_Sim_after_Replacement_' + str(i) + '.png')
+                    # same for reverse:
+                    height_reverse = (sim_mat_reverse - curr_sim)[np.argsort(sim_mat_reverse - curr_sim)]
+                    bars = attr_names[np.argsort(-sim_mat_reverse)]
+                    y_pos = np.arange(len(bars))
+                    pyplot.clf()
+                    pyplot.bar(y_pos, height_reverse)
+                    pyplot.xticks(y_pos, bars, fontname='Times New Roman')
+                    pyplot.savefig('Improvement_in_Sim_after_Replacement_' + str(i) + '_rev.png')
+                    # horizonzal ordering
+                    pyplot.clf()
+                    pyplot.barh(y_pos, height_reverse)
+                    pyplot.yticks(y_pos, bars, fontname='Times New Roman')
+                    pyplot.savefig('Improvement_in_Sim_after_Replacement_' + str(i) + '_rev.png')
+                has_improved = np.greater(sim_mat, curr_sim)
+                #has_improved_reverse = np.less(sim_mat_reverse, curr_sim)
+                num_of_improvements = np.count_nonzero(has_improved == True)
+                #num_of_improvements_reverse = np.count_nonzero(has_improved_reverse == True)
+                print("REPLACED has_improved shape:", has_improved.shape," | rev: ", has_improved_reverse.shape)
+                #print("REPLACED num_of_improvements:", num_of_improvements, " | rev: ", num_of_improvements_reverse)
+                #print("has_improved found org: ", attr_names[has_improved])
+                #print("has_improved found rev: ", attr_names[has_improved_reverse])
+                #print("ranking of improvements org: ", attr_names[np.argsort(-sim_mat)])
+                #print("ranking of improvements rev: ", attr_names[np.argsort(-sim_mat_reverse)])
+                print("REPLACED ranking of improvements with only improved ones org: ", attr_names[np.argsort(-sim_mat)][:num_of_improvements])
+                #print("REPLACED ranking of improvements with only improved ones rev: ", attr_names[np.argsort(sim_mat_reverse)][:num_of_improvements_reverse])
+                print("-----")
+
+                # Store the results for further processing
+                store_relevant_attribut_idx[test_example_idx] = np.argsort(-sim_mat)
+                store_relevant_attribut_dis[test_example_idx] = sim_mat[has_improved]
+                store_relevant_attribut_name[test_example_idx] = attr_names[np.argsort(-sim_mat)]
+                store_relevant_attribut_label[test_example_idx] = test_label[test_example_idx]
+                #TODO Is similarity now over threshold? If not, use the highest rank one ang generate a new one ...
+                ###
+                '''
+                # Jenks Natural Break:
+                res = jenkspy.jenks_breaks(curr_mean_distance_per_attribute_abs, nb_class=2)
+                #print("res: ", res)
+                lower_bound_exclusive = res[-2]
+                is_symptom = np.greater(curr_mean_distance_per_attribute_abs, lower_bound_exclusive)
+                symptoms = np.where(curr_mean_distance_per_attribute_abs >= lower_bound_exclusive, 1, 0)[0]
+                num_of_symptoms = np.count_nonzero(is_symptom == True)
+                #print("num of symptoms: ", np.count_nonzero(is_symptom == True))
+                print("is_symptom found: ", attr_names[is_symptom])
+                counterfactuals_entires[i] = attr_names[is_symptom]
+                counterfactuals_numOfSymptoms[i] = num_of_symptoms
+                '''
+
+            #sorted_dict_counterfactuals = dict(sorted(counterfactuals.items()))
+            '''
+            print("5 best: ")
+            minval = min(counterfactuals_numOfSymptoms.values())
+            min_entries = list(filter(lambda x: counterfactuals_numOfSymptoms[x] == minval, counterfactuals_numOfSymptoms))
+            print("minvalue:", minval,"and entries:", len(min_entries))
+            for found_key in min_entries:
+                print("found for i:", found_key,":", counterfactuals_entires[found_key])
+            '''
+
+    #'''
+    ####
+    '''
+    for test_example_idx in range(num_test_examples):
+        nn_woFailure = train_univar_encoded[idx_nn_woFailure[test_example_idx],:,:]
+        curr_test_example = test_univar_encoded[test_example_idx,:,:]
+        #print("nn_woFailure shape: ", nn_woFailure.shape , " | curr_test_example: ", curr_test_example.shape)
+        #get second nn
+        second_nn_woFailure = train_univar_encoded[idx_2nn_woFailure[idx_nn_woFailure[test_example_idx]], :, :]
+        third_nn_woFailure = train_univar_encoded[idx_3nn_woFailure[idx_nn_woFailure[test_example_idx]], :, :]
+        #print("second_nn_woFailure shape: ", second_nn_woFailure.shape)
+        #org data:
+        curr_test_example_raw = x_test_raw[test_example_idx,:,:]
+        nn_woFailure_raw = x_train_raw[idx_nn_woFailure[test_example_idx], :, :]
+        second_nn_woFailure_raw = x_train_raw[idx_2nn_woFailure[idx_nn_woFailure[test_example_idx]], :, :]
+        third_nn_woFailure_raw = x_train_raw[idx_3nn_woFailure[idx_nn_woFailure[test_example_idx]], :, :]
+        #print("curr_test_example_raw shape: ", curr_test_example_raw.shape)
+        #print("nn_woFailure_raw shape: ", nn_woFailure_raw.shape)
+
+        # Calculate distance between healthy nearest neigbbor and current test example
+        distance_abs = np.abs(nn_woFailure - curr_test_example)
+        distance_abs_raw = np.abs(nn_woFailure_raw - curr_test_example_raw)
+        #print("distance_abs_raw shape: ", distance_abs_raw.shape)
+        nn_woFailure_norm = nn_woFailure/np.linalg.norm(nn_woFailure, ord=2, axis=1, keepdims=True)
+        curr_test_example_norm = nn_woFailure/np.linalg.norm(curr_test_example, ord=2, axis=1, keepdims=True)
+        distance_cosine = np.matmul(nn_woFailure_norm, np.transpose(curr_test_example_norm))
+        #print("distance shape: ", distance.shape)
+        distance_abs_2nn = np.abs(nn_woFailure - second_nn_woFailure)
+        distance_abs_3nn = np.abs(nn_woFailure - third_nn_woFailure)
+        distance_abs_2nn_raw = np.abs(nn_woFailure_raw - second_nn_woFailure_raw)
+        distance_abs_3nn_raw = np.abs(nn_woFailure_raw - third_nn_woFailure_raw)
+        #print("distance_abs_2nn shape: ", distance_abs_2nn.shape)
+
+        # Aggregate the distances along the attribute / data stream dimension
+        mean_distance_per_attribute_abs = np.mean(distance_abs, axis=1)
+        mean_distance_per_attribute_abs_raw = np.mean(distance_abs_raw, axis=0)
+        mean_distance_per_attribute_abs_2_raw = np.mean(distance_abs_2nn_raw, axis=0)
+        mean_distance_per_attribute_abs_3_raw = np.mean(distance_abs_3nn_raw, axis=0)
+        #print("mean_distance_per_attribute_abs_raw shape: ", mean_distance_per_attribute_abs_raw.shape)
+        mean_distance_per_attribute_cosine = np.mean(distance_cosine, axis=1)
+        mean_distance_abs_2nn_per_attribute_abs = np.mean(distance_abs_2nn, axis=1)
+        mean_distance_abs_3nn_per_attribute_abs = np.mean(distance_abs_3nn, axis=1)
+        mean_distance_per_attribute_abs_norm = np.clip(mean_distance_per_attribute_abs - mean_distance_abs_2nn_per_attribute_abs , 0, 1)
+        mean_distance_per_attribute_abs_norm_2_3 = (mean_distance_abs_2nn_per_attribute_abs + mean_distance_abs_3nn_per_attribute_abs) / 2
+        mean_distance_per_attribute_abs_norm_2_3 = np.abs(mean_distance_per_attribute_abs_norm_2_3 - mean_distance_abs_2nn_per_attribute_abs)
+
+        # print("mean_distance_per_attribute shape: ", mean_distance_per_attribute.shape)
+        # Get the idx of the attributes with the highest distance
+        idx_of_attribute_with_highest_distance_abs = np.argsort(-mean_distance_per_attribute_abs)
+        idx_of_attribute_with_highest_distance_abs_raw = np.argsort(-mean_distance_per_attribute_abs_raw)
+        idx_of_attribute_with_highest_distance_abs_2_raw = np.argsort(-mean_distance_per_attribute_abs_2_raw)
+        idx_of_attribute_with_highest_distance_abs_3_raw = np.argsort(-mean_distance_per_attribute_abs_3_raw)
+        idx_of_attribute_with_highest_distance_cosine = np.argsort(mean_distance_per_attribute_cosine)
+        idx_of_attribute_with_highest_distance_2nn_abs = np.argsort(-mean_distance_abs_2nn_per_attribute_abs)
+        idx_of_attribute_with_highest_distance_norm = np.argsort(-mean_distance_per_attribute_abs_norm)
+        idx_of_attribute_with_highest_distance_norm_2_3 = np.argsort(-mean_distance_per_attribute_abs_norm_2_3)
+        # print("idx_of_attribute_with_highest_distance_abs shape: ", idx_of_attribute_with_highest_distance_abs.shape)
+        print("Label: ", test_label[test_example_idx])
+        print("Prediction: ", y_pred_anomalies[test_example_idx])
+        print("Att: ", idx_of_attribute_with_highest_distance_abs[:5], " names: ", attr_names[idx_of_attribute_with_highest_distance_abs[:5]])
+        print("Dis: ", mean_distance_per_attribute_abs[idx_of_attribute_with_highest_distance_abs[:5]])
+        print("Att 2nn: ", idx_of_attribute_with_highest_distance_2nn_abs[:5], " names: ", attr_names[idx_of_attribute_with_highest_distance_2nn_abs[:5]])
+        print("Dis 2nn: ", mean_distance_abs_2nn_per_attribute_abs[idx_of_attribute_with_highest_distance_2nn_abs[:5]])
+        print("Att_c: ", idx_of_attribute_with_highest_distance_cosine[:5], " names: ", attr_names[idx_of_attribute_with_highest_distance_cosine[:5]])
+        print("Dis_c: ", mean_distance_per_attribute_cosine[idx_of_attribute_with_highest_distance_cosine[:5]])
+        print("Att_normalized: ", idx_of_attribute_with_highest_distance_norm[:5], " names: ", attr_names[idx_of_attribute_with_highest_distance_norm[:5]])
+        print("Dis normalized: ", mean_distance_per_attribute_abs_norm[idx_of_attribute_with_highest_distance_norm[:5]])
+        print("Att_normalized 2_3: ", idx_of_attribute_with_highest_distance_norm_2_3[:5], " names: ", attr_names[idx_of_attribute_with_highest_distance_norm_2_3[:5]])
+        print("Dis normalized 2_3: ", mean_distance_per_attribute_abs_norm_2_3[idx_of_attribute_with_highest_distance_norm_2_3[:5]])
+        print("")
+        print("Att raw: ", idx_of_attribute_with_highest_distance_abs_raw[:5], " names: ",
+              attr_names[idx_of_attribute_with_highest_distance_abs_raw[:5]])
+        print("Dis raw: ", mean_distance_per_attribute_abs_raw[idx_of_attribute_with_highest_distance_abs_raw[:5]])
+        print("Att2 raw: ", idx_of_attribute_with_highest_distance_abs_2_raw[:5], " names: ",
+              attr_names[idx_of_attribute_with_highest_distance_abs_2_raw[:5]])
+        print("Dis2 raw: ", mean_distance_per_attribute_abs_2_raw[idx_of_attribute_with_highest_distance_abs_2_raw[:5]])
+        print("Att3 raw: ", idx_of_attribute_with_highest_distance_abs_3_raw[:5], " names: ",
+              attr_names[idx_of_attribute_with_highest_distance_abs_3_raw[:5]])
+        print("Dis3 raw: ", mean_distance_per_attribute_abs_3_raw[idx_of_attribute_with_highest_distance_abs_3_raw[:5]])
+        print("")
+
+        # Calculate relevant attributes
+        # Jenks Natural Break:
+        res = jenkspy.jenks_breaks(mean_distance_per_attribute_abs_raw, nb_class=2)
+        print("res: ", res)
+        lower_bound_exclusive = res[-2]
+        is_symptom = np.greater(mean_distance_per_attribute_abs_raw, lower_bound_exclusive)
+        symptoms = np.where(mean_distance_per_attribute_abs_raw >= lower_bound_exclusive, True, False)[0]
+        #print("is_symptom: ", is_symptom)
+        #print("symptoms: ", symptoms)
+        print("symptoms found: ", attr_names[symptoms])
+        print("is_symptom found: ", attr_names[is_symptom])
+        # Elbow
+        scores_sorted = np.sort(-mean_distance_per_attribute_abs_raw)
+        diffs = scores_sorted[1:] - scores_sorted[0:-1]
+        selected_index = np.argmin(diffs)
+
+        print("selected_index:", selected_index)
+        print("elbow slected:", attr_names[idx_of_attribute_with_highest_distance_abs_raw[:selected_index+1]])
+    '''
+
+        # Store the results for further processing
+        #store_relevant_attribut_idx[test_example_idx] = idx_of_attribute_with_highest_distance_abs_raw
+        #store_relevant_attribut_dis[test_example_idx] = mean_distance_per_attribute_abs_raw[idx_of_attribute_with_highest_distance_abs_raw]
+        #store_relevant_attribut_name[test_example_idx] = attr_names[idx_of_attribute_with_highest_distance_abs_raw]
+
+    return [store_relevant_attribut_idx, store_relevant_attribut_dis, store_relevant_attribut_name]
+
+
+def generate_and_encode(test_example_idx, curr_test_example_raw, curr_healthy_example_raw, i, attr_names=None, dataset=None, snn=None,print_it=False,num_of_examples=61):
+    '''
+    if test_example_idx == 10000:  # 3047:
+        print_it = True
+        csfont = {'Times New Roman'}
+    else:
+        print_it = False
+    '''
+    # Generate possible counterfactual examples by replacing single data streams
+    generated_versions = generated_possible_versions(np.expand_dims(curr_test_example_raw, 0),
+                                                     np.expand_dims(curr_healthy_example_raw, 0), print_it, i,
+                                                     attr_names)
+    generated_versions = generated_versions[1:, :]
+    encoded_variations = dataset.encode_single_example(snn,
+                                                       generated_versions,num_of_examples)  # Input format (batchsize, time, features)
+
+    if snn.hyper.encoder_variant in ["graphcnn2d"]:
+        encoded_variations_global = encoded_variations[0]
+        encoded_variations_local = np.squeeze(encoded_variations[1])  # intermediate output, univariate time series
+        print("encoded_variations_global shape:", encoded_variations_global.shape, "| encoded_variations_local shape:",encoded_variations_local.shape)
+    else:
+        # Loading encoded data previously created by the DatasetEncoder.py
+        encoded_variations_global = np.squeeze(encoded_variations)
+    print("encoded_variations_global shape: ", encoded_variations_global.shape)
+
+    # same in the other direction
+    generated_versions_reverse = generated_possible_versions(np.expand_dims(curr_healthy_example_raw, 0),
+                                                             np.expand_dims(curr_test_example_raw, 0), print_it, i,
+                                                             attr_names, "_rev")
+    generated_versions_reverse = generated_versions_reverse[1:, :]
+    encoded_variations_reverse = dataset.encode_single_example(snn,
+                                                               generated_versions_reverse,
+                                                               num_of_examples)  # Input format (batchsize, time, features)
+    if snn.hyper.encoder_variant in ["graphcnn2d"]:
+        encoded_variations_global_reverse = encoded_variations_reverse[0]
+        encoded_variations_local_reverse = np.squeeze(encoded_variations_reverse[1])  # intermediate output, univariate time series
+        print("encoded_variations_global shape:", encoded_variations_global.shape, "| encoded_variations_local shape:",encoded_variations_local_reverse.shape)
+    else:
+        # Loading encoded data previously created by the DatasetEncoder.py
+        encoded_variations_global_reverse = np.squeeze(encoded_variations_reverse)
+    print("encoded_variations_global shape: ", encoded_variations_global_reverse.shape)
+    print("train_encoded_global shape: ", encoded_variations_global_reverse.shape)
+
+    return encoded_variations_global, encoded_variations_global_reverse
+
+
+def generated_possible_versions(query_example, nn_example, print_it=False,i=0,feature_names=None,marker=""):
+    # Generates the input data to be computed by the neural network
+    # query_example nd-array (1,timesteps,datastreams) e.g. (1000,61), in which the replacement takes place
+    #print("query_example shape: ", query_example.shape,"| nn_example:", nn_example.shape)
+    query_example_return = query_example.copy()
+    for data_stream in range(query_example.shape[2]):
+        query_example_copy = query_example.copy()
+        query_example_copy[0,:,data_stream] = nn_example[0,:,data_stream]
+        #print("query_example_return shape: ", query_example_return.shape, "| query_example_copy:", query_example_copy.shape)
+        query_example_return = np.concatenate((query_example_return, query_example_copy), axis=0)
+        #print("query_example_return shape: ", query_example_return.shape)
+        if print_it:
+            df = pd.DataFrame(np.squeeze(query_example_copy), index=np.arange(0, 1000),columns=feature_names)
+            df.plot(subplots=True, sharex=True, figsize=(40, 40))
+            pyplot.savefig('query_example_replaced_'+str(data_stream)+'_'+str(i)+marker+'.png')
+    if print_it:
+        df = pd.DataFrame(np.squeeze(nn_example), index=np.arange(0, 1000),columns=feature_names)
+        df.plot(subplots=True, sharex=True, figsize=(40, 40))
+        pyplot.savefig('nn_example_'+str(i)+marker+'.png')
+        df = pd.DataFrame(np.squeeze(query_example), index=np.arange(0, 1000),columns=feature_names)
+        df.plot(subplots=True, sharex=True, figsize=(40, 40))
+        pyplot.savefig('query_example_'+str(i)+marker+'.png')
+    return query_example_return
+
+'''
+def calculate_most_relevant_attributes(sim_mat_casebase_test, sim_mat_casebase_casebase, train_univar_encoded, test_univar_encoded,test_label, attr_names, k=1, x_test_raw=None, x_train_raw=None, y_pred_anomalies=None):
+    print("sim_mat_casebase_casebase shape: ", sim_mat_casebase_casebase.shape)
+    print("sim_mat_casebase_test shape: ", sim_mat_casebase_test.shape, " | train_univar_encoded: ", train_univar_encoded.shape, " | test_univar_encoded: ", test_univar_encoded.shape, " | test_label: ", test_label.shape, " | attr_names: ", attr_names.shape)
+    # Get the idx from the nearest example without a failure
+    idx_nn_woFailure = np.matrix.argsort(-sim_mat_casebase_test, axis=1)[:, :k] # Output dim: (3389,1,61,128)
+    idx_nn_woFailure = np.squeeze(idx_nn_woFailure)
+    #print("idx_nn_woFailure shape: ", idx_nn_woFailure.shape)
+    num_test_examples = test_univar_encoded.shape[0]
+    idx_2nn_woFailure = np.squeeze(np.matrix.argsort(-sim_mat_casebase_casebase, axis=1)[:, 1:2]) # Output dim:  (22763, 61, 128)
+    idx_3nn_woFailure = np.squeeze(np.matrix.argsort(-sim_mat_casebase_casebase, axis=1)[:, 2:3])  # Output dim:  (22763, 61, 128)
+    #print("idx_2nn_woFailure shape: ", idx_2nn_woFailure.shape)
+    # store anomaly values attribute-wise per example
+    store_relevant_attribut_idx = {}
+    store_relevant_attribut_dis = {}
+    store_relevant_attribut_name = {}
+
+    #### find example with most similar attributes
+    
+    idx_nearest_neighbors = np.matrix.argsort(-sim_mat_casebase_test, axis=1)[:, :]
+    print("idx_nearest_neighbors shape ", idx_nearest_neighbors.shape)
+    for test_example_idx in range(num_test_examples):
+        print(" Example ",test_example_idx,"with label", test_label[test_example_idx])
+        if not test_label[test_example_idx] == "no_failure":
+            counterfactuals_entires = {}
+            counterfactuals_numOfSymptoms = {}
+            for i in range(sim_mat_casebase_test.shape[1]):
+                #print("Nearest Neighbor",i ," of Train Example: ")
+                curr_idx = idx_nearest_neighbors[test_example_idx, i]
+
+                # calculate attribute-wise distance on encoded data
+                curr_healthy_example_encoded = train_univar_encoded[curr_idx,:,:]
+                curr_test_example = test_univar_encoded[test_example_idx,:,:]
+
+                curr_distance_abs = np.abs(curr_healthy_example_encoded - curr_test_example)
+                curr_mean_distance_per_attribute_abs = np.mean(curr_distance_abs, axis=1)
+                idx_of_attribute_with_highest_distance_abs = np.argsort(-curr_mean_distance_per_attribute_abs)
+                #print("Att: ", idx_of_attribute_with_highest_distance_abs[:5], " names: ", attr_names[idx_of_attribute_with_highest_distance_abs[:5]])
+                #print("Dis: ", curr_mean_distance_per_attribute_abs[idx_of_attribute_with_highest_distance_abs[:5]])
+
+                # Jenks Natural Break:
+                res = jenkspy.jenks_breaks(curr_mean_distance_per_attribute_abs, nb_class=2)
+                #print("res: ", res)
+                lower_bound_exclusive = res[-2]
+                is_symptom = np.greater(curr_mean_distance_per_attribute_abs, lower_bound_exclusive)
+                symptoms = np.where(curr_mean_distance_per_attribute_abs >= lower_bound_exclusive, 1, 0)[0]
+                num_of_symptoms = np.count_nonzero(is_symptom == True)
+                #print("num of symptoms: ", np.count_nonzero(is_symptom == True))
+                #print("is_symptom found: ", attr_names[is_symptom])
+                counterfactuals_entires[i] = attr_names[is_symptom]
+                counterfactuals_numOfSymptoms[i] = num_of_symptoms
+            #sorted_dict_counterfactuals = dict(sorted(counterfactuals.items()))
+
+            print("5 best: ")
+            minval = min(counterfactuals_numOfSymptoms.values())
+            min_entries = list(filter(lambda x: counterfactuals_numOfSymptoms[x] == minval, counterfactuals_numOfSymptoms))
+            print("minvalue:", minval,"and entries:", len(min_entries))
+            for found_key in min_entries:
+                print("found for i:", found_key,":", counterfactuals_entires[found_key])
+
+
+
+    
+    ####
+
+    for test_example_idx in range(num_test_examples):
+        nn_woFailure = train_univar_encoded[idx_nn_woFailure[test_example_idx],:,:]
+        curr_test_example = test_univar_encoded[test_example_idx,:,:]
+        #print("nn_woFailure shape: ", nn_woFailure.shape , " | curr_test_example: ", curr_test_example.shape)
+        #get second nn
+        second_nn_woFailure = train_univar_encoded[idx_2nn_woFailure[idx_nn_woFailure[test_example_idx]], :, :]
+        third_nn_woFailure = train_univar_encoded[idx_3nn_woFailure[idx_nn_woFailure[test_example_idx]], :, :]
+        #print("second_nn_woFailure shape: ", second_nn_woFailure.shape)
+        #org data:
+        curr_test_example_raw = x_test_raw[test_example_idx,:,:]
+        nn_woFailure_raw = x_train_raw[idx_nn_woFailure[test_example_idx], :, :]
+        second_nn_woFailure_raw = x_train_raw[idx_2nn_woFailure[idx_nn_woFailure[test_example_idx]], :, :]
+        third_nn_woFailure_raw = x_train_raw[idx_3nn_woFailure[idx_nn_woFailure[test_example_idx]], :, :]
+        #print("curr_test_example_raw shape: ", curr_test_example_raw.shape)
+        #print("nn_woFailure_raw shape: ", nn_woFailure_raw.shape)
+
+        # Calculate distance between healthy nearest neigbbor and current test example
+        distance_abs = np.abs(nn_woFailure - curr_test_example)
+        distance_abs_raw = np.abs(nn_woFailure_raw - curr_test_example_raw)
+        #print("distance_abs_raw shape: ", distance_abs_raw.shape)
+        nn_woFailure_norm = nn_woFailure/np.linalg.norm(nn_woFailure, ord=2, axis=1, keepdims=True)
+        curr_test_example_norm = nn_woFailure/np.linalg.norm(curr_test_example, ord=2, axis=1, keepdims=True)
+        distance_cosine = np.matmul(nn_woFailure_norm, np.transpose(curr_test_example_norm))
+        #print("distance shape: ", distance.shape)
+        distance_abs_2nn = np.abs(nn_woFailure - second_nn_woFailure)
+        distance_abs_3nn = np.abs(nn_woFailure - third_nn_woFailure)
+        distance_abs_2nn_raw = np.abs(nn_woFailure_raw - second_nn_woFailure_raw)
+        distance_abs_3nn_raw = np.abs(nn_woFailure_raw - third_nn_woFailure_raw)
+        #print("distance_abs_2nn shape: ", distance_abs_2nn.shape)
+
+        # Aggregate the distances along the attribute / data stream dimension
+        mean_distance_per_attribute_abs = np.mean(distance_abs, axis=1)
+        mean_distance_per_attribute_abs_raw = np.mean(distance_abs_raw, axis=0)
+        mean_distance_per_attribute_abs_2_raw = np.mean(distance_abs_2nn_raw, axis=0)
+        mean_distance_per_attribute_abs_3_raw = np.mean(distance_abs_3nn_raw, axis=0)
+        #print("mean_distance_per_attribute_abs_raw shape: ", mean_distance_per_attribute_abs_raw.shape)
+        mean_distance_per_attribute_cosine = np.mean(distance_cosine, axis=1)
+        mean_distance_abs_2nn_per_attribute_abs = np.mean(distance_abs_2nn, axis=1)
+        mean_distance_abs_3nn_per_attribute_abs = np.mean(distance_abs_3nn, axis=1)
+        mean_distance_per_attribute_abs_norm = np.clip(mean_distance_per_attribute_abs - mean_distance_abs_2nn_per_attribute_abs , 0, 1)
+        mean_distance_per_attribute_abs_norm_2_3 = (mean_distance_abs_2nn_per_attribute_abs + mean_distance_abs_3nn_per_attribute_abs) / 2
+        mean_distance_per_attribute_abs_norm_2_3 = np.abs(mean_distance_per_attribute_abs_norm_2_3 - mean_distance_abs_2nn_per_attribute_abs)
+
+        # print("mean_distance_per_attribute shape: ", mean_distance_per_attribute.shape)
+        # Get the idx of the attributes with the highest distance
+        idx_of_attribute_with_highest_distance_abs = np.argsort(-mean_distance_per_attribute_abs)
+        idx_of_attribute_with_highest_distance_abs_raw = np.argsort(-mean_distance_per_attribute_abs_raw)
+        idx_of_attribute_with_highest_distance_abs_2_raw = np.argsort(-mean_distance_per_attribute_abs_2_raw)
+        idx_of_attribute_with_highest_distance_abs_3_raw = np.argsort(-mean_distance_per_attribute_abs_3_raw)
+        idx_of_attribute_with_highest_distance_cosine = np.argsort(mean_distance_per_attribute_cosine)
+        idx_of_attribute_with_highest_distance_2nn_abs = np.argsort(-mean_distance_abs_2nn_per_attribute_abs)
+        idx_of_attribute_with_highest_distance_norm = np.argsort(-mean_distance_per_attribute_abs_norm)
+        idx_of_attribute_with_highest_distance_norm_2_3 = np.argsort(-mean_distance_per_attribute_abs_norm_2_3)
+        # print("idx_of_attribute_with_highest_distance_abs shape: ", idx_of_attribute_with_highest_distance_abs.shape)
+        print("Label: ", test_label[test_example_idx])
+        print("Prediction: ", y_pred_anomalies[test_example_idx])
+        print("Att: ", idx_of_attribute_with_highest_distance_abs[:5], " names: ", attr_names[idx_of_attribute_with_highest_distance_abs[:5]])
+        print("Dis: ", mean_distance_per_attribute_abs[idx_of_attribute_with_highest_distance_abs[:5]])
+        print("Att 2nn: ", idx_of_attribute_with_highest_distance_2nn_abs[:5], " names: ", attr_names[idx_of_attribute_with_highest_distance_2nn_abs[:5]])
+        print("Dis 2nn: ", mean_distance_abs_2nn_per_attribute_abs[idx_of_attribute_with_highest_distance_2nn_abs[:5]])
+        print("Att_c: ", idx_of_attribute_with_highest_distance_cosine[:5], " names: ", attr_names[idx_of_attribute_with_highest_distance_cosine[:5]])
+        print("Dis_c: ", mean_distance_per_attribute_cosine[idx_of_attribute_with_highest_distance_cosine[:5]])
+        print("Att_normalized: ", idx_of_attribute_with_highest_distance_norm[:5], " names: ", attr_names[idx_of_attribute_with_highest_distance_norm[:5]])
+        print("Dis normalized: ", mean_distance_per_attribute_abs_norm[idx_of_attribute_with_highest_distance_norm[:5]])
+        print("Att_normalized 2_3: ", idx_of_attribute_with_highest_distance_norm_2_3[:5], " names: ", attr_names[idx_of_attribute_with_highest_distance_norm_2_3[:5]])
+        print("Dis normalized 2_3: ", mean_distance_per_attribute_abs_norm_2_3[idx_of_attribute_with_highest_distance_norm_2_3[:5]])
+        print("")
+        print("Att raw: ", idx_of_attribute_with_highest_distance_abs_raw[:5], " names: ",
+              attr_names[idx_of_attribute_with_highest_distance_abs_raw[:5]])
+        print("Dis raw: ", mean_distance_per_attribute_abs_raw[idx_of_attribute_with_highest_distance_abs_raw[:5]])
+        print("Att2 raw: ", idx_of_attribute_with_highest_distance_abs_2_raw[:5], " names: ",
+              attr_names[idx_of_attribute_with_highest_distance_abs_2_raw[:5]])
+        print("Dis2 raw: ", mean_distance_per_attribute_abs_2_raw[idx_of_attribute_with_highest_distance_abs_2_raw[:5]])
+        print("Att3 raw: ", idx_of_attribute_with_highest_distance_abs_3_raw[:5], " names: ",
+              attr_names[idx_of_attribute_with_highest_distance_abs_3_raw[:5]])
+        print("Dis3 raw: ", mean_distance_per_attribute_abs_3_raw[idx_of_attribute_with_highest_distance_abs_3_raw[:5]])
+        print("")
+
+        # Calculate relevant attributes
+        # Jenks Natural Break:
+        res = jenkspy.jenks_breaks(mean_distance_per_attribute_abs_raw, nb_class=2)
+        print("res: ", res)
+        lower_bound_exclusive = res[-2]
+        is_symptom = np.greater(mean_distance_per_attribute_abs_raw, lower_bound_exclusive)
+        symptoms = np.where(mean_distance_per_attribute_abs_raw >= lower_bound_exclusive, True, False)[0]
+        #print("is_symptom: ", is_symptom)
+        #print("symptoms: ", symptoms)
+        print("symptoms found: ", attr_names[symptoms])
+        print("is_symptom found: ", attr_names[is_symptom])
+        # Elbow
+        scores_sorted = np.sort(-mean_distance_per_attribute_abs_raw)
+        diffs = scores_sorted[1:] - scores_sorted[0:-1]
+        selected_index = np.argmin(diffs)
+
+        print("selected_index:", selected_index)
+        print("elbow slected:", attr_names[idx_of_attribute_with_highest_distance_abs_raw[:selected_index+1]])
+
+
+
+
+
+        # Store the results for further processing
+        store_relevant_attribut_idx[test_example_idx] = idx_of_attribute_with_highest_distance_abs_raw
+        store_relevant_attribut_dis[test_example_idx] = mean_distance_per_attribute_abs_raw[idx_of_attribute_with_highest_distance_abs_raw]
+        store_relevant_attribut_name[test_example_idx] = attr_names[idx_of_attribute_with_highest_distance_abs_raw]
+
+    return [store_relevant_attribut_idx, store_relevant_attribut_dis, store_relevant_attribut_name]
+'''
+
+def evaluate_most_relevant_examples(most_relevant_attributes, y_test_labels, dataset, y_pred_anomalies, ks=[1, 3, 5], dict_measures={},hitrateAtK=[100,150,200]):
+    store_relevant_attribut_idx, store_relevant_attribut_dis, store_relevant_attribut_name= most_relevant_attributes[0], most_relevant_attributes[1], most_relevant_attributes[2]
+    num_test_examples = y_test_labels.shape[0]
+    attr_names = dataset.feature_names_all
+    found_for_k_strict = {}
+    found_for_k_context = {}
+    found_rank_strict = {}
+    found_rank_context = {}
+    found_hitRateAtK_strict = {}
+    found_hitRateAtK_context = {}
+    df_k_rate_per_label = pd.DataFrame(columns=['Label', 'strict_rate','context_rate','for_k'])
+    df_k_avg_rank_per_label = pd.DataFrame(columns=['Label', 'strict_rank_average', 'context_rank_average'])
+    for curr_k in ks:
+        found_strict_hitsAtK = {}
+        found_context_hitsAtK = {}
+        found_strict_hitrateAtK = {}
+        found_context_hitrateAtK = {}
+        for i in range(num_test_examples):
+            # Get data needed to process and evaluate the current example
+            curr_label = y_test_labels[i]
+            curr_pred = y_pred_anomalies[i]
+            print("Label:", curr_label, "Pred:",curr_pred," num: ", i)
+            #if curr_label == "no_failure"  and curr_pred==1:
+            #    print("FALSE POSITIVE")
+            if not curr_label == "no_failure":
+                curr_gold_standard_attributes = dataset.get_masking(curr_label, return_strict_masking=True)
+                masking_strict = curr_gold_standard_attributes[61:]
+                masking_context = curr_gold_standard_attributes[:61]
+                #print("masking_strict shape: ", masking_strict.shape)
+                #print("masking_context shape: ", masking_context.shape)
+                #print("curr_gold_standard_attributes_strict shape: ", curr_gold_standard_attributes.shape)
+                #curr_gold_standard_attributes_context = dataset.get_masking(curr_label, return_strict_masking=False)
+                curr_gold_standard_attributes_strict_idx = np.where(masking_strict == 1)[0]
+                curr_gold_standard_attributes_context_idx = np.where(masking_context == 1)[0]
+                # Compare predictions with masked indexes for every k
+                k_predicted_attributes = store_relevant_attribut_idx[i][:curr_k]
+                #print("k_predicted_attributes: ", k_predicted_attributes)
+                print("k="+str(curr_k)+"_predicted_attributes: ", attr_names[k_predicted_attributes])
+                print("Labeled as relevant:  ", attr_names[curr_gold_standard_attributes_strict_idx])
+                found_strict_hitsAtK[i] = 0
+                found_context_hitsAtK[i] = 0
+                #print(store_relevant_attribut_idx[i][:curr_k])
+                for predicted_attribute in k_predicted_attributes:
+                    #print("predicted_attribute: ", predicted_attribute)
+                    #print("curr_gold_standard_attributes_strict_idx: ", curr_gold_standard_attributes_strict_idx)
+                    if predicted_attribute in curr_gold_standard_attributes_strict_idx:
+                        print("found idx ",predicted_attribute," in strict:", curr_gold_standard_attributes_strict_idx)
+                        found_strict_hitsAtK[i] = 1
+                    if predicted_attribute in curr_gold_standard_attributes_context_idx:
+                        print("found idx ",predicted_attribute," in context:", curr_gold_standard_attributes_context_idx)
+                        found_context_hitsAtK[i] = 1
+
+                # Calculate hitrate @k
+                #
+                # k entries need to be have the same length as for hits@K
+                #
+                index_pos =ks.index(curr_k)
+                print("index_pos:",index_pos)
+                #for hit_rate in hitrateAtK:
+                hit_rate = hitrateAtK[index_pos]
+                amount_data_streams_strict = np.sum(masking_strict.astype(int))
+                amount_data_streams_context = np.sum(masking_context.astype(int))
+                query_size_strict = int(round(amount_data_streams_strict*(hit_rate/100)))
+                query_size_context = int(round(amount_data_streams_context*(hit_rate/100)))
+                strict_predicted_attributes_idx = store_relevant_attribut_idx[i][:query_size_strict]
+                context_predicted_attributes_idx = store_relevant_attribut_idx[i][:query_size_context]
+
+                # Calculate hitrate@K for Strict Attributes
+                num_of_found_entires = 0
+                for gold_data_stream in curr_gold_standard_attributes_strict_idx:
+                    if gold_data_stream in strict_predicted_attributes_idx:
+                        print("Hitrate@"+str(hit_rate)+" strict found idx ", gold_data_stream, " in strict:", strict_predicted_attributes_idx)
+                        num_of_found_entires += 1
+                found_strict_hitrateAtK[i] = num_of_found_entires/amount_data_streams_strict
+
+                # Calculate hitrate@K for Context Attributes
+                for gold_data_stream in curr_gold_standard_attributes_context_idx:
+                    if gold_data_stream in context_predicted_attributes_idx:
+                        print("Hitrate@"+str(hit_rate)+" context found idx ", gold_data_stream, " in context:", context_predicted_attributes_idx)
+                        num_of_found_entires += 1
+                found_context_hitrateAtK[i] = num_of_found_entires / amount_data_streams_context
+
+                print("Hitrate@"+str(hit_rate)+" strict:",found_strict_hitrateAtK[i])
+                print("Hitrate@" + str(hit_rate) + " context:", found_context_hitrateAtK[i])
+
+
+
+                # Calculate the rank (This is k independently and should calculated outside of the k-loop normally)
+                if curr_k == ks[0]:
+                    mean_rank_strict = 0
+                    mean_rank_context = 0
+                    for curr_target_attribute in curr_gold_standard_attributes_strict_idx:
+                        rank = np.where(curr_target_attribute == store_relevant_attribut_idx[i])[0] + 1
+                        mean_rank_strict = mean_rank_strict + rank
+                        print("Rank strict: ", rank)
+                    for curr_target_attribute in curr_gold_standard_attributes_context_idx:
+                        rank = np.where(curr_target_attribute == store_relevant_attribut_idx[i])[0] + 1
+                        mean_rank_context = mean_rank_strict + rank
+                        print("Rank context: ", rank)
+                    mean_rank_strict = mean_rank_strict / len(curr_gold_standard_attributes_strict_idx)
+                    found_rank_strict[i] = mean_rank_strict
+                    mean_rank_context = mean_rank_context / len(curr_gold_standard_attributes_context_idx)
+                    found_rank_context[i] = mean_rank_context
+
+
+            else:
+                #found[i] = 0
+                #no-failure label
+                print("no failure example")
+
+        # finished for all examples for a specific value of k
+        found_for_k_strict[curr_k] = found_strict_hitsAtK
+        found_for_k_context[curr_k] = found_context_hitsAtK
+        found_rank_strict[curr_k] = found_rank_strict
+        found_rank_context[curr_k] = found_rank_context
+        found_hitRateAtK_strict[curr_k] = found_strict_hitrateAtK
+        found_hitRateAtK_context[curr_k] = found_context_hitrateAtK
+        #print("found_for_k[",curr_k,"]: ", found_rank_strict[curr_k])
+        print("found_hitRateAtK_strict:",found_hitRateAtK_strict)
+
+
+    # print results
+
+    for k_key in found_for_k_strict.keys():
+        print("K: ", k_key)
+        counter = 0
+        found_strict_hitsAtK = 0
+        found_context_hitsAtK = 0
+        found_strict_hitrateAtK = 0
+        found_context_hitrateAtK = 0
+        entries_strict = found_for_k_strict[k_key]
+        entries_context = found_for_k_context[k_key]
+        entries_hitrate_strict = found_hitRateAtK_strict[k_key]
+        entries_hitrate_context = found_hitRateAtK_context[k_key]
+        entries_rank_strict = found_rank_strict[k_key]
+        entries_rank_context = found_rank_context[k_key]
+        sum_of_mean_rank_strict = 0
+        sum_of_mean_rank_context = 0
+        for example in entries_strict.keys():
+            counter = counter + 1
+            #print("key: ", counter)
+            found_strict_hitsAtK = found_strict_hitsAtK + entries_strict[example]
+            found_context_hitsAtK = found_context_hitsAtK + entries_context[example]
+            found_strict_hitrateAtK = found_strict_hitrateAtK + entries_hitrate_strict[example]
+            found_context_hitrateAtK = found_context_hitrateAtK + entries_hitrate_context[example]
+            sum_of_mean_rank_strict = sum_of_mean_rank_strict + entries_rank_strict[example]
+            sum_of_mean_rank_context = sum_of_mean_rank_context + entries_rank_context[example]
+
+        print("Fuer k=", k_key, "wurden fuer", found_strict_hitsAtK, "von", counter ,"Anomalien direkte Attribute gefunden. Good entries found: ", str(found_strict_hitsAtK/counter))
+        print("Fuer k=", k_key, "wurden fuer", found_context_hitsAtK, "von", counter, "Anomalien contextuelle Attribute gefunden. Good entries found: ", str(found_context_hitsAtK / counter))
+        print("Fuer k=", k_key, "wurden relevante Attribute (direkt) auf folgendem Rang durchschnittlich gefunden: ", str(sum_of_mean_rank_strict / counter))
+        print("Fuer k=", k_key, "wurden relevante Attribute (kontextuelle) auf folgendem Rang durchschnittlich gefunden: ",str(sum_of_mean_rank_context / counter))
+        print("Fuer k=" + str(hitrateAtK[ks.index(k_key)]) + " wurden durschnittlich", (found_strict_hitrateAtK / counter)), " anomalie-relevante direkte Atrribute gefunden.",
+        print("Fuer k=" + str(hitrateAtK[ks.index(k_key)]) + "wurden durschnittlich", (found_context_hitrateAtK / counter)), " anomalie-relevante kontextuelle Atrribute gefunden.",
+
+        dict_measures[str(k_key)+ "_strict"]            = (found_strict_hitsAtK/counter)
+        dict_measures[str(k_key) + "_context"]          = (found_context_hitsAtK / counter)
+        dict_measures[str(k_key) + "_rank_strict"]      = (sum_of_mean_rank_strict / counter)
+        dict_measures[str(k_key) + "_rank_context"]     = (sum_of_mean_rank_context / counter)
+        dict_measures[str(hitrateAtK[ks.index(k_key)]) + "_hitrate_strict"] = (found_strict_hitrateAtK / counter)
+        dict_measures[str(hitrateAtK[ks.index(k_key)]) + "_hitrate_context"] = (found_context_hitrateAtK / counter)
+
+
+        for label in dataset.classes_total:
+            # restrict to failure only entries
+            #print("Label:",label)
+            y_test_labels_failure_only = np.delete(y_test_labels, np.argwhere(y_test_labels == 'no_failure'))
+            #print("y_test_labels_failure_only shape: ", y_test_labels_failure_only.shape)
+            mask_for_current_label = np.where(y_test_labels_failure_only == label)
+            #print("mask_for_current_label: ", mask_for_current_label)
+            #print("mask_for_current_label[0]shape: ", mask_for_current_label[0].shape)
+            #print("mask_for_current_label[1]shape: ", mask_for_current_label[1].shape)
+            mask_for_current_label = mask_for_current_label[0]
+            if not mask_for_current_label.shape[0] == 0:
+                #print("mask_for_current_label shape: ", mask_for_current_label.shape)
+                entries = np.sum(mask_for_current_label.shape[0])
+                # dict to array
+                entries_strict_arr = np.array(list(entries_strict.items()))
+                entries_context_arr = np.array(list(entries_context.items()))
+                entries_rank_strict_arr = np.array(list(entries_rank_strict.items()))
+                entries_rank_context_arr = np.array(list(entries_rank_context.items()))
+
+                #print("array: ", entries_strict_arr.shape)
+                #print("entries_strict_arr:",entries_strict_arr.T)
+                #print("entries_rank_strict_arr:", entries_rank_strict_arr)
+                entries_strict_arr = entries_strict_arr[:,1]
+                entries_context_arr = entries_context_arr[:, 1]
+                entries_rank_strict_arr = entries_rank_strict_arr[:, 1]
+                entries_rank_context_arr = entries_rank_context_arr[:, 1]
+                #print("array: ", entries_strict_arr.shape)
+                #array = np.squeeze(array[:, 1])
+                #print("array: ", array.shape)
+                found_strict_hitsAtK = np.sum(entries_strict_arr[mask_for_current_label])
+                #print("found_strict_hitsAtK: ",found_strict_hitsAtK)
+                #print("entries: ", entries)
+                found_context_hitsAtK = np.sum(entries_context_arr[mask_for_current_label])
+                found_strict_avg_rank = np.sum(entries_rank_strict_arr[mask_for_current_label])
+                found_context_avg_rank = np.sum(entries_rank_context_arr[mask_for_current_label])
+                rate_strict = found_strict_hitsAtK/ entries
+                rate_context = found_context_hitsAtK / entries
+                avg_rank_stric = found_strict_avg_rank / entries
+                avg_rank_context = found_context_avg_rank / entries
+                #print("Label: ", label, "found strict with rate of:", rate_strict, "with k=", k_key)
+                df_k_rate_per_label = df_k_rate_per_label.append({'Label': label, 'strict_rate': rate_strict, 'context_rate':rate_context, 'for_k':k_key}, ignore_index=True)
+                # Hinweis: Berechnung von df_k_avg_rank_per_label könnte auch außerhalb der k, Schleife, da k hier irrevelant ist ...
+                df_k_avg_rank_per_label = df_k_avg_rank_per_label.append({'Label': label, 'strict_rank_average': avg_rank_stric, 'context_rank_average':avg_rank_context}, ignore_index=True)
+
+    print(df_k_rate_per_label.to_string())
+    print(df_k_avg_rank_per_label.to_string())
+
+    # print masking statistics
+    attr_names = dataset.feature_names_all
+    sum_of_strict_wo_no_failure = 0
+    sum_of_context_wo_no_failure = 0
+    sum_of_strict_w_no_failure = 0
+    sum_of_context_w_no_failure = 0
+    df_masking_per_label = pd.DataFrame(columns=['Label', 'strict_mask_attributes', 'context_mask_attributes'])
+    heatmap = np.zeros((len(dataset.classes_total), attr_names.shape[0]))
+
+    cnt = 0
+    for label in dataset.classes_total:
+        curr_gold_standard_attributes = dataset.get_masking(label, return_strict_masking=True)
+        masking_strict = curr_gold_standard_attributes[61:]
+        masking_context = curr_gold_standard_attributes[:61]
+        masking_sum = np.add(masking_strict.astype(int), masking_context.astype(int))
+        #print("masking_strict: ", masking_strict)
+        #print("masking_context: ", masking_context)
+        #print("masking_sum: ", masking_sum)
+        heatmap[cnt,:] = masking_sum
+        df_masking_per_label = df_masking_per_label.append({'Label': label,  'strict_mask_attributes':attr_names[masking_strict], 'context_mask_attributes':attr_names[masking_context]}, ignore_index=True)
+        if not label == "no_failure":
+            sum_of_strict_wo_no_failure += np.sum(masking_strict)
+            sum_of_context_wo_no_failure += np.sum(masking_context)
+        sum_of_strict_w_no_failure += np.sum(masking_strict)
+        sum_of_context_w_no_failure += np.sum(masking_context)
+        cnt += 1
+    print("### Masking / Relevant Attributes Statistics ###")
+    print(df_masking_per_label.to_string())
+    print("Average num of attributes for strict masking / (wo no_failure):\t",(sum_of_strict_wo_no_failure / (len(dataset.classes_total)-1)),"\t/\t",(sum_of_strict_wo_no_failure / (len(dataset.classes_total))))
+    #print("Average num of attributes for strict masking / (wo no_failure):\t",(sum_of_context_wo_no_failure / (len(dataset.classes_total)-1)),"\t/\t",(sum_of_context_wo_no_failure / (len(dataset.classes_total))))
+
+    # print heatmap
+    pyplot.clf()
+    columns = attr_names
+    index = dataset.classes_total
+    df = pd.DataFrame(heatmap, index=index, columns=columns)
+
+    relevance_labels = ['Irrelevant', 'Strict', 'Strict/Context']
+
+    # replaces strings in labels:
+    #index = np_f.replace(data, 'HD\,', 'HD')
+    index = [sub.replace('failure_mode', 'fm') for sub in index]
+    index = [sub.replace('pneumatic', 'pneu') for sub in index]
+    index = [sub.replace('leakage', 'leak') for sub in index]
+    index = [sub.replace('lightbarrier', 'lb') for sub in index]
+    index = [sub.replace('workstation', 'ws') for sub in index]
+    index = [sub.replace('workingstation', 'ws') for sub in index]
+    index = [sub.replace('workpiece', 'wp') for sub in index]
+    index = [sub.replace('conveyorbelt', 'cb') for sub in index]
+    index = [sub.replace('conveyor', 'cb') for sub in index]
+    index = [sub.replace('driveshaft', 'ds') for sub in index]
+    index = [sub.replace('failure', 'fm') for sub in index]
+    index = [sub.replace('big', 'b') for sub in index]
+    index = [sub.replace('small', 's') for sub in index]
+    index = [sub.replace('transport', 'trans') for sub in index]
+
+    pyplot.pcolor(df)
+    pyplot.yticks(np.arange(0.5, len(df.index), 1), df.index)
+    pyplot.xticks(np.arange(0.5, len(df.columns), 1), df.columns)
+    pyplot.savefig("feature_relevance_heatmap.png")
+
+    #### El Weingarto Code für Attribute zu Labeln
+
+    relevance_vectors = df.values /2 #.T
+    print("relevance_vectors: ", relevance_vectors)
+    f_names = attr_names# df.index.values
+
+    font = {'family': 'serif','size': 14}
+
+    import matplotlib
+    matplotlib.rc('font', **font)
+    pyplot.clf()
+    pyplot.figure(figsize=(31, 10))
+
+    ax = pyplot.gca()
+    cmap = colors.ListedColormap(['#545454', '#0088ff', '#fff200'])
+    im = ax.imshow(relevance_vectors, cmap=cmap, aspect='auto')
+
+    ax.set_yticks(np.arange(relevance_vectors.shape[0]))
+    ax.set_yticklabels(index)
+
+    ax.set_xticks(np.arange(relevance_vectors.shape[1]))
+    ax.set_xticklabels(f_names, rotation=40, ha='right', rotation_mode='anchor')
+
+    cbar = ax.figure.colorbar(im, ax=ax, orientation='horizontal', fraction=0.07, pad=0.3)
+    cbar.ax.set_xlabel('Relevance')
+
+    #tick_locs = np.array([0, 0.9, 1.9])
+    #cbar.set_ticks(tick_locs)
+    cbar.set_ticklabels(relevance_labels)
+
+    # Turn spines off and create white grid.
+    for edge, spine in ax.spines.items():
+        spine.set_visible(False)
+
+    ax.set_xticks(np.arange(relevance_vectors.shape[1] + 1) - .5, minor=True)
+    ax.set_yticks(np.arange(relevance_vectors.shape[0] + 1) - .5, minor=True)
+    ax.grid(which="minor", color="black", linestyle='-', linewidth=3)
+    ax.tick_params(which="minor", bottom=False, left=False)
+
+    pyplot.tight_layout()
+    pyplot.savefig('feature_relevance_heatmap_2.png',bbox_inches="tight")
+
+    return dict_measures
+
+def find_anomaly_threshold(nn_distance_valid, labels_valid):
+    # the threshold is optimized based on the given data set, typically the validation set
+    '''
+    print("nn_distance_valid shape: ", nn_distance_valid.shape)
+    print("nn_distance_valid: ", nn_distance_valid)
+    print("nn_distance_valid: ", nn_distance_valid)
+    print("labels_valid shape: ", labels_valid.shape)
+    threshold_min=np.amin(nn_distance_valid)
+    threshold_max= np.amax(nn_distance_valid)
+    curr_threshold = threshold_min
+    '''
+    # labels
+    y_true = np.where(labels_valid == 'no_failure', 0, 1)
+    y_true = np.reshape(y_true, y_true.shape[0])
+    #print("y_true shape: ", y_true.shape)
+
+    #sort all anomaly scores and iterate over them for finding the highest score
+    nn_distance_valid_sorted = np.sort(nn_distance_valid)
+    f1_weighted_max_threshold   = 0
+    f1_weighted_max_value       = 0
+    f1_macro_max_threshold      = 0
+    f1_macro_max_value          = 0
+    for curr_threshold in nn_distance_valid_sorted:
+        y_pred = np.where(nn_distance_valid <= curr_threshold, 1, 0)
+        #print(" ---- ")
+        #print("Threshold: ", curr_threshold)
+        #print(classification_report(y_true, y_pred, target_names=['normal', 'anomaly']))
+        TN, FP, FN, TP = confusion_matrix(y_true, y_pred).ravel()
+        p_r_f_s_weighted = precision_recall_fscore_support(y_true, y_pred, average='weighted')
+        p_r_f_s_macro = precision_recall_fscore_support(y_true, y_pred, average='weighted')
+        # Sensitivity, hit rate, recall, or true positive rate
+        TPR = TP / (TP + FN)
+        # Specificity or true negative rate
+        TNR = TN / (TN + FP)
+        # Precision or positive predictive value
+        PPV = TP / (TP + FP)
+        # Negative predictive value
+        NPV = TN / (TN + FN)
+        # Fall out or false positive rate
+        FPR = FP / (FP + TN)
+        # False negative rate
+        FNR = FN / (TP + FN)
+        # False discovery rate
+        FDR = FP / (TP + FP)
+
+        # Overall accuracy
+        ACC = (TP + TN) / (TP + FP + FN + TN)
+        #print("precision_recall_fscore_support: ", precision_recall_fscore_support(y_true, y_pred, average='weighted'))
+        #print(" ---- ")
+        if f1_weighted_max_value < p_r_f_s_weighted[2]:
+            f1_weighted_max_value = p_r_f_s_weighted[2]
+            f1_weighted_max_threshold = curr_threshold
+        if f1_macro_max_value < p_r_f_s_weighted[2]:
+            f1_macro_max_value = p_r_f_s_macro[2]
+            f1_macro_max_threshold = curr_threshold
+    print(" ++++ ")
+    print(" Best Threshold on Validation Split Found:")
+    print(" F1 Score weighted: ", f1_weighted_max_value, "\t\t Threshold: ", f1_weighted_max_threshold)
+    print(" F1 Score macro: ", f1_macro_max_value, "\t\t\t Threshold: ", f1_macro_max_threshold)
+    print(" ++++ ")
+
+    return f1_weighted_max_threshold, f1_macro_max_threshold
+
+def evaluate(nn_distance_test, labels_test, anomaly_threshold, average='weighted'):
+        # prepare the labels according sklearn
+        y_true = np.where(labels_test == 'no_failure', 0, 1)
+        y_true = np.reshape(y_true, y_true.shape[0])
+
+        # apply threshold for anomaly decision
+        y_pred = np.where(nn_distance_test <= anomaly_threshold, 1, 0)
+
+        TN, FP, FN, TP = confusion_matrix(y_true, y_pred).ravel()
+        #p_r_f_s_weighted = precision_recall_fscore_support(y_true, y_pred, average='weighted')
+        #p_r_f_s_macro = precision_recall_fscore_support(y_true, y_pred, average='weighted')
+        # Sensitivity, hit rate, recall, or true positive rate
+        TPR = TP / (TP + FN)
+        # Specificity or true negative rate
+        TNR = TN / (TN + FP)
+        # Precision or positive predictive value
+        PPV = TP / (TP + FP)
+        # Negative predictive value
+        NPV = TN / (TN + FN)
+        # Fall out or false positive rate
+        FPR = FP / (FP + TN)
+        # False negative rate
+        FNR = FN / (TP + FN)
+        # False discovery rate
+        FDR = FP / (TP + FP)
+
+        # Overall accuracy
+        ACC = (TP + TN) / (TP + FP + FN + TN)
+
+        print("")
+        print(" +++ +++ +++ +++ +++ FINAL EVAL TEST +++ +++ +++ +++ +++ +++ +++")
+        print("")
+        print(classification_report(y_true, y_pred, target_names=['normal', 'anomaly'], digits=4))
+        print("")
+        print("FPR: ", FPR)
+        print("FNR: ", FNR)
+        print("")
+        print(" +++ +++ +++ +++ +++ +++ +++ +++ +++ +++ +++ +++ +++ +++ +++ +++")
+        print("")
+        prec_rec_fscore_support = precision_recall_fscore_support(y_true, y_pred, average=average)
+        return prec_rec_fscore_support, y_pred
+
+
+'''        
+def calculate_most_relevant_attributes(sim_mat_casebase_test, train_univar_encoded, test_univar_encoded,test_label, attr_names, k=1, attribute_mean_distance=None):
+    # print("sim_mat_casebase_test shape: ", sim_mat_casebase_test.shape, " | train_univar_encoded: ", train_univar_encoded.shape, " | test_univar_encoded: ", test_univar_encoded.shape, " | test_label: ", test_label.shape, " | attr_names: ", attr_names.shape)
+    # Get the idx from the nearest example without a failure
+    idx_nn_woFailure = np.matrix.argsort(-sim_mat_casebase_test, axis=1)[:, :k] # Output dim: (3389,1,61,128)
+    idx_nn_woFailure = np.squeeze(idx_nn_woFailure)
+    # print("idx_nn_woFailure shape: ", idx_nn_woFailure.shape)
+    num_test_examples = test_univar_encoded.shape[0]
+    for test_example_idx in range(num_test_examples):
+        nn_woFailure = train_univar_encoded[idx_nn_woFailure[test_example_idx],:,:]
+        curr_test_example = test_univar_encoded[test_example_idx,:,:]
+        # print("nn_woFailure shape: ", nn_woFailure.shape , " | curr_test_example: ", curr_test_example.shape)
+
+        # Calculate distance between healthy nearest neigbbor and current test example
+        distance_abs = np.abs(nn_woFailure - curr_test_example)
+        nn_woFailure_norm = nn_woFailure/np.linalg.norm(nn_woFailure, ord=2, axis=1, keepdims=True)
+        curr_test_example_norm = nn_woFailure/np.linalg.norm(curr_test_example, ord=2, axis=1, keepdims=True)
+        distance_cosine = np.matmul(nn_woFailure_norm, np.transpose(curr_test_example_norm))
+        #print("distance shape: ", distance.shape)
+        # Aggregate the distances along the attribute / data stream dimension
+        mean_distance_per_attribute_abs = np.mean(distance_abs, axis=1)
+        mean_distance_per_attribute_cosine = np.mean(distance_abs, axis=1)
+        if attribute_mean_distance is not None:
+            mean_distance_per_attribute_cosine = mean_distance_per_attribute_cosine - attribute_mean_distance
+        # print("mean_distance_per_attribute shape: ", mean_distance_per_attribute.shape)
+        # Get the idx of the attributes with the highest distance
+        idx_of_attribute_with_highest_distance_abs = np.argsort(-mean_distance_per_attribute_abs)
+        idx_of_attribute_with_highest_distance_cosine = np.argsort(mean_distance_per_attribute_cosine)
+        # print("idx_of_attribute_with_highest_distance_abs shape: ", idx_of_attribute_with_highest_distance_abs.shape)
+        print("Label: ", test_label[test_example_idx])
+        print("Att: ", idx_of_attribute_with_highest_distance_abs[:5], " names: ", attr_names[idx_of_attribute_with_highest_distance_abs[:5]])
+        print("Dis: ", mean_distance_per_attribute_abs[idx_of_attribute_with_highest_distance_abs[:5]])
+        print("Att_c: ", idx_of_attribute_with_highest_distance_cosine[:5], " names: ", attr_names[idx_of_attribute_with_highest_distance_cosine[:5]])
+        print("Dis_c: ", mean_distance_per_attribute_cosine[idx_of_attribute_with_highest_distance_cosine[:5]])
+        print("")
+'''
+def clean_case_base(x_case_base, k=2, fraction=0.1, measure='cosine'):
+    # Removes examples with the lowest mean distance to its nearest k neighbors
+    sim_mat_train_train = get_Similarity_Matrix(valid_vector=x_case_base, test_vector=x_case_base, measure=measure)
+    idx = np.matrix.argsort(-sim_mat_train_train, axis=1)[:, :k]
+    sim_mat_train_train_sorted = sim_mat_train_train[np.arange(x_case_base.shape[0])[:, None], idx]
+    sim_mat_train_train = np.mean(sim_mat_train_train_sorted, axis=1)
+    num_to_delete = math.ceil(x_case_base.shape[0] * fraction)
+    idx_del = np.argsort(sim_mat_train_train)[:num_to_delete]
+    x_case_base = np.delete(x_case_base, idx_del, axis=0)
+    return x_case_base
+
+def get_Similarity_Matrix(valid_vector, test_vector, measure):
+    # Input valid_vector (a,d), test_vactor (b,d) where a and b is the number of examples and d the number of feature dimension
+    # Returns a matrix of size (#test_examples, valid_examples) where each entry is the pairwise similarity
+    examples_matrix = np.concatenate((valid_vector, test_vector), axis=0)
+    if measure == 'cosine':
+        pairwise_sim_matrix = cosine_similarity(examples_matrix)
+    elif measure == 'l1':
+        pairwise_sim_matrix = np.exp(-manhattan_distances(examples_matrix))
+    elif measure == 'l2':
+        pairwise_sim_matrix = 1 / (1 + euclidean_distances(examples_matrix))
+
+    pairwise_sim_matrix = pairwise_sim_matrix[valid_vector.shape[0]:, :valid_vector.shape[0]]
+
+    return pairwise_sim_matrix
+
+
+def calculate_RocAuc(test_failure_labels_y, score_per_example):
+    #y_true = pd.factorize(test_failure_labels_y)[0].tolist()
+    #y_true = np.where(np.asarray(y_true) > 1, 1, 0)
+    y_true = np.where(test_failure_labels_y == 'no_failure',0,1)
+    y_true = np.reshape(y_true, y_true.shape[0])
+
+    #print("y_true: ", y_true)
+    #print("y_true: ", y_true.shape)
+    #print("mse_per_example_test:", mse_per_example_test.shape)
+    score_per_example_test_normalized = (score_per_example - np.min(score_per_example)) / np.ptp(score_per_example)
+    #print("score_per_example_test_normalized: ", score_per_example_test_normalized)
+    print("NAN found np.ptp(score_per_example: ", np.where(np.isnan(np.ptp(score_per_example))))
+    print("NAN found score_per_example: ", np.where(np.isnan(score_per_example)))
+    score_per_example_test_normalized = np.nan_to_num(score_per_example_test_normalized)
+    roc_auc_score_value = roc_auc_score(y_true, 1-score_per_example_test_normalized, average='weighted')
+    return roc_auc_score_value
+
+def calculate_PRCurve(test_failure_labels_y, score_per_example):
+        # y_true = pd.factorize(test_failure_labels_y)[0].tolist()
+        # y_true = np.where(np.asarray(y_true) > 1, 1, 0)
+        y_true = np.where(test_failure_labels_y == 'no_failure', 0, 1)
+        y_true = np.reshape(y_true, y_true.shape[0])
+
+        # print("y_true: ", y_true)
+        # print("y_true: ", y_true.shape)
+        # print("mse_per_example_test:", mse_per_example_test.shape)
+        score_per_example_test_normalized = (score_per_example - np.min(score_per_example)) / np.ptp(score_per_example)
+        # print("score_per_example_test_normalized: ", score_per_example_test_normalized)
+        print("NAN found: ", np.where(np.isnan(score_per_example_test_normalized)))
+        avgP = average_precision_score(y_true, 1-score_per_example_test_normalized, average='weighted')
+        precision, recall, _ = precision_recall_curve(y_true, 1-score_per_example_test_normalized)
+        auc_score = auc(recall, precision)
+        return avgP, auc_score
+
+def plotHistogram(anomaly_scores, labels, filename="plotHistogramWithMissingFilename.png", min=-1, max=1, num_of_bins=100):
+    # divide examples in normal and anomalous
+
+    # Get idx of examples with this label
+    example_idx_of_no_failure_label = np.where(labels == 'no_failure')
+    example_idx_of_opposite_labels = np.squeeze(np.array(np.where(labels != 'no_failure')))
+    #feature_data = np.expand_dims(feature_data, -1)
+    anomaly_scores_normal = anomaly_scores[example_idx_of_no_failure_label[0]]
+    anomaly_scores_unnormal = anomaly_scores[example_idx_of_opposite_labels[0]]
+
+    bins = np.linspace(min, max, num_of_bins)
+    pyplot.clf()
+    pyplot.hist(anomaly_scores_normal, bins, alpha=0.5, label='normal')
+    pyplot.hist(anomaly_scores_unnormal, bins, alpha=0.5, label='unnormal')
+    pyplot.legend(loc='upper right')
+    pyplot.savefig(filename) #pyplot.show()
+
+def change_model(config: Configuration, start_time_string, num_of_selction_iteration = None, get_model_by_loss_value = None):
+    search_dir = config.models_folder
+    loss_to_dir = {}
+
+    for subdir, dirs, files in os.walk(search_dir):
+        for directory in dirs:
+
+            # Only "temporary models" are created by the optimizer, other shouldn't be considered
+            if not directory.startswith('temp_snn_model'):
+                continue
+
+            # The model must have been created after the training has began, older ones are from other training runs
+            date_string_model = '_'.join(directory.split('_')[3:5])
+            date_model = datetime.strptime(date_string_model, "%m-%d_%H-%M-%S")
+            date_start = datetime.strptime(start_time_string, "%m-%d_%H-%M-%S")
+
+            if date_start > date_model:
+                continue
+
+            # Read the loss for the current model from the loss.txt file and add to dictionary
+            path_loss_file = os.path.join(search_dir, directory, 'loss.txt')
+
+            if os.path.isfile(path_loss_file):
+                with open(path_loss_file) as f:
+
+                    try:
+                        loss = float(f.readline())
+                    except ValueError:
+                        print('Could not read loss from loss.txt for', directory)
+                        continue
+
+                    if loss not in loss_to_dir.keys():
+                        loss_to_dir[loss] = directory
+            else:
+                print('Could not read loss from loss.txt for', directory)
+
+    if num_of_selction_iteration == None and get_model_by_loss_value == None:
+        # Select the best loss and change the config to the corresponding model
+        min_loss = min(list(loss_to_dir.keys()))
+        config.filename_model_to_use = loss_to_dir.get(min_loss)
+        config.directory_model_to_use = config.models_folder + config.filename_model_to_use + '/'
+
+        print('Model selected for inference:')
+        print(config.directory_model_to_use, '\n')
+
+    elif num_of_selction_iteration is not None and get_model_by_loss_value == None:
+        # Select k-th (num_of_selction_iteration) best loss and change the config to the corresponding model
+        loss_list = (list(loss_to_dir.keys()))
+        loss_list.sort()
+        min_loss = min(list(loss_to_dir.keys()))
+
+        selected_loss = loss_list[num_of_selction_iteration]
+
+        config.filename_model_to_use = loss_to_dir.get(selected_loss)
+        config.directory_model_to_use = config.models_folder + config.filename_model_to_use + '/'
+
+        print("Selection: ", num_of_selction_iteration, ' for model with loss: ', selected_loss, "(min loss:", min_loss,")", 'selected for evaluation on the validation set:')
+        print(config.directory_model_to_use, '\n')
+        return selected_loss
+
+    elif get_model_by_loss_value is not None:
+        # Select a model by a given loss value (as key) and change the config to the corresponding model
+        config.filename_model_to_use = loss_to_dir.get(get_model_by_loss_value)
+        config.directory_model_to_use = config.models_folder + config.filename_model_to_use + '/'
+
+        print('Model selected for inference by a given key (loss):')
+        print(config.directory_model_to_use, '\n')
+
+def get_labels_from_knowledge_graph_from_anomalous_data_streams(most_relevant_attributes, y_test_labels, dataset,y_pred_anomalies, not_selection_label="no_failure",only_true_positive_prediction=False):
+    store_relevant_attribut_idx, store_relevant_attribut_dis, store_relevant_attribut_name = most_relevant_attributes[0], \
+                                                                                             most_relevant_attributes[1], \
+                                                                                             most_relevant_attributes[2]
+    num_test_examples = y_test_labels.shape[0]
+
+    attr_names = dataset.feature_names_all
+    print("attr_names:", attr_names)
+    # Get ontological knowledge graph
+    onto = get_ontology("FTOnto_with_PredM_w_Inferred_.owl")
+    onto.load()
+
+    # Iterate over the test data set
+    cnt_label_found = 0
+    cnt_anomaly_examples = 0
+    cnt_querry = 0
+    cnt_labels = 0
+    cnt_noDataStrem_detected = 0
+    cnt_true_positives = 0
+    for i in range(num_test_examples):
+        curr_label = y_test_labels[i]
+        # Fix:
+        if curr_label == "txt16_conveyorbelt_big_gear_tooth_broken_failure":
+            curr_label = "txt16_conveyor_big_gear_tooth_broken_failure"
+        breaker = False
+
+        # Select which examples are used for evaluation
+        # a) all labeled as no_failure
+        # b) all examples selection_label=""
+        # c) only predicted anomalies
+        true_positive_prediction = False
+        if only_true_positive_prediction:
+            if y_pred_anomalies[i] == 1 and not curr_label == "no_failure":
+                true_positive_prediction = True
+                print("True Positive Found!")
+                cnt_true_positives += 1
+        else:
+            true_positive_prediction = True
+
+        already_provided_labels_not_further_counted = []
+        if not curr_label == not_selection_label and breaker == False and true_positive_prediction:
+            if breaker == True:
+                continue
+            print("")
+            print("##############################################################################")
+            print("Example:",i,"| Gold Label:", y_test_labels[i])
+            print("")
+            ordered_data_streams = store_relevant_attribut_idx[i]
+            print("Relevant attributes ordered asc: ", ordered_data_streams)
+            print("")
+            # Iterate over each data streams defined as anomalous and query the related labels:
+            cnt_anomaly_examples += 1
+            cnt_queries_per_example = 0
+            cnt_labels_per_example = 0
+
+            if len(ordered_data_streams) > 0 and breaker == False:
+                print("Query the knowledge graph ... ")
+                for data_stream in ordered_data_streams:
+                    if breaker == True:
+                        break
+                    #print("data_stream: ", data_stream)
+                    data_stream_name = data_stream #attr_names[data_stream]
+                    sparql_query = ''' SELECT ?labels
+                                            WHERE {
+                                        {
+                                                ?component <http://iot.uni-trier.de/FTOnto#is_associated_with_data_stream> "'''+data_stream_name+'''"^^<http://www.w3.org/2001/XMLSchema#string>.
+                                                ?component <http://iot.uni-trier.de/FMECA#hasPotentialFailureMode> ?failureModes.
+                                                ?failureModes <http://iot.uni-trier.de/PredM#hasLabel> ?labels}
+                                        UNION{
+                                                ?component <http://iot.uni-trier.de/FTOnto#is_associated_with_data_stream> "'''+data_stream_name+'''"^^<http://www.w3.org/2001/XMLSchema#string>.
+                                                ?failureModes <http://iot.uni-trier.de/PredM#isDetectableInDataStreamOf_Direct>  ?component.
+                                                ?failureModes <http://iot.uni-trier.de/PredM#hasLabel> ?labels
+                                        }
+                                        }
+                                    '''
+                    result = list(default_world.sparql(sparql_query))
+                    cnt_queries_per_example += 1
+                    cnt_labels_per_example += len(result)
+                    print(str(cnt_queries_per_example)+". query with ",data_stream_name, "has result:", result)
+                    if result ==None:
+                        continue
+
+                    # Clean result list by removing previously found labels for the current example as well as removing 'PredM.Label_'
+                    results_cleaned = []
+                    for found_instance in result:
+                        found_instance = str(found_instance).replace('PredM.Label_', '')
+                        if not found_instance in already_provided_labels_not_further_counted:
+                            results_cleaned.append(found_instance)
+                            already_provided_labels_not_further_counted.append(found_instance)
+
+                    # Counting
+                    cnt_labels += len(results_cleaned)
+                    cnt_querry += 1
+                    #res = [sub.replace('PredM.Label', '') for sub in result]
+                    #print("Label:",curr_label,"SPARQL-Result:", results_cleaned)
+                    if len(results_cleaned) > 0 and breaker == False:
+                        for result in results_cleaned:
+                            #print("result: ", result)
+                            result = result.replace("[","").replace("]","")
+                            #print("results_cleaned: ", results_cleaned)
+                            if(cnt_queries_per_example>59):
+                                print("WHERE IS THE LABEL???")
+                            if curr_label in result or result in curr_label:
+                                print("FOUND: ",str(curr_label),"in",str(result),"after queries:",str(cnt_queries_per_example),"and after checking labels:",cnt_labels_per_example)
+                                cnt_label_found += 1
+                                print()
+                                print("### statistics ###")
+                                print("Queries conducted until now:",cnt_querry)
+                                print("Labels provided until now:", cnt_labels)
+                                print("Found labels until now:", cnt_label_found)
+                                print("Rate of found labels until now:",(cnt_label_found / cnt_anomaly_examples))
+                                print("Rate of queries per labelled Anomalie until now:", (cnt_querry/(cnt_anomaly_examples-cnt_noDataStrem_detected)))
+                                print("Rate of labels provided per labelled Anomalie until now:", (cnt_labels/(cnt_anomaly_examples-cnt_noDataStrem_detected)))
+                                print("###            ###")
+                                print()
+                                breaker = True
+                                break
+                            else:
+                                if data_stream_name in curr_label:
+                                    print("+++ Check why no match? Datastream:", data_stream, "results_cleaned: ", result,
+                                          "and gold label:", curr_label)
+                                #print("No match, query next data stream ... ")
+                    #else:
+                        #print("No Failure Mode for this data stream is modelled in the knowledge base.")
+            else:
+                cnt_noDataStrem_detected +=1
+
+    print("")
+    print("*** Statistics for Finding Failure Modes to Anomalies ***")
+    print("")
+    print("Queries conducted in sum: \t\t","\t"+str(cnt_querry))
+    print("Labels provided in sum: \t\t", "\t" + str(cnt_labels))
+    print("Found labels in sum: \t\t", "\t\t" + str(cnt_label_found),"of", cnt_anomaly_examples)
+    print("Labelled anomalies with no data streams / symptoms:","\t\t"+str(cnt_noDataStrem_detected))
+    print("")
+    print("Queries executed per anomalous example: \t", "\t" + str(cnt_querry/cnt_anomaly_examples), "\t"+ str(cnt_querry/(cnt_anomaly_examples-cnt_noDataStrem_detected)))
+    print("Labels provided per anomalous example: \t", "\t\t" + str(cnt_labels / cnt_anomaly_examples), "\t"+ str(cnt_labels/(cnt_anomaly_examples-cnt_noDataStrem_detected)))
+    print("Rate of found labels: \t\t", "\t\t\t" + str(cnt_label_found / cnt_anomaly_examples), "\t"+ str(cnt_label_found/(cnt_anomaly_examples-cnt_noDataStrem_detected)))
+    print("Anomalous examples for which no label was found: ", "\t" + str(cnt_anomaly_examples-cnt_label_found))
+    print("")
+    if only_true_positive_prediction:
+        print("Found true positives: ", cnt_true_positives)
+        print("")
+
+    # Return dictonary
+    dict_measures = {}
+    dict_measures["Queries conducted in sum"]                   = cnt_querry
+    dict_measures["Labels provided in sum"]                     = cnt_labels
+    dict_measures["Found labels in sum"]                        = cnt_label_found
+    dict_measures["Labelled anomalies with no data streams / symptoms:"]        = cnt_noDataStrem_detected
+
+    dict_measures["Queries executed per anomalous example"]             = (cnt_querry/cnt_anomaly_examples)
+    dict_measures["Labels provided per anomalous example"]              = (cnt_labels / cnt_anomaly_examples)
+    dict_measures["Rate of found labels"]                               = (cnt_label_found / cnt_anomaly_examples)
+    dict_measures["Anomalous examples for which no label was found"]    = (cnt_anomaly_examples-cnt_label_found)
+
+    dict_measures["Queries executed per anomalous example_"]             = (cnt_querry/(cnt_anomaly_examples-cnt_noDataStrem_detected))
+    dict_measures["Labels provided per anomalous example_"]              = (cnt_labels/(cnt_anomaly_examples-cnt_noDataStrem_detected))
+    dict_measures["Rate of found labels_"]                               = (cnt_label_found/(cnt_anomaly_examples-cnt_noDataStrem_detected))
+
+    return dict_measures
+
+    # execute a query for each example
+
+def get_labels_from_knowledge_graph_from_anomalous_data_streams_permuted(most_relevant_attributes, y_test_labels, dataset,y_pred_anomalies, not_selection_label="no_failure",only_true_positive_prediction=False, k_data_streams=[1,3,5,10], k_permutations=[2,3], rel_type="Context"):
+    store_relevant_attribut_idx, store_relevant_attribut_dis, store_relevant_attribut_name = most_relevant_attributes[0], \
+                                                                                             most_relevant_attributes[1], \
+                                                                                             most_relevant_attributes[2]
+    num_test_examples = y_test_labels.shape[0]
+
+
+    attr_names = dataset.feature_names_all
+    print("attr_names:", attr_names)
+    # Get ontological knowledge graph
+    onto = get_ontology("FTOnto_with_PredM_w_Inferred_.owl")
+    onto.load()
+
+    # Iterate over the test data set
+    cnt_label_found = 0
+    cnt_anomaly_examples = 0
+    cnt_querry = 0
+    cnt_labels = 0
+    cnt_noDataStrem_detected = 0
+    cnt_true_positives = 0
+    for i in range(num_test_examples):
+        curr_label = y_test_labels[i]
+        breaker = False
+
+        # Select which examples are used for evaluation
+        # a) all labeled as no_failure
+        # b) all examples selection_label=""
+        # c) only predicted anomalies
+        true_positive_prediction = False
+        if only_true_positive_prediction:
+            if y_pred_anomalies[i] == 1 and not curr_label == "no_failure":
+                true_positive_prediction = True
+                print("True Positive Found!")
+                cnt_true_positives += 1
+        else:
+            true_positive_prediction = True
+
+        already_provided_labels_not_further_counted = []
+        if not curr_label == not_selection_label and breaker == False and true_positive_prediction:
+            if breaker == True:
+                continue
+            print("")
+            print("##############################################################################")
+            print("Example:",i,"| Gold Label:", y_test_labels[i])
+            print("")
+            ordered_data_streams = store_relevant_attribut_idx[i]
+            print("Relevant attributes ordered asc: ", ordered_data_streams)
+            print("")
+            # Iterate over each data streams defined as anomalous and query the related labels:
+            cnt_anomaly_examples += 1
+            cnt_queries_per_example = 0
+            cnt_labels_per_example = 0
+            for k in k_data_streams:
+                if len(ordered_data_streams) > k and breaker == False:
+                    for k_permutation in k_permutations:
+                        print("Generating "+str(k_permutation)+" permutations of "+str(k)+" data streams for querring them ...")
+
+                        combination_of_data_streams = list(itertools.combinations(ordered_data_streams[:k], k_permutation))
+                        print("Got ",len(combination_of_data_streams)," data stream combinations to query ...")
+                        # Generating 2 permutations of 3 data streams for querring them ...
+                        # Got  3  data stream combinations to query ...
+                        # combination_of_data_streams:  [('a_15_1_x', 'a_15_1_y'), ('a_15_1_x', 'a_16_3_x'), ('a_15_1_y', 'a_16_3_x')]
+                        print("combination_of_data_streams: ", combination_of_data_streams)
+                        if not k_permutation == 1:
+                            combination_of_data_streams_sorted = sorted(combination_of_data_streams, key=lambda item: ordered_data_streams.tolist().index(item[1]))
+                            print("combination_of_data_streams_sorted: ", combination_of_data_streams_sorted)
+                            #print(sdsds)
+                            combination_of_data_streams = combination_of_data_streams_sorted
+                        for combi in combination_of_data_streams:
+                            if breaker == False:
+                                print("Querying the knowledge graph with combi:",combi)
+
+                                sparql_query = '''  PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+                                                    PREFIX owl: <http://www.w3.org/2002/07/owl#>
+                                                    PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+                                                    PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+                                                    SELECT ?labels
+                                                        WHERE { 
+                                               '''
+                                for data_stream in combi:
+                                    data_stream_name = data_stream
+                                    sparql_query = sparql_query + '''
+                                        { 
+                                            {
+                                                ?component <http://iot.uni-trier.de/FTOnto#is_associated_with_data_stream> "''' + data_stream_name + '''"^^<http://www.w3.org/2001/XMLSchema#string>.
+                                                ?component <http://iot.uni-trier.de/FMECA#hasPotentialFailureMode> ?failureModes.
+                                                ?failureModes <http://iot.uni-trier.de/PredM#hasLabel> ?labels
+                                            }
+                                        UNION{
+                                                ?component2 <http://iot.uni-trier.de/FTOnto#is_associated_with_data_stream> "''' + data_stream_name + '''"^^<http://www.w3.org/2001/XMLSchema#string>.
+                                                ?failureModes <http://iot.uni-trier.de/PredM#isDetectableInDataStreamOf_''' + rel_type + '''>  ?component2.
+                                                ?failureModes <http://iot.uni-trier.de/PredM#hasLabel> ?labels
+                                            }
+                                        }                                
+                                    '''
+
+                                sparql_query = sparql_query + '''
+                                    }
+                                '''
+
+                                result = list(default_world.sparql(sparql_query))
+                                cnt_queries_per_example += 1
+                                cnt_labels_per_example += len(result)
+                                print(str(cnt_queries_per_example)+". query with ",data_stream_name, "has result:", result)
+                                if result ==None:
+                                    continue
+
+                                # Clean result list by removing previously found labels for the current example as well as removing 'PredM.Label_'
+                                results_cleaned = []
+                                for found_instance in result:
+                                    found_instance = str(found_instance).replace('PredM.Label_', '')
+                                    if not found_instance in already_provided_labels_not_further_counted:
+                                        results_cleaned.append(found_instance)
+                                        already_provided_labels_not_further_counted.append(found_instance)
+
+                                # Counting
+                                cnt_labels += len(results_cleaned)
+                                cnt_querry += 1
+                                #res = [sub.replace('PredM.Label', '') for sub in result]
+                                #print("Label:",curr_label,"SPARQL-Result:", results_cleaned)
+                                if len(results_cleaned) > 0 and breaker == False:
+                                    for result in results_cleaned:
+                                        #print("result: ", result)
+                                        result = result.replace("[","").replace("]","")
+                                        #print("results_cleaned: ", results_cleaned)
+                                        if curr_label in result or result in curr_label:
+                                            print("FOUND: ",str(curr_label),"in",str(result),"after queries:",str(cnt_queries_per_example),"and after checking labels:",cnt_labels_per_example)
+                                            cnt_label_found += 1
+                                            print()
+                                            print("### statistics ###")
+                                            print("Queries conducted until now:",cnt_querry)
+                                            print("Labels provided until now:", cnt_labels)
+                                            print("Found labels until now:", cnt_label_found)
+                                            print("Rate of found labels until now:",(cnt_label_found / cnt_anomaly_examples))
+                                            #print("Rate of queries per labelled Anomalie until now:", (cnt_querry/(cnt_anomaly_examples-cnt_noDataStrem_detected)))
+                                            #print("Rate of labels provided per labelled Anomalie until now:", (cnt_labels/(cnt_anomaly_examples-cnt_noDataStrem_detected)))
+                                            print("###            ###")
+                                            print()
+                                            breaker = True
+                                            break
+                                        else:
+                                            if data_stream_name in curr_label:
+                                                print("+++ Check why no match? Datastream:", data_stream, "results_cleaned: ", result,
+                                                      "and gold label:", curr_label)
+                                            #print("No match, query next data stream ... ")
+                                else:
+                                    print("No Failure Mode for this data stream is modelled in the knowledge base.")
+                else:
+                    print("Data stream size",len(ordered_data_streams),"is smaller than:", k)
+                    cnt_noDataStrem_detected +=1
+
+    print("")
+    print("*** Statistics for Finding Failure Modes to Anomalies ***")
+    print("")
+    print("Queries conducted in sum: \t\t","\t"+str(cnt_querry))
+    print("Labels provided in sum: \t\t", "\t" + str(cnt_labels))
+    print("Found labels in sum: \t\t", "\t\t" + str(cnt_label_found),"of", cnt_anomaly_examples)
+    print("Labelled anomalies with no data streams / symptoms:","\t\t"+str(cnt_noDataStrem_detected))
+    print("")
+    print("Queries executed per anomalous example: \t", "\t" + str(cnt_querry/cnt_anomaly_examples), "\t"+ str(cnt_querry/(cnt_anomaly_examples-cnt_noDataStrem_detected)))
+    print("Labels provided per anomalous example: \t", "\t\t" + str(cnt_labels / cnt_anomaly_examples), "\t"+ str(cnt_labels/(cnt_anomaly_examples-cnt_noDataStrem_detected)))
+    print("Rate of found labels: \t\t", "\t\t\t" + str(cnt_label_found / cnt_anomaly_examples), "\t"+ str(cnt_label_found/(cnt_anomaly_examples-cnt_noDataStrem_detected)))
+    print("Anomalous examples for which no label was found: ", "\t" + str(cnt_anomaly_examples-cnt_label_found))
+    print("")
+    if only_true_positive_prediction:
+        print("Found true positives: ", cnt_true_positives)
+        print("")
+
+    # Return dictonary
+    dict_measures = {}
+    dict_measures["Queries conducted in sum"]                   = cnt_querry
+    dict_measures["Labels provided in sum"]                     = cnt_labels
+    dict_measures["Found labels in sum"]                        = cnt_label_found
+    dict_measures["Labelled anomalies with no data streams / symptoms:"]        = cnt_noDataStrem_detected
+
+    dict_measures["Queries executed per anomalous example"]             = (cnt_querry/cnt_anomaly_examples)
+    dict_measures["Labels provided per anomalous example"]              = (cnt_labels / cnt_anomaly_examples)
+    dict_measures["Rate of found labels"]                               = (cnt_label_found / cnt_anomaly_examples)
+    dict_measures["Anomalous examples for which no label was found"]    = (cnt_anomaly_examples-cnt_label_found)
+
+    dict_measures["Queries executed per anomalous example_"]             = (cnt_querry/(cnt_anomaly_examples-cnt_noDataStrem_detected))
+    dict_measures["Labels provided per anomalous example_"]              = (cnt_labels/(cnt_anomaly_examples-cnt_noDataStrem_detected))
+    dict_measures["Rate of found labels_"]                               = (cnt_label_found/(cnt_anomaly_examples-cnt_noDataStrem_detected))
+
+    return dict_measures
+
+    # execute a query for each example
+
+def create_a_TSNE_plot_from_encoded_data(x_train_encoded,x_test_encoded,train_labels,test_labels, config, architecture):
+    print("Start with TSNE plot ...")
+    data4TSNE = x_train_encoded
+    data4TSNE = np.concatenate((data4TSNE, x_test_encoded), axis=0)
+
+    test_train_labels = np.concatenate((train_labels, test_labels),axis=0)
+    le = preprocessing.LabelEncoder()
+    le.fit(test_train_labels)
+    numOfClasses = le.classes_.size
+    # print("Number of classes detected: ", numOfClasses, ". \nAll classes: ", le.classes_)
+    unique_labels_EncodedAsNumber = le.transform(le.classes_)  # each label encoded as number
+    if config.plot_train_test:
+        x_trainTest_labels_EncodedAsNumber = le.transform(test_train_labels)
+    else:
+        x_trainTest_labels_EncodedAsNumber = le.transform(train_labels)
+
+    tsne_embedder = TSNE(n_components=2, perplexity=50.0, learning_rate=10, early_exaggeration=10, n_iter=10000,
+                         random_state=123, metric='cosine')
+    X_embedded = tsne_embedder.fit_transform(data4TSNE)
+
+    print("X_embedded shape: ", X_embedded.shape)
+    # print("X_embedded:", X_embedded[0:10,:])
+    # Defining the color for each class
+    colors = [pyplot.cm.jet(float(i) / max(unique_labels_EncodedAsNumber)) for i in range(numOfClasses)]
+    print("Colors: ", colors, "unique_labels_EncodedAsNumber: ", unique_labels_EncodedAsNumber, "numOfClasses:",
+          numOfClasses)
+    # Color maps: https://matplotlib.org/examples/color/colormaps_reference.html
+    # colors_ = colors(np.array(unique_labels_EncodedAsNumber))
+    # Overriding color map with own colors
+    colors[1] = np.array([0 / 256, 128 / 256, 0 / 256, 1])  # no failure
+    '''
+    colors[0] = np.array([0 / 256, 128 / 256, 0 / 256, 1])  # no failure
+    colors[1] = np.array([65 / 256, 105 / 256, 225 / 256, 1])  # txt15_m1_t1_high_wear
+    colors[2] = np.array([135 / 256, 206 / 256, 250 / 256, 1])  # txt15_m1_t1_low_wear
+    colors[3] = np.array([123 / 256, 104 / 256, 238 / 256, 1])  # txt15_m1_t2_wear
+    colors[4] = np.array([189 / 256, 183 / 256, 107 / 256, 1])  # txt16_i4
+    colors[5] = np.array([218 / 256, 112 / 256, 214 / 256, 1])  # txt16_m3_t1_high_wear
+    colors[6] = np.array([216 / 256, 191 / 256, 216 / 256, 1])  # txt16_m3_t1_low_wear
+    colors[7] = np.array([128 / 256, 0 / 256, 128 / 256, 1])  # txt16_m3_t2_wear
+    colors[8] = np.array([255 / 256, 127 / 256, 80 / 256, 1])  # txt_17_comp_leak
+    colors[9] = np.array([255 / 256, 99 / 256, 71 / 256, 1])  # txt_18_comp_leak
+    '''
+    # Generating the plot
+    rowCounter = 0
+
+    for i, u in enumerate(unique_labels_EncodedAsNumber):
+        # print("i: ",i,"u: ",u)
+        for j in range(X_embedded.shape[0]):
+            if x_trainTest_labels_EncodedAsNumber[j] == u:
+                xi = X_embedded[j, 0]
+                yi = X_embedded[j, 1]
+                # print("i: ", i, " u:", u, "j:",j,"xi: ", xi, "yi: ", yi)
+                # plt.scatter(xi, yi, color=colors[i], label=unique_labels_EncodedAsNumber[i], marker='.')
+                if j <= x_test_encoded.shape[0]:
+                    pyplot.scatter(xi, yi, color=colors[i], label=unique_labels_EncodedAsNumber[i], marker='.')
+                else:
+                    pyplot.scatter(xi, yi, color=colors[i], label=unique_labels_EncodedAsNumber[i], marker='x')
+
+    # print("X_embedded:", X_embedded.shape)
+    # print(X_embedded)
+    # print("x_trainTest_labels_EncodedAsNumber: ", x_trainTest_labels_EncodedAsNumber)
+    pyplot.title("Visualization Train(.) and Test (x) data (T-SNE-Reduced)")
+    lgd = pyplot.legend(labels=le.classes_, loc='upper center', bbox_to_anchor=(0.5, -0.05),
+                     fancybox=True, shadow=True, ncol=3)
+    # plt.legend(labels=x_test_train_labels, bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
+    # lgd = plt.legend(labels=le.classes_)
+
+    print("le.classes_: ", le.classes_)
+    for i, u in enumerate(le.classes_):
+        print("i:", i, "u:", u)
+        if i < 1:
+            lgd.legendHandles[i].set_color(colors[i])
+            lgd.legendHandles[i].set_label(le.classes_[i])
+    # plt.show()
+    pyplot.savefig(architecture.hyper.encoder_variant + '_' + str(
+        data4TSNE.shape[0]) + '.png',
+                bbox_extra_artists=(lgd,), bbox_inches='tight')
+    print("Start with TSNE plot saved!")
+
+
+def main(run=0):
+    config = Configuration()
+    config.print_detailed_config_used_for_training()
+
+    dataset = FullDataset(config.training_data_folder, config, training=False, model_selection=False)
+    dataset.load(selected_class=run)
+    dataset = Representation.convert_dataset_to_baseline_representation(config, dataset)
+
+    checker = ConfigChecker(config, dataset, 'snn', training=True)
+    checker.pre_init_checks()
+
+    # file_dis  - anomaly scores in original order - dictionary with key example integer and value 1d ndarray (dis is abbreviated distance; kNN approaches)
+    # file_name - names of data streams sorted by anomaly score - dictionary with key example integer and value 1d ndarray
+    # file_idx  - indexes of data streams sorted by anomaly score - dictionary with key example integer and value 1d ndarray
+    # file_ano_pred - predictions of anomalies - 1d ndarray
+
+    # store_relevant_attribut_name_FINAL_FINAL_FINAL_MSCRED_Standard_corrRelMat_inputLoss_epoch100
+    file_name       = "store_relevant_attribut_name_Fin_Standard_wAdjMat_newAdj_2"
+    file_idx        = "store_relevant_attribut_idx_Fin_Standard_wAdjMat_newAdj_2"
+    file_dis        = "store_relevant_attribut_dis_Fin_Standard_wAdjMat_newAdj_2"
+    file_ano_pred   = "predicted_anomaliesFin_Standard_wAdjMat_newAdj_2"
+
+    print("")
+    print(" ### Used Files ###")
+    print("Idx file used: ", file_idx)
+    print("Dis file used: ", file_dis)
+    print("Name file used: ", file_name)
+    print("Ano Pred file used: ", file_ano_pred)
+    print("")
+
+    is_memory = False
+    is_jenks_nat_break_used = True
+    is_elbow_selection_used = False
+    is_fix_k_selection_used = False
+    fix_k_for_selection = 1
+    is_randomly_selected_featues = False
+
+    # Wenn memomory in MSCRED aktiv war, dann muss das letzte Besipiel aus den Testdaten gelöscht werden
+    # BEI MEMORY aktivieren ...
+    if is_memory:
+        dataset.y_test_strings = dataset.y_test_strings[:-1]
+
+    import pickle
+    a_file = open('../../ADD_MA-Huneke/anomaly_detection/'+file_name+str(run)+'.pkl', "rb")
+    store_relevant_attribut_name = pickle.load(a_file)
+    a_file.close()
+    a_file = open('../../ADD_MA-Huneke/anomaly_detection/'+file_idx+str(run)+'.pkl',"rb")
+    store_relevant_attribut_idx = pickle.load(a_file)
+    a_file.close()
+    a_file = open('../../ADD_MA-Huneke/anomaly_detection/'+file_dis+str(run)+'.pkl',"rb")
+    store_relevant_attribut_dis = pickle.load(a_file)
+    a_file.close()
+
+    y_pred_anomalies = np.load('../../ADD_MA-Huneke/anomaly_detection/' + file_ano_pred + str(run) + '.npy')
+
+    print("Loaded data finsished ...")
+
+    store_relevant_attribut_idx_shortened = store_relevant_attribut_idx.copy()
+    store_relevant_attribut_name_shortened = store_relevant_attribut_name.copy()
+
+
+    ### clear attributes
+    if is_jenks_nat_break_used:
+        print("JENKS NATURAL BREAK SELECTION IS USED")
+        for i in store_relevant_attribut_dis:
+            #print(store_relevant_attribut_dis[i])
+            res = jenkspy.jenks_breaks(store_relevant_attribut_dis[i], nb_class=2)
+            lower_bound_exclusive = res[-2]
+            is_symptom = np.greater(store_relevant_attribut_dis[i], lower_bound_exclusive)
+            is_symptom_idx = np.argwhere(is_symptom).T
+            #print("is_symptom: ", is_symptom)
+            #print("indexes of symptoms: ", np.argwhere(is_symptom).T)
+            #print("Jenks Natural Break found symptoms org: ", dataset.feature_names_all[is_symptom])
+            mask = np.where(is_symptom,1,0)
+            #print("store_relevant_attribut_idx[i]: ", store_relevant_attribut_idx[i])
+            #print("store_relevant_attribut_dis[i][mask]: ", store_relevant_attribut_dis[i][mask])
+            #print("-store_relevant_attribut_dis[i][mask]: ", -store_relevant_attribut_dis[i][mask])
+            #print("np.argsort(-store_relevant_attribut_dis[i][mask]): ", np.argsort(-store_relevant_attribut_dis[i][mask]))
+
+            store_relevant_attribut_idx_shortened[i] = np.argsort(-store_relevant_attribut_dis[i])[:np.sum(mask)]
+            #print("store_relevant_attribut_idx[i]: ", store_relevant_attribut_idx[i])
+            #print("store_relevant_attribut_idx_shortened[i]: ", store_relevant_attribut_idx_shortened[i])
+            store_relevant_attribut_name_shortened[i] = dataset.feature_names_all[store_relevant_attribut_idx_shortened[i]]
+            #print("store_relevant_attribut_name_shortened[i]: ", store_relevant_attribut_name_shortened[i])
+
+    if is_elbow_selection_used:
+        print("ELLBOW SELECTION IS USED")
+        for i in store_relevant_attribut_dis:
+            # Elbow
+            #print(" +++++++++++++++++++++++")
+            #print("store_relevant_attribut_idx:", store_relevant_attribut_idx[i])
+            scores_sorted = np.abs(np.sort(-store_relevant_attribut_dis[i]))
+            #print("scores_sorted: ", scores_sorted)
+            diffs = scores_sorted[1:] - scores_sorted[0:-1]
+            #print("diffs:", diffs)
+            selected_index_for_cut = np.argmin(diffs)
+            #print("selected_index position for cut:", selected_index_for_cut)
+            store_relevant_attribut_idx_shortened[i] = np.argsort(-store_relevant_attribut_dis[i])[:selected_index_for_cut + 1]
+            #print("store_relevant_attribut_idx[i]: ", store_relevant_attribut_idx[i])
+            #print("store_relevant_attribut_idx_shortened[i] new: ", store_relevant_attribut_idx_shortened[i])
+            store_relevant_attribut_name_shortened[i] = dataset.feature_names_all[np.argsort(-store_relevant_attribut_dis[i])[:selected_index_for_cut + 1]]
+            #print("store_relevant_attribut_idx_shortened[i] new: ", store_relevant_attribut_name_shortened[i])
+
+    if is_fix_k_selection_used:
+        print("FIX SELECTION WITH k="+str(fix_k_for_selection)+" IS USED")
+        for i in store_relevant_attribut_dis:
+            store_relevant_attribut_idx_shortened[i] = np.argsort(-store_relevant_attribut_dis[i])[:fix_k_for_selection]
+            store_relevant_attribut_name_shortened[i] = dataset.feature_names_all[np.argsort(-store_relevant_attribut_dis[i])[:fix_k_for_selection]]
+
+    if is_randomly_selected_featues:
+        print("RANDOMIZATION IS USED ++++++++++++++++++++++++++++++")
+        for i in store_relevant_attribut_dis:
+            # randomly change the order of anomaly scores
+            #print("store_relevant_attribut_dis[i]: ", store_relevant_attribut_dis[i])
+            np.random.shuffle(store_relevant_attribut_dis[i])
+            # randomly change idx and name anomaly scores
+            #print("store_relevant_attribut_dis[i] random: ", store_relevant_attribut_dis[i])
+            #print("store_relevant_attribut_idx[i]: ", store_relevant_attribut_idx_shortened[i])
+            store_relevant_attribut_idx_shortened[i] = np.argsort(-store_relevant_attribut_dis[i])
+            #print("store_relevant_attribut_idx[i] random: ", store_relevant_attribut_idx_shortened[i])
+            store_relevant_attribut_name_shortened[i] = dataset.feature_names_all[np.argsort(-store_relevant_attribut_dis[i])]
+
+    #store_relevant_attribut_idx, store_relevant_attribut_dis, store_relevant_attribut_name
+
+    print()
+    print("store_relevant_attribut_name: ", len(store_relevant_attribut_name), " | store_relevant_attribut_idx: ", len(store_relevant_attribut_idx), " | store_relevant_attribut_dis: ", len(store_relevant_attribut_dis))
+    print("y_pred_anomalies: ", y_pred_anomalies.shape)
+    print()
+    #print("store_relevant_attribut_name", store_relevant_attribut_name)
+    #print("store_relevant_attribut_idx", store_relevant_attribut_idx)
+    #print("store_relevant_attribut_dis", store_relevant_attribut_dis)
+
+    most_rel_att = [store_relevant_attribut_name_shortened, store_relevant_attribut_idx_shortened, store_relevant_attribut_dis]
+
+    #dict_measures = get_labels_from_knowledge_graph_from_anomalous_data_streams(most_rel_att, dataset.y_test_strings, dataset, y_pred_anomalies, not_selection_label="no_failure", only_true_positive_prediction=False)
+
+    dict_measures = get_labels_from_knowledge_graph_from_anomalous_data_streams_permuted(most_rel_att, dataset.y_test_strings, dataset, y_pred_anomalies, not_selection_label="no_failure", only_true_positive_prediction=True, k_data_streams=[3, 5, 10], k_permutations=[3, 2, 1], rel_type="Context")
+
+    #most_rel_att = [store_relevant_attribut_idx_shortened, store_relevant_attribut_dis, store_relevant_attribut_name_shortened]
+    most_rel_att = [store_relevant_attribut_idx, store_relevant_attribut_dis, store_relevant_attribut_name]
+
+    dict_measures = evaluate_most_relevant_examples(most_rel_att, dataset.y_test_strings, dataset, y_pred_anomalies, ks=[1, 3, 5], dict_measures=dict_measures,hitrateAtK=[100,200,500])
+
+    return dict_measures
+
+
+
+if __name__ == '__main__':
+    num_of_runs = 5
+
+    dict_measures_collection = {}
+
+    # Conduct the evaluation for each model and get the relevant metrics
+    for run in range(num_of_runs):
+        print("Experiment ", run, " started!")
+        dict_measures = main(run=run)
+        dict_measures_collection[run] = dict_measures
+        print("Experiment ", run, " finished!")
+
+    # Prepare dictonary with final predicts of all experiments
+    #print("dict_measures_collection: ", dict_measures_collection)
+    mean_dict_0 = {}
+    for key in dict_measures_collection[0]:
+        mean_dict_0[key] = []
+    #print("mean_dict_0: ", mean_dict_0)
+    for i in range(num_of_runs):
+        for key in dict_measures_collection[i]:
+            #print("key: ", key)
+            mean_dict_0[key].append(dict_measures_collection[i][key])
+
+    # Print final metrics
+    #print("mean_dict_0: ", mean_dict_0)
+    print("")
+    print("############## FINAL EVALUATION RESULTS OF"+str(num_of_runs)+" #################")
+    print("")
+    print("Metric; Mean; Std")
+    # compute mean
+    dict_mean = {}
+    for key in mean_dict_0:
+        mean = np.mean(mean_dict_0[key])
+        std = np.std(mean_dict_0[key],axis=0)
+        print(key,";",mean,";",std)
+

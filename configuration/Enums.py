@@ -10,6 +10,8 @@ class BatchSubsetType(Enum):
     ONLY_FAILURE_PAIRS = 2
     # Positive pairs will be the same as for 2, but negative pairs could also be failure mode, no_failure
     NO_FAILURE_ONLY_FOR_NEG_PAIRS = 3
+    # Generate only positive pairs
+    ONLY_NO_FAILURE_PAIRS = 4
 
 
 class LossFunction(Enum):
@@ -18,6 +20,8 @@ class LossFunction(Enum):
     MEAN_SQUARED_ERROR = 2
     HUBER_LOSS = 3
     TRIPLET_LOSS = 4
+    SIMPLE_SIAM_LOSS = 5
+    COSINE_LOSS = 6
 
 
 class BaselineAlgorithm(Enum):
@@ -63,6 +67,8 @@ class ComplexSimilarityMeasure(Enum):
     GRAPH_SIM = 1
     BASELINE_OVERWRITE = 2
     CNN2DWAddInp = 3
+    SIMPLE_SIAM = 4
+    BARLOW_TWIN = 5
 
 
 class TrainTestSplitMode(Enum):

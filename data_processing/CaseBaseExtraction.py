@@ -13,13 +13,13 @@ from configuration.Configuration import Configuration
 def main():
     config = Configuration()
 
-    y_train = np.load(config.training_data_folder + 'train_labels.npy')  # labels of the training data
-    x_train = np.load(config.training_data_folder + 'train_features.npy')  # labels of the training data
+    y_train = np.load(config.training_data_folder + 'train_labels_new2_few_shot_k3.npy')  # labels of the training data
+    x_train = np.load(config.training_data_folder + 'train_features_new2_few_shot_k3.npy')  # labels of the training data
     feature_names = np.load(config.training_data_folder + 'feature_names.npy', allow_pickle=True)
 
     if os.path.isfile(config.training_data_folder + 'train_failure_times.npy'):
-        failure_times_train = np.load(config.training_data_folder + 'train_failure_times.npy')
-        window_times_train = np.load(config.training_data_folder + 'train_window_times.npy')
+        failure_times_train = np.load(config.training_data_folder + 'train_failure_times_new2_few_shot_k3.npy')
+        window_times_train = np.load(config.training_data_folder + 'train_window_times_new2_few_shot_k3.npy')
         is_third_party = False
     else:
         is_third_party = True
@@ -79,15 +79,16 @@ def main():
 
     print('Number of exaples in training data set:', casebase_features.shape[0])
 
-    np.save(config.case_base_folder + 'train_features.npy', casebase_features.astype('float32'))
-    np.save(config.case_base_folder + 'train_labels.npy', casebase_labels)
+    np.save(config.case_base_folder + 'train_features_new2_few_shot_k3.npy', casebase_features.astype('float32'))
+    #print(sddsds)
+    np.save(config.case_base_folder + 'train_labels_new2_few_shot_k3.npy', casebase_labels)
 
     files_to_copy = ['feature_names.npy', 'test_labels.npy', 'test_features.npy']
 
     if not is_third_party:
-        np.save(config.case_base_folder + 'train_failure_times.npy', casebase_failures)
-        np.save(config.case_base_folder + 'train_window_times.npy', casebase_window_times)
-
+        np.save(config.case_base_folder + 'train_failure_times_new2_few_shot_k3.npy', casebase_failures)
+        np.save(config.case_base_folder + 'train_window_times_new2_few_shot_k3.npy', casebase_window_times)
+        print(xxdsdsd)
         additional_files = ['test_window_times.npy', 'test_failure_times.npy', 'FailureMode_Sim_Matrix.csv',
                             'Lokalization_Sim_Matrix.csv', 'Condition_Sim_Matrix.csv']
         files_to_copy.extend(additional_files)

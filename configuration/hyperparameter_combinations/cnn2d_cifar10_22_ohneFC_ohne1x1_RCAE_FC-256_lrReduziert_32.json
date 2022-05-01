@@ -1,0 +1,52 @@
+{
+  "encoder_variant": "cnn2d",
+  "batch_size": 512,
+  "epochs": 400000,
+  "epochs_current": 0,
+  "learning_rate": 0.000001,
+  "gradient_cap": -1,
+  "dropout_rate": 0.1,
+  "ffnn_layers": [
+  32
+  ],
+  "cnn_layers": [
+  ],
+  "cnn_kernel_length": [
+  ],
+  "cnn_strides": [
+  ],
+  "cnn2d_layers": [
+    32,
+    64,
+    128
+  ],
+  "cnn2d_kernel_length": [
+    [5,5],
+    [5,5],
+    [5,5]
+  ],
+  "cnn2d_strides": [
+    [3,3],
+    [3,3],
+    [3,3]
+  ],
+  "cnn2d_dilation_rate": [
+  ],
+  "lstm_layers": [
+
+  ],
+  "tcn_layers": [
+
+  ],
+  "tcn_kernel_length": [
+
+  ],
+   "fc_after_cnn1d_layers": [
+     256
+  ],
+  "useAttributeWiseAggregation": "False",
+    "cnn2d_AttributeWiseAggregation": [
+  ],
+    "useFilterwise1DConvBefore2DConv": "False",
+  "use_owl2vec_node_features_as_input_AttributeWiseAggregation": "False"
+}

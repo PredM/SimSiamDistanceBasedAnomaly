@@ -2,6 +2,9 @@ import os
 import sys
 from datetime import datetime
 import tensorflow as tf
+gpus = tf.config.list_physical_devices('GPU')
+
+tf.config.experimental.set_memory_growth(gpus[0], True)
 
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 # suppress debugging messages of TensorFlow

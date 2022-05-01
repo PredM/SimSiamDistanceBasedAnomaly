@@ -13,6 +13,7 @@ from sklearn import preprocessing
 from sklearn.manifold import TSNE
 from neural_network.Dataset import FullDataset
 from neural_network.SNN import initialise_snn
+import tensorflow as tf
 
 from configuration.Configuration import Configuration
 
@@ -23,9 +24,12 @@ from configuration.Enums import BatchSubsetType, LossFunction, BaselineAlgorithm
 # In progress. For visualization of encoded data of an SNN using T-SNE or PCA.
 if __name__ == '__main__':
     os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+    gpus = tf.config.list_physical_devices('GPU')
+
+    tf.config.experimental.set_memory_growth(gpus[0], True)
 
     # Config relevant for cnnwithclassattention
-    use_channelwiseEncoded_for_cnnwithclassattention = True
+    use_channelwiseEncoded_for_cnnwithclassattention = False
     use_each_sensor_as_single_example = False  # default: false
 
     use_channelcontextEncoded_for_cnnwithclassattention = True
@@ -33,16 +37,27 @@ if __name__ == '__main__':
     # TSNE Embeddings are learned on a sim matrix, not on embeddings itself
     use_sim_matrix = False  # default false
 
+    # Valid (True) or test (False)
+    model_selection = True
+
+    # Default: the case is visualized, but if encode_test_data is True,
+    # then also the testdata will be encoded together with the training data / case base
     encode_test_data = True
+    encode_only_test_data = False
 
     save_encoded_data = True
 
     config = Configuration()
     config.architecture_variant = ArchitectureVariant.STANDARD_SIMPLE
+    # Full Training Data or only case base used?
+    config.case_base_for_inference = False
+    # Specify the model:
+    #config.models_folder = config.data_folder_prefix + 'trained_models26/'
+    #config.filename_model_to_use = 'temp_snn_model_03-17_02-44-44_epoch-1287'
     if config.case_base_for_inference:
-        dataset = FullDataset(config.case_base_folder, config, training=False)
+        dataset = FullDataset(config.case_base_folder, config, training=False, model_selection=model_selection)
     else:
-        dataset = FullDataset(config.training_data_folder, config, training=False)
+        dataset = FullDataset(config.training_data_folder, config, training=False, model_selection=model_selection)
     # config.case_base_folder
     dataset.load()
     '''
@@ -58,7 +73,7 @@ if __name__ == '__main__':
 
     architecture = initialise_snn(config, dataset, False)
 
-    if architecture.hyper.encoder_variant in ['cnnwithclassattention', 'cnn1dwithclassattention']:
+    if architecture.hyper.encoder_variant in ['cnnwithclassattention', 'cnn1dwithclassattention', "cnn2dwithaddinput"]:
         if config.use_same_feature_weights_for_unsimilar_pairs == True:
             print("config.use_same_feature_weights_for_unsimilar_pairs should be False during TSNE Plot!")
 
@@ -68,7 +83,7 @@ if __name__ == '__main__':
         distance_matrix = 1 - sim_matrix
     else:
         encoded_data = dataset.encode(architecture, encode_test_data=encode_test_data)
-    if architecture.hyper.encoder_variant in ['cnnwithclassattention', 'cnn1dwithclassattention']:
+    if architecture.hyper.encoder_variant in ['cnnwithclassattention', 'cnn1dwithclassattention', "cnn2dwithaddinput"]:
         x_train_encoded = dataset.x_train[0]
         x_train_encoded_context = np.squeeze(dataset.x_train[2])
         x_train_labels = dataset.y_train_strings
@@ -85,8 +100,12 @@ if __name__ == '__main__':
         if config.case_base_for_inference:
             np.save('x_train_encoded_case_base.npy', x_train_encoded)
         else:
+            #print("x_train_encoded shape: ", x_train_encoded[0].shape)
             np.save('x_train_encoded.npy', x_train_encoded)
-        np.save('x_test_encoded.npy', x_test_encoded)
+        if model_selection == True:
+            np.save('x_valid_encoded.npy', x_test_encoded)
+        else:
+            np.save('x_test_encoded.npy', x_test_encoded)
         print("Encoded data was saved! Train shape: ", x_train_encoded.shape, " , test shape: ", x_test_encoded.shape)
 
     if encode_test_data:
@@ -117,7 +136,8 @@ if __name__ == '__main__':
 
     # Converting / reshaping 3d encoded features to 2d (required as TSNE/PCA input)
     data4TSNE = None
-    if architecture.hyper.encoder_variant in ['cnnwithclassattention', 'cnn1dwithclassattention']:
+    print("architecture.hyper.encoder_variant: ", architecture.hyper.encoder_variant)
+    if architecture.hyper.encoder_variant in ['cnnwithclassattention', 'cnn1dwithclassattention', "cnn2dwithaddinput"]:
         if use_sim_matrix == False:
             if use_channelwiseEncoded_for_cnnwithclassattention:
                 num_of_flatten_features = x_train_encoded.shape[1] * x_train_encoded.shape[2]
@@ -154,7 +174,7 @@ if __name__ == '__main__':
             data4TSNE = distance_matrix
         print("data4TSNE:", data4TSNE.shape)
     else:
-        if architecture.hyper.encoder_variant in ['cnn', 'graphcnn2d']:
+        if architecture.hyper.encoder_variant in ['cnn', 'graphcnn2d', 'cnn2d']:
             x_train_encoded = np.squeeze(x_train_encoded)
             data4TSNE = x_train_encoded
         else:
@@ -174,14 +194,19 @@ if __name__ == '__main__':
     # Concatenate train and test data into one matrix
     # x_testTrain_encoded_reshapedAs2d = np.concatenate((x_train_encoded_reshapedAs2d, x_test_encoded_reshapedAs2d),
     #                                                  axis=0)
-
+    #print("encode_test_data: ", encode_test_data, "encode_only_test_data: ", encode_only_test_data)
     if encode_test_data == True:
-        x_test_encoded = np.squeeze(x_test_encoded)
-        data4TSNE = np.concatenate((data4TSNE, x_test_encoded),axis=0)
+        if encode_only_test_data == False:
+            x_test_encoded = np.squeeze(x_test_encoded)
+            data4TSNE = np.concatenate((data4TSNE, x_test_encoded),axis=0)
+        else:
+            x_test_encoded = np.squeeze(x_test_encoded)
+            data4TSNE = x_test_encoded
 
+    print("Input data dimensions for TSNE: ", data4TSNE.shape)
     # Reducing dimensionality with TSNE or PCA
     # metrics: manhattan, euclidean, cosine
-    if architecture.hyper.encoder_variant in ['cnnwithclassattention', 'cnn1dwithclassattention']:
+    if architecture.hyper.encoder_variant in ['cnnwithclassattention', 'cnn1dwithclassattention', "cnn2dwithaddinput"]:
         if use_sim_matrix:
             tsne_embedder = TSNE(n_components=2, perplexity=50.0, learning_rate=10, early_exaggeration=30, n_iter=10000,
                               random_state=123, metric="precomputed")
@@ -194,7 +219,7 @@ if __name__ == '__main__':
             #                  random_state=123, metric='manhattan').fit_transform(data4TSNE)
     else:
         tsne_embedder = TSNE(n_components=2, perplexity=50.0, learning_rate=10, early_exaggeration=10, n_iter=10000,
-                          random_state=123, metric='manhattan')
+                          random_state=123, metric='cosine')
         #X_embedded = TSNE(n_components=2, perplexity=50.0, learning_rate=10, early_exaggeration=10, n_iter=10000,
         #                  random_state=123, metric='manhattan').fit_transform(data4TSNE)
 
@@ -210,12 +235,12 @@ if __name__ == '__main__':
     print("X_embedded shape: ", X_embedded.shape)
     # print("X_embedded:", X_embedded[0:10,:])
     # Defining the color for each class
-
     colors = [plt.cm.jet(float(i) / max(unique_labels_EncodedAsNumber)) for i in range(numOfClasses)]
+    print("Colors: ", colors, "unique_labels_EncodedAsNumber: ", unique_labels_EncodedAsNumber, "numOfClasses:", numOfClasses)
     # Color maps: https://matplotlib.org/examples/color/colormaps_reference.html
     # colors_ = colors(np.array(unique_labels_EncodedAsNumber))
     # Overriding color map with own colors
-    colors[0] = np.array([0 / 256, 128 / 256, 0 / 256, 1])  # no failure
+    colors[1] = np.array([0 / 256, 128 / 256, 0 / 256, 1])  # no failure
     '''
     colors[0] = np.array([0 / 256, 128 / 256, 0 / 256, 1])  # no failure
     colors[1] = np.array([65 / 256, 105 / 256, 225 / 256, 1])  # txt15_m1_t1_high_wear
@@ -238,7 +263,11 @@ if __name__ == '__main__':
                 xi = X_embedded[j, 0]
                 yi = X_embedded[j, 1]
                 # print("i: ", i, " u:", u, "j:",j,"xi: ", xi, "yi: ", yi)
-                plt.scatter(xi, yi, color=colors[i], label=unique_labels_EncodedAsNumber[i], marker='.')
+                #plt.scatter(xi, yi, color=colors[i], label=unique_labels_EncodedAsNumber[i], marker='.')
+                if j <= x_test_encoded.shape[0]:
+                    plt.scatter(xi, yi, color=colors[i], label=unique_labels_EncodedAsNumber[i], marker='.')
+                else:
+                    plt.scatter(xi, yi, color=colors[i], label=unique_labels_EncodedAsNumber[i], marker='x')
 
     # print("X_embedded:", X_embedded.shape)
     # print(X_embedded)
@@ -248,9 +277,13 @@ if __name__ == '__main__':
                      fancybox=True, shadow=True, ncol=3)
     # plt.legend(labels=x_test_train_labels, bbox_to_anchor=(1.05, 1), loc=2, borderaxespad=0.)
     # lgd = plt.legend(labels=le.classes_)
+
+    print("le.classes_: ", le.classes_)
     for i, u in enumerate(le.classes_):
-        lgd.legendHandles[i].set_color(colors[i])
-        lgd.legendHandles[i].set_label(le.classes_[i])
+        print("i:", i , "u:",u)
+        if i< 1:
+            lgd.legendHandles[i].set_color(colors[i])
+            lgd.legendHandles[i].set_label(le.classes_[i])
     # plt.show()
-    plt.savefig(architecture.hyper.encoder_variant + '_' + config.filename_model_to_use + '_730.png',
+    plt.savefig(architecture.hyper.encoder_variant + '_' + config.filename_model_to_use + '_'+str(data4TSNE.shape[0])+'.png',
                 bbox_extra_artists=(lgd,), bbox_inches='tight')

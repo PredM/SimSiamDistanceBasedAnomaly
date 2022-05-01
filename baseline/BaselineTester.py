@@ -205,7 +205,6 @@ def main():
 
     execute_baseline_test(config, dataset, start_index, end_index)
 
-
 # this script is used to execute the dtw and other baseline methods for comparison with the neural network
 if __name__ == '__main__':
     try:

@@ -26,20 +26,21 @@ class ConfigChecker:
         ##
         # SNN
         ##
-
+        '''
         ConfigChecker.implication(self.config.simple_measure == SimpleSimilarityMeasure.EUCLIDEAN_DIS,
                                   self.config.type_of_loss_function in [LossFunction.TRIPLET_LOSS,
                                                                         LossFunction.CONSTRATIVE_LOSS],
                                   'euclidean_dis should only be used for constrative or triplet loss.')
-
+        '''
         sum_percentages = sum(self.config.batch_distribution.values())
         ConfigChecker.implication(True,
                                   sum_percentages == 1.0,
                                   'Percentages for batch subsets must add up to 1.0')
-
+        '''
         ConfigChecker.implication(self.config.type_of_loss_function == LossFunction.TRIPLET_LOSS,
                                   self.config.simple_measure == SimpleSimilarityMeasure.EUCLIDEAN_DIS,
                                   'The euclidean distance must be used for triplet loss (set config.simple_measure = \'euclidean_dis\')')
+                                  '''
         '''
         ConfigChecker.implication(self.config.type_of_loss_function == LossFunction.TRIPLET_LOSS,
                                   self.config.useFeatureWeightedSimilarity == False,
@@ -122,12 +123,12 @@ class ConfigChecker:
     def post_init_checks(self, architecture):
         if self.architecture_type == 'snn':
             architecture: SimpleSNN = architecture
-
+            '''
             self.implication(ArchitectureVariant.is_complex(self.config.architecture_variant),
                              architecture.hyper.fc_after_cnn1d_layers is None,
                              'Additional fully connected layers shouldn\'t be used with FFNN. '
                              'fc_after_cnn1d_layers list should be empty.')
-
+            '''
             self.implication(self.config.overwrite_input_data_with_baseline_representation,
                              architecture.hyper.encoder_variant == 'dummy',
                              'config.overwrite_input_data_with_baseline_representation can\'t be used without a dummy encoder. \n'
@@ -146,11 +147,11 @@ class ConfigChecker:
                 architecture.hyper.encoder_variant in ['cnn2dwithaddinput', 'typebasedencoder']
             ]
             one_true = any(incompatible_with_3rd_party)
-
+            '''
             ConfigChecker.implication(architecture.dataset.is_third_party_dataset, not one_true,
                                       'At least one configured feature is incompatible with 3rd party datasets.\n'
                                       'Current dataset folder: ' + self.config.data_folder_prefix)
-
+            '''
         elif self.architecture_type == 'cbs':
             architecture: CBS = architecture
 

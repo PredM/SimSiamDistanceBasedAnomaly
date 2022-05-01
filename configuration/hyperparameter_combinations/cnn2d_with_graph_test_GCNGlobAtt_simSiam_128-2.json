@@ -8,8 +8,7 @@
   "gradient_cap": -1,
   "dropout_rate": 0.05,
   "ffnn_layers": [
-    64,
-    16
+    4
   ],
   "cnn_layers": [
   ],
@@ -55,6 +54,7 @@
     256
       ],
   "useFilterwise1DConvBefore2DConv": "False",
+      "use_additional_strict_masking": "True",
   "useFactoryStructureFusion": "False",
   "use_GCNGlobAtt_Fusion": "True",
   "use_owl2vec_node_features_in_graph_layers": "True",

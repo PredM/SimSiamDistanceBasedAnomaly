@@ -6,7 +6,7 @@ import pandas as pd
 from sklearn import preprocessing
 from spektral import utils
 
-from configuration.Enums import AdjacencyMatrixPreprossingCNN2DWithAddInput, NodeFeaturesForGraphVariants, FtDataSetVersion
+from configuration.Enums import AdjacencyMatrixPreprossingCNN2DWithAddInput, NodeFeaturesForGraphVariants, FtDataSetVersion, ArchitectureVariant
 
 from configuration.Configuration import Configuration
 
@@ -44,6 +44,8 @@ class FullDataset(Dataset):
         self.x_test = None
         self.y_test = None
         self.y_test_strings = None
+        self.x_valid = None
+        self.y_valid_strings = None
         self.num_test_instances = None
         self.training = training
         self.model_selection = model_selection
@@ -105,13 +107,92 @@ class FullDataset(Dataset):
         self.additional_static_attribute_features = None
         self.owl2vec_embedding_dim = None
 
-        self.is_third_party_dataset = True if self.config.data_folder_prefix != '../../../../data/pklein/PredMSiamNN/data/' else False
+        self.is_third_party_dataset = False #True if self.config.data_folder_prefix != '../../../../data/pklein/PredMSiamNN/data/' else False
 
-    def load_files(self):
+    def add_anomalous_examples_to_normal_class(self, lables_train, feature_data_train, noise_fraction=0.1):
+            print("Addining anomalous examples to the normal class with a fraction of: ", noise_fraction)
+            count_before = np.array(np.squeeze(np.where(lables_train == "no_failure"))).shape[0]
+            print("feature_data_train shape: ", feature_data_train.shape, "lables_train: ", lables_train.shape, "with original no_failure examples: ", count_before)
+            num_of_train_examples = feature_data_train.shape[0]
+
+
+            # Reduce size of anomalies as fraction of original data
+            import math
+            k = math.ceil(count_before * noise_fraction)
+            example_idx_of_anomalies = np.squeeze(np.array(np.where(lables_train != "no_failure")))
+            # Select k examples randomly
+            np.random.seed(seed=1234)
+
+            # Get unique entries
+            k_anomalous_examples_for_noise = np.random.choice(example_idx_of_anomalies, k)
+            k_anomalous_examples_for_noise = np.unique(k_anomalous_examples_for_noise)
+            while k_anomalous_examples_for_noise.shape[0] < k:
+                # print("k_examples_for_valid.shape[0]: ", k_examples_for_valid.shape[0]," vs. ", k)
+                k_anomalous_examples_for_noise_add = np.random.choice(example_idx_of_anomalies,
+                                                                   k - k_anomalous_examples_for_noise.shape[0])
+                k_anomalous_examples_for_noise = np.unique(
+                    np.concatenate((k_anomalous_examples_for_noise_add, k_anomalous_examples_for_noise)))
+
+            # Are there any double entries
+            u, c = np.unique(k_anomalous_examples_for_noise, return_counts=True)
+            dup = u[c > 1]
+            print("Duplicate entries in validation set: ", np.array(dup).shape, "Indexes: ", dup)
+
+            # Generate Mask
+            mask = np.isin(np.arange(feature_data_train.shape[0]), k_anomalous_examples_for_noise)
+            #remove_mask = np.isin(np.arange(feature_data_train.shape[0]), k_anomalous_examples_for_noise, invert=True)
+
+            # Change Label from anomalous to normal
+            lables_train[mask] = "no_failure"
+
+            count_after = np.squeeze(np.array(np.where(lables_train == "no_failure"))).shape[0]
+            print("feature_data_train shape: ", feature_data_train.shape, "lables_train: ", lables_train.shape)
+            print("Examples with no_failure after adding noise:", count_after, "with original number of examples: ", count_before)
+            return lables_train
+
+    def remove_validation_set(self, lables_train, feature_data_train, valid_fraction=0.1):
+        print("feature_data_train shape: ", feature_data_train.shape, "lables_train: ",
+              lables_train.shape)
+        num_of_train_examples = feature_data_train.shape[0]
+
+        # Reduce size of anomalies as fraction of original data
+        import math
+        k = math.ceil(num_of_train_examples * valid_fraction)
+        # Select k examples randomly
+        np.random.seed(seed=1234)
+
+        # Get unique entries
+        k_examples_for_valid = np.random.choice(np.arange(num_of_train_examples), k)
+        k_examples_for_valid = np.unique(k_examples_for_valid)
+        while k_examples_for_valid.shape[0] < k:
+            #print("k_examples_for_valid.shape[0]: ", k_examples_for_valid.shape[0]," vs. ", k)
+            k_examples_for_valid_additional = np.random.choice(np.arange(num_of_train_examples), k-k_examples_for_valid.shape[0] )
+            k_examples_for_valid = np.unique(np.concatenate((k_examples_for_valid_additional, k_examples_for_valid)))
+
+        # Are there any double entries
+        u, c = np.unique(k_examples_for_valid, return_counts=True)
+        dup = u[c > 1]
+        #print("Duplicate entries in validation set: ", np.array(dup).shape, "Indexes: ", dup)
+
+        # Conact no_failure with selected anomalies
+        mask = np.isin(np.arange(feature_data_train.shape[0]), k_examples_for_valid)
+        remove_mask = np.isin(np.arange(feature_data_train.shape[0]), k_examples_for_valid, invert=True)
+
+        feature_data_train_reduced = feature_data_train[remove_mask, :,:,:]
+        lables_train_reduced = lables_train[remove_mask]
+        feature_data_valid_reduced = feature_data_train[mask, :, :, :]
+        lables_valid_reduced = lables_train[mask]
+        print("feature_data_train_reduced shape: ", feature_data_train_reduced.shape, "lables_train_reduced: ", lables_train_reduced.shape)
+        print("feature_data_valid_reduced shape: ", feature_data_valid_reduced.shape, "lables_valid_reduced: ", lables_valid_reduced.shape)
+        return lables_train_reduced, feature_data_train_reduced, lables_valid_reduced, feature_data_valid_reduced
+
+    def load_files(self, selected_class):
         # In difference to 2020 version, 2021 considers a validation set
         if self.config.ft_data_set_version == FtDataSetVersion.FT_DataSet_2021:
             self.x_train = np.load(self.dataset_folder + 'train_features_new2.npy')  # data training
             self.y_train_strings = np.expand_dims(np.load(self.dataset_folder + 'train_labels_new2.npy'), axis=-1)
+            #self.x_train = np.load(self.dataset_folder + 'train_features_new2_noFailureOnly.npy')  # data training
+            #self.y_train_strings = np.expand_dims(np.load(self.dataset_folder + 'train_labels_new2_noFailureOnly.npy'), axis=-1)
 
             if self.model_selection == True:
                 # Validation data set is loaded
@@ -131,6 +212,8 @@ class FullDataset(Dataset):
             if not self.is_third_party_dataset:
                 self.window_times_train = np.expand_dims(np.load(self.dataset_folder + 'train_window_times_new2.npy'),axis=-1)
                 self.failure_times_train = np.expand_dims(np.load(self.dataset_folder + 'train_failure_times_new2.npy'),axis=-1)
+                #self.window_times_train = np.expand_dims(np.load(self.dataset_folder + 'train_window_times_new2_noFailureOnly.npy'),axis=-1)
+                #self.failure_times_train = np.expand_dims(np.load(self.dataset_folder + 'train_failure_times_new2_noFailureOnly.npy'),axis=-1)
                 if self.model_selection == True:
                     # Validation data set is loaded
                     self.window_times_test = np.expand_dims(np.load(self.dataset_folder + 'valid_window_times_new2.npy'), axis=-1)
@@ -162,8 +245,8 @@ class FullDataset(Dataset):
                 self.failure_times_test = np.expand_dims(np.load(self.dataset_folder + 'test_failure_times.npy'),
                                                          axis=-1)
 
-    def load(self, print_info=True):
-        self.load_files()
+    def load(self, print_info=True, selected_class=0):
+        self.load_files(selected_class)
 
         # create a encoder, sparse output must be disabled to get the intended output format
         # added categories='auto' to use future behavior
@@ -234,8 +317,8 @@ class FullDataset(Dataset):
             self.load_sim_matrices()
             self.load_adjacency_matrix()
             self.load_workstation_attribute_membership()
-            if self.config.use_additional_static_node_features_for_graphNN != 0:
-                self.load_additional_static_attribute_features()
+            #if self.config.use_additional_static_node_features_for_graphNN != 0:
+            self.load_additional_static_attribute_features()
 
         self.calculate_maskings()
 
@@ -292,6 +375,8 @@ class FullDataset(Dataset):
         if self.config.use_GCN_adj_matrix_preprocessing:
             self.graph_adjacency_matrix_attributes_preprocessed = utils.gcn_filter(self.graph_adjacency_matrix_attributes,
                                                                       symmetric=self.config.use_GCN_adj_matrix_preprocessing_sym)
+        else:
+            self.graph_adjacency_matrix_attributes_preprocessed = self.graph_adjacency_matrix_attributes
 
         # Load adjacency matrix for workstations
         adj_matrix_df = pd.read_csv(self.config.graph_adjacency_matrix_ws_file, sep=';', index_col=0)
@@ -301,6 +386,9 @@ class FullDataset(Dataset):
         if self.config.use_GCN_adj_matrix_preprocessing:
             self.graph_adjacency_matrix_ws_preprocessed = utils.gcn_filter(self.graph_adjacency_matrix_ws,
                                                                       symmetric=self.config.use_GCN_adj_matrix_preprocessing_sym)
+        else:
+            self.graph_adjacency_matrix_ws_preprocessed = self.graph_adjacency_matrix_ws
+
 
     def load_workstation_attribute_membership(self):
         # Load a mapping from a data stream to its workstation (can be used for pooling after GNN-layer)
@@ -352,11 +440,11 @@ class FullDataset(Dataset):
             self.additional_static_attribute_features = owl2vec_attr_embeddings
 
     def calculate_maskings(self):
+        print("classes_total: ", self.classes_total)
         for case in self.classes_total:
-
             if self.config.use_additional_strict_masking_for_attribute_sim:
                 relevant_features_for_case = self.config.get_relevant_features_case(case, return_strict_masking=True)
-
+                print("relevant features for ",case,"are: ", relevant_features_for_case)
                 masking1 = np.isin(self.feature_names_all, relevant_features_for_case[0])
                 masking2 = np.isin(self.feature_names_all, relevant_features_for_case[1])
                 self.class_label_to_masking_vector_strict[case] = [masking1, masking2]
@@ -389,6 +477,7 @@ class FullDataset(Dataset):
 
         if self.config.use_masking_regularization:
             masking = self.apply_masking_regularization(masking,label=class_label)
+        #masking = np.ones(masking.shape[0])
         return masking
 
     # returns a boolean matrix with values depending on whether the attribute at this index is relevant
@@ -570,6 +659,19 @@ class FullDataset(Dataset):
         asaf_with_batch_dim = np.transpose(asaf_with_batch_dim, axes=[2, 0, 1])
         return asaf_with_batch_dim
 
+    def get_static_attribute_features_cifar(self, batchsize):
+        #print("btachsize: ", batchsize)
+        asaf_with_batch_dim = np.expand_dims(np.ones((9,9)),-1)
+        asaf_with_batch_dim = np.repeat(asaf_with_batch_dim, batchsize, axis=2)
+        asaf_with_batch_dim = np.transpose(asaf_with_batch_dim, axes=[2, 0, 1])
+        return asaf_with_batch_dim
+
+    def get_static_attribute_features_cifar_oneHot(self, batchsize):
+        asaf_with_batch_dim = np.expand_dims(np.eye((9)), -1)
+        asaf_with_batch_dim = np.repeat(asaf_with_batch_dim, batchsize, axis=2)
+        asaf_with_batch_dim = np.transpose(asaf_with_batch_dim, axes=[2, 0, 1])
+        return asaf_with_batch_dim
+
     def get_masked_example_group(self, test_example, group_id):
 
         if group_id not in self.group_id_to_masking_vector:
@@ -609,6 +711,111 @@ class FullDataset(Dataset):
     def get_indices_failures_only_test(self):
         return np.where(self.y_test_strings != 'no_failure')[0]
 
+    def encode_single_example(self, snn, example,num_examples=61):
+
+        start_time_encoding = perf_counter()
+
+
+        x_train_unencoded = example
+        x_train_encoded = None
+        self.x_train = None
+        batchsize = self.config.sim_calculation_batch_size
+
+        print('Encoding of data with shape', x_train_unencoded.shape, 'started...')
+
+        x_train_unencoded_reshaped = snn.reshape_and_add_aux_input(x_train_unencoded, batch_size=(x_train_unencoded.shape[0] // 2))
+        encoded = snn.encode_in_batches(x_train_unencoded_reshaped)
+
+        ### use model of complex sim
+        #print("encoded shape: ", encoded[0].shape)
+        #encoded = snn.complex_sim_measure.model(encoded[0], training=self.training)
+        #print("encoded shape: ", encoded.shape)
+
+        if snn.hyper.encoder_variant == 'cnn2dwithaddinput':
+            # train need to be reanmed into test
+            # encoded output is a list with each entry has an encoded batchjob with the number of outputs
+            x_train_encoded_0 = encoded[0][0]
+            x_train_encoded_1 = encoded[0][1]
+            x_train_encoded_2 = encoded[0][2]
+            #x_train_encoded_3 = encoded[0][3]
+            for encoded_batch in encoded:
+                x_train_encoded_0 = np.append(x_train_encoded_0, encoded_batch[0], axis=0)
+                x_train_encoded_1 = np.append(x_train_encoded_1, encoded_batch[1], axis=0)
+                x_train_encoded_2 = np.append(x_train_encoded_2, encoded_batch[2], axis=0)
+                # x_train_encoded_3 = np.append(x_train_encoded_3, x_test_encoded[3], axis=0)
+
+            x_train_encoded_0 = x_train_encoded_0[batchsize:, :, :]
+            x_train_encoded_1 = x_train_encoded_1[batchsize:, :]
+            x_train_encoded_2 = x_train_encoded_2[batchsize:, :, :]
+            # x_train_encoded_3 = x_train_encoded_3[batchsize:, :]
+
+            # self.x_train = [x_train_encoded_0, x_train_encoded_1, x_train_encoded_2, x_train_encoded_3]
+            x_train_encoded = [x_train_encoded_0, x_train_encoded_1, x_train_encoded_2]
+        elif snn.hyper.encoder_variant == 'graphcnn2d':
+            # Encoding with intermediate output
+            #print("encoded: ", encoded)
+            #print("SNN Output of Encoded train data shape. ", encoded[0][0].shape, encoded[0][1].shape)
+            #print("SNN Output of Encoded train data shape. ", encoded[4][0].shape, encoded[4][1].shape)
+            if self.config.architecture_variant == ArchitectureVariant.STANDARD_SIMPLE:
+                # Get the first example (to know the shape)
+                x_train_encoded_0 = encoded[0][0] # encoded final output
+                x_train_encoded_1 = encoded[0][1] # encoded time series (intermediate output)
+                #print("x_train_encoded_0 shape: ", x_train_encoded_0.shape)
+                #print("x_train_encoded_1 shape: ", x_train_encoded_1.shape)
+            else:
+                x_train_encoded_0 = np.expand_dims(snn.complex_sim_measure.model(encoded[0], training=self.training), -1)
+                x_train_encoded_1 = np.expand_dims(snn.complex_sim_measure.model(encoded[1], training=self.training), -1)
+            #x_train_encoded_0 = np.expand_dims(x_train_encoded_0, -1)
+            # Go over all encoded batches in build a single array
+            for encoded_batch in encoded:
+                if self.config.architecture_variant == ArchitectureVariant.STANDARD_SIMPLE:
+                    #print("encoded_batch[0] shape: ", encoded_batch[0].shape)
+                    x_train_encoded_0 = np.append(x_train_encoded_0, encoded_batch[0], axis=0)
+                    x_train_encoded_1 = np.append(x_train_encoded_1, encoded_batch[1], axis=0)
+                else:
+                    x_train_encoded_0 = np.append(x_train_encoded_0, np.expand_dims(snn.complex_sim_measure.model(encoded_batch, training=self.training),-1), axis=0)
+                #print("x_train_encoded_0 shape: ", x_train_encoded_0.shape)
+            #print("x_train_encoded_0 shape: ", x_train_encoded_0.shape)
+            #print("x_train_encoded_1 shape: ", x_train_encoded_1.shape)
+            ### FIX VALUE OF 61 required since input was smaller as batchsize and this resulted in an empty return
+            ### TODO fix this
+            #x_train_encoded_0 = x_train_encoded_0[batchsize:, :]
+            x_train_encoded_0 = x_train_encoded_0[:num_examples, :]
+            #x_train_encoded_1 = x_train_encoded_1[batchsize:, :]
+            x_train_encoded_1 = x_train_encoded_1[:num_examples:, :]
+            #print("x_train_encoded_0 shape: ", x_train_encoded_0.shape)
+            #print("x_train_encoded_1 shape: ", x_train_encoded_1.shape)
+
+            #print("x_train_encoded_0: ", x_train_encoded_0.shape,  " | x_train_encoded_1: ", x_train_encoded_1.shape)
+            x_train_encoded = [x_train_encoded_0, x_train_encoded_1]
+        else:
+            #print("SNN Output of Encoded train data shape. ", encoded[0].shape)
+            if self.config.architecture_variant == ArchitectureVariant.STANDARD_SIMPLE:
+                x_train_encoded_0 = encoded[0]
+            else:
+                x_train_encoded_0 = np.expand_dims(snn.complex_sim_measure.model(encoded[0], training=self.training),-1)
+            #x_train_encoded_0 = np.expand_dims(x_train_encoded_0, -1)
+            for encoded_batch in encoded:
+                if self.config.architecture_variant == ArchitectureVariant.STANDARD_SIMPLE:
+                    x_train_encoded_0 = np.append(x_train_encoded_0, encoded_batch, axis=0)
+                else:
+                    x_train_encoded_0 = np.append(x_train_encoded_0, np.expand_dims(snn.complex_sim_measure.model(encoded_batch, training=self.training),-1), axis=0)
+                #print("x_train_encoded_0 shape: ", x_train_encoded_0.shape)
+            ### FIX VALUE OF 61 required since input was smaller as batchsize and this resulted in an empty return
+            ### TODO fix this
+            x_train_encoded_0 = x_train_encoded_0[:num_examples, :]
+            x_train_encoded = x_train_encoded_0
+
+        # x_test will not be encoded by default because examples should simulate "new data" --> encoded at runtime
+        # but can be done for visualisation purposes
+
+        encoding_duration = perf_counter() - start_time_encoding
+        print('Encoding of data finished. Duration:', encoding_duration)
+
+        return x_train_encoded
+
+
+    #Encode Intermediate Version
     def encode(self, snn, encode_test_data=False):
 
         start_time_encoding = perf_counter()
@@ -619,56 +826,277 @@ class FullDataset(Dataset):
         self.x_train = None
         batchsize = self.config.sim_calculation_batch_size
 
-        x_train_unencoded_reshaped = snn.reshape_and_add_aux_input(x_train_unencoded,
-                                                                   batch_size=(x_train_unencoded.shape[0] // 2))
+        x_train_unencoded_reshaped = snn.reshape_and_add_aux_input(x_train_unencoded, batch_size=(x_train_unencoded.shape[0] // 2))
         encoded = snn.encode_in_batches(x_train_unencoded_reshaped)
 
+        ### use model of complex sim
+        #print("encoded shape: ", encoded[0].shape)
+        #encoded = snn.complex_sim_measure.model(encoded[0], training=self.training)
+        #print("encoded shape: ", encoded.shape)
+
         if snn.hyper.encoder_variant == 'cnn2dwithaddinput':
+            # train need to be reanmed into test
             # encoded output is a list with each entry has an encoded batchjob with the number of outputs
             x_train_encoded_0 = encoded[0][0]
             x_train_encoded_1 = encoded[0][1]
             x_train_encoded_2 = encoded[0][2]
-            x_train_encoded_3 = encoded[0][3]
+            #x_train_encoded_3 = encoded[0][3]
             for encoded_batch in encoded:
                 x_train_encoded_0 = np.append(x_train_encoded_0, encoded_batch[0], axis=0)
                 x_train_encoded_1 = np.append(x_train_encoded_1, encoded_batch[1], axis=0)
                 x_train_encoded_2 = np.append(x_train_encoded_2, encoded_batch[2], axis=0)
-                x_train_encoded_3 = np.append(x_train_encoded_3, encoded_batch[3], axis=0)
+                # x_train_encoded_3 = np.append(x_train_encoded_3, x_test_encoded[3], axis=0)
 
             x_train_encoded_0 = x_train_encoded_0[batchsize:, :, :]
             x_train_encoded_1 = x_train_encoded_1[batchsize:, :]
             x_train_encoded_2 = x_train_encoded_2[batchsize:, :, :]
-            x_train_encoded_3 = x_train_encoded_3[batchsize:, :]
+            # x_train_encoded_3 = x_train_encoded_3[batchsize:, :]
 
-            self.x_train = [x_train_encoded_0, x_train_encoded_1, x_train_encoded_2, x_train_encoded_3]
+            # self.x_train = [x_train_encoded_0, x_train_encoded_1, x_train_encoded_2, x_train_encoded_3]
+            self.x_train = [x_train_encoded_0, x_train_encoded_1, x_train_encoded_2]
+        elif snn.hyper.encoder_variant == 'graphcnn2d':
+            # Encoding with intermediate output
+            #print("encoded: ", encoded)
+            #print("SNN Output of Encoded train data shape. ", encoded[0][0].shape, encoded[0][1].shape)
+            #print("SNN Output of Encoded train data shape. ", encoded[4][0].shape, encoded[4][1].shape)
+            if self.config.architecture_variant == ArchitectureVariant.STANDARD_SIMPLE:
+                # Get the first example (to know the shape)
+                x_train_encoded_0 = encoded[0][0] # encoded final output
+                x_train_encoded_1 = encoded[0][1] # encoded time series (intermediate output)
+                #print("x_train_encoded_0 shape: ", x_train_encoded_0.shape)
+                #print("x_train_encoded_1 shape: ", x_train_encoded_1.shape)
+            else:
+                x_train_encoded_0 = np.expand_dims(snn.complex_sim_measure.model(encoded[0], training=self.training), -1)
+                x_train_encoded_1 = np.expand_dims(snn.complex_sim_measure.model(encoded[1], training=self.training), -1)
+            #x_train_encoded_0 = np.expand_dims(x_train_encoded_0, -1)
+            # Go over all encoded batches in build a single array
+            for encoded_batch in encoded:
+                #print("encoded_batch[0] shape: ", encoded_batch[0].shape)
+                if self.config.architecture_variant == ArchitectureVariant.STANDARD_SIMPLE:
+                    #print("encoded_batch[0] shape: ", encoded_batch[0].shape)
+                    x_train_encoded_0 = np.append(x_train_encoded_0, encoded_batch[0], axis=0)
+                    x_train_encoded_1 = np.append(x_train_encoded_1, encoded_batch[1], axis=0)
+                else:
+                    # print("encoded_batch[0] shape: ", encoded_batch[0].shape)
+                    #x_train_encoded_0 = np.append(x_train_encoded_0, np.expand_dims(snn.complex_sim_measure.model(encoded_batch, training=self.training),-1), axis=0)
+                    x_train_encoded_0 = np.expand_dims(snn.complex_sim_measure.model(encoded[0], training=self.training), 0)
+                    x_train_encoded_1 = np.expand_dims(snn.complex_sim_measure.model(encoded[1], training=self.training), 0)
+                #print("x_train_encoded_0 shape: ", x_train_encoded_0.shape)
+            x_train_encoded_0 = x_train_encoded_0[batchsize:, :]
+            x_train_encoded_1 = x_train_encoded_1[batchsize:, :]
+
+            #print("x_train_encoded_0: ", x_train_encoded_0.shape,  " | x_train_encoded_1: ", x_train_encoded_1.shape)
+            self.x_train = [x_train_encoded_0, x_train_encoded_1]
         else:
-            print("SNN Output of Encoded data shape. ", encoded[0].shape)
-            x_train_encoded_0 = encoded[0]
+            print("SNN Output of Encoded train data shape. ", encoded[0].shape)
+            if self.config.architecture_variant == ArchitectureVariant.STANDARD_SIMPLE:
+                x_train_encoded_0 = encoded[0]
+            else:
+                x_train_encoded_0 = np.expand_dims(snn.complex_sim_measure.model(encoded[0], training=self.training),-1)
             #x_train_encoded_0 = np.expand_dims(x_train_encoded_0, -1)
             for encoded_batch in encoded:
-                x_train_encoded_0 = np.append(x_train_encoded_0, encoded_batch, axis=0)
+                if self.config.architecture_variant == ArchitectureVariant.STANDARD_SIMPLE:
+                    x_train_encoded_0 = np.append(x_train_encoded_0, encoded_batch, axis=0)
+                else:
+                    print("x_train_encoded_0 shape: ", x_train_encoded_0.shape)
+                    print("snn.complex_sim_measure.model(encoded_batch, training=self.training),-1): ", np.expand_dims(snn.complex_sim_measure.model(encoded_batch, training=self.training),-1).shape)
+                    x_train_encoded_0 = np.append(x_train_encoded_0, np.expand_dims(snn.complex_sim_measure.model(encoded_batch, training=self.training),-1), axis=0)
+                #print("x_train_encoded_0 shape: ", x_train_encoded_0.shape)
             x_train_encoded_0 = x_train_encoded_0[batchsize:, :]
             self.x_train = x_train_encoded_0
+
         # x_test will not be encoded by default because examples should simulate "new data" --> encoded at runtime
         # but can be done for visualisation purposes
+
         if encode_test_data:
-            x_test_unencoded = self.x_test
+            #print("+++ Start with Test ENCODING +++ ")
+            x_test_unencoded = self.x_test.copy()
             self.x_test = None
-            x_test_unencoded_reshaped = snn.reshape(x_test_unencoded)
-            print("x_test_unencoded_reshaped shape: ", x_test_unencoded_reshaped.shape)
+            #x_test_unencoded_reshaped = snn.reshape(x_test_unencoded)
+            #print("x_test_unencoded_reshaped shape: ", x_test_unencoded_reshaped.shape)
+            #x_test_encoded = snn.encode_in_batches(x_test_unencoded_reshaped)
+            #bs= x_test_unencoded.shape[0] // 2
+            #print("bs:" , bs )
+            x_test_unencoded_reshaped = snn.reshape_and_add_aux_input(x_test_unencoded, batch_size=(x_test_unencoded.shape[0] // 2))
+            #print("hier")
             x_test_encoded = snn.encode_in_batches(x_test_unencoded_reshaped)
+
             #x_test_encoded = snn.encoder.model(x_test_unencoded, training=False)
             #x_test_encoded = np.asarray(x_test_encoded)
-            x_test_encoded_0 = x_test_encoded[0]
-            # x_train_encoded_0 = np.expand_dims(x_train_encoded_0, -1)
-            for encoded_batch in x_test_encoded:
-                x_test_encoded_0 = np.append(x_test_encoded_0, encoded_batch, axis=0)
-            x_test_encoded_0 = x_test_encoded_0[batchsize:, :]
-            self.x_test = x_test_encoded_0
+            if snn.hyper.encoder_variant == 'cnn2dwithaddinput':
+                # encoded output is a list with each entry has an encoded batchjob with the number of outputs
+                x_test_encoded_0 = encoded[0][0]
+                x_test_encoded_1 = encoded[0][1]
+                x_test_encoded_2 = encoded[0][2]
+                # x_train_encoded_3 = encoded[0][3]
+                for encoded_batch in encoded:
+                    x_test_encoded_0 = np.append(x_test_encoded_0, encoded_batch[0], axis=0)
+                    x_test_encoded_1 = np.append(x_test_encoded_1, encoded_batch[1], axis=0)
+                    x_test_encoded_2 = np.append(x_test_encoded_2, encoded_batch[2], axis=0)
+                    # x_train_encoded_3 = np.append(x_train_encoded_3, encoded_batch[3], axis=0)
+
+                x_test_encoded_0 = x_test_encoded_0[batchsize:, :, :]
+                x_test_encoded_1 = x_test_encoded_1[batchsize:, :]
+                x_test_encoded_2 = x_test_encoded_2[batchsize:, :, :]
+                # x_train_encoded_3 = x_train_encoded_3[batchsize:, :]
+
+                # self.x_train = [x_train_encoded_0, x_train_encoded_1, x_train_encoded_2, x_train_encoded_3]
+                self.x_test = [x_test_encoded_0, x_test_encoded_1, x_test_encoded_2]
+            elif snn.hyper.encoder_variant == 'graphcnn2d':
+                if self.config.architecture_variant == ArchitectureVariant.STANDARD_SIMPLE:
+                    # Get the first example (to know the shape)
+                    x_test_encoded_0 = x_test_encoded[0][0]  # encoded final output
+                    x_test_encoded_1 = x_test_encoded[0][1]  # encoded time series (intermediate output)
+                else:
+                    x_test_encoded_0 = np.expand_dims(snn.complex_sim_measure.model(x_test_encoded[0], training=self.training)[0],-1)
+                # x_train_encoded_0 = np.expand_dims(x_train_encoded_0, -1)
+                for encoded_batch in x_test_encoded:
+                    if self.config.architecture_variant == ArchitectureVariant.STANDARD_SIMPLE:
+                        #x_test_encoded_0 = np.append(x_test_encoded_0, encoded_batch, axis=0)
+                        x_test_encoded_0 = np.append(x_test_encoded_0, encoded_batch[0], axis=0)
+                        x_test_encoded_1 = np.append(x_test_encoded_1, encoded_batch[1], axis=0)
+                    else:
+                        #print("x_test_encoded_0:", x_test_encoded_0.shape)
+                        a = snn.complex_sim_measure.model(encoded_batch, training=self.training)[0]
+                        #print("a shape: ", a.shape)
+                        x_test_encoded_0 = np.append(x_test_encoded_0, np.expand_dims(a,0), axis=0)
+                x_test_encoded_0 = x_test_encoded_0[batchsize:, :]
+                if self.config.architecture_variant == ArchitectureVariant.STANDARD_SIMPLE:
+                    x_test_encoded_1 = x_test_encoded_1[batchsize:, :]
+                    self.x_test = [x_test_encoded_0, x_test_encoded_1]
+                else:
+                    self.x_test = x_test_encoded_0,
+
+            else:
+                print("SNN Output of Encoded test data shape. ", encoded[0].shape)
+                if self.config.architecture_variant == ArchitectureVariant.STANDARD_SIMPLE:
+                    x_test_encoded_0 = x_test_encoded[0]
+                else:
+                    x_test_encoded_0 = np.expand_dims(snn.complex_sim_measure.model(x_test_encoded[0], training=self.training),-1)
+                # x_train_encoded_0 = np.expand_dims(x_train_encoded_0, -1)
+                for encoded_batch in x_test_encoded:
+                    if self.config.architecture_variant == ArchitectureVariant.STANDARD_SIMPLE:
+                        x_test_encoded_0 = np.append(x_test_encoded_0, encoded_batch, axis=0)
+                    else:
+                        x_test_encoded_0 = np.append(x_test_encoded_0, np.expand_dims(snn.complex_sim_measure.model(encoded_batch, training=self.training),-1), axis=0)
+                x_test_encoded_0 = x_test_encoded_0[batchsize:, :]
+                self.x_test = x_test_encoded_0
 
         encoding_duration = perf_counter() - start_time_encoding
         print('Encoding of dataset finished. Duration:', encoding_duration)
         # return [x_train_encoded_0, x_train_encoded_1,x_train_encoded_2,x_train_encoded_3]
+    #Encode Saved
+    '''
+    def encode(self, snn, encode_test_data=False):
+
+        start_time_encoding = perf_counter()
+        print('Encoding of dataset started')
+
+        x_train_unencoded = self.x_train
+
+        self.x_train = None
+        batchsize = self.config.sim_calculation_batch_size
+
+        x_train_unencoded_reshaped = snn.reshape_and_add_aux_input(x_train_unencoded, batch_size=(x_train_unencoded.shape[0] // 2))
+        encoded = snn.encode_in_batches(x_train_unencoded_reshaped)
+
+        ### use model of complex sim
+        #print("encoded shape: ", encoded[0].shape)
+        #encoded = snn.complex_sim_measure.model(encoded[0], training=self.training)
+        #print("encoded shape: ", encoded.shape)
+
+        if snn.hyper.encoder_variant == 'cnn2dwithaddinput':
+            # train need to be reanmed into test
+            # encoded output is a list with each entry has an encoded batchjob with the number of outputs
+            x_train_encoded_0 = encoded[0][0]
+            x_train_encoded_1 = encoded[0][1]
+            x_train_encoded_2 = encoded[0][2]
+            #x_train_encoded_3 = encoded[0][3]
+            for encoded_batch in encoded:
+                x_train_encoded_0 = np.append(x_train_encoded_0, encoded_batch[0], axis=0)
+                x_train_encoded_1 = np.append(x_train_encoded_1, encoded_batch[1], axis=0)
+                x_train_encoded_2 = np.append(x_train_encoded_2, encoded_batch[2], axis=0)
+                # x_train_encoded_3 = np.append(x_train_encoded_3, x_test_encoded[3], axis=0)
+
+            x_train_encoded_0 = x_train_encoded_0[batchsize:, :, :]
+            x_train_encoded_1 = x_train_encoded_1[batchsize:, :]
+            x_train_encoded_2 = x_train_encoded_2[batchsize:, :, :]
+            # x_train_encoded_3 = x_train_encoded_3[batchsize:, :]
+
+            # self.x_train = [x_train_encoded_0, x_train_encoded_1, x_train_encoded_2, x_train_encoded_3]
+            self.x_train = [x_train_encoded_0, x_train_encoded_1, x_train_encoded_2]
+        else:
+            print("SNN Output of Encoded train data shape. ", encoded[0].shape)
+            if self.config.architecture_variant == ArchitectureVariant.STANDARD_SIMPLE:
+                x_train_encoded_0 = encoded[0]
+            else:
+                x_train_encoded_0 = np.expand_dims(snn.complex_sim_measure.model(encoded[0], training=self.training),-1)
+            #x_train_encoded_0 = np.expand_dims(x_train_encoded_0, -1)
+            for encoded_batch in encoded:
+                if self.config.architecture_variant == ArchitectureVariant.STANDARD_SIMPLE:
+                    x_train_encoded_0 = np.append(x_train_encoded_0, encoded_batch, axis=0)
+                else:
+                    x_train_encoded_0 = np.append(x_train_encoded_0, np.expand_dims(snn.complex_sim_measure.model(encoded_batch, training=self.training),-1), axis=0)
+                #print("x_train_encoded_0 shape: ", x_train_encoded_0.shape)
+            x_train_encoded_0 = x_train_encoded_0[batchsize:, :]
+            self.x_train = x_train_encoded_0
+
+        # x_test will not be encoded by default because examples should simulate "new data" --> encoded at runtime
+        # but can be done for visualisation purposes
+
+        if encode_test_data:
+            #print("+++ Start with Test ENCODING +++ ")
+            x_test_unencoded = self.x_test.copy()
+            self.x_test = None
+            #x_test_unencoded_reshaped = snn.reshape(x_test_unencoded)
+            #print("x_test_unencoded_reshaped shape: ", x_test_unencoded_reshaped.shape)
+            #x_test_encoded = snn.encode_in_batches(x_test_unencoded_reshaped)
+            #bs= x_test_unencoded.shape[0] // 2
+            #print("bs:" , bs )
+            x_test_unencoded_reshaped = snn.reshape_and_add_aux_input(x_test_unencoded, batch_size=(x_test_unencoded.shape[0] // 2))
+            #print("hier")
+            x_test_encoded = snn.encode_in_batches(x_test_unencoded_reshaped)
+
+            #x_test_encoded = snn.encoder.model(x_test_unencoded, training=False)
+            #x_test_encoded = np.asarray(x_test_encoded)
+            if snn.hyper.encoder_variant == 'cnn2dwithaddinput':
+                # encoded output is a list with each entry has an encoded batchjob with the number of outputs
+                x_test_encoded_0 = encoded[0][0]
+                x_test_encoded_1 = encoded[0][1]
+                x_test_encoded_2 = encoded[0][2]
+                # x_train_encoded_3 = encoded[0][3]
+                for encoded_batch in encoded:
+                    x_test_encoded_0 = np.append(x_test_encoded_0, encoded_batch[0], axis=0)
+                    x_test_encoded_1 = np.append(x_test_encoded_1, encoded_batch[1], axis=0)
+                    x_test_encoded_2 = np.append(x_test_encoded_2, encoded_batch[2], axis=0)
+                    # x_train_encoded_3 = np.append(x_train_encoded_3, encoded_batch[3], axis=0)
+
+                x_test_encoded_0 = x_test_encoded_0[batchsize:, :, :]
+                x_test_encoded_1 = x_test_encoded_1[batchsize:, :]
+                x_test_encoded_2 = x_test_encoded_2[batchsize:, :, :]
+                # x_train_encoded_3 = x_train_encoded_3[batchsize:, :]
+
+                # self.x_train = [x_train_encoded_0, x_train_encoded_1, x_train_encoded_2, x_train_encoded_3]
+                self.x_test = [x_test_encoded_0, x_test_encoded_1, x_test_encoded_2]
+            else:
+                print("SNN Output of Encoded test data shape. ", encoded[0].shape)
+                if self.config.architecture_variant == ArchitectureVariant.STANDARD_SIMPLE:
+                    x_test_encoded_0 = x_test_encoded[0]
+                else:
+                    x_test_encoded_0 = np.expand_dims(snn.complex_sim_measure.model(x_test_encoded[0], training=self.training),-1)
+                # x_train_encoded_0 = np.expand_dims(x_train_encoded_0, -1)
+                for encoded_batch in x_test_encoded:
+                    if self.config.architecture_variant == ArchitectureVariant.STANDARD_SIMPLE:
+                        x_test_encoded_0 = np.append(x_test_encoded_0, encoded_batch, axis=0)
+                    else:
+                        x_test_encoded_0 = np.append(x_test_encoded_0, np.expand_dims(snn.complex_sim_measure.model(encoded_batch, training=self.training),-1), axis=0)
+                x_test_encoded_0 = x_test_encoded_0[batchsize:, :]
+                self.x_test = x_test_encoded_0
+
+        encoding_duration = perf_counter() - start_time_encoding
+        print('Encoding of dataset finished. Duration:', encoding_duration)
+        # return [x_train_encoded_0, x_train_encoded_1,x_train_encoded_2,x_train_encoded_3]
+    '''
 
     # Returns a pairwise similarity matrix (NumTrainExamples,NumTrainExamples) of all training examples
     def get_similarity_matrix(self, snn, encode_test_data=False):

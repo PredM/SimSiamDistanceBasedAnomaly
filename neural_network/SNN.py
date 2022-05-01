@@ -1,4 +1,6 @@
 import sys
+from builtins import print
+
 import numpy as np
 import tensorflow as tf
 
@@ -7,17 +9,18 @@ from configuration.Enums import ArchitectureVariant, ComplexSimilarityMeasure
 from configuration.Hyperparameter import Hyperparameters
 from neural_network.BasicNeuralNetworks import CNN, RNN, FFNN, CNN2dWithAddInput, \
     CNN2D, TypeBasedEncoder, DUMMY, BaselineOverwriteSimilarity, GraphCNN2D, GraphSimilarity, AttributeConvolution, \
-    GraphAttributeConvolution, Cnn2DWithAddInput_Network_OnTop
+    GraphAttributeConvolution, Cnn2DWithAddInput_Network_OnTop, FFNN_SimpleSiam_Prediction_MLP, FFNN_BarlowTwin_MLP_Dummy
 from neural_network.Dataset import FullDataset
 from neural_network.SimpleSimilarityMeasure import SimpleSimilarityMeasure
+from configuration.Enums import LossFunction
 
 
 # initialises the correct SNN variant depending on the configuration
 def initialise_snn(config: Configuration, dataset, training, for_cbs=False, group_id=''):
     var = config.architecture_variant
     av = ArchitectureVariant
-    tf.random.set_seed(2021)
-    np.random.seed(2021)
+    #tf.random.set_seed(2021)
+    #np.random.seed(2021)
 
     if training and av.is_simple(var) or not training and var == av.STANDARD_SIMPLE:
         print('Creating standard SNN with simple similarity measure: ', config.simple_measure)
@@ -234,17 +237,355 @@ class SimpleSNN(AbstractSimilarityMeasure):
     # Called by get_sims or get_sims_multiple_batches for a single example or by an optimizer directly
     @tf.function
     def get_sims_for_batch(self, batch):
-
         # some encoder variants require special / additional input
         batch, examples_in_batch = self.input_extension(batch)
 
         # calculate the output of the encoder for the examples in the batch
         context_vectors = self.encoder.model(batch, training=self.training)
 
-        sims_batch = tf.map_fn(lambda pair_index: self.get_sim_pair(context_vectors, pair_index),
-                               tf.range(examples_in_batch, dtype=tf.int32), back_prop=True,
-                               fn_output_signature=tf.float32)
+        if not self.config.use_pairwise_sim_siam:
+            if self.hyper.encoder_variant in ['graphcnn2d']:
+                context_vectors = context_vectors[0]
+                context_vectors_ = context_vectors
 
+        # Investigate Collapsing:
+        ###
+        '''
+        #context_vectors_ = context_vectors
+        print("context_vectors: ", context_vectors_.shape)
+        z_a_l2_norm = tf.math.l2_normalize(context_vectors_, axis=0)
+        z_b_l2_norm = tf.math.l2_normalize(context_vectors_, axis=1)
+        std_axis_0 = tf.math.reduce_std(z_a_l2_norm, 0)
+        std_axis_1 = tf.math.reduce_std(z_b_l2_norm, 1)
+        std_axis_0_mean = tf.math.reduce_mean(std_axis_0)
+        std_axis_1_mean = tf.math.reduce_mean(std_axis_1)
+        #print("std_axis_0 shape: ", std_axis_0.shape)
+        #print("std_axis_1 shape: ", std_axis_1.shape)
+        tf.print("std_axis_0_mean: ", std_axis_0_mean)
+        tf. print("std_axis_1_mean: ", std_axis_1_mean)
+        tf.print("1/sqrt(d): ", (1/(tf.sqrt(128.0))))
+        # Batch mean
+        o_z_a = tf.reduce_mean(z_a_l2_norm, axis=0)
+        o_z_a = tf.expand_dims(o_z_a, 0)
+        o_z_a_tiled = tf.tile(o_z_a, [z_a_l2_norm.shape[0],1])
+        o_z_b = tf.reduce_mean(z_b_l2_norm, axis=0)
+        o_z_b = tf.expand_dims(o_z_b, 0)
+        o_z_b_tiled = tf.tile(o_z_b, [z_b_l2_norm.shape[0], 1])
+        #print("o_z_tiled shape: ", o_z_tiled.shape)
+        mse = tf.keras.losses.MeanSquaredError()
+
+        # a_e = tf.reduce_mean(tf.squared_difference(recon_a, e))
+        # b_f = tf.reduce_mean(tf.squared_difference(recon_b, f))
+        center_loss_a = mse(z_a_l2_norm, o_z_a_tiled)
+        center_loss_b = mse(z_b_l2_norm, o_z_b_tiled)
+        tf.print("center loss: ", center_loss_a, center_loss_b)
+        
+        #context vectors shape: (batchsize / entries, features)
+        tf.print("std_axis_0_mean:",std_axis_0_mean,"| std_axis_1_mean:",std_axis_1_mean,"| 1/sqrt(d):", (1/(tf.sqrt(128.0))),"| center loss:", center_loss_a, center_loss_b)
+        '''
+        ###
+
+        ###
+        # "Official Way of Impementation for SimSiam
+        ###
+        #'''
+        if self.config.complex_measure == ComplexSimilarityMeasure.SIMPLE_SIAM and not self.config.use_pairwise_sim_siam:
+            #if not self.config.use_pairwise_sim_siam:
+            #context shape (2*Batchsize, dim) , axis=0 --> dim, axis=1 --> 2*BS
+            # Wird hier nicht gebraucht, da für jedes Beispiel einzeln: context_vectors = tf.math.l2_normalize(context_vectors, axis=0)
+            #context_vectors = tf.math.l2_normalize(context_vectors, axis=0)
+            entries_a = np.arange(0,context_vectors.shape[0],2)
+            entries_b = np.arange(1, context_vectors.shape[0], 2)
+            a = tf.gather(context_vectors, entries_a) #context_vectors[entries_a, :, 0]
+            b = tf.gather(context_vectors, entries_b) #context_vectors[entries_b, :, 0]
+
+            # projections z_a, z_b from encoder f (backbone + projection mlp); shape (batchsize, features)
+            z_a = tf.squeeze(a)
+            z_b = tf.squeeze(b)
+            # tf.print("z_a shape:", tf.shape(z_a))
+
+            # predictions p_a, p_b from prediction MLP h
+            p_a = self.complex_sim_measure.model(z_a, training=self.training)
+            '''
+            p_a_res1 = p_a[1]  # residual term
+            p_a_res2 = p_a[2]
+            p_a_res3 = p_a[3]
+            p_a_res4 = p_a[4]
+            p_a_res5 = p_a[5]
+            p_a = p_a[0]    # normal state
+            '''
+            #p_a_res1 = p_a[1]  # residual term
+            #p_a = p_a[0]    # normal state
+            #p_a_mul2 = p_a[2]
+            p_b = self.complex_sim_measure.model(z_b, training=self.training)
+            '''
+            p_b_res1 = p_b[1]
+            p_b_res2 = p_b[2]
+            p_b_res3 = p_b[3]
+            p_b_res4 = p_b[4]
+            p_b_res5 = p_b[5]
+            p_b = p_b[0]
+            '''
+            #p_b_res1 = p_b[1]
+            #p_b_mul2 = p_b[2]
+            #p_b = p_b[0]
+            # p_a, p_b Shape: (batch, features)
+            #tf.print("p_a shape:", tf.shape(p_a))
+
+            # SimSiam Algo 1. normlize according dim=1 whereas Barlow Twin normalise along the batch dimension (i.e. dim=0)
+            # Cosine similarity according: https://github.com/keras-team/keras/blob/d8fcb9d4d4dad45080ecfdd575483653028f8eda/keras/metrics.py#L4162
+
+            p_a_1 = tf.math.l2_normalize(p_a, axis=1)
+            p_b_1 = tf.math.l2_normalize(p_b, axis=1)
+            z_a_l2_norm = tf.math.l2_normalize(z_a, axis=1)
+            z_b_l2_norm = tf.math.l2_normalize(z_b, axis=1)
+            '''
+            p_a_1 = (p_a - tf.reduce_mean(p_a, axis=0)) / tf.math.reduce_std(p_a, axis=0)
+            p_b_1 = (p_b - tf.reduce_mean(p_b, axis=0)) / tf.math.reduce_std(p_b, axis=0)
+            z_a_l2_norm = (z_a - tf.reduce_mean(z_a, axis=0)) / tf.math.reduce_std(z_a, axis=0)
+            z_b_l2_norm = (z_b - tf.reduce_mean(z_b, axis=0)) / tf.math.reduce_std(z_b, axis=0)
+            '''
+            '''
+            p_a_res1_p_b_norm_ = tf.math.l2_normalize((p_a_res1 + p_a_res2 + p_a_res3 ) + z_b, axis=1)
+            p_a_res1_norm = tf.math.l2_normalize(p_a_res1, axis=1)
+            p_a_res2_norm = tf.math.l2_normalize(p_a_res2, axis=1)
+            p_a_res3_norm = tf.math.l2_normalize(p_a_res3, axis=1)
+            p_b_res1_p_a_norm_ = tf.math.l2_normalize((p_b_res1 + p_b_res2 + p_b_res3) + z_a, axis=1)
+            p_b_res1_norm = tf.math.l2_normalize(p_b_res1, axis=1)
+            p_b_res2_norm = tf.math.l2_normalize(p_b_res2, axis=1)
+            p_b_res3_norm = tf.math.l2_normalize(p_b_res3, axis=1)
+            '''
+
+            '''
+            p_b_res1_p_a_norm = tf.math.l2_normalize(p_a - (p_b_res1), axis=1)
+            p_b_res1_p_a_norm = tf.math.l2_normalize(p_b - (p_a_res1), axis=1)
+            p_a_res1_p_a_norm = tf.math.l2_normalize((p_a_res1) + p_a, axis=1)
+            p_a_res1_p_b_norm = tf.math.l2_normalize((p_a_res1) + p_b, axis=1)
+            p_b_res1_p_b_norm = tf.math.l2_normalize((p_b_res1) + p_b, axis=1)
+            p_b_res1_z_a_norm = tf.math.l2_normalize((p_b_res1) + z_a, axis=1)
+            p_a_res1_z_b_norm = tf.math.l2_normalize((p_a_res1) + z_b, axis=1)
+            p_a_res1_norm = tf.math.l2_normalize(p_a_res1, axis=1)
+            p_b_res1_norm = tf.math.l2_normalize(p_b_res1, axis=1)
+
+            #a = tf.math.l2_normalize(p_a + (p_b_res1+p_b_res2 +p_b_res3), axis=1)
+            a = tf.math.l2_normalize(p_a - (p_b_res1), axis=1)
+            a_2 = tf.math.l2_normalize((p_a - p_b_res1) / p_b_mul2, axis=1)
+            a_neg = tf.math.l2_normalize(z_a + (p_b_res1), axis=1)
+            #b = tf.math.l2_normalize(p_b + (p_a_res1+p_a_res2+p_a_res3), axis=1)
+            b = tf.math.l2_normalize(p_b - (p_a_res1), axis=1)
+            b_2 = tf.math.l2_normalize((p_b - p_a_res1) / p_a_mul2, axis=1)
+            b_neg = tf.math.l2_normalize(z_b + (p_a_res1), axis=1)
+            b_neg2 = tf.math.l2_normalize(z_b - (p_a_res1), axis=1)
+            '''
+            if self.config.stop_gradient:
+                #D_pa1_zb = tf.matmul(p_a_1, tf.stop_gradient(z_b_l2_norm), transpose_b=True)
+                #D_pb1_za = tf.matmul(p_b_1, tf.stop_gradient(z_a_l2_norm), transpose_b=True)
+                D_pa1_zb = tf.reduce_sum(p_a_1 * tf.stop_gradient(z_b_l2_norm), axis=1)
+                D_pb1_za = tf.reduce_sum(p_b_1 *  tf.stop_gradient(z_a_l2_norm), axis=1)
+
+            else:
+                #D_pa1_zb = tf.matmul(p_a_1, z_b_l2_norm, transpose_b=True)
+                #D_pb1_za = tf.matmul(p_b_1, z_a_l2_norm, transpose_b=True)
+                D_pa1_zb = tf.reduce_sum(p_a_1 * z_b_l2_norm, axis=1)
+                D_pb1_za = tf.reduce_sum(p_b_1 * z_a_l2_norm, axis=1)
+
+
+            # Residuals
+            '''
+            p_a_res1 = tf.math.l2_normalize(p_a_res1, axis=1)
+            p_b_res1 = tf.math.l2_normalize(p_b_res1, axis=1)
+            p_a_res2 = tf.math.l2_normalize(p_a_res2, axis=1)
+            p_b_res2 = tf.math.l2_normalize(p_b_res2, axis=1)
+            p_a_res3 = tf.math.l2_normalize(p_a_res3, axis=1)
+            p_b_res3 = tf.math.l2_normalize(p_b_res3, axis=1)
+            #tf.print("p_a_res1 shape: ",p_a_res1.shape, "p_b_res2 shape: ",p_b_res2.shape)
+            #tf.print("p_a_1 shape: ", p_a_1.shape, "p_b_1 shape: ", p_b_1.shape)
+            D_p_a_x_p_b_x_1 = tf.reduce_sum(p_a_res1 * p_b_res1, axis=1)
+            D_p_a_x_p_b_x_2 = tf.reduce_sum(p_a_res2 * p_b_res2, axis=1)
+            D_p_a_x_p_b_x_3 = tf.reduce_sum(p_a_res3 * p_b_res3, axis=1)
+            #D_p_a_x_p_b_x = tf.matmul(p_a_res1, p_b_res2, transpose_b=True)
+            '''
+
+            '''
+            D_a_zb = tf.reduce_sum(a * tf.stop_gradient(z_b_l2_norm), axis=1)
+            D_b_zb = tf.reduce_sum(b * tf.stop_gradient(z_a_l2_norm), axis=1)
+            D_a_zb_neg = tf.reduce_sum(a_neg * tf.stop_gradient(p_b_1), axis=1)
+            D_b_zb_neg = tf.reduce_sum(b_neg * tf.stop_gradient(p_a_1), axis=1)
+            D_a_zb2 = tf.reduce_sum(a_2 * tf.stop_gradient(z_b_l2_norm), axis=1)
+            D_b_zb2 = tf.reduce_sum(b_2 * tf.stop_gradient(z_a_l2_norm), axis=1)
+            D_p_a_p_b = tf.reduce_sum(p_a_1 * p_b_1, axis=1)
+            D_z_a_z_b = tf.reduce_sum(z_a_l2_norm * z_b_l2_norm, axis=1)
+            D_1 = tf.reduce_sum(p_a_res1_p_b_norm * z_a_l2_norm, axis=1)
+            D_1_z = tf.reduce_sum(p_a_res1_z_b_norm * tf.stop_gradient(z_a_l2_norm), axis=1)
+            D_pb_pbres_zb = tf.reduce_sum(p_b_res1_p_a_norm * z_b_l2_norm, axis=1)
+            D_pa_pbres_zb = tf.reduce_sum(p_a_res1_p_b_norm * z_a_l2_norm, axis=1)
+            #D_1_z_ = tf.reduce_sum(p_b_res1_p_a_norm_ * tf.stop_gradient(z_a_l2_norm), axis=1)
+            D_2 = tf.reduce_sum(p_b_res1_p_a_norm * z_b_l2_norm, axis=1)
+            D_2_z = tf.reduce_sum(p_b_res1_z_a_norm * tf.stop_gradient(z_b_l2_norm), axis=1)
+            #D_2_z_ = tf.reduce_sum(p_b_res1_p_a_norm * tf.stop_gradient(z_b_l2_norm), axis=1)
+            D_pres1 = tf.reduce_sum(p_a_res1_norm * p_b_res1_norm, axis=1)
+            #D_pres2 = tf.reduce_sum(p_a_res2_norm * p_b_res2_norm, axis=1)
+            #D_pres3 = tf.reduce_sum(p_a_res3_norm * p_b_res3_norm, axis=1)
+            #D_p_a_p_b = tf.matmul(p_a_1, p_b_1, transpose_b=True)
+            #tf.print("D_p_a_x_p_b_x shape: ", D_p_a_x_p_b_x.shape, "D_p_a_p_b shape: ", D_p_a_p_b.shape)
+            #D_pa1_zb = tf.matmul(p_a_1, z_b_l2_norm, transpose_a=True)
+            #D_pb1_za = tf.matmul(p_b_1, z_a_l2_norm, transpose_a=True)
+            #D_za_zb = tf.matmul(z_a_l2_norm, z_b_l2_norm, transpose_a=True)
+            loss = 0.5 * D_p_a_p_b + 0.5 * D_z_a_z_b
+            loss = 0.5 * D_1 + 0.5 * D_2 # + 0.1 *D_p_a_p_b
+            loss = 0.5 * D_1_z + 0.5 * D_2_z #+ 0.1 *D_p_a_p_b #+0.2 * 1-D_pres1 #+ 0.1 -(tf.abs(D_pres1 - D_z_a_z_b))
+            #loss = 0.49 * D_p_a_p_b + 0.01 * -D_z_a_z_b + 0.49 * (0.5 * D_1_z_ + 0.5 * D_2_z_)
+            #loss = 1 * D_a_zb + 1 * D_b_zb - (10 *       tf.abs( std_axis_0_mean -(1/(tf.sqrt(128.0))))) + (D_p_a_p_b - D_z_a_z_b) + D_pres1
+            #loss = 0.5 * D_a_zb + 0.5 * D_b_zb - (10 * tf.abs( std_axis_0_mean -(1/(tf.sqrt(128.0))))) + 0.5  * D_p_a_p_b + 0.5 * D_pres1 #+ 0.4*(D_p_a_p_b - D_z_a_z_b) + 0.4 * D_pres1
+            #loss = 0.45 * D_p_a_p_b + 0.1 * -D_z_a_z_b + 0.45 * (0.5 * D_1_z_ + 0.5 * D_2_z_)
+            #loss = 0.5 * D_a_zb2 + 0.5 * D_b_zb2
+            loss = 2* (0.5 * D_a_zb2 + 0.5 * D_b_zb2) - (0.5 * D_a_zb_neg + 0.5 * D_b_zb_neg) + 2* D_p_a_p_b - (10 * tf.abs( std_axis_0_mean -(1/(tf.sqrt(128.0)))))
+            #loss = D_p_a_p_b
+            #tf.print("Loss:", loss, "D_p_a_p_b: ", D_p_a_p_b, "(0.5 * D_1 + 0.5 * D_2):", 0.5 * D_1 + 0.5 * D_2,"D_z_a_z_b:",D_z_a_z_b,"D_pres:",D_pres1,D_pres2,D_pres3)
+            #tf.print("Loss:", loss, "D_p_a_p_b: ", D_p_a_p_b, "0.5 * D_1 + 0.5 * D_2:", 0.5 * D_1 + 0.5 * D_2," 0.5 * D_1_z + 0.5 * D_2_z:", 0.5 * D_1_z + 0.5 * D_2_z,"D_z_a_z_b:",D_z_a_z_b,"D_pres:",D_pres1)
+            #tf.print("Loss:", tf.reduce_mean(loss), "D_p_a_p_b: ", tf.reduce_mean(D_p_a_p_b), "(0.5 * D_1 + 0.5 * D_2):", tf.reduce_mean(0.5 * D_1 + 0.5 * D_2),"D_z_a_z_b:",tf.reduce_mean(D_z_a_z_b),"D_pres:",tf.reduce_mean(D_pres1),tf.reduce_mean(D_pres2),tf.reduce_mean(D_pres3))
+            #tf.print("Loss:", tf.reduce_mean(loss), "D_p_a_p_b: ", tf.reduce_mean(D_p_a_p_b), "(0.5 * D_1 + 0.5 * D_2):", tf.reduce_mean(0.5 * D_1 + 0.5 * D_2), "(0.5 * D_1_z + 0.5 * D_2_z):", tf.reduce_mean(0.5 * D_1_z + 0.5 * D_2_z),"D_z_a_z_b:",tf.reduce_mean(D_z_a_z_b),"D_pres:",tf.reduce_mean(D_pres1))
+            #tf.print("Loss:", tf.reduce_mean(loss), "D_p_a_p_b: ", tf.reduce_mean(D_p_a_p_b), "(0.5 * D_1 + 0.5 * D_2):", tf.reduce_mean(0.5 * D_1 + 0.5 * D_2),"(0.5 * D_a_zb_neg + 0.5 * D_b_zb_neg):", tf.reduce_mean(0.5 * D_a_zb_neg + 0.5 * D_b_zb_neg), "(0.5 * D_a_zb2 + 0.5 * D_b_zb2):", tf.reduce_mean(0.5 * D_a_zb2 + 0.5 * D_b_zb2),"D_z_a_z_b:",tf.reduce_mean(D_z_a_z_b),"D_pres:",tf.reduce_mean(D_pres1))
+            # Term 1: extract underlying normal state  - should be similar, maximize towards 1
+            term_1 = D_p_a_p_b
+            '''
+            loss = (0.5 * D_pa1_zb + 0.5 * D_pb1_za)
+            # Term 2: residuals should be different, distance is used which is zero if similar and 2 if dissimilar
+            # term_2 = 0.5 * ((1 / 3 * (1 - D_p_a_x_p_b_x_1)) + 1 / 3 * (1 - D_p_a_x_p_b_x_2) + 1 / 3 * (1 - D_p_a_x_p_b_x_3))
+
+
+            # Reg for term2: if underlying is similar (D_z_a_z_b == 1) then term_2 should also be similar : i.e. term_2_sim is used
+            # if underlying is dissimilar, then (D_z_a_z_b == -1)
+            '''
+            term_2_sim = ((1 / 3 * (D_p_a_x_p_b_x_1)) + 1 / 3 * (D_p_a_x_p_b_x_2) + 1 / 3 * (D_p_a_x_p_b_x_3))
+            term_2_dis = ((1 / 3 * (- D_p_a_x_p_b_x_1)) + 1 / 3 * (- D_p_a_x_p_b_x_2) + 1 / 3 * (- D_p_a_x_p_b_x_3))
+            reg_res_error = tf.clip_by_value(1 - D_z_a_z_b, clip_value_min=0, clip_value_max=1)
+            term_2_reg = (((1-reg_res_error) * term_2_sim) + ((reg_res_error) * term_2_dis))
+            term_2_be_same = (term_2_sim * D_z_a_z_b)
+            '''
+            # Cosine distance acc. https://docs.scipy.org/doc/scipy/reference/generated/scipy.spatial.distance.cosine.html
+            #loss = 0.5 * term_1 + 0.5 * term_2
+            #loss = 0.5 * term_1 + 0.5 * (term_2_sim * D_z_a_z_b)
+            #loss = D_z_a_z_b
+
+            #tf.print("Loss:", loss, "D_p_a_p_b: ", term_1, "D_p_a_x_p_b_x:", term_2,"term_2_be_same:", term_2_be_same)
+            #tf.print("Loss:", tf.reduce_mean(loss),"D_p_a_p_b: ", tf.reduce_mean(term_1), "D_p_a_x_p_b_x:", tf.reduce_mean(term_2),"term_2_be_same:", tf.reduce_mean(term_2_be_same))
+
+            # old
+            #loss = (0.5 * D_pa1_zb + 0.5 * D_pb1_za) # + 1- D_p_a_x_p_b_x # * (D_za_zb)
+            ''' PROOF
+            cosine = tf.keras.losses.CosineSimilarity()
+            loss_1 = cosine(p_a, z_b)
+            loss_2 = cosine(p_b, z_a)
+            loss_1_2 = (0.5 * loss_1 + 0.5 * loss_2)
+            tf.print("loss_old: ", tf.reduce_mean(loss_old),"vs. loss new:", loss_1_2)
+            '''
+
+            #tf.print("Loss: ", loss, tf.shape(loss))
+            '''
+            if self.training == True:
+                sim = loss
+            else:
+                sim = loss * -1
+            # sim = tf.exp(-tf.reduce_mean(warped_dists))
+            '''
+            sims_batch = loss# sim
+        #'''
+            # Barlow Twins / normalize over batch dimension
+        elif self.config.complex_measure == ComplexSimilarityMeasure.BARLOW_TWIN:
+            #tf.print("context_vectors shape: ", tf.shape(context_vectors))
+            #context chape (2*Batchsize, dim)
+            # Wird hier nicht gebraucht, da für jedes Beispiel einzeln: context_vectors = tf.math.l2_normalize(context_vectors, axis=0)
+            #context_vectors = tf.math.l2_normalize(context_vectors, axis=0)
+            entries_a = np.arange(0,context_vectors.shape[0],2)
+            entries_b = np.arange(1, context_vectors.shape[0], 2)
+            a = tf.gather(context_vectors, entries_a) #context_vectors[entries_a, :, 0]
+            b = tf.gather(context_vectors, entries_b) #context_vectors[entries_b, :, 0]
+            #tf.print("a shape: ", tf.shape(a))
+            #tf.print("b shape: ", tf.shape(b))
+            a = tf.squeeze(a)
+            b = tf.squeeze(b)
+            z_a_norm = (a - tf.reduce_mean(a, axis=0)) / tf.math.reduce_std(a, axis=0)  # (b, i) # should: NxD
+            z_b_norm = (b - tf.reduce_mean(b, axis=0)) / tf.math.reduce_std(b, axis=0)  # (b, j) # should: NxD
+            #z_a_norm = tf.expand_dims(z_a_norm,-1)
+            #z_b_norm = tf.expand_dims(z_b_norm, -1)
+            #tf.print("a shape: ", tf.shape(z_a_norm))
+            #tf.print("b shape: ", tf.shape(z_b_norm))
+            context_vectors = tf.concat([z_a_norm,z_b_norm],axis=0)
+            #tf.print("context_vectors shape: ", tf.shape(context_vectors))
+
+            N = tf.shape(z_a_norm)[0]
+            D = tf.shape(z_b_norm)[1]
+
+            ###
+            # According to: https://github.com/PaperCodeReview/BarlowTwins-TF/blob/main/model.py
+            '''
+            # cross-correlation matrix
+            c_ij = tf.einsum('bi,bj->ij',
+                             tf.math.l2_normalize(z_a_norm, axis=0),
+                             tf.math.l2_normalize(z_b_norm, axis=0)) /C  # (i, j)
+
+            # loss
+            # for obtaining loss with one-step
+            # c_ij = tf.where(
+            #     tf.cast(eye, tf.bool),
+            #     tf.square(1. - c_ij),
+            #     tf.square(c_ij) * self.args.loss_weight)
+            # loss_barlowtwins = tf.reduce_sum(c_ij)
+
+            # for separating invariance and reduction
+            loss_invariance = tf.reduce_sum(tf.square(1. - tf.boolean_mask(c_ij, tf.eye(D, dtype=tf.bool))))
+            loss_reduction = tf.reduce_sum(tf.square(tf.boolean_mask(c_ij, ~tf.eye(D, dtype=tf.bool))))
+
+            loss_barlowtwins = loss_invariance +  0.0005 * loss_reduction
+            sims_batch = tf.tile([loss_barlowtwins], [tf.cast(N / 2, tf.int32)])
+            ###
+            '''
+            # from: https://github.com/IgorSusmelj/barlowtwins/blob/main/loss.py
+            c = tf.matmul(tf.transpose(z_a_norm), z_b_norm) / tf.cast(N/2, tf.float32)
+            #tf.print("c shape: ", tf.shape(c))
+            c_diff = tf.math.pow((c - tf.eye(D)),2)
+            #tf.print("c_diff shape: ", tf.shape(c_diff))
+            c_diff__ = tf.boolean_mask(c_diff, tf.eye(D, dtype=tf.bool))
+            c_diff_ = tf.boolean_mask(c_diff, ~tf.eye(D, dtype=tf.bool)) * 0.005
+            c_diff = tf.reduce_sum(c_diff)
+            c_diff_ = tf.reduce_sum(c_diff_)
+            c_diff__ = tf.reduce_sum(c_diff__)
+            #tf.print("c_diff: ", c_diff, "c_diff_: ", c_diff_, "c_diff__: ", c_diff__)
+            loss = c_diff + c_diff__
+            #loss = loss /tf.cast(N/2, tf.float32)
+            '''
+            # Multiply all values of c_diff that are not on its diagonal
+            c_diff_ = c_diff * 0.0005
+            c_diff__ = tf.multiply(tf.eye(D), c_diff)
+
+            ones = tf.ones((D,D))
+            ones_ = ones - tf.eye(D)
+            c_diff__ = tf.multiply(tf.eye(D), c_diff__)
+            #tf.print("sum3", tf.reduce_sum(c_diff_))
+            c_diff = c_diff_ * ones_ + c_diff__
+            tf.print("c_diff shape: ", c_diff.shape)
+            #c_diff *= tf.eye(D)
+
+            #c_diff[tf.eye(D, dtype=bool)]
+            loss = tf.reduce_sum(c_diff)
+            '''
+
+            #sims_batch = tf.tile(loss,[tf.cast(N/2, tf.int32)])
+            sims_batch = tf.tile([loss],[tf.cast(N/2, tf.int32)])
+
+            #tf.print("sims_batch shape: ", sims_batch.shape)
+
+        else:
+            sims_batch = tf.map_fn(lambda pair_index: self.get_sim_pair(context_vectors, pair_index), tf.range(examples_in_batch, dtype=tf.int32), back_prop=True,
+                                   #fn_output_signature=(tf.float32,tf.TensorSpec((1,10), dtype=tf.float32))) # Bei What mit 50 Neuronen
+                                   fn_output_signature= tf.float32)
+        #sims_batch = sims_batch[0]
+        #print("sims_batch: ", sims_batch[0].shape, "what: ", sims_batch[1].shape)
+        #tf.print("sims_batch: ", sims_batch)
+        #tf.print("sims_batch[1]: ", sims_batch.shape) # SimSiam mit Complex Sim: [BS, 1, 1]
+        #sims_batch = sims_batch[0]
+        sims_batch #+ center_loss
         return sims_batch
     # This method allows to insert/add additional data which are the same for every training example
     # e.g. adjacency matrices if graph neural networks are used
@@ -260,7 +601,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
             # Add static attribute features
             asaf_with_batch_dim = self.dataset.get_static_attribute_features(batchsize=batch[0].shape[0])
             batch = [batch[0], batch[1], batch[2], batch[3],batch[4], asaf_with_batch_dim]
-            #print("batch[0]: ", batch[0].shape, "batch[1]: ", batch[1].shape, "batch[2]: ", batch[2].shape, "batch[3]: ", batch[3].shape)
+            #print("batch[0]: ", batch[0].shape, "batch[1]: ", batch[1].shape, "batch[2]: ", batch[2].shape, "batch[3]: ", batch[3].shape, "batch[4]: ", batch[4].shape, "batch[5]: ", batch[5].shape)
         else:
             examples_in_batch = batch.shape[0] // 2
 
@@ -300,8 +641,13 @@ class SimpleSNN(AbstractSimilarityMeasure):
 
         # Results of this encoder are one dimensional: ([batch], features)
         elif self.encoder.hyper.encoder_variant in ['graphcnn2d', 'graphattributeconvolution']:
-            a = context_vectors[2 * pair_index, :]
-            b = context_vectors[2 * pair_index + 1, :]
+            print("self.config.type_of_loss_function: ", self.config.type_of_loss_function)
+            if self.config.type_of_loss_function == LossFunction.COSINE_LOSS: # Cosine
+                a = context_vectors[0][2 * pair_index, :]
+                b = context_vectors[0][2 * pair_index + 1, :]
+            else:
+                a = context_vectors[2 * pair_index, :]
+                b = context_vectors[2 * pair_index + 1, :]
 
         else:
             a = context_vectors[2 * pair_index, :, :]
@@ -315,6 +661,11 @@ class SimpleSNN(AbstractSimilarityMeasure):
         # Time-step wise (each time-step of a is compared each time-step of b) (from NeuralWarp FFNN)
         if self.config.use_time_step_wise_simple_similarity:
             a, b = self.transform_to_time_step_wise(a, b)
+
+        # Time-step matching
+        if self.config.use_time_step_matching_simple_similarity:
+            a, b, a_weights, b_weights = self.match_time_step_wise(a, b, training= self.training)
+
 
         return self.simple_sim.get_sim(a, b, a_weights, b_weights, a_context, b_context, w)
 
@@ -332,6 +683,67 @@ class SimpleSNN(AbstractSimilarityMeasure):
         b = tf.gather(b, indices_b)
 
         return a, b
+
+    @tf.function
+    def match_time_step_wise(self, a, b, training=False):
+        # a and b shape: [T, C] where T is length of time dimension and C number of (deep) features
+
+        attention_a, attention_b = None, None
+        for num_of_matching in range(self.config.num_of_matching_iterations):
+            #tf.print("num_of_matching: ", num_of_matching)
+            #tf.print("a: ", a)
+            #tf.print("b: ", b)
+            #tf.print("a mean:",tf.reduce_mean(a), "a max:",tf.reduce_max(a), "a min:",tf.reduce_min(a))
+            #tf.print("b mean:", tf.reduce_mean(b), "b max:", tf.reduce_max(b), "b min:", tf.reduce_min(b))
+
+            attention_a, attention_b = self.simple_sim.compute_cross_attention(a, b, self.config.simple_measure_matching, use_window=False)
+            # print("Attention A shape:", attention_a.shape, "Attention B shape:", attention_b.shape)
+
+            '''
+            if training:
+                attention_a = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(attention_a)
+                attention_b = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate)(attention_b)
+            '''
+
+            # Subtract attention from original input
+            #u_a = tf.subtract(a, attention_a)
+            # u_b = tf.subtract(b, attention_b)
+            '''
+            u_a = tf.abs(a - attention_a)
+            u_b = tf.abs(b - attention_b)
+            u_a = tf.clip_by_value(u_a, clip_value_min=1e-12, clip_value_max=10-(1e-12) )
+            u_b = tf.clip_by_value(u_b, clip_value_min=1e-12, clip_value_max=10-(1e-12) )
+            '''
+            #a = u_a
+            #b = u_a
+            #tf.print("attention_a: ", attention_a)
+            #tf.print("attention_b: ", attention_b)
+            #tf.print("u_a mean:",tf.reduce_mean(u_a), "attention_a mean: ", tf.reduce_mean(attention_a), "u_a max:",tf.reduce_max(u_a), "u_a min:",tf.reduce_min(u_a), "attention_a max:",tf.reduce_max(attention_a), "attention_a min:",tf.reduce_min(attention_a))
+            #tf.print("u_b mean:", tf.reduce_mean(u_b), "attention_b mean: ", tf.reduce_mean(attention_b), "u_b max:",tf.reduce_max(u_b), "u_b min:",tf.reduce_min(u_b), "attention_b max:",tf.reduce_max(attention_b), "attention_b min:",tf.reduce_min(attention_b))
+            #distance_a = tf.reduce_mean(a)
+            #distance_b = tf.reduce_mean(b)
+            #distance = (distance_a + distance_b) / 2
+            #sim = tf.exp(-5 * distance)
+            #tf.print("distance_a: ", distance_a, "distance_b: ", distance_b, "distance: ", distance, "sim: ", sim)
+
+        if self.config.simple_matching_aggregator == "none_attention_only":
+            input_a = a
+            input_b = b
+        elif self.config.simple_matching_aggregator == "none":
+            input_a = u_a
+            input_b = u_b
+        elif self.config.simple_matching_aggregator == "sum":
+            input_a = tf.reduce_sum(u_a, axis=0, keepdims=True)
+            input_b = tf.reduce_sum(u_b, axis=0, keepdims=True)
+        elif self.config.simple_matching_aggregator == "mean":
+            input_a = tf.reduce_mean(u_a, axis=0, keepdims=True)
+            input_b = tf.reduce_mean(u_b, axis=0, keepdims=True)
+        else:
+            raise ValueError("Error: No aggregator function with name: ", self.config.simple_matching_aggregator,
+                             " found!")
+
+        return input_a, input_b, attention_a, attention_b
+
 
     # Called by Dataset encode() to output encoded data of the input data in size of batches
     def encode_in_batches(self, raw_data):
@@ -361,6 +773,12 @@ class SimpleSNN(AbstractSimilarityMeasure):
             # Calculation of assignments of pair indices to similarity value indices
 
             if self.hyper.encoder_variant == 'cnn2dwithaddinput':
+                #print("raw_data: ", raw_data[0].shape)
+                #print("raw_data: ", raw_data[1].shape)
+                #print("raw_data: ", raw_data[2].shape)
+                #print("raw_data: ", raw_data[3].shape)
+                #print("raw_data: ", raw_data[4].shape)
+                #print("raw_data: ", raw_data[5].shape)
                 subsection_examples = raw_data[0][index:index + batch_size]
                 subsection_aux_input = raw_data[1][index:index + batch_size]
                 subsection_batch = [subsection_examples, subsection_aux_input]
@@ -434,6 +852,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
         elif self.hyper.encoder_variant == 'cnn2d':
             self.encoder = CNN2D(self.hyper, input_shape_encoder)
         elif self.hyper.encoder_variant == 'graphcnn2d':
+            print("self.dataset.owl2vec_embedding_dim: ", self.dataset.owl2vec_embedding_dim)
             input_shape_encoder = [(self.hyper.time_series_length, self.hyper.time_series_depth),
                                    (self.hyper.time_series_depth,),(5,),
                                    (self.dataset.owl2vec_embedding_dim, self.hyper.time_series_depth)]
@@ -480,7 +899,6 @@ class SimpleSNN(AbstractSimilarityMeasure):
             raise AttributeError('Unknown encoder variant:', self.hyper.encoder_variant)
 
         self.encoder.create_model()
-
         # load weights if snn that isn't training
         if not self.training and not for_cbs:
             self.encoder.load_model_weights(model_folder)
@@ -548,6 +966,14 @@ class SimpleSNN(AbstractSimilarityMeasure):
                 else:
                     self.complex_sim_measure = Cnn2DWithAddInput_Network_OnTop(self.hyper, input_shape)
 
+            elif self.config.complex_measure == ComplexSimilarityMeasure.SIMPLE_SIAM:
+                #input_shape = (encoder_output_shape[1],1)
+                self.complex_sim_measure = FFNN_SimpleSiam_Prediction_MLP(self.hyper, (128))
+                #self.complex_sim_measure = FFNN_SimpleSiam_Prediction_MLP(self.hyper, [(128,), (128,)])
+
+            elif self.config.complex_measure == ComplexSimilarityMeasure.BARLOW_TWIN:
+                #input_shape = (encoder_output_shape[1],1)
+                self.complex_sim_measure = FFNN_BarlowTwin_MLP_Dummy(self.hyper, (576))
 
             self.complex_sim_measure.create_model()
 
@@ -599,7 +1025,13 @@ class SNN(SimpleSNN):
                 #if self.hyper.useAddContextForSim == "True":
                     #a_2 = context_vectors[6][2 * pair_index, :]
                     #b_2 = context_vectors[6][2 * pair_index + 1, :]
-
+        elif self.hyper.encoder_variant == 'graphcnn2d':
+            a = context_vectors[0][2 * pair_index, :]
+            b = context_vectors[0][2 * pair_index + 1, :]
+            c = context_vectors[1][2 * pair_index, :]
+            d = context_vectors[1][2 * pair_index + 1, :]
+            e = context_vectors[2][2 * pair_index, :]
+            f = context_vectors[2][2 * pair_index + 1, :]
         else:
             a = context_vectors[2 * pair_index, :, :]
             b = context_vectors[2 * pair_index + 1, :, :]
@@ -944,10 +1376,309 @@ class SNN(SimpleSNN):
             else:
                 raise ValueError('Use Case not implemented:', use_case)
 
+        elif self.config.complex_measure == ComplexSimilarityMeasure.SIMPLE_SIAM:
+            if self.config.use_pairwise_sim_siam:
+                # Simple Siam Prediction MLP
+                z_a = a
+                z_b = b
+                # (64,1)
+                if self.hyper.encoder_variant == 'graphcnn2d':
+                    z_a = tf.expand_dims(z_a, -1)
+                    z_b = tf.expand_dims(z_b, -1)
+                #tf.print("z_a", z_a)
+                #tf.print("z_a shape:", tf.shape(z_a))
+
+                # Stop Gradient (c.f. Eq. 3, input to D() is z with "stopped" gradient calculation)
+                #if np.random.binomial(1, 1) == 1: # high value result in more ones
+                #z_a = tf.stop_gradient(z_a)
+                #z_b = tf.stop_gradient(z_b)
+
+                # Transpose to get 1 as batch dimension for input into prediction mlp
+                z_a_t = tf.transpose(z_a)
+                z_b_t = tf.transpose(z_b)
+                #(1,64)
+                #tf.print("z_a transposed shape:", tf.shape(z_a_t))
+                #p_a = self.complex_sim_measure.model([z_a_t, tf.stop_gradient(z_b_t)], training=self.training)
+                #tf.print(z_a_t)
+                p_a = self.complex_sim_measure.model(z_a_t, training=self.training)
+                #p_a_recon = self.complex_sim_measure.model(z_a_t, training=self.training)
+                #p_a = p_a_recon[0]
+                #recon_a = p_a_recon[1]
+                #tf.print(p_a)
+                #p_b = self.complex_sim_measure.model([z_b_t, tf.stop_gradient(z_a_t)], training=self.training)
+                p_b = self.complex_sim_measure.model(z_b_t, training=self.training)
+                #p_b_recon = self.complex_sim_measure.model(z_b_t, training=self.training)
+                #p_b = p_b_recon[0]
+                #recon_b = p_b_recon[1]
+                # (1,64)
+                #p_a = tf.transpose(p_a)
+                #p_b = tf.transpose(p_b)
+                #tf.print("p_a", p_a)
+                #tf.print("p_a shape:", tf.shape(p_a[0]))
+
+                # single view
+                p_a_1 = tf.math.l2_normalize(tf.transpose(p_a), axis=0)
+                p_b_1 = tf.math.l2_normalize(tf.transpose(p_b), axis=0)
+                z_a_l2_norm = tf.math.l2_normalize(z_a, axis=0)
+                z_b_l2_norm = tf.math.l2_normalize(z_b, axis=0)
+                if self.config.stop_gradient:
+                    D_pa1_zb = tf.matmul(p_a_1, tf.stop_gradient(z_b_l2_norm), transpose_a=True)
+                    D_pb1_za = tf.matmul(p_b_1, tf.stop_gradient(z_a_l2_norm), transpose_a=True)
+                else:
+                    D_pa1_zb = tf.matmul(p_a_1, z_b_l2_norm, transpose_a=True)
+                    D_pb1_za = tf.matmul(p_b_1, z_a_l2_norm, transpose_a=True)
+                # L1
+                #D_pa1_zb = tf.reduce_mean(tf.abs(p_a_1 - z_b))
+                #D_pb1_za = tf.reduce_mean(tf.abs(p_b_1 - z_a))
+
+                # multiple views
+                '''
+                p_a_1 = tf.math.l2_normalize(tf.transpose(p_a[0]), axis=0)
+                p_a_2 = tf.math.l2_normalize(tf.transpose(p_a[1]), axis=0)
+                p_a_3 = tf.math.l2_normalize(tf.transpose(p_a[2]), axis=0)
+                #x_a_1 = tf.math.l2_normalize(tf.transpose(p_a[3]), axis=0)
+                #x_a_2 = tf.math.l2_normalize(tf.transpose(p_a[4]), axis=0)
+                #x_a_3 = tf.math.l2_normalize(tf.transpose(p_a[5]), axis=0)
+                p_b_1 = tf.math.l2_normalize(tf.transpose(p_b[0]), axis=0)
+                p_b_2 = tf.math.l2_normalize(tf.transpose(p_b[1]), axis=0)
+                p_b_3 = tf.math.l2_normalize(tf.transpose(p_b[2]), axis=0)
+                #x_b_1 = tf.math.l2_normalize(tf.transpose(p_b[3]), axis=0)
+                #x_b_2 = tf.math.l2_normalize(tf.transpose(p_b[4]), axis=0)
+                #x_b_3 = tf.math.l2_normalize(tf.transpose(p_b[5]), axis=0)
+                z_a_l2_norm = tf.math.l2_normalize(z_a, axis=0)
+                z_b_l2_norm = tf.math.l2_normalize(z_b, axis=0)
+    
+                D_pa1_zb = tf.matmul(p_a_1, tf.stop_gradient(z_b_l2_norm), transpose_a=True)
+                D_pa2_zb = tf.matmul(p_a_2, tf.stop_gradient(z_b_l2_norm), transpose_a=True)
+                D_pa3_zb = tf.matmul(p_a_3, tf.stop_gradient(z_b_l2_norm), transpose_a=True)
+                D_pb1_za = tf.matmul(p_b_1, tf.stop_gradient(z_a_l2_norm), transpose_a=True)
+                D_pb2_za = tf.matmul(p_b_2, tf.stop_gradient(z_a_l2_norm), transpose_a=True)
+                D_pb3_za = tf.matmul(p_b_3,tf.stop_gradient( z_a_l2_norm), transpose_a=True)
+                D_za_zb = tf.matmul(z_a_l2_norm, z_b_l2_norm, transpose_a=True)
+    
+                #D_xa1_xa2 = tf.matmul(x_a_1, x_a_2, transpose_a=True)
+                #D_xa1_xa3 = tf.matmul(x_a_1, x_a_3, transpose_a=True)
+                #D_xa2_xa3 = tf.matmul(x_a_2, x_a_3, transpose_a=True)
+                #D_xb1_xb2 = tf.matmul(x_b_1, x_b_2, transpose_a=True)
+                #D_xb1_xb3 = tf.matmul(x_a_1, x_b_3, transpose_a=True)
+                #D_xb2_xb3 = tf.matmul(x_a_2, x_b_3, transpose_a=True)
+    
+                # Compression loss
+                D_pa1_za = tf.matmul(p_a_1, z_a_l2_norm, transpose_a=True)
+                D_pa2_za = tf.matmul(p_a_2, z_a_l2_norm, transpose_a=True)
+                D_pa3_za = tf.matmul(p_a_3, z_a_l2_norm, transpose_a=True)
+                D_pb1_zb = tf.matmul(p_b_1, z_b_l2_norm, transpose_a=True)
+                D_pb2_zb = tf.matmul(p_b_2, z_b_l2_norm, transpose_a=True)
+                D_pb3_zb = tf.matmul(p_b_3, z_b_l2_norm, transpose_a=True)
+    
+                D_pa1_pa2 = tf.matmul(p_a_1, p_a_2, transpose_a=True)
+                D_pa1_pa3 = tf.matmul(p_a_1, p_a_3, transpose_a=True)
+                D_pa2_pa3 = tf.matmul(p_a_2, p_a_3, transpose_a=True)
+                D_pa1_pb1 = tf.matmul(p_a_1, p_a_2, transpose_a=True)
+                D_pa1_pb2 = tf.matmul(p_a_1, p_a_2, transpose_a=True)
+                D_pa1_pb3 = tf.matmul(p_a_1, p_a_2, transpose_a=True)
+                '''
+                # Memory loss
+                '''
+                w_hat_a1 = p_a[6]
+                w_hat_a2 = p_a[7]
+                w_hat_a3 = p_a[8]
+                w_hat_b1 = p_b[6]
+                w_hat_b2 = p_b[7]
+                w_hat_b3 = p_b[8]
+                w_hat_gesamt = (w_hat_a1 + w_hat_a2 + w_hat_a3 + w_hat_b1 + w_hat_b2+ w_hat_b3)/6
+                #tf.print("tf.reduce_mean(w_hat_gesamt): ", tf.reduce_mean(w_hat_gesamt))
+                memory_loss_sparsity_access = tf.reduce_mean((-w_hat_a1) * tf.math.log(w_hat_a1 + 1e-12), axis=-1) + \
+                    tf.reduce_mean((-w_hat_a2) * tf.math.log(w_hat_a2 + 1e-12), axis=-1) + \
+                    tf.reduce_mean((-w_hat_a3) * tf.math.log(w_hat_a3 + 1e-12), axis=-1) + \
+                    tf.reduce_mean((-w_hat_b1) * tf.math.log(w_hat_b1 + 1e-12), axis=-1) + \
+                    tf.reduce_mean((-w_hat_b2) * tf.math.log(w_hat_b2 + 1e-12), axis=-1) + \
+                    tf.reduce_mean((-w_hat_b3) * tf.math.log(w_hat_b3 + 1e-12), axis=-1)
+                mem_storage = p_a[9]
+                #tf.print("Mem Storage Size: ", tf.shape(mem_storage))
+                x = tf.math.l2_normalize(mem_storage, axis=1)
+    
+                y = tf.math.l2_normalize(mem_storage, axis=1)
+                loss = tf.matmul(x, y, transpose_b=True)
+                loss = tf.keras.activations.relu(loss) - (10/100)
+                loss_mem_storage = tf.reduce_mean(loss)
+                #tf.print("Mem Storage loss shape: ", tf.shape(loss),"value: ", loss_mem_storage)
+    
+                '''
+
+                # Compression loss:
+                '''
+                loss3 = (1 / 6) * D_pa1_za + (1 / 6) * D_pa2_za + (1 / 6) * D_pa3_za + \
+                        (1 / 6) * D_pb1_zb + (1 / 6) * D_pb2_zb + (1 / 6) * D_pb3_zb
+                '''
+                # Bottleneck Encoding loss:
+                '''
+                loss2 = (1 / 6) * D_xa1_xa2 + (1 / 6) * D_xa1_xa3 + (1 / 6) * D_xa2_xa3 +\
+                        (1 / 6) * D_xb1_xb2 + (1 / 6) * D_xb1_xb3 + (1 / 6) * D_xb2_xb3
+                loss2_ = (1 / 8) * D_xa1_xa2 + (1 / 8) * D_xa1_xa3 - (2 / 8) * D_xa2_xa3 + \
+                        (1 / 8) * D_xb1_xb2 + (1 / 8) * D_xb1_xb3 - (2 / 8) * D_xb2_xb3
+                loss2_ = (1 / 8) * D_xa1_xa2 + (1 / 8) * D_xa1_xa3 - (2 / 8) * D_xa2_xa3 + \
+                         (1 / 8) * D_xb1_xb2 + (1 / 8) * D_xb1_xb3 - (2 / 8) * D_xb2_xb3
+                '''
+                # Prediction-vs-Embedding loss:
+                # loss1 = 0.25 * D_pa1_zb + 0.25 * D_pa2_zb + 0.25 * D_pb1_za + 0.25 * D_pb2_za
+                '''
+                loss1 = (1 / 6) * D_pa1_zb + (1 / 6) * D_pa2_zb + (1 / 6) * D_pa3_zb + \
+                        (1 / 6) * D_pb1_za + (1 / 6) * D_pb2_za + (1 / 6) * D_pb3_za
+                #Prediction Similarity
+                loss_p = (1 / 6) * D_pa1_pa2 + (1 / 6) * D_pa1_pa3 + (1 / 6) * D_pa2_pa3 + (1 / 6) * D_pa1_pb1 + (
+                            1 / 6) * D_pa1_pb2 + (1 / 6) * D_pa1_pb3
+                '''
+
+                # Regularize loss by data stream distance
+                # c,d 61 x 128
+                #tf.print(tf.shape(e))
+                '''
+                data_stream_distance = tf.reduce_mean(tf.abs(c - d), axis=1)
+                input_stream_distance = tf.reduce_mean(tf.abs(tf.squeeze(e) - tf.squeeze(f)), axis=0)
+
+                input_stream_distance_mean = tf.reduce_mean(input_stream_distance)
+                data_stream_distance_mean = tf.reduce_mean(data_stream_distance)
+                diff_input_latent_ds = tf.abs(input_stream_distance_mean - data_stream_distance_mean)
+                diff_input_latent_ds_2 = tf.reduce_mean(tf.abs(data_stream_distance - input_stream_distance))
+                '''
+                #tf.print("input_stream_distance_mean: ", input_stream_distance_mean)
+                #tf.print("data_stream_distance_mean: ", data_stream_distance_mean)
+                #tf.print("diff_input_latent_ds: ", diff_input_latent_ds)
+                #tf.print("diff_input_latent_ds_2: ", diff_input_latent_ds_2)
+                '''
+                c_norm = tf.math.l2_normalize(c, axis=1)
+                d_norm = tf.math.l2_normalize(d, axis=1)
+                cd = tf.reduce_sum(tf.multiply(c_norm, d_norm))
+                tf.print(tf.shape(cd))
+                tf.print(cd)
+                #tf.print(tf.shape(data_stream_distance))
+                tf.print(tf.reduce_mean(data_stream_distance))
+                '''
+                # Single view / predictor:
+                loss1 = 0.5 * D_pb1_za + 0.5 * D_pa1_zb #+ diff_input_latent_ds_2
+
+                # recon
+                mse = tf.keras.losses.MeanSquaredError()
+
+                #a_e = tf.reduce_mean(tf.squared_difference(recon_a, e))
+                #b_f = tf.reduce_mean(tf.squared_difference(recon_b, f))
+                #a_e = mse(p_a, tf.transpose(e, perm=[0, 2, 1]))
+                #b_f = mse(p_b, tf.transpose(f, perm=[0, 2, 1]))
+                #tf.print(a_e, b_f)
+                loss1 = 0.5 * D_pb1_za + 0.5 * D_pa1_zb  #+ 0.1 * a_e + 0.1 * b_f
+
+                #loss1 = 0.5 * tf.abs(D_pb1_za + 1- diff_input_latent_ds_2) + 0.5 * tf.abs(D_pa1_zb + 1 - diff_input_latent_ds_2) + diff_input_latent_ds_2
+                # loss1 = (1/7) * D_pa1_zb + (1/7) * D_pa2_zb + (1/7) * D_pb1_za + (1/7) * D_pb2_za + (1/7) * D_pa3_zb + (1/7) * D_pb3_za + (1/7) * D_za_zb
+                #loss = (1/3) * loss1 + (1/3) * loss3 - (1/3)* D_za_zb + 0.1 * loss2
+                loss = loss1 #+ 0.5 * tf.abs(0- loss3) #+ memory_loss_sparsity_access#+ tf.abs(0- loss3) #- memory_loss_sparsity_access #+ loss_mem_storage #+ 0.1 * loss2 #+ memory_loss # + 0.5* loss3 #+ 0.1 * loss2 #tf.clip_by_value(loss2_,0,1) # loss2
+                #loss = - 0.5 * D_za_zb + 0.5 * loss3
+                #tf.print("loss gesamt: ", loss, " | loss 1: ", loss1, " | loss 2: ", loss2, " | loss 2_: ", tf.clip_by_value(loss2_,0,1), " loss 3: ", loss3," | D_za_zb: ", D_za_zb, "loss p:", loss_p)
+                #tf.print("loss: ", loss, "loss1: ", loss1, "loss3: ", loss3) #, "loss_mem_storage: ", loss_mem_storage, "memory_loss_sparsity_access: ", memory_loss_sparsity_access)
+
+                #loss = tf.concat([loss, tf.expand_dims(tf.expand_dims(tf.cast(w_hat_gesamt[tf.argmax(w_hat_gesamt)],tf.float32),-1),-1)], axis=0)
+
+                '''
+                p_a_1 = tf.math.l2_normalize(tf.transpose(p_a), axis=0)
+                p_b_1 = tf.math.l2_normalize(tf.transpose(p_b), axis=0)
+                z_a_l2_norm = tf.math.l2_normalize(z_a, axis=0)
+                z_b_l2_norm = tf.math.l2_normalize(z_b, axis=0)
+                D_pa1_zb = tf.matmul(p_a_1, z_b_l2_norm, transpose_a=True)
+                D_pb1_za = tf.matmul(p_b_1, z_a_l2_norm, transpose_a=True)
+                D_za_zb = tf.matmul(z_a_l2_norm, z_b_l2_norm, transpose_a=True)
+                D_pa_za = tf.matmul(p_a_1, z_a_l2_norm, transpose_a=True)
+                D_pb_zb = tf.matmul(p_b_1, z_b_l2_norm, transpose_a=True)
+                D_pa_pb = tf.matmul(p_a_1, p_b_1, transpose_a=True)
+                
+    
+                #loss = 0.5 * D_pa1_zb + 0.5 * D_pb1_za #* (D_za_zb)
+                loss_ = 0.5 * D_pa1_zb + 0.5 * D_pb1_za  # * (D_za_zb)
+                loss2 = 0.5 * D_pa_za + 0.5 * D_pb_zb
+                loss = (1/3) * loss_ + (1/3) * loss2 - (1/3) * D_za_zb
+                tf.print("loss gesamt: ", loss, "loss_: ",loss_," | D_za_zb: ", D_za_zb, " | D_pa_za 2: ", D_pa_za, " D_pb_zb 3: ", D_pb_zb,"D_pa_pb: ", D_pa_pb)
+                #         " | D_za_zb: ", D_za_zb, )
+                '''
+                #self.memory_access_pattern = self.memory_access_pattern + w_hat_gesamt
+                # tf.print("Loss: ", loss)
+                if self.training == True:
+                    sim = loss
+                else:
+                    sim = loss * -1
+                #sim = tf.exp(-tf.reduce_mean(warped_dists))
+
+        elif self.config.complex_measure == ComplexSimilarityMeasure.BARLOW_TWIN:
+            # Code based on: https://github.com/PaperCodeReview/BarlowTwins-TF/blob/main/model.py
+            # Missing: weight decay
+
+            #tf.print(tf.shape(a))
+            z_a = self.complex_sim_measure.model(a, training=self.training)
+            z_b = self.complex_sim_measure.model(b, training=self.training)
+            #tf.print(tf.shape(z_a))
+            z_a = tf.transpose(z_a)
+            z_b = tf.transpose(z_b)
+            #tf.print(tf.shape(z_a))
+
+            if self.hyper.encoder_variant == 'graphcnn2d':
+                z_a = tf.expand_dims(z_a,-1)
+                z_b = tf.expand_dims(z_b, -1)
+
+            N = tf.shape(z_a)[0]
+            D = tf.shape(z_a)[1]
+            #tf.print("D: ". tf.shape(z_a)[1], "N: ", tf.shape(z_a)[0])
+
+            # normalize repr. along the batch dimension
+            #z_a_norm = (z_a - tf.reduce_mean(z_a, axis=1)) / tf.math.reduce_std(z_a, axis=1)  # (b, i) # should: NxD
+            #z_b_norm = (z_b - tf.reduce_mean(z_b, axis=1)) / tf.math.reduce_std(z_b, axis=1)  # (b, j) # should: NxD
+
+            #tf.print(tf.shape(z_a_norm))
+            #tf.print("sum1", tf.reduce_sum(z_a_norm))
+
+            c = tf.matmul(z_a, tf.transpose(z_b)) / tf.cast(1024, tf.float32)
+            c_diff = tf.math.pow((c - tf.eye(D)),2)
+            #tf.print("sum2", tf.reduce_sum(c))
+            # Multiply all values of c_diff that are not on its diagonal
+            c_diff_ = c_diff * 0.005
+            c_diff__ = tf.multiply(tf.eye(D), c_diff)
+
+            ones = tf.ones((D,D))
+            ones_ = ones - tf.eye(D)
+            c_diff__ = tf.multiply(tf.eye(D), c_diff__)
+            #tf.print("sum3", tf.reduce_sum(c_diff_))
+            c_diff = c_diff_ * ones_ + c_diff__
+            #tf.print("c_diff shape: ", c_diff.shape)
+            #c_diff *= tf.eye(D)
+
+            #c_diff[tf.eye(D, dtype=bool)]
+            loss = tf.reduce_sum(c_diff)
+            #tf.print("loss", loss)
+            # from: https://github.com/IgorSusmelj/barlowtwins/blob/main/loss.py
+            '''
+            # cross-correlation matrix
+            c_ij = tf.einsum('bi,bj->ij',
+                             tf.math.l2_normalize(a, axis=0),
+                             tf.math.l2_normalize(b, axis=0)) / tf.cast(1024, tf.float32)  # (i, j)
+
+            # for separating invariance and reduction
+            loss_invariance = tf.reduce_sum(tf.square(1. - tf.boolean_mask(c_ij, tf.eye(576, dtype=tf.bool))))
+            loss_reduction = tf.reduce_sum(tf.square(tf.boolean_mask(c_ij, ~tf.eye(576, dtype=tf.bool))))
+
+            loss_barlowtwins = loss_invariance + 0.005 * loss_reduction
+            # weight decay: 0.0000015
+            loss = loss_barlowtwins
+            '''
+            if self.training == True:
+                sim = loss
+                #tf.print(sim)
+            else:
+                sim = loss * -1
+            #sim = tf.exp(-tf.reduce_mean(warped_dists))
+
+
         else:
             raise ValueError('Complex similarity measure not implemented:', self.config.complex_measure)
 
-        return sim
+
+        return sim#, w_hat_gesamt
 
     def print_detailed_model_info(self):
         print('')

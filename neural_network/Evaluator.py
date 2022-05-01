@@ -3,7 +3,7 @@ import pandas as pd
 from sklearn import metrics
 
 from neural_network.Dataset import FullDataset
-
+from sklearn.metrics import roc_auc_score, auc, average_precision_score, precision_recall_curve
 
 class Evaluator:
 
@@ -31,6 +31,8 @@ class Evaluator:
 
         # Sklearn classification report as dictonary
         self.report_dict = None
+
+        self.sim_pred = []
 
         if not self.dataset.is_third_party_dataset:
             self.unique_test_failures = np.unique(self.dataset.failure_times_test)
@@ -94,6 +96,7 @@ class Evaluator:
         # Store this information
         self.y_true.append(true_class)
         self.y_pred.append(max_sim_class)
+        self.sim_pred.append(max_sim)
 
         # Increase the value of this "label pair"
         self.multi_class_results.loc[max_sim_class, true_class] += 1
@@ -209,6 +212,18 @@ class Evaluator:
     # Calculates the final results based on the information added for each example during inference
     # Must be called after inference before print_results is called.
     def calculate_results(self):
+
+        # Calculate roc-auc and pr-auc score
+        y_test_strings = np.expand_dims(self.dataset.y_test_strings, axis=-1)
+        roc_auc_test_DTW = self.calculate_RocAuc(y_test_strings, np.asarray(self.sim_pred), 'cosine')
+        avgpr_test_DTW, pr_auc_test_DTW = self.calculate_PRCurve(y_test_strings, np.asarray(self.sim_pred), 'cosine')
+
+        print("-------------------------------------------------")
+        print("*** roc_auc_test_DTW:", roc_auc_test_DTW, " ***")
+        print("*** avgpr_test_DTW", avgpr_test_DTW, " ***")
+        print("*** pr_auc_test_DTW:", pr_auc_test_DTW, " ***")
+        print("-------------------------------------------------")
+
         # A few auxiliary calculations required to calculate true positive (TP),
         # true negative (TN), false positive (FP) and false negative (FN) values for each class.
 
@@ -281,6 +296,45 @@ class Evaluator:
         self.results.loc['combined', 'FNR'] = self.rate_calculation(fnc, tpc)
         self.results.loc['combined', 'FPR'] = self.rate_calculation(fpc, tnc)
         self.results.loc['combined', 'FDR'] = self.rate_calculation(fpc, tpc)
+
+    def calculate_RocAuc(self, test_failure_labels_y, score_per_example, measure):
+        # Replace 'no_failure' string with 0 (for negative class) and failures (anomalies) with 1 (for positive class)
+        y_true = np.where(test_failure_labels_y == 'no_failure', 0, 1)
+        #print("y_true shape: ", np.asarray(y_true.shape))
+        #print("score_per_example shape: ", score_per_example.shape)
+        y_true = np.reshape(y_true, y_true.shape[0])
+        #y_true = y_true[:2]
+
+        # Normalize anomalie scores (i.e. similarity / or distance values to normal examples) between 0 and 1
+        score_per_example_test_normalized = (score_per_example - np.min(score_per_example)) / np.ptp(score_per_example)
+        #print("score_per_example_test_normalized shape: ", score_per_example_test_normalized.shape)
+        # Calculate Roc-Auc Score
+        if measure == 'cosine':  # output is the similarity (lower value means higher anomaly score)
+            roc_auc_score_value = roc_auc_score(y_true, 1 - score_per_example_test_normalized, average='weighted')
+        else:
+            # In case of l1,l2: output is the distance (higher value means higher anomaly score)
+            roc_auc_score_value = roc_auc_score(y_true, score_per_example_test_normalized, average='weighted')
+        return roc_auc_score_value
+
+    def calculate_PRCurve(self, test_failure_labels_y, score_per_example, measure):
+        # Replace 'no_failure' string with 0 (for negative class) and failures (anomalies) with 1 (for positive class)
+        y_true = np.where(test_failure_labels_y == 'no_failure', 0, 1)
+        y_true = np.reshape(y_true, y_true.shape[0])
+
+        # print("y_true: ", y_true)
+        # print("y_true: ", y_true.shape)
+        # print("mse_per_example_test:", mse_per_example_test.shape)
+        score_per_example_test_normalized = (score_per_example - np.min(score_per_example)) / np.ptp(score_per_example)
+        if measure == 'cosine':  # output is the similarity (lower value means higher anomaly score)
+            avgP = average_precision_score(y_true, 1 - score_per_example_test_normalized, average='weighted')
+            precision, recall, _ = precision_recall_curve(y_true, 1 - score_per_example_test_normalized)
+            auc_score = auc(recall, precision)
+        else:
+            # In case of l1,l2: output is the distance (higher value means higher anomaly score)
+            avgP = average_precision_score(y_true, score_per_example_test_normalized, average='weighted')
+            precision, recall, _ = precision_recall_curve(y_true, score_per_example_test_normalized)
+            auc_score = auc(recall, precision)
+        return avgP, auc_score
 
     @staticmethod
     def rate_calculation(numerator, denominator_part2):

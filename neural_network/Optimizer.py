@@ -121,6 +121,7 @@ class SNNOptimizer(Optimizer):
             model_input = self.architecture.reshape_and_add_aux_input(model_input, 0, aux_input=model_aux_input,
                                                                   aux_input_adj_1=model_aux_input_adj)
 
+        #print("model_input shape: ", model_input[0].shape, model_input[1].shape, model_input[2].shape ,model_input[3].shape, model_input[4].shape)
         batch_loss = self.optimizer_helper.update_single_model(model_input, true_similarities,
                                                                query_classes=model_input_class_strings)
 

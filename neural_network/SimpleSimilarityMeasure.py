@@ -1,4 +1,7 @@
 import tensorflow as tf
+#tf.config.run_functions_eagerly(True)
+import numpy as np
+#import matplotlib.pyplot as plt
 
 # "as SSM" is necessary due to duplicate class names
 from configuration.Enums import SimpleSimilarityMeasure as SSM
@@ -14,6 +17,18 @@ class SimpleSimilarityMeasure:
         self.a_context = None
         self.b_context = None
         self.w = None
+
+        # Create Masking for window in time step matching
+        self.window_size=86 #86 #(232/4) 58
+        final_length=232 #232, 245
+        self.matrix = np.zeros(shape=(final_length, final_length), dtype=np.float)
+        for i in range(final_length):
+            lower = max(0, i - self.window_size)
+            upper = min(final_length, i + self.window_size + 1)
+
+            index_interval = [j for j in range(lower, upper)]
+            self.matrix[i, index_interval] = 1
+            #self.matrix = self.matrix + np.identity(final_length)
 
     @tf.function
     def get_sim(self, a, b, a_weights=None, b_weights=None, a_context=None, b_context=None, w=None):
@@ -55,12 +70,12 @@ class SimpleSimilarityMeasure:
         if use_weighted_sim:
             # Note: only one weight vector is used (a_weights) to simulate a retrieval situation
             # where only weights of the case are known
-            weight_matrix = self.get_weight_matrix(a)
+            # weight_matrix = self.get_weight_matrix(a)
             #a = a / tf.sqrt(tf.math.reduce_sum(tf.square(a), axis=1, keepdims=True) + 1e-8)
             #b = b / tf.sqrt(tf.math.reduce_sum(tf.square(b), axis=1, keepdims=True) + 1e-8)
             diff = tf.abs(a - b)
             # feature (data stream) weighted distance:
-            distance = tf.reduce_mean(weight_matrix * diff)
+            distance = tf.reduce_mean(diff)
 
             if use_additional_sim:
                 # calculate context distance
