@@ -868,6 +868,7 @@ def evaluate_most_relevant_examples(most_relevant_attributes, y_test_labels, dat
                 found_strict_hitrateAtK[i] = num_of_found_entires/amount_data_streams_strict
 
                 # Calculate hitrate@K for Context Attributes
+                num_of_found_entires = 0
                 for gold_data_stream in curr_gold_standard_attributes_context_idx:
                     if gold_data_stream in context_predicted_attributes_idx:
                         print("Hitrate@"+str(hit_rate)+" context found idx ", gold_data_stream, " in context:", context_predicted_attributes_idx)
@@ -1844,10 +1845,17 @@ def main(run=0):
     # file_ano_pred - predictions of anomalies - 1d ndarray
 
     # store_relevant_attribut_name_FINAL_FINAL_FINAL_MSCRED_Standard_corrRelMat_inputLoss_epoch100
-    file_name       = "store_relevant_attribut_name_Fin_Standard_wAdjMat_newAdj_2"
-    file_idx        = "store_relevant_attribut_idx_Fin_Standard_wAdjMat_newAdj_2"
-    file_dis        = "store_relevant_attribut_dis_Fin_Standard_wAdjMat_newAdj_2"
-    file_ano_pred   = "predicted_anomaliesFin_Standard_wAdjMat_newAdj_2"
+    #file_name       = "store_relevant_attribut_name_Fin_Standard_wAdjMat_newAdj_2"
+    file_name_2        = "store_relevant_attribut_name_wTrainFaF_nn2_cnn1d_with_fc_simsiam_128-32__"
+    file_name      = "store_relevant_attribut_name_wTrainFaF_2_nn2_cnn1d_with_fc_simsiam_128-32__"
+    #file_idx        = "store_relevant_attribut_idx_Fin_Standard_wAdjMat_newAdj_2"
+    file_idx_2         = "store_relevant_attribut_idx_wTrainFaF_nn2_cnn1d_with_fc_simsiam_128-32__"
+    file_idx       = "store_relevant_attribut_idx_wTrainFaF_2_nn2_cnn1d_with_fc_simsiam_128-32__"
+    #file_dis        = "store_relevant_attribut_dis_Fin_Standard_wAdjMat_newAdj_2"
+    file_dis_2         = "store_relevant_attribut_dis_wTrainFaF_nn2_cnn1d_with_fc_simsiam_128-32__"
+    file_dis       = "store_relevant_attribut_dis_wTrainFaF_2_nn2_cnn1d_with_fc_simsiam_128-32__"
+    #file_ano_pred   = "predicted_anomaliesFin_Standard_wAdjMat_newAdj_2"
+    file_ano_pred    = "predicted_anomaliescnn1d_with_fc_simsiam_128-32__"
 
     print("")
     print(" ### Used Files ###")
@@ -1858,7 +1866,7 @@ def main(run=0):
     print("")
 
     is_memory = False
-    is_jenks_nat_break_used = True
+    is_jenks_nat_break_used = False
     is_elbow_selection_used = False
     is_fix_k_selection_used = False
     fix_k_for_selection = 1
@@ -1870,23 +1878,50 @@ def main(run=0):
         dataset.y_test_strings = dataset.y_test_strings[:-1]
 
     import pickle
-    a_file = open('../../ADD_MA-Huneke/anomaly_detection/'+file_name+str(run)+'.pkl', "rb")
+    #a_file = open('../../ADD_MA-Huneke/anomaly_detection/'+file_name+str(run)+'.pkl', "rb")
+    a_file = open(file_name+str(run)+'.pkl', "rb")
     store_relevant_attribut_name = pickle.load(a_file)
     a_file.close()
-    a_file = open('../../ADD_MA-Huneke/anomaly_detection/'+file_idx+str(run)+'.pkl',"rb")
+    a_file = open(file_idx+str(run)+'.pkl',"rb")
     store_relevant_attribut_idx = pickle.load(a_file)
     a_file.close()
-    a_file = open('../../ADD_MA-Huneke/anomaly_detection/'+file_dis+str(run)+'.pkl',"rb")
+    a_file = open(file_dis+str(run)+'.pkl',"rb")
     store_relevant_attribut_dis = pickle.load(a_file)
     a_file.close()
 
-    y_pred_anomalies = np.load('../../ADD_MA-Huneke/anomaly_detection/' + file_ano_pred + str(run) + '.npy')
+    a_file = open(file_name_2+str(run)+'.pkl', "rb")
+    store_relevant_attribut_name_2 = pickle.load(a_file)
+    a_file.close()
+    a_file = open(file_idx_2+str(run)+'.pkl',"rb")
+    store_relevant_attribut_idx_2 = pickle.load(a_file)
+    a_file.close()
+    a_file = open(file_dis_2+str(run)+'.pkl',"rb")
+    store_relevant_attribut_dis_2 = pickle.load(a_file)
+    a_file.close()
+
+    y_pred_anomalies = np.load(file_ano_pred + str(run) + '.npy')
+
+    # Fill missing entries from the second nearest neighbor
+    for i in range (y_pred_anomalies.shape[0]):
+        if not i in store_relevant_attribut_name:
+            if i in store_relevant_attribut_name_2:
+                store_relevant_attribut_name[i] = store_relevant_attribut_name_2[i]
+                store_relevant_attribut_idx[i] = store_relevant_attribut_idx_2[i]
+            else:
+                store_relevant_attribut_name[i] = []
+                store_relevant_attribut_idx[i] = []
+            if i in store_relevant_attribut_dis_2:
+                store_relevant_attribut_dis[i] = store_relevant_attribut_dis_2[i]
+            else:
+                store_relevant_attribut_dis[i] =[]
 
     print("Loaded data finsished ...")
+    print("y_pred_anomalies shape:",y_pred_anomalies.shape,"store_relevant_attribut_name length:", len(store_relevant_attribut_name), "store_relevant_attribut_idx length:", len(store_relevant_attribut_idx), "store_relevant_attribut_dis length:", len(store_relevant_attribut_dis))
 
     store_relevant_attribut_idx_shortened = store_relevant_attribut_idx.copy()
     store_relevant_attribut_name_shortened = store_relevant_attribut_name.copy()
 
+    print("store_relevant_attribut_idx:", store_relevant_attribut_idx_2.keys())
 
     ### clear attributes
     if is_jenks_nat_break_used:
@@ -1961,9 +1996,9 @@ def main(run=0):
 
     most_rel_att = [store_relevant_attribut_name_shortened, store_relevant_attribut_idx_shortened, store_relevant_attribut_dis]
 
-    #dict_measures = get_labels_from_knowledge_graph_from_anomalous_data_streams(most_rel_att, dataset.y_test_strings, dataset, y_pred_anomalies, not_selection_label="no_failure", only_true_positive_prediction=False)
+    dict_measures = get_labels_from_knowledge_graph_from_anomalous_data_streams(most_rel_att, dataset.y_test_strings, dataset, y_pred_anomalies, not_selection_label="no_failure", only_true_positive_prediction=False)
 
-    dict_measures = get_labels_from_knowledge_graph_from_anomalous_data_streams_permuted(most_rel_att, dataset.y_test_strings, dataset, y_pred_anomalies, not_selection_label="no_failure", only_true_positive_prediction=True, k_data_streams=[3, 5, 10], k_permutations=[3, 2, 1], rel_type="Context")
+    #dict_measures = get_labels_from_knowledge_graph_from_anomalous_data_streams_permuted(most_rel_att, dataset.y_test_strings, dataset, y_pred_anomalies, not_selection_label="no_failure", only_true_positive_prediction=True, k_data_streams=[3, 5, 10], k_permutations=[3, 2, 1], rel_type="Context")
 
     #most_rel_att = [store_relevant_attribut_idx_shortened, store_relevant_attribut_dis, store_relevant_attribut_name_shortened]
     most_rel_att = [store_relevant_attribut_idx, store_relevant_attribut_dis, store_relevant_attribut_name]

@@ -198,7 +198,7 @@ class TrainingConfiguration:
         self.use_margin_reduction_based_on_label_sim = False  # default: False
 
         self.use_early_stopping = True
-        self.early_stopping_epochs_limit = 100
+        #self.early_stopping_epochs_limit = 100
         self.early_stopping_loss_minimum = -1.00  # Default: -1.0 (no effect), CNN2D_with_add_Input: BCE:0.03, MSE:0.01
 
         # Parameter to control if and when a test is conducted through training
@@ -217,16 +217,6 @@ class TrainingConfiguration:
         self.batch_distribution = {
             BatchSubsetType.ONLY_NO_FAILURE_PAIRS: 1,
         }
-
-        self.use_pairwise_sim_siam = True
-
-        self.stop_gradient = False
-
-        self.evaluate_attribute_and_use_KG = True
-
-        self.plot_embeddings_via_TSNE = False
-
-        self.plot_train_test = False
 
 
         # Use a custom similarity values instead of 0 for unequal / negative pairs during batch creation
@@ -452,12 +442,20 @@ class StaticConfiguration:
         #3W self.data_folder_prefix = '/../../../../../data/datasets/PredMSiamNN/data/3rd_party/3w_dataset/'
 
         # Folder where the trained models are saved to during learning process
-        self.hyper_file = self.hyper_file_folder + 'cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2.json'#'cnn1d_with_fc_simsiam_128-32.json'  #cnn2d_with_graph_test_GCNGlobAtt_simSiam.json #cnn2d_withAddInput_ContextStrang.json  'cnn2d_with_graph-26-10.json'  #cnn2d_with_graph_test.json #cnn2d_withAddInput_nwApproach.json
+        self.hyper_file = self.hyper_file_folder + 'cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2.json' #'cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2.json'  #cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2.json #cnn2d_withAddInput_ContextStrang.json  'cnn2d_with_graph-26-10.json'  #cnn2d_with_graph_test.json #cnn2d_withAddInput_nwApproach.json
         #3W self.models_folder = '../../../../data/pklein/PredMSiamNN/data/' + 'trained_model2/' #
-        self.models_folder = self.data_folder_prefix + 'trained_models5/'
-        self.save_results_as_file = True
+        self.models_folder = self.data_folder_prefix + 'trained_models4/'
+        self.save_results_as_file = False
         self.curr_run_identifier = self.hyper_file.split("/")[-1].split(".")[0]
         self.use_train_FaF_in_eval = True
+
+        self.use_pairwise_sim_siam = True
+        self.stop_gradient = False
+        self.evaluate_attribute_and_use_KG = False
+        self.plot_embeddings_via_TSNE = False
+        self.plot_train_test = False
+
+        self.early_stopping_epochs_limit = 1
 
         # Matches each time step with each time step from the other encoding which is implemented as a subtraction
         # of the attention weights multiplied with the other time series

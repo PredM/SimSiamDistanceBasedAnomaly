@@ -32,6 +32,7 @@ from sklearn import preprocessing
 from sklearn.svm import OneClassSVM
 from matplotlib import pyplot
 from matplotlib import colors
+import pickle
 
 from configuration.Enums import BatchSubsetType, LossFunction, BaselineAlgorithm, SimpleSimilarityMeasure, \
     ArchitectureVariant, ComplexSimilarityMeasure, TrainTestSplitMode, AdjacencyMatrixPreprossingCNN2DWithAddInput,\
@@ -103,6 +104,15 @@ def extract_failure_examples(lables, feature_data, label_to_NOT_retain="no_failu
     lables = lables[example_idx_of_curr_label]
     return lables, feature_data
 
+def extract_failure_examples_raw(lables, raw_data, label_to_NOT_retain="no_failure"):
+    # Similar to extract_failure_examples() but for raw data / 3d
+
+    # Get idx of examples with this label
+    example_idx_of_curr_label = np.where(lables != label_to_NOT_retain)
+    #feature_data = np.expand_dims(feature_data, -1)
+    raw_data = raw_data[example_idx_of_curr_label[0],:,:]
+    return raw_data
+
 def calculate_nn_distance(sim_mat_casebase_test, k=1):
     # Returns the mean distance of the k nereast neighbors for each test example with size (a,)
     # from a similarity matrix with size (a,b) where a is the number of test examples and b the number of train/case examples
@@ -167,41 +177,41 @@ def getAnomalousTimeSteps(healthy_example_raw, anomalous_example_raw, indexes_da
     return dict
 
 
-def calculate_most_relevant_attributes(sim_mat_casebase_test, sim_mat_casebase_casebase, test_label, train_univar_encoded=None, test_univar_encoded=None, attr_names=None, k=1, x_test_raw=None, x_train_raw=None, y_pred_anomalies=None, treshold=0.0,dataset=None,snn=None,train_encoded_global=None,used_neighbours=1):
-    #print("sim_mat_casebase_casebase shape: ", sim_mat_casebase_casebase.shape)
+def calculate_most_relevant_attributes(sim_mat_casebase_test, sim_mat_casebase_casebase, test_label, train_univar_encoded=None, test_univar_encoded=None, attr_names=None, k=1, x_test_raw=None, x_train_raw=None, y_pred_anomalies=None, treshold=0.0,dataset=None,snn=None,train_encoded_global=None,used_neighbours=2):
+    print("sim_mat_casebase_casebase shape: ", sim_mat_casebase_casebase.shape, "sim_mat_casebase_test:",sim_mat_casebase_test.shape)
     #print("sim_mat_casebase_test shape: ", sim_mat_casebase_test.shape, " | train_univar_encoded: ", train_univar_encoded.shape, " | test_univar_encoded: ", test_univar_encoded.shape, " | test_label: ", test_label.shape, " | attr_names: ", attr_names.shape)
     # Get the idx from the nearest example without a failure
     #sim_mat_casebase_test shape: (3389, 22763) | train_univar_encoded:  (22763, 61, 256) | test_univar_encoded: (3389, 61,256) | test_label:  (3389,) | attr_names: (61,)idx_nearest_neighbors shape(3389, 22763)
 
-    idx_nn_woFailure = np.matrix.argsort(-sim_mat_casebase_test, axis=1)[:, :k] # Output dim: (3389,1,61,128)
-    idx_nn_woFailure = np.squeeze(idx_nn_woFailure)
+    #idx_nn_woFailure = np.matrix.argsort(-sim_mat_casebase_test, axis=1)[:, :k] # Output dim: (3389,1,61,128)
+    #idx_nn_woFailure = np.squeeze(idx_nn_woFailure)
     #print("idx_nn_woFailure shape: ", idx_nn_woFailure.shape)
     num_test_examples = test_label.shape[0]
     idx_2nn_woFailure = np.squeeze(np.matrix.argsort(-sim_mat_casebase_casebase, axis=1)[:, 1:2]) # Output dim:  (22763, 61, 128)
     idx_3nn_woFailure = np.squeeze(np.matrix.argsort(-sim_mat_casebase_casebase, axis=1)[:, 2:3])  # Output dim:  (22763, 61, 128)
     #print("idx_2nn_woFailure shape: ", idx_2nn_woFailure.shape)
     # store anomaly values attribute-wise per example
-    store_relevant_attribut_idx = {}
-    store_relevant_attribut_dis = {}
-    store_relevant_attribut_name = {}
-    store_relevant_attribut_label= {} # stores the gold label of the test example
-    store_relevant_attribut_idx_2 = {}
-    store_relevant_attribut_dis_2 = {}
-    store_relevant_attribut_name_2 = {}
-    store_relevant_attribut_label_2 = {} # stores the gold label of the test example
+    store_relevant_attribut_idx = {}; store_relevant_attribut_dis = {}; store_relevant_attribut_name = {}; store_relevant_attribut_label= {}; store_relevant_attribut_isAnomaly= {} # stores the gold label of the test example
+    store_relevant_attribut_idx_2 = {}; store_relevant_attribut_dis_2 = {}; store_relevant_attribut_name_2 = {}; store_relevant_attribut_label_2 = {}; store_relevant_attribut_isAnomaly_2 = {} # stores the gold label of the test example
+    store_relevant_attribut_idx_nn2 = {}; store_relevant_attribut_dis_nn2 = {}; store_relevant_attribut_name_nn2 = {}; store_relevant_attribut_label_nn2= {}; store_relevant_attribut_isAnomaly_nn2= {}  # stores the gold label of the test example
+    store_relevant_attribut_idx_2_nn2 = {}; store_relevant_attribut_dis_2_nn2 = {}; store_relevant_attribut_name_2_nn2 = {}; store_relevant_attribut_label_2_nn2 = {}; store_relevant_attribut_isAnomaly_2_nn2 = {} # stores the gold label of the test example
     #### find example with most similar attributes
     #'''
     idx_nearest_neighbors = np.matrix.argsort(-sim_mat_casebase_test, axis=1)[:, :]
     print("idx_nearest_neighbors shape ", idx_nearest_neighbors.shape)
+
     for test_example_idx in range(num_test_examples):
         print("###################################################################################")
         print(" Example ",test_example_idx,"with label", test_label[test_example_idx])
+
         if not test_label[test_example_idx] == "no_failure" or (test_label[test_example_idx] == "no_failure" and y_pred_anomalies[test_example_idx]==1) :
             print()
             counterfactuals_entires = {}
             counterfactuals_entires_2 = {}
-            # For every entry in case base, do the following:
+
+            # Use the ith nearest neighbour from the normal state as base for a counterfactual
             for i in range(used_neighbours):
+                print("The "+str(i)+"-th nearest neigbour from the normal state is used as base for a counterfactual explanation ...\n")
 
                 # Get idx to load the encoded version of the current test example and its nearest neighbour (healthy)
                 curr_idx = idx_nearest_neighbors[test_example_idx, i]
@@ -210,13 +220,15 @@ def calculate_most_relevant_attributes(sim_mat_casebase_test, sim_mat_casebase_c
                 # Load the encoded version of the nearest neighbour and curren test example
                 if snn.hyper.encoder_variant in ["graphcnn2d"]:
                     # calculate attribute-wise distance on encoded data
+                    '''
                     curr_healthy_example_encoded = train_univar_encoded[curr_idx,:,:]
                     curr_test_example = test_univar_encoded[test_example_idx,:,:]
 
                     curr_distance_abs = np.abs(curr_healthy_example_encoded - curr_test_example)
                     curr_mean_distance_per_attribute_abs = np.mean(curr_distance_abs, axis=1)
                     idx_of_attribute_with_highest_distance_abs = np.argsort(-curr_mean_distance_per_attribute_abs)
-                    print("idx nn to test example:", curr_idx, "sim:", curr_sim, "threshold:", treshold) #"abs distance: ", curr_mean_distance_per_attribute_abs)
+                    '''
+                print("idx nn to test example:", curr_idx, "sim:", curr_sim, "threshold:", treshold, "under threshold (is anomaly?): ", treshold>curr_sim) #"abs distance: ", curr_mean_distance_per_attribute_abs)
 
                 # Load raw data to generate counterfactuals by changing the input data ...
                 curr_test_example_raw = x_test_raw[test_example_idx, :, :]
@@ -318,20 +330,21 @@ def calculate_most_relevant_attributes(sim_mat_casebase_test, sim_mat_casebase_c
                 has_improved_reverse = np.less(sim_mat_reverse, curr_sim)
                 num_of_improvements = np.count_nonzero(has_improved == True)
                 num_of_improvements_reverse = np.count_nonzero(has_improved_reverse == True)
-                print("has_improved shape:", has_improved.shape," | rev: ", has_improved_reverse.shape)
+                #print("has_improved shape:", has_improved.shape," | rev: ", has_improved_reverse.shape)
                 print("num_of_improvements:", num_of_improvements, " | rev: ", num_of_improvements_reverse)
                 #print("has_improved found org: ", attr_names[has_improved])
                 #print("has_improved found rev: ", attr_names[has_improved_reverse])
                 #print("ranking of improvements org: ", attr_names[np.argsort(-sim_mat)])
                 #print("ranking of improvements rev: ", attr_names[np.argsort(-sim_mat_reverse)])
+                num_of_improvements_reverse_ = 5 if num_of_improvements_reverse > 5 else num_of_improvements_reverse
                 print("Ranking of improvements with only improved ones org: ", attr_names[np.argsort(-sim_mat)][:num_of_improvements])
-                print("Ranking of improvements with only improved ones rev: ", attr_names[np.argsort(sim_mat_reverse)][:num_of_improvements_reverse])
+                print("Ranking of improvements with only improved ones rev: ", attr_names[np.argsort(sim_mat_reverse)][:num_of_improvements_reverse_])
 
                 curr_test_example_raw_replaced = curr_test_example_raw.copy()
 
                 if num_of_improvements == 0:
-                    print("No attributes have improved the similarity to the healthy state. "
-                          "For this reason, the next nearest neighbor is used to find relevant datastreams/attributes.")
+                    print("No attributes have improved the similarity w.r.t. the (nearest) healthy state. "
+                          "For this reason, the next nearest neighbor is used to find relevant datastreams/attributes.\n")
                     continue
 
 
@@ -343,9 +356,9 @@ def calculate_most_relevant_attributes(sim_mat_casebase_test, sim_mat_casebase_c
                     print("Jenks Natural Break found symptoms org: ", attr_names[is_symptom])
 
                     res_rev = jenkspy.jenks_breaks(sim_mat_reverse[has_improved_reverse], nb_class=2)
-                    lower_bound_exclusive_rev = res[1]
+                    lower_bound_exclusive_rev = res_rev[1]
                     is_symptom_rev = np.less(sim_mat_reverse, lower_bound_exclusive_rev)
-                    print("Jenks Natural Break found symptoms rev: ", attr_names[is_symptom_rev])
+                    #print("Jenks Natural Break found symptoms rev: ", attr_names[is_symptom_rev])
 
                     # Elbow
                     scores_sorted = np.sort(-sim_mat[has_improved])
@@ -374,7 +387,7 @@ def calculate_most_relevant_attributes(sim_mat_casebase_test, sim_mat_casebase_c
 
                         #
                         curr_test_example_raw_replaced[:,found_relevant_data_strem] = curr_healthy_example_raw[:,found_relevant_data_strem]
-
+                    print("Since more than 3 improvements were found, the jenks natural break algorithm was applied to select the most relevant ones ...")
                 else:
                     print("Less than 3 improvements found. For this reason, all considered as symptoms.")
 
@@ -408,6 +421,10 @@ def calculate_most_relevant_attributes(sim_mat_casebase_test, sim_mat_casebase_c
                 #print("sim_mat_replaced: ", sim_mat_replaced.shape, "np.argsort(-sim_mat_replaced): ", np.argsort(np.squeeze(-sim_mat_replaced))[:3],"vs. curr idx:", curr_idx)
                 print("For the replaced / cleaned anomalous example we get the following three nearest normal ones", np.argsort(np.squeeze(-sim_mat_replaced))[:3],"vs. curr idx:", curr_idx)
                 curr_idx_2 =  np.argsort(np.squeeze(-sim_mat_replaced))[0]
+
+                curr_sim_2 = sim_mat_replaced[curr_idx_2, 0]
+                print("idx nn to test example:", curr_idx_2, "sim:", curr_sim_2, "threshold:", treshold,"under threshold (still anomaly?): ", treshold > curr_sim_2)
+
                 #print("curr_idx_2:",curr_idx_2)
                 curr_healthy_example_raw_2 = x_train_raw[curr_idx_2, :, :]
                 #print("curr_healthy_example_raw_2: ",curr_healthy_example_raw_2)
@@ -474,7 +491,9 @@ def calculate_most_relevant_attributes(sim_mat_casebase_test, sim_mat_casebase_c
                 #print("ranking of improvements rev: ", attr_names[np.argsort(-sim_mat_reverse)])
                 print("Previous ranking of improvements with only improved ones org: ", attr_names[np.argsort(-sim_mat)][:num_of_improvements])
                 print("New ranking of improvements with only improved ones org: ", attr_names[np.argsort(-sim_mat_2)][:num_of_improvements_2])
-                print("Intersection between both: ", [value for value in attr_names[np.argsort(-sim_mat)][:num_of_improvements] if value in attr_names[np.argsort(-sim_mat_2)][:num_of_improvements_2]])
+                print("Num of improvements decreased?: ", num_of_improvements<num_of_improvements_2)
+                has_intersection = [value for value in attr_names[np.argsort(-sim_mat)][:num_of_improvements] if value in attr_names[np.argsort(-sim_mat_2)][:num_of_improvements_2]]
+                print("Intersection between both: ", has_intersection)
                 #print("REPLACED ranking of improvements with only improved ones rev: ", attr_names[np.argsort(sim_mat_reverse)][:num_of_improvements_reverse])
 
                 counterfactuals_entires[i] = has_improved
@@ -489,10 +508,12 @@ def calculate_most_relevant_attributes(sim_mat_casebase_test, sim_mat_casebase_c
                             print("Nearest Neighbour:", i_, ": ", attr_names[counterfactuals_entires_2[i_]])
                         except:
                             print("For key "+str(i_)+ " an exception occurred!")
-
-                print()
-                print("-----")
-                print()
+                else:
+                    print()
+                    print("-----")
+                    print("Next neighbor used as counter factual ...")
+                    print("-----")
+                    print()
 
                 if print_it == True:
                         # Useful: https://pandas.pydata.org/pandas-docs/version/0.13.1/visualization.html#targeting-different-subplots
@@ -567,15 +588,32 @@ def calculate_most_relevant_attributes(sim_mat_casebase_test, sim_mat_casebase_c
                         #    print("Plot could not be generated ...")
 
                 # Store the results for further processing
-                store_relevant_attribut_idx[test_example_idx] = np.argsort(-sim_mat)
-                store_relevant_attribut_dis[test_example_idx] = sim_mat[has_improved]
-                store_relevant_attribut_name[test_example_idx] = attr_names[np.argsort(-sim_mat)]
-                store_relevant_attribut_label[test_example_idx] = test_label[test_example_idx]
+                if i == 0:
+                    store_relevant_attribut_idx[test_example_idx] = np.argsort(-sim_mat)
+                    store_relevant_attribut_dis[test_example_idx] = sim_mat[has_improved]
+                    store_relevant_attribut_name[test_example_idx] = attr_names[np.argsort(-sim_mat)]
+                    store_relevant_attribut_label[test_example_idx] = test_label[test_example_idx]
+                    store_relevant_attribut_isAnomaly[test_example_idx] = treshold > curr_sim
 
-                store_relevant_attribut_idx_2[test_example_idx] = np.argsort(-sim_mat_2)
-                store_relevant_attribut_dis_2[test_example_idx] = sim_mat_2[has_improved_2]
-                store_relevant_attribut_name_2[test_example_idx] = attr_names[np.argsort(-sim_mat_2)]
-                store_relevant_attribut_label_2[test_example_idx] = test_label[test_example_idx]
+                    store_relevant_attribut_idx_2[test_example_idx] = np.argsort(-sim_mat_2)
+                    store_relevant_attribut_dis_2[test_example_idx] = sim_mat_2[has_improved_2]
+                    store_relevant_attribut_name_2[test_example_idx] = attr_names[np.argsort(-sim_mat_2)]
+                    store_relevant_attribut_label_2[test_example_idx] = test_label[test_example_idx]
+                    store_relevant_attribut_isAnomaly_2[test_example_idx] = treshold > curr_sim_2
+
+                elif i == 1:
+                    store_relevant_attribut_idx_nn2[test_example_idx] = np.argsort(-sim_mat)
+                    store_relevant_attribut_dis_nn2[test_example_idx] = sim_mat[has_improved]
+                    store_relevant_attribut_name_nn2[test_example_idx] = attr_names[np.argsort(-sim_mat)]
+                    store_relevant_attribut_label_nn2[test_example_idx] = test_label[test_example_idx]
+                    store_relevant_attribut_isAnomaly_nn2[test_example_idx] = treshold > curr_sim
+
+                    store_relevant_attribut_idx_2_nn2[test_example_idx] = np.argsort(-sim_mat_2)
+                    store_relevant_attribut_dis_2_nn2[test_example_idx] = sim_mat_2[has_improved_2]
+                    store_relevant_attribut_name_2_nn2[test_example_idx] = attr_names[np.argsort(-sim_mat_2)]
+                    store_relevant_attribut_label_2_nn2[test_example_idx] = test_label[test_example_idx]
+                    store_relevant_attribut_isAnomaly_2_nn2[test_example_idx] = treshold > curr_sim_2
+
 
                 #TODO Is similarity now over threshold? If not, use the highest rank one ang generate a new one ...
                 ###
@@ -711,7 +749,10 @@ def calculate_most_relevant_attributes(sim_mat_casebase_test, sim_mat_casebase_c
     #store_relevant_attribut_dis[test_example_idx] = mean_distance_per_attribute_abs_raw[idx_of_attribute_with_highest_distance_abs_raw]
     #store_relevant_attribut_name[test_example_idx] = attr_names[idx_of_attribute_with_highest_distance_abs_raw]
     print("Finished ...")
-    return [store_relevant_attribut_idx, store_relevant_attribut_dis, store_relevant_attribut_name], [store_relevant_attribut_idx_2, store_relevant_attribut_dis_2, store_relevant_attribut_name_2]
+    return [store_relevant_attribut_idx, store_relevant_attribut_dis, store_relevant_attribut_name, store_relevant_attribut_isAnomaly], \
+           [store_relevant_attribut_idx_2, store_relevant_attribut_dis_2, store_relevant_attribut_name_2, store_relevant_attribut_isAnomaly_2], \
+           [store_relevant_attribut_idx_nn2, store_relevant_attribut_dis_nn2, store_relevant_attribut_name_nn2, store_relevant_attribut_isAnomaly_nn2], \
+           [store_relevant_attribut_idx_2_nn2, store_relevant_attribut_dis_2_nn2, store_relevant_attribut_name_2_nn2, store_relevant_attribut_isAnomaly_2_nn2]
 
 
 def generate_and_encode(curr_test_example_raw, curr_healthy_example_raw, i, attr_names=None, dataset=None, snn=None,print_it=False,num_of_examples=61):
@@ -757,7 +798,7 @@ def generate_and_encode(curr_test_example_raw, curr_healthy_example_raw, i, attr
 def generated_possible_versions(query_example, nn_example, print_it=False,i=0,feature_names=None,marker=""):
     # Generates the input data to be computed by the neural network
     # query_example nd-array (1,timesteps,datastreams) e.g. (1000,61), in which the replacement takes place
-    print("query_example shape: ", query_example.shape,"| nn_example:", nn_example.shape)
+    #print("query_example shape: ", query_example.shape,"| nn_example:", nn_example.shape)
     query_example_return = query_example.copy()
     for data_stream in range(query_example.shape[2]):
         query_example_copy = query_example.copy()
@@ -1726,12 +1767,37 @@ def reduce_size_of_valid_for_healthy_examples(valid_labels_y, recon_err_matrixes
     recon_err_matrixes_valid_wf_ = np.delete(recon_err_matrixes_valid_wf, indices_of_NoFaF_to_remove, 0)
     return valid_labels_y, recon_err_matrixes_valid_wf_
 
+def store_results(most_rel_att, y_pred_anomalies, curr_run_identifier, post_fix=""):
+    print("saving with postfix"+ post_fix +"...")
+
+    store_relevant_attribut_idx = most_rel_att[0]
+    store_relevant_attribut_dis = most_rel_att[1]
+    store_relevant_attribut_name = most_rel_att[2]
+    store_relevant_attribut_overThreshold = most_rel_att[3]
+
+    a_file = open('store_relevant_attribut_idx_' +str(post_fix)+"_"+ curr_run_identifier + '.pkl', "wb")
+    pickle.dump(store_relevant_attribut_idx, a_file)
+    a_file.close()
+    a_file = open('store_relevant_attribut_dis_'  +str(post_fix)+"_"+ curr_run_identifier + '.pkl', "wb")
+    pickle.dump(store_relevant_attribut_dis, a_file)
+    a_file.close()
+    a_file = open('store_relevant_attribut_name_'  +str(post_fix)+"_"+ curr_run_identifier + '.pkl', "wb")
+    pickle.dump(store_relevant_attribut_name, a_file)
+    a_file.close()
+    np.save('predicted_anomalies_' +  +str(post_fix)+"_"+curr_run_identifier + '.npy', y_pred_anomalies)
+    a_file = open('store_relevant_attribut_overThreshold_' + curr_run_identifier + '.pkl', "wb")
+    pickle.dump(store_relevant_attribut_overThreshold, a_file)
+    a_file.close()
+
+    print("saving finished")
+
 # noinspection DuplicatedCode
 def main(run=0, val_split_rates=[0.0]):
     config = Configuration()
     config.print_detailed_config_used_for_training()
+    own=""
 
-    curr_run_identifier = config.curr_run_identifier +"_"+ str(run)+"_usedN1"
+    curr_run_identifier = config.curr_run_identifier +"_"+ str(own)+"_"+str(run)
     print()
     print("curr_run_identifier:", curr_run_identifier)
 
@@ -1809,7 +1875,7 @@ def main(run=0, val_split_rates=[0.0]):
     x_train_labels = None
     x_train_cb_labels = None
     x_test_labels = None
-    x_valid_labels = None
+    x_valid_labels_ = None
 
     # Load Model for train_cb and test data:
     change_model(config, start_time_string)
@@ -1857,6 +1923,7 @@ def main(run=0, val_split_rates=[0.0]):
 
     # Get unencoded data:
     x_train_raw = dataset.x_train
+    x_train_raw_wf = extract_failure_examples_raw(dataset.y_train_strings, dataset.x_train)
     x_valid_raw = dataset.x_test
 
     snn = initialise_snn(config, dataset, False)
@@ -1953,14 +2020,17 @@ def main(run=0, val_split_rates=[0.0]):
     parameter = {} # key:valid, value: parameter string
     scores = {}  # key:valid, value: roc_auc test
     val_splits_results = {}
-    dict_results_test_train_wF = {}
+    #val_splits_results[run]= {}
+    val_splits_results_wF = {}
     for k_clean_ in k_clean:
         for fraction_clean_ in fraction_clean:
             for k_pred_ in k_pred:
                 for measure_ in measure:
 
                     for val_split_rate_ in val_split_rates:
+                        print("########################################")
                         print("Parameter Config: k_clean: ", k_clean_, " | fraction_clean:", fraction_clean_," | k_pred:",k_pred_," | measure:", measure_," | val_split_rate_:", val_split_rate_ )
+                        print()
 
                         # Clean case base
                         x_train_cb_cleaned = clean_case_base(x_case_base=x_train_encoded, k=k_clean_,
@@ -2000,13 +2070,15 @@ def main(run=0, val_split_rates=[0.0]):
                         # Reduce Valid labels
                         x_valid_labels_org = x_valid_labels.copy()
                         nn_distance_valid_org = nn_distance_valid.copy()
-                        x_valid_labels, nn_distance_valid = reduce_FaF_examples_in_val_split(x_valid_labels.copy(),
+                        print("x_valid_labels_org shape: ", x_valid_labels_org.shape, "nn_distance_valid_org: ", nn_distance_valid_org.shape)
+                        x_valid_labels_, nn_distance_valid = reduce_FaF_examples_in_val_split(x_valid_labels.copy(),
                                                                                              nn_distance_valid.copy(),
                                                                                              x_test_labels,
                                                                                              used_rate=val_split_rate_)
+                        print("After reduction with split size "+str(val_split_rate_)+": x_valid_labels_ shape: ", x_valid_labels_.shape,"nn_distance_valid: ", nn_distance_valid.shape)
 
                         # Calculate roc-auc score valid data
-                        y_valid_strings = np.expand_dims(x_valid_labels, axis=-1)
+                        y_valid_strings = np.expand_dims(x_valid_labels_, axis=-1)
                         roc_auc_knn_valid = calculate_RocAuc(y_valid_strings, nn_distance_valid)
                         avgpr_knn_valid, pr_auc_knn_valid = calculate_PRCurve(y_valid_strings, nn_distance_valid)
                         dict_results['roc_auc_knn_valid'] = roc_auc_knn_valid
@@ -2019,12 +2091,12 @@ def main(run=0, val_split_rates=[0.0]):
                         print("*** valid pr_auc kNN:\t\t", pr_auc_knn_valid, " ***")
                         print("-------------------------------------------------")
 
-                        plotHistogram(labels=x_valid_labels, anomaly_scores=nn_distance_valid,
+                        plotHistogram(labels=x_valid_labels_, anomaly_scores=nn_distance_valid,
                                       filename='Anomaly_Score_Histogram_valid_'+str(curr_run_identifier)+'.png',
                                       min=np.amin(nn_distance_valid), max=np.amax(nn_distance_valid),
                                       num_of_bins=10)
 
-                        f1_weigh_thold, f1_macro_thold, dict_results = find_anomaly_threshold(nn_distance_valid=nn_distance_valid, labels_valid=x_valid_labels, results_dict=dict_results)
+                        f1_weigh_thold, f1_macro_thold, dict_results = find_anomaly_threshold(nn_distance_valid=nn_distance_valid, labels_valid=x_valid_labels_, results_dict=dict_results)
 
 
                         # Plot Anomaly Score distribution as histogram
@@ -2072,16 +2144,43 @@ def main(run=0, val_split_rates=[0.0]):
                         print("*** test pr_auc kMean:\t\t", pr_auc_test_kmean, " ***")
                         print("-------------------------------------------------")
 
+                        # OCSVM
+
+                        # Use OC-SVM
+                        '''
+                        clf = OneClassSVM(verbose=True)
+                        clf.fit(x_train_encoded_scaled)
+                        #y_test_pred = clf.predict(x_test_encoded_scaled)
+                        y_valid_pred_df = clf.decision_function(x_valid_encoded_scaled)
+                        y_test_pred_df = clf.decision_function(x_test_encoded_scaled)
+
+                        roc_auc_valid_ocsvm_df = calculate_RocAuc(y_valid_strings, y_valid_pred_df)
+                        avgpr_valid_ocsvm_df, pr_auc_valid_ocsvm_df = calculate_PRCurve(y_valid_strings, y_valid_pred_df)
+
+                        print("*** valid roc_auc OCSVM:", roc_auc_valid_ocsvm_df, " ***")
+                        print("*** valid avgpr OCSVM:", avgpr_valid_ocsvm_df, " ***")
+                        print("*** valid pr_auc OCSVM:", pr_auc_valid_ocsvm_df, " ***")
+                        print("-------------------------------------------------")
+
+                        roc_auc_test_ocsvm_df = calculate_RocAuc(y_test_strings, y_test_pred_df)
+                        avgpr_test_ocsvm_df, pr_auc_test_ocsvm_df = calculate_PRCurve(y_test_strings, y_test_pred_df)
+
+                        print("*** test roc_auc OCSVM:", roc_auc_test_ocsvm_df, " ***")
+                        print("*** test avgpr OCSVM:", avgpr_test_ocsvm_df, " ***")
+                        print("*** test pr_auc OCSVM:", pr_auc_test_ocsvm_df, " ***")
+                        print("-------------------------------------------------")
+                        '''
+
                         # Calculate f1,recall,precion based on given threshold
                         precision_recall_fscore_support_test, y_pred_anomalies, dict_results = evaluate(nn_distance_test, x_test_labels, f1_weigh_thold, dict_results=dict_results)
                         #evaluate(nn_distance_test, x_test_labels, f1_macro_thold)
-
+                        #'''
                         if config.evaluate_attribute_and_use_KG:
-                            #'''
+                            
                             # Get most relevant data streams
                             config.architecture_variant = ArchitectureVariant.STANDARD_SIMPLE
                             if snn.hyper.encoder_variant in ["graphcnn2d"]:
-                                most_rel_att, most_rel_att_2 = calculate_most_relevant_attributes(sim_mat_casebase_test=sim_mat_trainCb_test,
+                                most_rel_att, most_rel_att_2, most_rel_att_nn2, most_rel_att_2_nn2  = calculate_most_relevant_attributes(sim_mat_casebase_test=sim_mat_trainCb_test,
                                                                    sim_mat_casebase_casebase = sim_mat_trainCb_trainCb,
                                                                    train_univar_encoded= x_train_encoded_context,
                                                                    test_univar_encoded=x_test_encoded_context,
@@ -2096,7 +2195,7 @@ def main(run=0, val_split_rates=[0.0]):
                                                                                   snn=snn,
                                                                                   train_encoded_global=x_train_encoded)
                             else:
-                                most_rel_att, most_rel_att_2 = calculate_most_relevant_attributes(sim_mat_casebase_test=sim_mat_trainCb_test,
+                                most_rel_att, most_rel_att_2, most_rel_att_nn2, most_rel_att_2_nn2  = calculate_most_relevant_attributes(sim_mat_casebase_test=sim_mat_trainCb_test,
                                                                    sim_mat_casebase_casebase = sim_mat_trainCb_trainCb,
                                                                    test_label=x_test_labels,
                                                                    attr_names= dataset.feature_names_all,
@@ -2110,28 +2209,17 @@ def main(run=0, val_split_rates=[0.0]):
                                                                                   train_encoded_global=x_train_encoded)
 
                             if config.save_results_as_file:
-                                store_relevant_attribut_idx = most_rel_att[0]
-                                store_relevant_attribut_dis = most_rel_att[0]
-                                store_relevant_attribut_name = most_rel_att[0]
-
-                                import pickle
-                                a_file = open('store_relevant_attribut_idx_' + curr_run_identifier + '.pkl', "wb")
-                                pickle.dump(store_relevant_attribut_idx, a_file)
-                                a_file.close()
-                                a_file = open('store_relevant_attribut_dis_' + curr_run_identifier + '.pkl', "wb")
-                                pickle.dump(store_relevant_attribut_dis, a_file)
-                                a_file.close()
-                                a_file = open('store_relevant_attribut_name_' + curr_run_identifier + '.pkl', "wb")
-                                pickle.dump(store_relevant_attribut_name, a_file)
-                                a_file.close()
-                                np.save('predicted_anomalies' + curr_run_identifier + '.npy', y_pred_anomalies)
+                                store_results(most_rel_att, y_pred_anomalies, curr_run_identifier, post_fix="")
+                                store_results(most_rel_att_2, y_pred_anomalies, curr_run_identifier,post_fix="_2")
+                                store_results(most_rel_att_nn2, y_pred_anomalies, curr_run_identifier,post_fix="_nn2")
+                                store_results(most_rel_att_2_nn2, y_pred_anomalies, curr_run_identifier,post_fix="_2_nn2")
 
                             else:
                                 evaluate_most_relevant_examples(most_rel_att, x_test_labels, dataset, y_pred_anomalies)
-                                #'''
+                                
 
                                 get_labels_from_knowledge_graph_from_anomalous_data_streams(most_rel_att, x_test_labels, dataset, y_pred_anomalies)
-
+                        #'''
 
                         if config.use_train_FaF_in_eval:
                             print()
@@ -2141,20 +2229,37 @@ def main(run=0, val_split_rates=[0.0]):
                             # Merge FaF examples from train with test
                             test_train_wf_labels_y = np.concatenate((x_test_labels, x_train_labels_wf), axis=0)
                             nn_distance_test_train_wf = np.concatenate((nn_distance_test, nn_distance_train_wf), axis=0)
-                            print("Shape merged labels:", test_train_wf_labels_y.shape, "| Shape merged nearest neighbour distances:",
-                                  nn_distance_test_train_wf.shape)
+                            sim_mat_test_train_wf = np.concatenate((sim_mat_trainCb_test, sim_mat_trainCb_train_wf), axis=0)
+                            test_train_wf_raw_x = np.concatenate((x_test_raw, x_train_raw_wf),axis=0)
+                            print("Shape merged labels:", test_train_wf_labels_y.shape, "| Shape merged nearest neighbour distances:",nn_distance_test_train_wf.shape, "| Shape merged sim matrix of test to normal distances:", sim_mat_test_train_wf.shape)
 
                             # Reduce size to have the same ratio of no-failure to failure in the test set
                             valid_labels_y_red, nn_distance_valid_red = reduce_size_of_valid_for_healthy_examples(x_valid_labels_org, nn_distance_valid_org, 170)  # 170 are removed to get 156
-                            print(" Shape reduced recon_err_matrixes_valid_wf_red:",nn_distance_valid_red.shape, "| valid_labels_y_red:",valid_labels_y_red.shape)
+                            print("Reduce to new test ratio: Shape reduced recon_err_matrixes_valid_wf_red:",nn_distance_valid_red.shape, "| valid_labels_y_red:",valid_labels_y_red.shape)
+
+                            # Reduce Valid labels
+                            x_valid_labels_org = valid_labels_y_red.copy()
+                            nn_distance_valid_org = nn_distance_valid_red.copy()
+                            print("x_valid_labels_org shape: ", x_valid_labels_org.shape, "nn_distance_valid_org: ",
+                                  nn_distance_valid_org.shape)
+                            valid_labels_y_red, nn_distance_valid_red = reduce_FaF_examples_in_val_split(valid_labels_y_red.copy(),
+                                                                                                  nn_distance_valid_red.copy(),
+                                                                                                  x_test_labels,
+                                                                                                  used_rate=val_split_rate_)
+                            print(
+                                "After reduction with split size " + str(val_split_rate_) + ": x_valid_labels_ shape: ",
+                                valid_labels_y_red.shape, "nn_distance_valid: ", nn_distance_valid_red.shape)
+                            print()
+
+
 
                             # Calculate roc-auc score valid data
                             y_valid_strings = np.expand_dims(valid_labels_y_red, axis=-1)
                             roc_auc_knn_valid = calculate_RocAuc(y_valid_strings, nn_distance_valid_red)
                             avgpr_knn_valid, pr_auc_knn_valid = calculate_PRCurve(y_valid_strings, nn_distance_valid_red)
-                            dict_results_test_train_wF['roc_auc_knn_valid_train_wf'] = roc_auc_knn_valid
-                            dict_results_test_train_wF['pr_auc_knn_valid_train_wf'] = pr_auc_knn_valid
-                            dict_results_test_train_wF['avgpr_knn_valid_train_wf'] = avgpr_knn_valid
+                            val_splits_results_wF['roc_auc_knn_valid_train_wf'] = roc_auc_knn_valid
+                            val_splits_results_wF['pr_auc_knn_valid_train_wf'] = pr_auc_knn_valid
+                            val_splits_results_wF['avgpr_knn_valid_train_wf'] = avgpr_knn_valid
                             print("-------------------------------------------------")
                             print("*** valid roc_auc_train_wf kNN:\t\t", roc_auc_knn_valid, " ***")
                             print("*** valid avgpr_train_wf kNN:\t\t", avgpr_knn_valid, " ***")
@@ -2162,21 +2267,21 @@ def main(run=0, val_split_rates=[0.0]):
                             print("-------------------------------------------------")
 
                             # Get Threshold
-                            f1_weigh_thold, f1_macro_thold, dict_results_test_train_wF = find_anomaly_threshold(
+                            f1_weigh_thold, f1_macro_thold, val_splits_results_wF = find_anomaly_threshold(
                                 nn_distance_valid=nn_distance_valid_red, labels_valid=valid_labels_y_red,
-                                results_dict=dict_results_test_train_wF)
+                                results_dict=val_splits_results_wF)
 
                             # Calculate f1,recall,precion based on given threshold
-                            precision_recall_fscore_support_test, y_pred_anomalies, dict_results_test_train_wF = evaluate(
-                                nn_distance_test_train_wf, test_train_wf_labels_y, f1_weigh_thold, dict_results=dict_results_test_train_wF)
+                            precision_recall_fscore_support_test, y_pred_anomalies, val_splits_results_wF = evaluate(
+                                nn_distance_test_train_wf, test_train_wf_labels_y, f1_weigh_thold, dict_results=val_splits_results_wF)
 
                             # Calculate roc-auc score
                             y_test_strings = np.expand_dims(test_train_wf_labels_y, axis=-1)
                             roc_auc_test_knn = calculate_RocAuc(y_test_strings, nn_distance_test_train_wf)
                             avgpr_test_knn, pr_auc_test_knn = calculate_PRCurve(y_test_strings, nn_distance_test_train_wf)
-                            dict_results_test_train_wF['roc_auc_knn_test_train_wf'] = roc_auc_test_knn
-                            dict_results_test_train_wF['pr_auc_knn_test_train_wf'] = pr_auc_test_knn
-                            dict_results_test_train_wF['avgpr_knn_test_train_wf'] = avgpr_test_knn
+                            val_splits_results_wF['roc_auc_knn_test_train_wf'] = roc_auc_test_knn
+                            val_splits_results_wF['pr_auc_knn_test_train_wf'] = pr_auc_test_knn
+                            val_splits_results_wF['avgpr_knn_test_train_wf'] = avgpr_test_knn
                             print("-------------------------------------------------")
                             # print("*** valid mean distance kNN:", mean_distance_valid, " ***")
                             print("*** test roc_auc_train_wf kNN:\t\t", roc_auc_test_knn, " ***")
@@ -2189,15 +2294,15 @@ def main(run=0, val_split_rates=[0.0]):
                                 # Get most relevant data streams
                                 config.architecture_variant = ArchitectureVariant.STANDARD_SIMPLE
                                 if snn.hyper.encoder_variant in ["graphcnn2d"]:
-                                    most_rel_att, most_rel_att_2 = calculate_most_relevant_attributes(
-                                        sim_mat_casebase_test=sim_mat_trainCb_train_wf,
+                                    most_rel_att, most_rel_att_2, most_rel_att_nn2, most_rel_att_2_nn2 = calculate_most_relevant_attributes(
+                                        sim_mat_casebase_test=sim_mat_test_train_wf,
                                         sim_mat_casebase_casebase=sim_mat_trainCb_trainCb,
                                         train_univar_encoded=x_train_encoded_context,
                                         test_univar_encoded=x_test_encoded_context,
                                         test_label=test_train_wf_labels_y,
                                         attr_names=dataset.feature_names_all,
                                         k=1,
-                                        x_test_raw=x_test_raw,
+                                        x_test_raw=test_train_wf_raw_x,
                                         x_train_raw=x_train_raw,
                                         y_pred_anomalies=y_pred_anomalies,
                                         treshold=f1_weigh_thold,
@@ -2205,13 +2310,13 @@ def main(run=0, val_split_rates=[0.0]):
                                         snn=snn,
                                         train_encoded_global=x_train_encoded)
                                 else:
-                                    most_rel_att, most_rel_att_2 = calculate_most_relevant_attributes(
-                                        sim_mat_casebase_test=sim_mat_trainCb_train_wf,
+                                    most_rel_att, most_rel_att_2, most_rel_att_nn2, most_rel_att_2_nn2  = calculate_most_relevant_attributes(
+                                        sim_mat_casebase_test=sim_mat_test_train_wf,
                                         sim_mat_casebase_casebase=sim_mat_trainCb_trainCb,
                                         test_label=test_train_wf_labels_y,
                                         attr_names=dataset.feature_names_all,
                                         k=1,
-                                        x_test_raw=x_test_raw,
+                                        x_test_raw=test_train_wf_raw_x,
                                         x_train_raw=x_train_raw,
                                         y_pred_anomalies=y_pred_anomalies,
                                         treshold=f1_weigh_thold,
@@ -2220,33 +2325,30 @@ def main(run=0, val_split_rates=[0.0]):
                                         train_encoded_global=x_train_encoded)
 
                                 if config.save_results_as_file:
-                                    print("saving ...")
-                                    store_relevant_attribut_idx = most_rel_att[0]
-                                    store_relevant_attribut_dis = most_rel_att[0]
-                                    store_relevant_attribut_name = most_rel_att[0]
-
-                                    import pickle
-                                    a_file = open(
-                                        'store_relevant_attribut_idx_' + curr_run_identifier + '_wTrainFaF.pkl',
-                                        "wb")
-                                    pickle.dump(store_relevant_attribut_idx, a_file)
-                                    a_file.close()
-                                    a_file = open(
-                                        'store_relevant_attribut_dis_' + curr_run_identifier + '_wTrainFaF.pkl',
-                                        "wb")
-                                    pickle.dump(store_relevant_attribut_dis, a_file)
-                                    a_file.close()
-                                    a_file = open(
-                                        'store_relevant_attribut_name_' + curr_run_identifier + '_wTrainFaF.pkl',
-                                        "wb")
-                                    pickle.dump(store_relevant_attribut_name, a_file)
-                                    a_file.close()
-                                    np.save('predicted_anomalies' + curr_run_identifier + '_wTrainFaF.npy', y_pred_anomalies)
-
+                                    store_results(most_rel_att, y_pred_anomalies, curr_run_identifier, post_fix="wTrainFaF")
+                                    store_results(most_rel_att_2, y_pred_anomalies, curr_run_identifier, post_fix="wTrainFaF_2")
+                                    store_results(most_rel_att_nn2, y_pred_anomalies, curr_run_identifier, post_fix="wTrainFaF_nn2")
+                                    store_results(most_rel_att_2_nn2, y_pred_anomalies, curr_run_identifier,  post_fix="wTrainFaF_2_nn2")
+                        #print("--------")
+                        #print("val_split_rate_: ", val_split_rate_,"dict_results: ", dict_results['roc_auc_knn_valid'])
+                        #print("dict_results: len", len(dict_results),"with: ", dict_results)
+                        print("---------")
                         if config.use_train_FaF_in_eval:
-                            val_splits_results[val_split_rate_] = [dict_results, dict_results_test_train_wF]
+                            #if val_split_rate_ in val_splits_results:
+                            #    val_splits_results[val_split_rate_].apppend([dict_results, val_splits_results_wF])
+                            #else:
+                            val_splits_results[val_split_rate_] = [dict_results.copy(), val_splits_results_wF.copy()]
+
                         else:
-                            val_splits_results[val_split_rate_] = [dict_results]
+                            #if val_split_rate_ in val_splits_results:
+                            #    val_splits_results[val_split_rate_].append([dict_results])
+                            #else:
+                            val_splits_results[val_split_rate_] = [dict_results.copy()]
+                            dict_results = {}
+                        #print("--------")
+                        #print("Run;", run, "val_splits_results_wF: ", val_splits_results_wF)
+                        #print("Run;", run,"keys (valid-splits) in results:", val_splits_results)
+                        #print("--------")
 
     '''
     print("FINAL RESULTS FOR RUN: ", run)
@@ -2258,49 +2360,22 @@ def main(run=0, val_split_rates=[0.0]):
     max_key = max(results, key=results.get)
     '''
 
-    '''
-    # Clean case base
-    x_train_cb_cleaned = clean_case_base(x_case_base=x_train_encoded, k=5, fraction=0.5)  # k=5, fraction=0.4
-    # Calculate a similarity matrix between case base and test examples
-    sim_mat_trainCb_test = get_Similarity_Matrix(valid_vector=x_train_cb_cleaned, test_vector=x_test_encoded, measure='cosine')
-    # Calculate the distance for each test examples to k examples from the case base
-    nn_distance = calculate_nn_distance(sim_mat_casebase_test=sim_mat_trainCb_test, k=3)
-    # Calculate roc-auc score
-    y_test_strings = np.expand_dims(x_test_labels, axis=-1)
-    roc_auc_test_knn = calculate_RocAuc(y_test_strings, nn_distance)
-    print("-------------------------------------------------")
-    print("*** roc_auc_test kNN:", roc_auc_test_knn, " ***")
-    '''
-    # Use OC-SVM
-    '''
-    clf = OneClassSVM(verbose=True)
-    clf.fit(x_train_encoded_scaled)
-    y_test_pred = clf.predict(x_test_encoded_scaled)
-    # y_test_pred_score = clf.score_samples(x_test_encoded_scaled)
-    y_test_pred_df = clf.decision_function(x_test_encoded_scaled)
 
-    roc_auc_ocsvm_pred = calculate_RocAuc(y_test_strings, y_test_pred)
-    roc_auc_ocsvm_df = calculate_RocAuc(y_test_strings, y_test_pred_df)
-
-    print("*** roc_auc_test OCSVM pred:", roc_auc_ocsvm_pred, " ***")
-    print("*** roc_auc_test OCSVM df:", roc_auc_ocsvm_df, " ***")
-    print("-------------------------------------------------")
-    '''
     ### Plot encoded data with TSNE
 
     if config.plot_embeddings_via_TSNE:
         create_a_TSNE_plot_from_encoded_data(x_train_encoded=x_train_encoded,x_test_encoded=x_test_encoded,
                                              train_labels=x_train_labels,test_labels=x_test_labels, config=config, architecture=snn)
 
-    print("Run;",run,"val_splits_results: ", val_splits_results)
+    #print("Run;",run,"val_splits_results: ", val_splits_results)
     return val_splits_results
 
 if __name__ == '__main__':
     use_train_FaF_in_eval = True
     dict_measures_collection = {}
     dict_measures_collection_2 = {}
-    num_of_runs = 1
-    eval_with_reduced_val_split = [0.0] #[0.0,0.25,0.50,0.75,0.90] # [0.0,0.10,0.25,0.50,0.75,0.90] # rate of reduction
+    num_of_runs = 5
+    eval_with_reduced_val_split = [0.0, 0.25, 0.50, 0.75, 0.90] #[0.0,0.25,0.50,0.75,0.90] #[0.0,0.25,0.50,0.75,0.90] # [0.0,0.10,0.25,0.50,0.75,0.90] # rate of reduction
 
 
     for run in range(num_of_runs):
@@ -2314,15 +2389,16 @@ if __name__ == '__main__':
         #for val_split_rate in eval_with_reduced_val_split:
         if use_train_FaF_in_eval:
             for split in eval_with_reduced_val_split:
-                dict_measures, dict_measures_2 = results[split].copy() #[eval_with_reduced_val_split]
+                dict_measures, dict_measures_2 = results[split]             #[eval_with_reduced_val_split]
                 dict_measures_collection[run][split] = dict_measures
                 dict_measures_collection_2[run][split] = dict_measures_2
         else:
             for split in eval_with_reduced_val_split:
                 #print("result: ", results)
-                dict_measures = results[split].copy() #[eval_with_reduced_val_split]
+                dict_measures = results[split].copy()                       #[eval_with_reduced_val_split]
                 dict_measures_collection[run][split] = dict_measures
-        print("dict_measures_collection: ", dict_measures_collection)
+        #print("dict_measures_collection: ", dict_measures_collection)
+       # print("dict_measures_collection_2: ", dict_measures_collection_2)
         print()
         print(" ############## END OF RUN " + str(run) + " ##############")
 
@@ -2362,11 +2438,11 @@ if __name__ == '__main__':
                     #print("key: ", key)
                     mean_dict_0_2[split][key].append(dict_measures_collection_2[i][split][key])
     else:
-
-        for split in eval_with_reduced_val_split:
-            for key in dict_measures_collection[i][split][key]:
-                print("key: ", key)
-                mean_dict_0[split][key] = []
+        for i in range(num_of_runs):
+            for split in eval_with_reduced_val_split:
+                for key in dict_measures_collection[i][split][key]:
+                    #print("key: ", key)
+                    mean_dict_0[split][key] = []
 
         #print("mean_dict_0: ", mean_dict_0)
         #print("mean_dict_0_2: ", mean_dict_0_2)
