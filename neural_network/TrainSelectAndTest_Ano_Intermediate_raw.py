@@ -1784,7 +1784,7 @@ def store_results(most_rel_att, y_pred_anomalies, curr_run_identifier, post_fix=
     a_file = open('store_relevant_attribut_name_'  +str(post_fix)+"_"+ curr_run_identifier + '.pkl', "wb")
     pickle.dump(store_relevant_attribut_name, a_file)
     a_file.close()
-    np.save('predicted_anomalies_' +  +str(post_fix)+"_"+curr_run_identifier + '.npy', y_pred_anomalies)
+    np.save('predicted_anomalies_' +  str(post_fix)+"_"+curr_run_identifier + '.npy', y_pred_anomalies)
     a_file = open('store_relevant_attribut_overThreshold_' + curr_run_identifier + '.pkl', "wb")
     pickle.dump(store_relevant_attribut_overThreshold, a_file)
     a_file.close()
@@ -2375,7 +2375,7 @@ if __name__ == '__main__':
     dict_measures_collection = {}
     dict_measures_collection_2 = {}
     num_of_runs = 5
-    eval_with_reduced_val_split = [0.0, 0.25, 0.50, 0.75, 0.90] #[0.0,0.25,0.50,0.75,0.90] #[0.0,0.25,0.50,0.75,0.90] # [0.0,0.10,0.25,0.50,0.75,0.90] # rate of reduction
+    eval_with_reduced_val_split = [0.0] #[0.0,0.25,0.50,0.75,0.90] #[0.0,0.25,0.50,0.75,0.90] # [0.0,0.10,0.25,0.50,0.75,0.90] # rate of reduction
 
 
     for run in range(num_of_runs):

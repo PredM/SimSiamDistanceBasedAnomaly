@@ -412,6 +412,7 @@ class CNN2D(NN):
                     sensor_data_input2 = tf.concat([input, temp], axis=3)
                 else:
                     sensor_data_input2 = input
+                    #sensor_data_input2 = tf.keras.layers.Dropout(rate=0.25)(sensor_data_input2)
                     # Add First 2DConv Layer
                 conv_layer1 = tf.keras.layers.Conv2D(filters=num_filter, padding='VALID', kernel_size=(filter_size), strides=stride, input_shape=input.shape, use_bias=True, name="2DConv-"+str(i))
                 x = conv_layer1(sensor_data_input2)
@@ -1967,7 +1968,7 @@ class FFNN_BarlowTwin_MLP_Dummy(NN):
         output = input
         self.model = tf.keras.Model(inputs=input, outputs=output, name='Dummy')
 
-class FFNN_SimpleSiam_Prediction_MLP(NN):
+class FFNN_SimpleSiam_Prediction_MLP__NORMAL(NN):
     def __init__(self, hyperparameters, input_shape):
         super().__init__(hyperparameters, input_shape)
 
@@ -2362,7 +2363,7 @@ class FFNN_SimpleSiam_Prediction_MLP_Backup_03_05(NN):
         self.model = tf.keras.Model(inputs=[input, input_2], outputs=[output,output_2,output_3,x,i_x2,i_x3])
         #self.model = tf.keras.Model(inputs=[input, input_2], outputs=[output])
 
-class FFNN_SimpleSiam_Prediction_MLP_VariationExtraction30_04_22(NN):
+class FFNN_SimpleSiam_Prediction_MLP(NN):
 
     def __init__(self, hyperparameters, input_shape):
         super().__init__(hyperparameters, input_shape)

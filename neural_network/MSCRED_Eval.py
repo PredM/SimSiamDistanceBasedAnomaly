@@ -10,6 +10,7 @@ import pandas as pd
 from owlready2 import *
 from datetime import datetime
 from sklearn.manifold import TSNE
+from scipy.stats import kurtosis
 
 tf.config.experimental.set_memory_growth(gpus[0], True)
 
@@ -33,6 +34,7 @@ from sklearn.svm import OneClassSVM
 from matplotlib import pyplot
 from matplotlib import colors
 import itertools
+import pickle
 
 from configuration.Enums import BatchSubsetType, LossFunction, BaselineAlgorithm, SimpleSimilarityMeasure, \
     ArchitectureVariant, ComplexSimilarityMeasure, TrainTestSplitMode, AdjacencyMatrixPreprossingCNN2DWithAddInput,\
@@ -792,7 +794,31 @@ def calculate_most_relevant_attributes(sim_mat_casebase_test, sim_mat_casebase_c
     return [store_relevant_attribut_idx, store_relevant_attribut_dis, store_relevant_attribut_name]
 '''
 
-def evaluate_most_relevant_examples(most_relevant_attributes, y_test_labels, dataset, y_pred_anomalies, ks=[1, 3, 5], dict_measures={},hitrateAtK=[100,150,200]):
+def shuffle_idx_with_maximum_values(dis,idx):
+    dis = np.asarray(dis)
+    length_highest_anomaly_score = int(np.sum(np.where(dis == np.amax(dis),1,0)))
+    #print(" max(dis): ",  max(dis))
+    #print("length: ", length_highest_anomaly_score)
+    idx = np.array(idx)
+    #print("idx[0:length_highest_anomaly_score-1]:", idx[0:length_highest_anomaly_score-1])
+    np.random.shuffle(idx[0:length_highest_anomaly_score-1])
+    #print("idx[0:length_highest_anomaly_score-1]:", idx[0:length_highest_anomaly_score-1])
+    return idx
+
+def check_tsfresh_features(label, datastream, test_idx, healthy_idx ):
+    file_name = "ts_fresh_extracted_features_unfiltered"
+    a_file = open('../../../../../data/pklein/PredMSiamNN/data/training_data_backup/training_data/' + file_name + '.pkl', "rb")
+    tsfresh_features = pickle.load(a_file)
+    print("tsfresh_features shape: ", tsfresh_features.shape)
+    a_file.close()
+
+    kurtosis(data)
+
+    # kurosis
+
+
+def evaluate_most_relevant_examples(most_relevant_attributes, y_test_labels, dataset, y_pred_anomalies, ks=[1, 3, 5], dict_measures={},hitrateAtK=[100,150,200], only_true_positive_prediction=True):
+
     store_relevant_attribut_idx, store_relevant_attribut_dis, store_relevant_attribut_name= most_relevant_attributes[0], most_relevant_attributes[1], most_relevant_attributes[2]
     num_test_examples = y_test_labels.shape[0]
     attr_names = dataset.feature_names_all
@@ -813,95 +839,108 @@ def evaluate_most_relevant_examples(most_relevant_attributes, y_test_labels, dat
             # Get data needed to process and evaluate the current example
             curr_label = y_test_labels[i]
             curr_pred = y_pred_anomalies[i]
-            print("Label:", curr_label, "Pred:",curr_pred," num: ", i)
-            #if curr_label == "no_failure"  and curr_pred==1:
-            #    print("FALSE POSITIVE")
-            if not curr_label == "no_failure":
-                curr_gold_standard_attributes = dataset.get_masking(curr_label, return_strict_masking=True)
-                masking_strict = curr_gold_standard_attributes[61:]
-                masking_context = curr_gold_standard_attributes[:61]
-                #print("masking_strict shape: ", masking_strict.shape)
-                #print("masking_context shape: ", masking_context.shape)
-                #print("curr_gold_standard_attributes_strict shape: ", curr_gold_standard_attributes.shape)
-                #curr_gold_standard_attributes_context = dataset.get_masking(curr_label, return_strict_masking=False)
-                curr_gold_standard_attributes_strict_idx = np.where(masking_strict == 1)[0]
-                curr_gold_standard_attributes_context_idx = np.where(masking_context == 1)[0]
-                # Compare predictions with masked indexes for every k
-                k_predicted_attributes = store_relevant_attribut_idx[i][:curr_k]
-                #print("k_predicted_attributes: ", k_predicted_attributes)
-                print("k="+str(curr_k)+"_predicted_attributes: ", attr_names[k_predicted_attributes])
-                print("Labeled as relevant:  ", attr_names[curr_gold_standard_attributes_strict_idx])
-                found_strict_hitsAtK[i] = 0
-                found_context_hitsAtK[i] = 0
-                #print(store_relevant_attribut_idx[i][:curr_k])
-                for predicted_attribute in k_predicted_attributes:
-                    #print("predicted_attribute: ", predicted_attribute)
-                    #print("curr_gold_standard_attributes_strict_idx: ", curr_gold_standard_attributes_strict_idx)
-                    if predicted_attribute in curr_gold_standard_attributes_strict_idx:
-                        print("found idx ",predicted_attribute," in strict:", curr_gold_standard_attributes_strict_idx)
-                        found_strict_hitsAtK[i] = 1
-                    if predicted_attribute in curr_gold_standard_attributes_context_idx:
-                        print("found idx ",predicted_attribute," in context:", curr_gold_standard_attributes_context_idx)
-                        found_context_hitsAtK[i] = 1
 
-                # Calculate hitrate @k
-                #
-                # k entries need to be have the same length as for hits@K
-                #
-                index_pos =ks.index(curr_k)
-                print("index_pos:",index_pos)
-                #for hit_rate in hitrateAtK:
-                hit_rate = hitrateAtK[index_pos]
-                amount_data_streams_strict = np.sum(masking_strict.astype(int))
-                amount_data_streams_context = np.sum(masking_context.astype(int))
-                query_size_strict = int(round(amount_data_streams_strict*(hit_rate/100)))
-                query_size_context = int(round(amount_data_streams_context*(hit_rate/100)))
-                strict_predicted_attributes_idx = store_relevant_attribut_idx[i][:query_size_strict]
-                context_predicted_attributes_idx = store_relevant_attribut_idx[i][:query_size_context]
+            # Decide if this example is evaluated
 
-                # Calculate hitrate@K for Strict Attributes
-                num_of_found_entires = 0
-                for gold_data_stream in curr_gold_standard_attributes_strict_idx:
-                    if gold_data_stream in strict_predicted_attributes_idx:
-                        print("Hitrate@"+str(hit_rate)+" strict found idx ", gold_data_stream, " in strict:", strict_predicted_attributes_idx)
-                        num_of_found_entires += 1
-                found_strict_hitrateAtK[i] = num_of_found_entires/amount_data_streams_strict
-
-                # Calculate hitrate@K for Context Attributes
-                num_of_found_entires = 0
-                for gold_data_stream in curr_gold_standard_attributes_context_idx:
-                    if gold_data_stream in context_predicted_attributes_idx:
-                        print("Hitrate@"+str(hit_rate)+" context found idx ", gold_data_stream, " in context:", context_predicted_attributes_idx)
-                        num_of_found_entires += 1
-                found_context_hitrateAtK[i] = num_of_found_entires / amount_data_streams_context
-
-                print("Hitrate@"+str(hit_rate)+" strict:",found_strict_hitrateAtK[i])
-                print("Hitrate@" + str(hit_rate) + " context:", found_context_hitrateAtK[i])
-
-
-
-                # Calculate the rank (This is k independently and should calculated outside of the k-loop normally)
-                if curr_k == ks[0]:
-                    mean_rank_strict = 0
-                    mean_rank_context = 0
-                    for curr_target_attribute in curr_gold_standard_attributes_strict_idx:
-                        rank = np.where(curr_target_attribute == store_relevant_attribut_idx[i])[0] + 1
-                        mean_rank_strict = mean_rank_strict + rank
-                        print("Rank strict: ", rank)
-                    for curr_target_attribute in curr_gold_standard_attributes_context_idx:
-                        rank = np.where(curr_target_attribute == store_relevant_attribut_idx[i])[0] + 1
-                        mean_rank_context = mean_rank_strict + rank
-                        print("Rank context: ", rank)
-                    mean_rank_strict = mean_rank_strict / len(curr_gold_standard_attributes_strict_idx)
-                    found_rank_strict[i] = mean_rank_strict
-                    mean_rank_context = mean_rank_context / len(curr_gold_standard_attributes_context_idx)
-                    found_rank_context[i] = mean_rank_context
-
-
+            true_positive_prediction = False
+            if only_true_positive_prediction:
+                if y_pred_anomalies[i] == 1 and not curr_label == "no_failure":
+                    true_positive_prediction = True
             else:
-                #found[i] = 0
-                #no-failure label
-                print("no failure example")
+                true_positive_prediction = True
+
+            if true_positive_prediction:
+                print("")
+                print("Label:", curr_label, "Pred:",curr_pred," num: ", i)
+                #if curr_label == "no_failure"  and curr_pred==1:
+                #    print("FALSE POSITIVE")
+                if not curr_label == "no_failure":
+                    curr_gold_standard_attributes = dataset.get_masking(curr_label, return_strict_masking=True)
+                    masking_strict = curr_gold_standard_attributes[61:]
+                    masking_context = curr_gold_standard_attributes[:61]
+                    #print("masking_strict shape: ", masking_strict.shape)
+                    #print("masking_context shape: ", masking_context.shape)
+                    #print("curr_gold_standard_attributes_strict shape: ", curr_gold_standard_attributes.shape)
+                    #curr_gold_standard_attributes_context = dataset.get_masking(curr_label, return_strict_masking=False)
+                    curr_gold_standard_attributes_strict_idx = np.where(masking_strict == 1)[0]
+                    curr_gold_standard_attributes_context_idx = np.where(masking_context == 1)[0]
+                    # Compare predictions with masked indexes for every k
+                    k_predicted_attributes = store_relevant_attribut_idx[i][:curr_k]
+                    #print("k_predicted_attributes: ", k_predicted_attributes)
+                    print("store_relevant_attribut_dis: ", store_relevant_attribut_dis)
+                    print("k="+str(curr_k)+"_predicted_attributes: ", attr_names[k_predicted_attributes])
+                    print("Labeled as relevant:  ", attr_names[curr_gold_standard_attributes_strict_idx])
+                    found_strict_hitsAtK[i] = 0
+                    found_context_hitsAtK[i] = 0
+                    #print(store_relevant_attribut_idx[i][:curr_k])
+                    for predicted_attribute in k_predicted_attributes:
+                        #print("predicted_attribute: ", predicted_attribute)
+                        #print("curr_gold_standard_attributes_strict_idx: ", curr_gold_standard_attributes_strict_idx)
+                        if predicted_attribute in curr_gold_standard_attributes_strict_idx:
+                            print("found idx ",predicted_attribute," in strict:", curr_gold_standard_attributes_strict_idx)
+                            found_strict_hitsAtK[i] = 1
+                        if predicted_attribute in curr_gold_standard_attributes_context_idx:
+                            print("found idx ",predicted_attribute," in context:", curr_gold_standard_attributes_context_idx)
+                            found_context_hitsAtK[i] = 1
+
+                    # Calculate hitrate @k
+                    #
+                    # k entries need to be have the same length as for hits@K
+                    #
+                    index_pos =ks.index(curr_k)
+                    print("index_pos:",index_pos)
+                    #for hit_rate in hitrateAtK:
+                    hit_rate = hitrateAtK[index_pos]
+                    amount_data_streams_strict = np.sum(masking_strict.astype(int))
+                    amount_data_streams_context = np.sum(masking_context.astype(int))
+                    query_size_strict = int(round(amount_data_streams_strict*(hit_rate/100)))
+                    query_size_context = int(round(amount_data_streams_context*(hit_rate/100)))
+                    strict_predicted_attributes_idx = store_relevant_attribut_idx[i][:query_size_strict]
+                    context_predicted_attributes_idx = store_relevant_attribut_idx[i][:query_size_context]
+
+                    # Calculate hitrate@K for Strict Attributes
+                    num_of_found_entires = 0
+                    for gold_data_stream in curr_gold_standard_attributes_strict_idx:
+                        if gold_data_stream in strict_predicted_attributes_idx:
+                            print("Hitrate@"+str(hit_rate)+" strict found idx ", gold_data_stream, " in strict:", strict_predicted_attributes_idx)
+                            num_of_found_entires += 1
+                    found_strict_hitrateAtK[i] = num_of_found_entires/amount_data_streams_strict
+
+                    # Calculate hitrate@K for Context Attributes
+                    num_of_found_entires = 0
+                    for gold_data_stream in curr_gold_standard_attributes_context_idx:
+                        if gold_data_stream in context_predicted_attributes_idx:
+                            print("Hitrate@"+str(hit_rate)+" context found idx ", gold_data_stream, " in context:", context_predicted_attributes_idx)
+                            num_of_found_entires += 1
+                    found_context_hitrateAtK[i] = num_of_found_entires / amount_data_streams_context
+
+                    print("Hitrate@"+str(hit_rate)+" strict:",found_strict_hitrateAtK[i])
+                    print("Hitrate@" + str(hit_rate) + " context:", found_context_hitrateAtK[i])
+
+
+
+                    # Calculate the rank (This is k independently and should calculated outside of the k-loop normally)
+                    if curr_k == ks[0]:
+                        mean_rank_strict = 0
+                        mean_rank_context = 0
+                        for curr_target_attribute in curr_gold_standard_attributes_strict_idx:
+                            rank = np.where(curr_target_attribute == store_relevant_attribut_idx[i])[0] + 1
+                            mean_rank_strict = mean_rank_strict + rank
+                            print("Rank strict: ", rank)
+                        for curr_target_attribute in curr_gold_standard_attributes_context_idx:
+                            rank = np.where(curr_target_attribute == store_relevant_attribut_idx[i])[0] + 1
+                            mean_rank_context = mean_rank_strict + rank
+                            print("Rank context: ", rank)
+                        mean_rank_strict = mean_rank_strict / len(curr_gold_standard_attributes_strict_idx)
+                        found_rank_strict[i] = mean_rank_strict
+                        mean_rank_context = mean_rank_context / len(curr_gold_standard_attributes_context_idx)
+                        found_rank_context[i] = mean_rank_context
+
+
+                else:
+                    #found[i] = 0
+                    #no-failure label
+                    print("no failure example")
 
         # finished for all examples for a specific value of k
         found_for_k_strict[curr_k] = found_strict_hitsAtK
@@ -911,7 +950,7 @@ def evaluate_most_relevant_examples(most_relevant_attributes, y_test_labels, dat
         found_hitRateAtK_strict[curr_k] = found_strict_hitrateAtK
         found_hitRateAtK_context[curr_k] = found_context_hitrateAtK
         #print("found_for_k[",curr_k,"]: ", found_rank_strict[curr_k])
-        print("found_hitRateAtK_strict:",found_hitRateAtK_strict)
+        #print("found_hitRateAtK_strict:",found_hitRateAtK_strict)
 
 
     # print results
@@ -960,7 +999,21 @@ def evaluate_most_relevant_examples(most_relevant_attributes, y_test_labels, dat
             # restrict to failure only entries
             #print("Label:",label)
             y_test_labels_failure_only = np.delete(y_test_labels, np.argwhere(y_test_labels == 'no_failure'))
+            #print(np.sum(np.where(y_test_labels_failure_only == True, 1, 0)))
+            #print("y_test_labels_failure_only shape: ",y_test_labels_failure_only.shape)
+            # Get predictions for failures only:
+            #print("y_pred_anomalies shape: ",y_pred_anomalies.shape)
+            #print("y_test_labels shape: ",y_test_labels.shape)
+
+            if only_true_positive_prediction:
+                #print("y_pred_anomalies shape:", y_pred_anomalies.shape)
+                y_test_labels_failure_only = np.delete(y_test_labels, np.argwhere((y_test_labels == 'no_failure') | (y_pred_anomalies[:3389] == 0)))
+                #print("y_pred_anomalies shape:", y_pred_anomalies.shape)
+                #print("y_test_labels_failure_only shape: ", y_test_labels_failure_only.shape)
+                #y_test_labels_failure_only = np.delete(y_test_labels_failure_only, np.argwhere(y_pred_anomalies == 1))
+
             #print("y_test_labels_failure_only shape: ", y_test_labels_failure_only.shape)
+            #print(np.sum(np.where(y_test_labels_failure_only==True,1,0)))
             mask_for_current_label = np.where(y_test_labels_failure_only == label)
             #print("mask_for_current_label: ", mask_for_current_label)
             #print("mask_for_current_label[0]shape: ", mask_for_current_label[0].shape)
@@ -976,6 +1029,7 @@ def evaluate_most_relevant_examples(most_relevant_attributes, y_test_labels, dat
                 entries_rank_context_arr = np.array(list(entries_rank_context.items()))
 
                 #print("array: ", entries_strict_arr.shape)
+                #print("mask_for_current_label:", mask_for_current_label.shape)
                 #print("entries_strict_arr:",entries_strict_arr.T)
                 #print("entries_rank_strict_arr:", entries_rank_strict_arr)
                 entries_strict_arr = entries_strict_arr[:,1]
@@ -1845,17 +1899,59 @@ def main(run=0):
     # file_ano_pred - predictions of anomalies - 1d ndarray
 
     # store_relevant_attribut_name_FINAL_FINAL_FINAL_MSCRED_Standard_corrRelMat_inputLoss_epoch100
+
+    file_name       = "store_relevant_attribut_name_Fin_Standard_3_"
+    file_idx        = "store_relevant_attribut_idx_Fin_Standard_3_"
+    file_dis        = "store_relevant_attribut_dis_Fin_Standard_3_"
+    file_ano_pred   = "predicted_anomaliesFin_Standard_3_"
+
+    file_name       = "store_relevant_attribut_name_Fin_Standard_wAdjMat_newAdj_2"
+    file_idx        = "store_relevant_attribut_idx_Fin_Standard_wAdjMat_newAdj_2"
+    file_dis        = "store_relevant_attribut_dis_Fin_Standard_wAdjMat_newAdj_2"
+    file_ano_pred   = "predicted_anomaliesFin_Standard_wAdjMat_newAdj_2"
+
+    '''
+    folder = "cnn1d_with_fc_simsiam_128-32-3-/"
+
+
+    file_name        = folder + "store_relevant_attribut_name_wTrainFaF_cnn1d_with_fc_simsiam_128-32-3-__"
+    file_name_2          = folder + "store_relevant_attribut_name_wTrainFaF_nn2_cnn1d_with_fc_simsiam_128-32-3-__"
+    
+    file_idx         = folder + "store_relevant_attribut_idx_wTrainFaF_cnn1d_with_fc_simsiam_128-32-3-__"
+    file_idx_2           = folder + "store_relevant_attribut_idx_wTrainFaF_nn2_cnn1d_with_fc_simsiam_128-32-3-__"
+    
+    file_dis         = folder + "store_relevant_attribut_dis_wTrainFaF_cnn1d_with_fc_simsiam_128-32-3-__"
+    file_dis_2           = folder + "store_relevant_attribut_dis_wTrainFaF_nn2_cnn1d_with_fc_simsiam_128-32-3-__"
+    
+    file_ano_pred    = folder + "predicted_anomalies_wTrainFaF_2_cnn1d_with_fc_simsiam_128-32-3-__"
+    '''
+    '''
+    folder = "cnn1d_with_fc_simsiam_128-32-3-/"
+
+    file_name        = folder + "store_relevant_attribut_name__cnn1d_with_fc_simsiam_128-32-3-__"
+    file_name_2          = folder + "store_relevant_attribut_name__nn2_cnn1d_with_fc_simsiam_128-32-3-__"
+    file_idx         = folder + "store_relevant_attribut_idx__cnn1d_with_fc_simsiam_128-32-3-__"
+    file_idx_2           = folder + "store_relevant_attribut_idx__nn2_cnn1d_with_fc_simsiam_128-32-3-__"
+    file_dis         = folder + "store_relevant_attribut_dis__cnn1d_with_fc_simsiam_128-32-3-__"
+    file_dis_2           = folder + "store_relevant_attribut_dis__nn2_cnn1d_with_fc_simsiam_128-32-3-__"
+    file_ano_pred    = folder + "predicted_anomalies__cnn1d_with_fc_simsiam_128-32-3-__"
+    '''
+
+    '''
+    folder = "cnn2d_gcn/"
+
     #file_name       = "store_relevant_attribut_name_Fin_Standard_wAdjMat_newAdj_2"
-    file_name_2        = "store_relevant_attribut_name_wTrainFaF_nn2_cnn1d_with_fc_simsiam_128-32__"
-    file_name      = "store_relevant_attribut_name_wTrainFaF_2_nn2_cnn1d_with_fc_simsiam_128-32__"
+    file_name        = folder + "store_relevant_attribut_name__2_cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2__"
+    file_name_2          = folder + "store_relevant_attribut_name__2_nn2_cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2__"
     #file_idx        = "store_relevant_attribut_idx_Fin_Standard_wAdjMat_newAdj_2"
-    file_idx_2         = "store_relevant_attribut_idx_wTrainFaF_nn2_cnn1d_with_fc_simsiam_128-32__"
-    file_idx       = "store_relevant_attribut_idx_wTrainFaF_2_nn2_cnn1d_with_fc_simsiam_128-32__"
+    file_idx        = folder + "store_relevant_attribut_idx__2_cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2__"
+    file_idx_2           = folder + "store_relevant_attribut_idx__2_nn2_cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2__"
     #file_dis        = "store_relevant_attribut_dis_Fin_Standard_wAdjMat_newAdj_2"
-    file_dis_2         = "store_relevant_attribut_dis_wTrainFaF_nn2_cnn1d_with_fc_simsiam_128-32__"
-    file_dis       = "store_relevant_attribut_dis_wTrainFaF_2_nn2_cnn1d_with_fc_simsiam_128-32__"
+    file_dis         = folder + "store_relevant_attribut_dis__2_cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2__"
+    file_dis_2           = folder + "store_relevant_attribut_dis__2_nn2_cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2__"
     #file_ano_pred   = "predicted_anomaliesFin_Standard_wAdjMat_newAdj_2"
-    file_ano_pred    = "predicted_anomaliescnn1d_with_fc_simsiam_128-32__"
+    file_ano_pred    = folder + "predicted_anomalies_cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2__"
+    '''
 
     print("")
     print(" ### Used Files ###")
@@ -1877,8 +1973,19 @@ def main(run=0):
     if is_memory:
         dataset.y_test_strings = dataset.y_test_strings[:-1]
 
-    import pickle
-    #a_file = open('../../ADD_MA-Huneke/anomaly_detection/'+file_name+str(run)+'.pkl', "rb")
+    #'''
+    a_file = open('../../ADD_MA-Huneke/anomaly_detection/'+file_name+str(run)+'.pkl', "rb")
+    store_relevant_attribut_name = pickle.load(a_file)
+    a_file.close()
+    a_file = open('../../ADD_MA-Huneke/anomaly_detection/'+file_idx+str(run)+'.pkl', "rb")
+    store_relevant_attribut_idx = pickle.load(a_file)
+    a_file.close()
+    a_file = open('../../ADD_MA-Huneke/anomaly_detection/'+file_dis+str(run)+'.pkl', "rb")
+    store_relevant_attribut_dis = pickle.load(a_file)
+    a_file.close()
+    y_pred_anomalies = np.load('../../ADD_MA-Huneke/anomaly_detection/'+file_ano_pred + str(run) + '.npy')
+    #'''
+    '''
     a_file = open(file_name+str(run)+'.pkl', "rb")
     store_relevant_attribut_name = pickle.load(a_file)
     a_file.close()
@@ -1901,6 +2008,10 @@ def main(run=0):
 
     y_pred_anomalies = np.load(file_ano_pred + str(run) + '.npy')
 
+
+
+
+    
     # Fill missing entries from the second nearest neighbor
     for i in range (y_pred_anomalies.shape[0]):
         if not i in store_relevant_attribut_name:
@@ -1914,6 +2025,7 @@ def main(run=0):
                 store_relevant_attribut_dis[i] = store_relevant_attribut_dis_2[i]
             else:
                 store_relevant_attribut_dis[i] =[]
+    '''
 
     print("Loaded data finsished ...")
     print("y_pred_anomalies shape:",y_pred_anomalies.shape,"store_relevant_attribut_name length:", len(store_relevant_attribut_name), "store_relevant_attribut_idx length:", len(store_relevant_attribut_idx), "store_relevant_attribut_dis length:", len(store_relevant_attribut_dis))
@@ -1921,7 +2033,7 @@ def main(run=0):
     store_relevant_attribut_idx_shortened = store_relevant_attribut_idx.copy()
     store_relevant_attribut_name_shortened = store_relevant_attribut_name.copy()
 
-    print("store_relevant_attribut_idx:", store_relevant_attribut_idx_2.keys())
+    #print("store_relevant_attribut_idx:", store_relevant_attribut_idx_2.keys())
 
     ### clear attributes
     if is_jenks_nat_break_used:
@@ -1979,12 +2091,19 @@ def main(run=0):
             np.random.shuffle(store_relevant_attribut_dis[i])
             # randomly change idx and name anomaly scores
             #print("store_relevant_attribut_dis[i] random: ", store_relevant_attribut_dis[i])
-            #print("store_relevant_attribut_idx[i]: ", store_relevant_attribut_idx_shortened[i])
-            store_relevant_attribut_idx_shortened[i] = np.argsort(-store_relevant_attribut_dis[i])
-            #print("store_relevant_attribut_idx[i] random: ", store_relevant_attribut_idx_shortened[i])
-            store_relevant_attribut_name_shortened[i] = dataset.feature_names_all[np.argsort(-store_relevant_attribut_dis[i])]
+            print("store_relevant_attribut_idx[i]: ", store_relevant_attribut_idx_shortened[i])
+            print("store_relevant_attribut_dis[i]: ", store_relevant_attribut_dis[i])
 
-    #store_relevant_attribut_idx, store_relevant_attribut_dis, store_relevant_attribut_name
+            # If considers cases in which no explanation was found (e.g. siamese network with counterfactual approach)
+            if len(store_relevant_attribut_dis[i]) > 0:
+                store_relevant_attribut_idx_shortened[i] = np.argsort(-store_relevant_attribut_dis[i])
+                #print("store_relevant_attribut_idx[i] random: ", store_relevant_attribut_idx_shortened[i])
+                store_relevant_attribut_name_shortened[i] = dataset.feature_names_all[np.argsort(-store_relevant_attribut_dis[i])]
+            else:
+                store_relevant_attribut_idx_shortened[i] = store_relevant_attribut_dis[i]
+                store_relevant_attribut_name_shortened[i] = store_relevant_attribut_dis[i]
+
+                #store_relevant_attribut_idx, store_relevant_attribut_dis, store_relevant_attribut_name
 
     print()
     print("store_relevant_attribut_name: ", len(store_relevant_attribut_name), " | store_relevant_attribut_idx: ", len(store_relevant_attribut_idx), " | store_relevant_attribut_dis: ", len(store_relevant_attribut_dis))
@@ -1994,16 +2113,23 @@ def main(run=0):
     #print("store_relevant_attribut_idx", store_relevant_attribut_idx)
     #print("store_relevant_attribut_dis", store_relevant_attribut_dis)
 
+    #check_tsfresh_features("","","","")
+
+    #Shuffle order of anomalous data streams if multiple have the same score:
+    for i in store_relevant_attribut_idx_shortened.keys():
+        if len(store_relevant_attribut_idx_shortened[i]) > 0 and len(store_relevant_attribut_dis[i]) > 0:
+            store_relevant_attribut_idx_shortened[i] = shuffle_idx_with_maximum_values(idx=store_relevant_attribut_idx_shortened[i], dis=store_relevant_attribut_dis[i])
+
     most_rel_att = [store_relevant_attribut_name_shortened, store_relevant_attribut_idx_shortened, store_relevant_attribut_dis]
 
     dict_measures = get_labels_from_knowledge_graph_from_anomalous_data_streams(most_rel_att, dataset.y_test_strings, dataset, y_pred_anomalies, not_selection_label="no_failure", only_true_positive_prediction=False)
 
     #dict_measures = get_labels_from_knowledge_graph_from_anomalous_data_streams_permuted(most_rel_att, dataset.y_test_strings, dataset, y_pred_anomalies, not_selection_label="no_failure", only_true_positive_prediction=True, k_data_streams=[3, 5, 10], k_permutations=[3, 2, 1], rel_type="Context")
 
-    #most_rel_att = [store_relevant_attribut_idx_shortened, store_relevant_attribut_dis, store_relevant_attribut_name_shortened]
-    most_rel_att = [store_relevant_attribut_idx, store_relevant_attribut_dis, store_relevant_attribut_name]
+    most_rel_att = [store_relevant_attribut_idx_shortened, store_relevant_attribut_dis, store_relevant_attribut_name_shortened]
+    #most_rel_att = [store_relevant_attribut_idx, store_relevant_attribut_dis, store_relevant_attribut_name]
 
-    dict_measures = evaluate_most_relevant_examples(most_rel_att, dataset.y_test_strings, dataset, y_pred_anomalies, ks=[1, 3, 5], dict_measures=dict_measures,hitrateAtK=[100,200,500])
+    dict_measures = evaluate_most_relevant_examples(most_rel_att, dataset.y_test_strings, dataset, y_pred_anomalies, ks=[1, 3, 5], dict_measures=dict_measures,hitrateAtK=[100, 200, 500], only_true_positive_prediction=False)
 
     return dict_measures
 
