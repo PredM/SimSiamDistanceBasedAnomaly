@@ -817,9 +817,37 @@ def check_tsfresh_features(label, datastream, test_idx, healthy_idx ):
     # kurosis
 
 
-def evaluate_most_relevant_examples(most_relevant_attributes, y_test_labels, dataset, y_pred_anomalies, ks=[1, 3, 5], dict_measures={},hitrateAtK=[100,150,200], only_true_positive_prediction=True):
+def evaluate_most_relevant_examples(most_relevant_attributes, y_test_labels, dataset, y_pred_anomalies, ks=[1, 3, 5], dict_measures={},hitrateAtK=[100,150,200], only_true_positive_prediction=True, not_selection_label=["no_failure"]):
 
     store_relevant_attribut_idx, store_relevant_attribut_dis, store_relevant_attribut_name= most_relevant_attributes[0], most_relevant_attributes[1], most_relevant_attributes[2]
+
+    # Extract values to normalize the effect of different class sizes
+
+    unique, counts = np.unique(y_test_labels, return_counts=True)
+    class_label_counts = dict(zip(unique, counts))
+
+    dict_masking_classes = {}
+    dict_masking_instances = {}
+    dict_class_normalizer = {}
+    for c in unique:
+        curr_gold_standard_attributes = dataset.get_masking(c, return_strict_masking=True)
+        masking_strict = curr_gold_standard_attributes[61:]
+        masking_context = curr_gold_standard_attributes[:61]
+        if not masking_strict.tostring() in dict_masking_classes.keys():
+            dict_masking_classes[masking_strict.tostring()] = [c]
+        else:
+            dict_masking_classes[masking_strict.tostring()].append(c)
+    print("dict_masking_classes keys:", len(dict_masking_classes.keys()), " - ", dict_masking_classes.keys())
+    for m in dict_masking_classes.keys():
+        count_instances_per_class = 0
+        for c in dict_masking_classes[m]:
+            num_instances_of_c = class_label_counts[c]
+            count_instances_per_class = count_instances_per_class + num_instances_of_c
+        for c in dict_masking_classes[m]:
+            dict_class_normalizer[c] = count_instances_per_class
+
+    print("dict_class_normalizer:",dict_class_normalizer)
+
     num_test_examples = y_test_labels.shape[0]
     attr_names = dataset.feature_names_all
     found_for_k_strict = {}
@@ -867,7 +895,7 @@ def evaluate_most_relevant_examples(most_relevant_attributes, y_test_labels, dat
                     # Compare predictions with masked indexes for every k
                     k_predicted_attributes = store_relevant_attribut_idx[i][:curr_k]
                     #print("k_predicted_attributes: ", k_predicted_attributes)
-                    print("store_relevant_attribut_dis: ", store_relevant_attribut_dis)
+                    #print("store_relevant_attribut_dis: ", store_relevant_attribut_dis)
                     print("k="+str(curr_k)+"_predicted_attributes: ", attr_names[k_predicted_attributes])
                     print("Labeled as relevant:  ", attr_names[curr_gold_standard_attributes_strict_idx])
                     found_strict_hitsAtK[i] = 0
@@ -962,6 +990,7 @@ def evaluate_most_relevant_examples(most_relevant_attributes, y_test_labels, dat
         found_context_hitsAtK = 0
         found_strict_hitrateAtK = 0
         found_context_hitrateAtK = 0
+        class_weighted_found_hitsAtK = 0
         entries_strict = found_for_k_strict[k_key]
         entries_context = found_for_k_context[k_key]
         entries_hitrate_strict = found_hitRateAtK_strict[k_key]
@@ -979,8 +1008,10 @@ def evaluate_most_relevant_examples(most_relevant_attributes, y_test_labels, dat
             found_context_hitrateAtK = found_context_hitrateAtK + entries_hitrate_context[example]
             sum_of_mean_rank_strict = sum_of_mean_rank_strict + entries_rank_strict[example]
             sum_of_mean_rank_context = sum_of_mean_rank_context + entries_rank_context[example]
+            class_weighted_found_hitsAtK = class_weighted_found_hitsAtK + entries_strict[example]/(class_label_counts[y_test_labels[example]])
+            masking_weighted_found_hitsAtK = class_weighted_found_hitsAtK + entries_strict[example]/(dict_class_normalizer[y_test_labels[example]])
 
-        print("Fuer k=", k_key, "wurden fuer", found_strict_hitsAtK, "von", counter ,"Anomalien direkte Attribute gefunden. Good entries found: ", str(found_strict_hitsAtK/counter))
+        print("Fuer k=", k_key, "wurden fuer", found_strict_hitsAtK, "von", counter ,"Anomalien direkte Attribute gefunden. Good entries found: ", str(found_strict_hitsAtK/counter),". Masking weighted:", str(masking_weighted_found_hitsAtK / len(dict_masking_classes.keys()))," | Class weighted:", str(class_weighted_found_hitsAtK / len(unique)))
         print("Fuer k=", k_key, "wurden fuer", found_context_hitsAtK, "von", counter, "Anomalien contextuelle Attribute gefunden. Good entries found: ", str(found_context_hitsAtK / counter))
         print("Fuer k=", k_key, "wurden relevante Attribute (direkt) auf folgendem Rang durchschnittlich gefunden: ", str(sum_of_mean_rank_strict / counter))
         print("Fuer k=", k_key, "wurden relevante Attribute (kontextuelle) auf folgendem Rang durchschnittlich gefunden: ",str(sum_of_mean_rank_context / counter))
@@ -1450,7 +1481,7 @@ def change_model(config: Configuration, start_time_string, num_of_selction_itera
         print('Model selected for inference by a given key (loss):')
         print(config.directory_model_to_use, '\n')
 
-def get_labels_from_knowledge_graph_from_anomalous_data_streams(most_relevant_attributes, y_test_labels, dataset,y_pred_anomalies, not_selection_label="no_failure",only_true_positive_prediction=False):
+def get_labels_from_knowledge_graph_from_anomalous_data_streams(most_relevant_attributes, y_test_labels, dataset,y_pred_anomalies, not_selection_label="no_failure",only_true_positive_prediction=False, q1=False, q3=False):
     store_relevant_attribut_idx, store_relevant_attribut_dis, store_relevant_attribut_name = most_relevant_attributes[0], \
                                                                                              most_relevant_attributes[1], \
                                                                                              most_relevant_attributes[2]
@@ -1512,19 +1543,57 @@ def get_labels_from_knowledge_graph_from_anomalous_data_streams(most_relevant_at
                         break
                     #print("data_stream: ", data_stream)
                     data_stream_name = data_stream #attr_names[data_stream]
-                    sparql_query = ''' SELECT ?labels
-                                            WHERE {
-                                        {
-                                                ?component <http://iot.uni-trier.de/FTOnto#is_associated_with_data_stream> "'''+data_stream_name+'''"^^<http://www.w3.org/2001/XMLSchema#string>.
-                                                ?component <http://iot.uni-trier.de/FMECA#hasPotentialFailureMode> ?failureModes.
-                                                ?failureModes <http://iot.uni-trier.de/PredM#hasLabel> ?labels}
-                                        UNION{
-                                                ?component <http://iot.uni-trier.de/FTOnto#is_associated_with_data_stream> "'''+data_stream_name+'''"^^<http://www.w3.org/2001/XMLSchema#string>.
-                                                ?failureModes <http://iot.uni-trier.de/PredM#isDetectableInDataStreamOf_Direct>  ?component.
-                                                ?failureModes <http://iot.uni-trier.de/PredM#hasLabel> ?labels
-                                        }
-                                        }
-                                    '''
+                    if q1:
+                        sparql_query = ''' SELECT ?labels
+                                                WHERE {
+                                            {
+                                                    ?component <http://iot.uni-trier.de/FTOnto#is_associated_with_data_stream> "'''+data_stream_name+'''"^^<http://www.w3.org/2001/XMLSchema#string>.
+                                                    ?component <http://iot.uni-trier.de/FMECA#hasPotentialFailureMode> ?failureModes.
+                                                    ?failureModes <http://iot.uni-trier.de/PredM#hasLabel> ?labels}
+                                            UNION{
+                                                    ?component <http://iot.uni-trier.de/FTOnto#is_associated_with_data_stream> "'''+data_stream_name+'''"^^<http://www.w3.org/2001/XMLSchema#string>.
+                                                    ?failureModes <http://iot.uni-trier.de/PredM#isDetectableInDataStreamOf_Direct>  ?component.
+                                                    ?failureModes <http://iot.uni-trier.de/PredM#hasLabel> ?labels
+                                            }
+                                            }
+                                        '''
+                    elif q3:
+                        sparql_query = '''  PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+                                            PREFIX owl: <http://www.w3.org/2002/07/owl#>
+                                            PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+                                            PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+                                            PREFIX ftonto: <http://iot.uni-trier.de/FTOnto#>
+                                            PREFIX fmeca: <http://iot.uni-trier.de/FMECA#>
+                                            PREFIX predm: <http://iot.uni-trier.de/PredM#>
+                                            PREFIX sosa: <http://www.w3.org/ns/sosa/>
+                                            SELECT  DISTINCT ?labels
+                                            WHERE 
+                                            {
+                                                {
+                                                 ?component ftonto:is_associated_with_data_stream "txt16_i4"^^xsd:string.
+                                                 ?workstation ftonto:hasComponent ?component.
+                                                }UNION{
+                                                 ?sensorStream ftonto:is_associated_with_data_stream "txt16_i4"^^xsd:string.
+                                                 ?sensor ftonto:hasComponent ?sensorStream .
+                                                 ?sensor sosa:isHostedBy ?component .
+                                                 ?workstation ftonto:hasComponent ?component .
+                                                }
+                                                {
+                                                    {
+                                                     ?workstation ftonto:hasComponent ?components.
+                                                     ?failureModes predm:isDetectableInDataStreamOf_Context ?components.
+                                                    }UNION{
+                                                     ?failureModes predm:isDetectableInDataStreamOf_Context  ?component.
+                                                    }
+                                                }
+                                                {
+                                                    ?failureModes predm:hasLabel ?labels
+                                                }
+                                            }
+                                                                '''
+
+                    else:
+                        raise Exception("NO QUERY IS SPECIFIED!")
                     result = list(default_world.sparql(sparql_query))
                     cnt_queries_per_example += 1
                     cnt_labels_per_example += len(result)
@@ -1636,6 +1705,11 @@ def get_labels_from_knowledge_graph_from_anomalous_data_streams_permuted(most_re
     cnt_true_positives = 0
     for i in range(num_test_examples):
         curr_label = y_test_labels[i]
+
+        # Fix:
+        if curr_label == "txt16_conveyorbelt_big_gear_tooth_broken_failure":
+            curr_label = "txt16_conveyor_big_gear_tooth_broken_failure"
+
         breaker = False
 
         # Select which examples are used for evaluation
@@ -1652,7 +1726,8 @@ def get_labels_from_knowledge_graph_from_anomalous_data_streams_permuted(most_re
             true_positive_prediction = True
 
         already_provided_labels_not_further_counted = []
-        if not curr_label == not_selection_label and breaker == False and true_positive_prediction:
+
+        if (not curr_label == not_selection_label) and breaker == False and true_positive_prediction:
             if breaker == True:
                 continue
             print("")
@@ -1667,103 +1742,107 @@ def get_labels_from_knowledge_graph_from_anomalous_data_streams_permuted(most_re
             cnt_queries_per_example = 0
             cnt_labels_per_example = 0
             for k in k_data_streams:
-                if len(ordered_data_streams) > k and breaker == False:
+                if len(ordered_data_streams) >= k and breaker == False:
                     for k_permutation in k_permutations:
-                        print("Generating "+str(k_permutation)+" permutations of "+str(k)+" data streams for querring them ...")
+                        if breaker == False:
+                            print("Generating "+str(k_permutation)+" permutations of "+str(k)+" data streams for querring them ...")
 
-                        combination_of_data_streams = list(itertools.combinations(ordered_data_streams[:k], k_permutation))
-                        print("Got ",len(combination_of_data_streams)," data stream combinations to query ...")
-                        # Generating 2 permutations of 3 data streams for querring them ...
-                        # Got  3  data stream combinations to query ...
-                        # combination_of_data_streams:  [('a_15_1_x', 'a_15_1_y'), ('a_15_1_x', 'a_16_3_x'), ('a_15_1_y', 'a_16_3_x')]
-                        print("combination_of_data_streams: ", combination_of_data_streams)
-                        if not k_permutation == 1:
-                            combination_of_data_streams_sorted = sorted(combination_of_data_streams, key=lambda item: ordered_data_streams.tolist().index(item[1]))
-                            print("combination_of_data_streams_sorted: ", combination_of_data_streams_sorted)
-                            #print(sdsds)
-                            combination_of_data_streams = combination_of_data_streams_sorted
-                        for combi in combination_of_data_streams:
-                            if breaker == False:
-                                print("Querying the knowledge graph with combi:",combi)
+                            combination_of_data_streams = list(itertools.combinations(ordered_data_streams[:k], k_permutation))
+                            print("Got ",len(combination_of_data_streams)," data stream combinations to query ...")
+                            # Generating 2 permutations of 3 data streams for querring them ...
+                            # Got  3  data stream combinations to query ...
+                            # combination_of_data_streams:  [('a_15_1_x', 'a_15_1_y'), ('a_15_1_x', 'a_16_3_x'), ('a_15_1_y', 'a_16_3_x')]
+                            print("combination_of_data_streams: ", combination_of_data_streams)
+                            if not k_permutation == 1:
+                                combination_of_data_streams_sorted = sorted(combination_of_data_streams, key=lambda item: ordered_data_streams.tolist().index(item[1]))
+                                print("combination_of_data_streams_sorted: ", combination_of_data_streams_sorted)
+                                #print(sdsds)
+                                combination_of_data_streams = combination_of_data_streams_sorted
+                            for combi in combination_of_data_streams:
+                                if breaker == False:
+                                    print("Querying the knowledge graph with combi:",combi)
 
-                                sparql_query = '''  PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-                                                    PREFIX owl: <http://www.w3.org/2002/07/owl#>
-                                                    PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-                                                    PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
-                                                    SELECT ?labels
-                                                        WHERE { 
-                                               '''
-                                for data_stream in combi:
-                                    data_stream_name = data_stream
+                                    sparql_query = '''  PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+                                                        PREFIX owl: <http://www.w3.org/2002/07/owl#>
+                                                        PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+                                                        PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+                                                        SELECT ?labels
+                                                            WHERE { 
+                                                   '''
+                                    for data_stream in combi:
+                                        data_stream_name = data_stream
+                                        sparql_query = sparql_query + '''
+                                            { 
+                                                {
+                                                    ?component <http://iot.uni-trier.de/FTOnto#is_associated_with_data_stream> "''' + data_stream_name + '''"^^<http://www.w3.org/2001/XMLSchema#string>.
+                                                    ?component <http://iot.uni-trier.de/FMECA#hasPotentialFailureMode> ?failureModes.
+                                                    ?failureModes <http://iot.uni-trier.de/PredM#hasLabel> ?labels
+                                                }
+                                            UNION{
+                                                    ?component2 <http://iot.uni-trier.de/FTOnto#is_associated_with_data_stream> "''' + data_stream_name + '''"^^<http://www.w3.org/2001/XMLSchema#string>.
+                                                    ?failureModes <http://iot.uni-trier.de/PredM#isDetectableInDataStreamOf_''' + rel_type + '''>  ?component2.
+                                                    ?failureModes <http://iot.uni-trier.de/PredM#hasLabel> ?labels
+                                                }
+                                            }                                
+                                        '''
+
                                     sparql_query = sparql_query + '''
-                                        { 
-                                            {
-                                                ?component <http://iot.uni-trier.de/FTOnto#is_associated_with_data_stream> "''' + data_stream_name + '''"^^<http://www.w3.org/2001/XMLSchema#string>.
-                                                ?component <http://iot.uni-trier.de/FMECA#hasPotentialFailureMode> ?failureModes.
-                                                ?failureModes <http://iot.uni-trier.de/PredM#hasLabel> ?labels
-                                            }
-                                        UNION{
-                                                ?component2 <http://iot.uni-trier.de/FTOnto#is_associated_with_data_stream> "''' + data_stream_name + '''"^^<http://www.w3.org/2001/XMLSchema#string>.
-                                                ?failureModes <http://iot.uni-trier.de/PredM#isDetectableInDataStreamOf_''' + rel_type + '''>  ?component2.
-                                                ?failureModes <http://iot.uni-trier.de/PredM#hasLabel> ?labels
-                                            }
-                                        }                                
+                                        }
                                     '''
 
-                                sparql_query = sparql_query + '''
-                                    }
-                                '''
+                                    result = list(default_world.sparql(sparql_query))
+                                    cnt_queries_per_example += 1
+                                    cnt_labels_per_example += len(result)
+                                    print(str(cnt_queries_per_example)+". query with ",data_stream_name, "has result:", result)
+                                    if result ==None:
+                                        continue
 
-                                result = list(default_world.sparql(sparql_query))
-                                cnt_queries_per_example += 1
-                                cnt_labels_per_example += len(result)
-                                print(str(cnt_queries_per_example)+". query with ",data_stream_name, "has result:", result)
-                                if result ==None:
-                                    continue
+                                    # Clean result list by removing previously found labels for the current example as well as removing 'PredM.Label_'
+                                    results_cleaned = []
+                                    for found_instance in result:
+                                        found_instance = str(found_instance).replace('PredM.Label_', '')
+                                        if not found_instance in already_provided_labels_not_further_counted:
+                                            results_cleaned.append(found_instance)
+                                            already_provided_labels_not_further_counted.append(found_instance)
 
-                                # Clean result list by removing previously found labels for the current example as well as removing 'PredM.Label_'
-                                results_cleaned = []
-                                for found_instance in result:
-                                    found_instance = str(found_instance).replace('PredM.Label_', '')
-                                    if not found_instance in already_provided_labels_not_further_counted:
-                                        results_cleaned.append(found_instance)
-                                        already_provided_labels_not_further_counted.append(found_instance)
-
-                                # Counting
-                                cnt_labels += len(results_cleaned)
-                                cnt_querry += 1
-                                #res = [sub.replace('PredM.Label', '') for sub in result]
-                                #print("Label:",curr_label,"SPARQL-Result:", results_cleaned)
-                                if len(results_cleaned) > 0 and breaker == False:
-                                    for result in results_cleaned:
-                                        #print("result: ", result)
-                                        result = result.replace("[","").replace("]","")
-                                        #print("results_cleaned: ", results_cleaned)
-                                        if curr_label in result or result in curr_label:
-                                            print("FOUND: ",str(curr_label),"in",str(result),"after queries:",str(cnt_queries_per_example),"and after checking labels:",cnt_labels_per_example)
-                                            cnt_label_found += 1
-                                            print()
-                                            print("### statistics ###")
-                                            print("Queries conducted until now:",cnt_querry)
-                                            print("Labels provided until now:", cnt_labels)
-                                            print("Found labels until now:", cnt_label_found)
-                                            print("Rate of found labels until now:",(cnt_label_found / cnt_anomaly_examples))
-                                            #print("Rate of queries per labelled Anomalie until now:", (cnt_querry/(cnt_anomaly_examples-cnt_noDataStrem_detected)))
-                                            #print("Rate of labels provided per labelled Anomalie until now:", (cnt_labels/(cnt_anomaly_examples-cnt_noDataStrem_detected)))
-                                            print("###            ###")
-                                            print()
-                                            breaker = True
-                                            break
-                                        else:
-                                            if data_stream_name in curr_label:
-                                                print("+++ Check why no match? Datastream:", data_stream, "results_cleaned: ", result,
-                                                      "and gold label:", curr_label)
-                                            #print("No match, query next data stream ... ")
-                                else:
-                                    print("No Failure Mode for this data stream is modelled in the knowledge base.")
+                                    # Counting
+                                    cnt_labels += len(results_cleaned)
+                                    cnt_querry += 1
+                                    #res = [sub.replace('PredM.Label', '') for sub in result]
+                                    #print("Label:",curr_label,"SPARQL-Result:", results_cleaned)
+                                    if len(results_cleaned) > 0 and breaker == False:
+                                        for result in results_cleaned:
+                                            #print("result: ", result)
+                                            result = result.replace("[","").replace("]","")
+                                            #print("results_cleaned: ", results_cleaned)
+                                            if curr_label in result or result in curr_label:
+                                                print("FOUND: ",str(curr_label),"in",str(result),"after queries:",str(cnt_queries_per_example),"and after checking labels:",cnt_labels_per_example)
+                                                cnt_label_found += 1
+                                                print()
+                                                print("### statistics ###")
+                                                print("Queries conducted until now:",cnt_querry)
+                                                print("Labels provided until now:", cnt_labels)
+                                                print("Found labels until now:", cnt_label_found)
+                                                print("Rate of found labels until now:",(cnt_label_found / cnt_anomaly_examples))
+                                                #print("Rate of queries per labelled Anomalie until now:", (cnt_querry/(cnt_anomaly_examples-cnt_noDataStrem_detected)))
+                                                #print("Rate of labels provided per labelled Anomalie until now:", (cnt_labels/(cnt_anomaly_examples-cnt_noDataStrem_detected)))
+                                                print("###            ###")
+                                                print()
+                                                breaker = True
+                                                break
+                                            else:
+                                                if data_stream_name in curr_label:
+                                                    print("+++ Check why no match? Datastream:", data_stream, "results_cleaned: ", result,
+                                                          "and gold label:", curr_label)
+                                                #print("No match, query next data stream ... ")
+                                    else:
+                                        print("No Failure Mode for this data stream is modelled in the knowledge base.")
                 else:
-                    print("Data stream size",len(ordered_data_streams),"is smaller than:", k)
+                    if breaker:
+                        break;
+                    print("Data stream size",len(ordered_data_streams),"is smaller than:", k, "or Breaker active:",breaker)
                     cnt_noDataStrem_detected +=1
+
 
     print("")
     print("*** Statistics for Finding Failure Modes to Anomalies ***")
@@ -1904,12 +1983,12 @@ def main(run=0):
     file_idx        = "store_relevant_attribut_idx_Fin_Standard_3_"
     file_dis        = "store_relevant_attribut_dis_Fin_Standard_3_"
     file_ano_pred   = "predicted_anomaliesFin_Standard_3_"
-
+    '''
     file_name       = "store_relevant_attribut_name_Fin_Standard_wAdjMat_newAdj_2"
     file_idx        = "store_relevant_attribut_idx_Fin_Standard_wAdjMat_newAdj_2"
     file_dis        = "store_relevant_attribut_dis_Fin_Standard_wAdjMat_newAdj_2"
     file_ano_pred   = "predicted_anomaliesFin_Standard_wAdjMat_newAdj_2"
-
+    '''
     '''
     folder = "cnn1d_with_fc_simsiam_128-32-3-/"
 
@@ -1937,7 +2016,7 @@ def main(run=0):
     file_ano_pred    = folder + "predicted_anomalies__cnn1d_with_fc_simsiam_128-32-3-__"
     '''
 
-    '''
+    #'''
     folder = "cnn2d_gcn/"
 
     #file_name       = "store_relevant_attribut_name_Fin_Standard_wAdjMat_newAdj_2"
@@ -1951,7 +2030,7 @@ def main(run=0):
     file_dis_2           = folder + "store_relevant_attribut_dis__2_nn2_cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2__"
     #file_ano_pred   = "predicted_anomaliesFin_Standard_wAdjMat_newAdj_2"
     file_ano_pred    = folder + "predicted_anomalies_cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2__"
-    '''
+    #'''
 
     print("")
     print(" ### Used Files ###")
@@ -1961,19 +2040,24 @@ def main(run=0):
     print("Ano Pred file used: ", file_ano_pred)
     print("")
 
-    is_memory = False
-    is_jenks_nat_break_used = False
-    is_elbow_selection_used = False
-    is_fix_k_selection_used = False
-    fix_k_for_selection = 1
-    is_randomly_selected_featues = False
+    is_memory                       = False
+    is_jenks_nat_break_used         = False
+    is_elbow_selection_used         = False
+    is_fix_k_selection_used         = False
+    fix_k_for_selection             = 1
+    is_randomly_selected_featues    = False
+    is_oracle                       = False
+    q1                              = False
+    q2                              = False
+    q3                              = True
+
 
     # Wenn memomory in MSCRED aktiv war, dann muss das letzte Besipiel aus den Testdaten gelöscht werden
     # BEI MEMORY aktivieren ...
     if is_memory:
         dataset.y_test_strings = dataset.y_test_strings[:-1]
 
-    #'''
+    '''
     a_file = open('../../ADD_MA-Huneke/anomaly_detection/'+file_name+str(run)+'.pkl', "rb")
     store_relevant_attribut_name = pickle.load(a_file)
     a_file.close()
@@ -1984,8 +2068,8 @@ def main(run=0):
     store_relevant_attribut_dis = pickle.load(a_file)
     a_file.close()
     y_pred_anomalies = np.load('../../ADD_MA-Huneke/anomaly_detection/'+file_ano_pred + str(run) + '.npy')
-    #'''
     '''
+    #'''
     a_file = open(file_name+str(run)+'.pkl', "rb")
     store_relevant_attribut_name = pickle.load(a_file)
     a_file.close()
@@ -2025,7 +2109,7 @@ def main(run=0):
                 store_relevant_attribut_dis[i] = store_relevant_attribut_dis_2[i]
             else:
                 store_relevant_attribut_dis[i] =[]
-    '''
+    #'''
 
     print("Loaded data finsished ...")
     print("y_pred_anomalies shape:",y_pred_anomalies.shape,"store_relevant_attribut_name length:", len(store_relevant_attribut_name), "store_relevant_attribut_idx length:", len(store_relevant_attribut_idx), "store_relevant_attribut_dis length:", len(store_relevant_attribut_dis))
@@ -2034,6 +2118,28 @@ def main(run=0):
     store_relevant_attribut_name_shortened = store_relevant_attribut_name.copy()
 
     #print("store_relevant_attribut_idx:", store_relevant_attribut_idx_2.keys())
+
+    if is_randomly_selected_featues:
+        print("RANDOMIZATION IS USED ++++++++++++++++++++++++++++++")
+        for i in store_relevant_attribut_dis:
+            # randomly change the order of anomaly scores
+            #print("store_relevant_attribut_dis[i]: ", store_relevant_attribut_dis[i])
+            np.random.shuffle(store_relevant_attribut_dis[i])
+            # randomly change idx and name anomaly scores
+            #print("store_relevant_attribut_dis[i] random: ", store_relevant_attribut_dis[i])
+            #print("store_relevant_attribut_idx[i]: ", store_relevant_attribut_idx_shortened[i])
+            #print("store_relevant_attribut_dis[i]: ", store_relevant_attribut_dis[i])
+
+            # If considers cases in which no explanation was found (e.g. siamese network with counterfactual approach)
+            if len(store_relevant_attribut_dis[i]) > 0:
+                store_relevant_attribut_idx[i] = np.argsort(-store_relevant_attribut_dis[i])
+                #print("store_relevant_attribut_idx[i] random: ", store_relevant_attribut_idx_shortened[i])
+                store_relevant_attribut_name_shortened[i] = dataset.feature_names_all[np.argsort(-store_relevant_attribut_dis[i])]
+            else:
+                print("PRÜFEN!")
+                store_relevant_attribut_idx[i] = store_relevant_attribut_dis[i]
+                store_relevant_attribut_name[i] = store_relevant_attribut_dis[i]
+
 
     ### clear attributes
     if is_jenks_nat_break_used:
@@ -2083,25 +2189,24 @@ def main(run=0):
             store_relevant_attribut_idx_shortened[i] = np.argsort(-store_relevant_attribut_dis[i])[:fix_k_for_selection]
             store_relevant_attribut_name_shortened[i] = dataset.feature_names_all[np.argsort(-store_relevant_attribut_dis[i])[:fix_k_for_selection]]
 
-    if is_randomly_selected_featues:
-        print("RANDOMIZATION IS USED ++++++++++++++++++++++++++++++")
-        for i in store_relevant_attribut_dis:
-            # randomly change the order of anomaly scores
-            #print("store_relevant_attribut_dis[i]: ", store_relevant_attribut_dis[i])
-            np.random.shuffle(store_relevant_attribut_dis[i])
-            # randomly change idx and name anomaly scores
-            #print("store_relevant_attribut_dis[i] random: ", store_relevant_attribut_dis[i])
-            print("store_relevant_attribut_idx[i]: ", store_relevant_attribut_idx_shortened[i])
-            print("store_relevant_attribut_dis[i]: ", store_relevant_attribut_dis[i])
+    if is_oracle:
+        print("ORACLE MODE ACTIVE!")
+        for i in range(dataset.y_test_strings.shape[0]):
+            curr_label = dataset.y_test_strings[i]
+            if not curr_label == "no_failure":
+                # Get masking as the gold standard and store it as a models prediction
+                curr_gold_standard_attributes = dataset.get_masking(curr_label, return_strict_masking=True)
+                masking_strict = curr_gold_standard_attributes[61:]
+                masking_context = curr_gold_standard_attributes[:61]
+                masking_strict = masking_context
 
-            # If considers cases in which no explanation was found (e.g. siamese network with counterfactual approach)
-            if len(store_relevant_attribut_dis[i]) > 0:
-                store_relevant_attribut_idx_shortened[i] = np.argsort(-store_relevant_attribut_dis[i])
-                #print("store_relevant_attribut_idx[i] random: ", store_relevant_attribut_idx_shortened[i])
-                store_relevant_attribut_name_shortened[i] = dataset.feature_names_all[np.argsort(-store_relevant_attribut_dis[i])]
-            else:
-                store_relevant_attribut_idx_shortened[i] = store_relevant_attribut_dis[i]
-                store_relevant_attribut_name_shortened[i] = store_relevant_attribut_dis[i]
+                # Replace idx, score and name with the masking data:
+                store_relevant_attribut_idx_shortened[i] = np.squeeze(np.argwhere(masking_strict == True))
+                print("store_relevant_attribut_idx_shortened[i]:", store_relevant_attribut_idx_shortened[i] )
+                store_relevant_attribut_name_shortened[i] = np.squeeze(dataset.feature_names_all[store_relevant_attribut_idx_shortened[i]])
+                store_relevant_attribut_dis[i] = np.squeeze(np.where(masking_strict == True, 1, 0))# dataset.feature_names_all[store_relevant_attribut_idx_shortened[i]] = 1
+                print("store_relevant_attribut_name_shortened[i]:",store_relevant_attribut_name_shortened[i])
+                print("store_relevant_attribut_dis[i]:", store_relevant_attribut_dis[i])
 
                 #store_relevant_attribut_idx, store_relevant_attribut_dis, store_relevant_attribut_name
 
@@ -2122,14 +2227,19 @@ def main(run=0):
 
     most_rel_att = [store_relevant_attribut_name_shortened, store_relevant_attribut_idx_shortened, store_relevant_attribut_dis]
 
-    dict_measures = get_labels_from_knowledge_graph_from_anomalous_data_streams(most_rel_att, dataset.y_test_strings, dataset, y_pred_anomalies, not_selection_label="no_failure", only_true_positive_prediction=False)
+    if q1 or q3:
+        dict_measures = get_labels_from_knowledge_graph_from_anomalous_data_streams(most_rel_att, dataset.y_test_strings, dataset, y_pred_anomalies, not_selection_label="no_failure", only_true_positive_prediction=False, q1=q1, q3=q3)
+    elif q2:
+        dict_measures = get_labels_from_knowledge_graph_from_anomalous_data_streams_permuted(most_rel_att, dataset.y_test_strings, dataset, y_pred_anomalies, not_selection_label="no_failure", only_true_positive_prediction=False, k_data_streams=[2, 3, 5, 10], k_permutations=[3, 2, 1], rel_type="Context")
 
-    #dict_measures = get_labels_from_knowledge_graph_from_anomalous_data_streams_permuted(most_rel_att, dataset.y_test_strings, dataset, y_pred_anomalies, not_selection_label="no_failure", only_true_positive_prediction=True, k_data_streams=[3, 5, 10], k_permutations=[3, 2, 1], rel_type="Context")
+    else:
+        print("Query not specified!")
+        raise Exception("!")
 
     most_rel_att = [store_relevant_attribut_idx_shortened, store_relevant_attribut_dis, store_relevant_attribut_name_shortened]
     #most_rel_att = [store_relevant_attribut_idx, store_relevant_attribut_dis, store_relevant_attribut_name]
 
-    dict_measures = evaluate_most_relevant_examples(most_rel_att, dataset.y_test_strings, dataset, y_pred_anomalies, ks=[1, 3, 5], dict_measures=dict_measures,hitrateAtK=[100, 200, 500], only_true_positive_prediction=False)
+    dict_measures = evaluate_most_relevant_examples(most_rel_att, dataset.y_test_strings, dataset, y_pred_anomalies, ks=[1, 3, 5], dict_measures=dict_measures, hitrateAtK=[100, 200, 500], only_true_positive_prediction=False)
 
     return dict_measures
 
