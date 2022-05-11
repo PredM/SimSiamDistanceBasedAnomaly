@@ -2150,7 +2150,7 @@ def execute_kNN_label_embedding_search(query_embedding, embedding_df, dataset, g
 
 def get_labels_from_knowledge_graph_embeddings_from_anomalous_data_streams_permuted(most_relevant_attributes, y_test_labels, dataset, y_pred_anomalies, not_selection_label="no_failure",
                                                                                     only_true_positive_prediction=False, restrict_to_top_k_results = 3, restict_to_top_k_data_streams = 3,
-                                                                                    tsv_file=''):
+                                                                                    tsv_file='', dict_measures = {}):
     store_relevant_attribut_idx, store_relevant_attribut_dis, store_relevant_attribut_name = most_relevant_attributes[0], \
                                                                                              most_relevant_attributes[1], \
                                                                                              most_relevant_attributes[2]
@@ -2165,6 +2165,8 @@ def get_labels_from_knowledge_graph_embeddings_from_anomalous_data_streams_permu
     # Get embeddings
     embedding_df = pd.read_csv(tsv_file, sep='\t', skiprows=1, header=None,
                                error_bad_lines=False, warn_bad_lines=False, index_col=0)
+
+    used_emb_marker = tsv_file.split("_")[0]
 
     # Add the url in case of starspace file
     if "StSp" in tsv_file:
@@ -2250,13 +2252,12 @@ def get_labels_from_knowledge_graph_embeddings_from_anomalous_data_streams_permu
                 skipped_cnt += 1
 
     # Return dictonary
-    dict_measures = {}
-    dict_measures["Average label position using all data streams (add)"] = pos_add_allDS_sum / cnt_anomaly_examples
-    dict_measures["Average label position using all data streams (add_avg)"] = pos_add_avg_allDS_sum / cnt_anomaly_examples
-    dict_measures["Average label position using all data streams (add_weighted)"] = pos_add_weighted_allDS_sum / cnt_anomaly_examples
-    dict_measures["From the first "+str(restict_to_top_k_data_streams)+" data streams, the first "+str(restrict_to_top_k_results)+"results are considered"] = provided_labels_top_k_sum / cnt_anomaly_examples
-    dict_measures["No label found From the first "+str(restict_to_top_k_data_streams)+" data streams, the first "+str(restrict_to_top_k_results)+"results"] = not_found_cnt
-    dict_measures["Examples for which no anomalous data streams were provided:"] = skipped_cnt
+    dict_measures[used_emb_marker + ": Average label position using all data streams (add)"] = pos_add_allDS_sum / cnt_anomaly_examples
+    dict_measures[used_emb_marker + ": Average label position using all data streams (add_avg)"] = pos_add_avg_allDS_sum / cnt_anomaly_examples
+    dict_measures[used_emb_marker + ": Average label position using all data streams (add_weighted)"] = pos_add_weighted_allDS_sum / cnt_anomaly_examples
+    dict_measures[used_emb_marker + ": From the first "+str(restict_to_top_k_data_streams)+" data streams, the first "+str(restrict_to_top_k_results)+"results are considered"] = provided_labels_top_k_sum / cnt_anomaly_examples
+    dict_measures[used_emb_marker + ": No label found From the first "+str(restict_to_top_k_data_streams)+" data streams, the first "+str(restrict_to_top_k_results)+"results"] = not_found_cnt
+    dict_measures[used_emb_marker + ": Examples for which no anomalous data streams were provided:"] = skipped_cnt
 
     return dict_measures
     # execute a query for each example
@@ -2289,18 +2290,19 @@ def main(run=0):
     file_dis        = "store_relevant_attribut_dis_Fin_Standard_wAdjMat_newAdj_2"
     file_ano_pred   = "predicted_anomaliesFin_Standard_wAdjMat_newAdj_2"
     #'''
+    # Finally reported models for MSCRED:
     #'''
     file_name       = "store_relevant_attribut_name_Fin_Standard_wAdjMat_newAdj_2_fixed"
     file_idx        = "store_relevant_attribut_idx_Fin_Standard_wAdjMat_newAdj_2_fixed"
     file_dis        = "store_relevant_attribut_dis_Fin_Standard_wAdjMat_newAdj_2_fixed"
     file_ano_pred   = "predicted_anomaliesFin_Standard_wAdjMat_newAdj_2_fixed"
     #'''
-    #'''
+    '''
     file_name       = "store_relevant_attribut_name_Fin_MSCRED_standard_repeat"
     file_idx        = "store_relevant_attribut_idx_Fin_MSCRED_standard_repeat"
     file_dis        = "store_relevant_attribut_dis_Fin_MSCRED_standard_repeat"
     file_ano_pred   = "predicted_anomaliesFin_MSCRED_standard_repeat"
-    #'''
+    '''
 
     '''
     folder = "cnn1d_with_fc_simsiam_128-32-3-/"
@@ -2353,6 +2355,8 @@ def main(run=0):
     print("Ano Pred file used: ", file_ano_pred)
     print("")
 
+    use_only_true_positive_pred     = False
+    evaluate_hitsAtK_hitRateAtP     = False
     is_memory                       = False
     is_jenks_nat_break_used         = True
     is_elbow_selection_used         = False
@@ -2364,6 +2368,8 @@ def main(run=0):
     q2                              = False
     q3                              = False
     q4                              = True
+
+    print("Used config: use_only_true_positive_pred:", use_only_true_positive_pred,"is_jenks_nat_break_used:", is_jenks_nat_break_used,"is_randomly_selected_featues", is_randomly_selected_featues,"is_oracle",is_oracle,"q1:",q1,"q2:",q2,"q3:",q3,"q4:",q4)
 
 
     # Wenn memomory in MSCRED aktiv war, dann muss das letzte Besipiel aus den Testdaten gelöscht werden
@@ -2544,12 +2550,29 @@ def main(run=0):
     most_rel_att = [store_relevant_attribut_name_shortened, store_relevant_attribut_idx_shortened, store_relevant_attribut_dis]
 
     if q1 or q3:
-        dict_measures = get_labels_from_knowledge_graph_from_anomalous_data_streams(most_rel_att, dataset.y_test_strings, dataset, y_pred_anomalies, not_selection_label="no_failure", only_true_positive_prediction=False, q1=q1, q3=q3)
+        dict_measures = get_labels_from_knowledge_graph_from_anomalous_data_streams(most_rel_att, dataset.y_test_strings, dataset, y_pred_anomalies, not_selection_label="no_failure", only_true_positive_prediction=use_only_true_positive_pred, q1=q1, q3=q3)
     elif q2:
-        dict_measures = get_labels_from_knowledge_graph_from_anomalous_data_streams_permuted(most_rel_att, dataset.y_test_strings, dataset, y_pred_anomalies, not_selection_label="no_failure", only_true_positive_prediction=False, k_data_streams=[2, 3, 5, 10], k_permutations=[3, 2, 1], rel_type="Context")
+        dict_measures = get_labels_from_knowledge_graph_from_anomalous_data_streams_permuted(most_rel_att, dataset.y_test_strings, dataset, y_pred_anomalies, not_selection_label="no_failure", only_true_positive_prediction=use_only_true_positive_pred, k_data_streams=[2, 3, 5, 10], k_permutations=[3, 2, 1], rel_type="Context")
     elif q4:
-        dict_measures = get_labels_from_knowledge_graph_embeddings_from_anomalous_data_streams_permuted(most_rel_att, dataset.y_test_strings, dataset, y_pred_anomalies, not_selection_label="no_failure", only_true_positive_prediction=False,
-                                                                                                        restrict_to_top_k_results = 3, restict_to_top_k_data_streams = 3, tsv_file='../data/training_data/knowledge/owl2vecstar_eval_proj_True_dims_10_epochs_25_wk_wl_wd_4_wm_none_uriDoc_yes_litDoc_yes_mixDoc_yes.tsv')
+        dict_measures = get_labels_from_knowledge_graph_embeddings_from_anomalous_data_streams_permuted(most_rel_att, dataset.y_test_strings, dataset, y_pred_anomalies, not_selection_label="no_failure", only_true_positive_prediction=use_only_true_positive_pred,
+                                                                                                        restrict_to_top_k_results = 3, restict_to_top_k_data_streams = 3, tsv_file='../data/training_data/knowledge/StSp_eval_lr_0.100001_d_25_e_150_bs_5_doLHS_0.0_doRHS_0.0_mNS_50_nSL_100_l_hinge_s_cosine_m_0.7_iM_False.tsv')
+        list_embedding_models = var = [
+            '../data/training_data/knowledge/owl2vecstar_eval_proj_False_dims_50_epochs_10_wk_random_wd_4_wm_none_uriDoc_yes_litDoc_no_mixDoc_no.tsv',
+            '../data/training_data/knowledge/owl2vecstar_eval_proj_True_dims_10_epochs_25_wk_wl_wd_4_wm_none_uriDoc_yes_litDoc_yes_mixDoc_yes.tsv',
+            '../data/training_data/knowledge/rdf2vec_eval_proj_False_dims_50_epochs_10_wk_wl_wd_2.tsv',
+            '../data/training_data/knowledge/rdf2vec_eval_proj_False_dims_100_epochs_50_wk_wl_wd_2.tsv']
+
+        for emb_mod in list_embedding_models:
+            dict_measures = get_labels_from_knowledge_graph_embeddings_from_anomalous_data_streams_permuted(most_rel_att,
+                                                                                                        dataset.y_test_strings,
+                                                                                                        dataset,
+                                                                                                        y_pred_anomalies,
+                                                                                                        not_selection_label="no_failure",
+                                                                                                        only_true_positive_prediction=use_only_true_positive_pred,
+                                                                                                        restrict_to_top_k_results=3,
+                                                                                                        restict_to_top_k_data_streams=3,
+                                                                                                        tsv_file=emb_mod,
+                                                                                                        dict_measures=dict_measures)
 
     else:
         print("Query not specified!")
@@ -2557,8 +2580,8 @@ def main(run=0):
 
     most_rel_att = [store_relevant_attribut_idx_shortened, store_relevant_attribut_dis, store_relevant_attribut_name_shortened]
     #most_rel_att = [store_relevant_attribut_idx, store_relevant_attribut_dis, store_relevant_attribut_name]
-
-    dict_measures = evaluate_most_relevant_examples(most_rel_att, dataset.y_test_strings, dataset, y_pred_anomalies, ks=[1, 3, 5], dict_measures=dict_measures, hitrateAtK=[100, 200, 500], only_true_positive_prediction=False)
+    if evaluate_hitsAtK_hitRateAtP:
+        dict_measures = evaluate_most_relevant_examples(most_rel_att, dataset.y_test_strings, dataset, y_pred_anomalies, ks=[1, 3, 5], dict_measures=dict_measures, hitrateAtK=[100, 200, 500], only_true_positive_prediction=use_only_true_positive_pred)
 
     return dict_measures
 
