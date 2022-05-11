@@ -33,6 +33,7 @@ from sklearn.svm import OneClassSVM
 from matplotlib import pyplot
 from matplotlib import colors
 import pickle
+from sklearn import metrics
 
 from configuration.Enums import BatchSubsetType, LossFunction, BaselineAlgorithm, SimpleSimilarityMeasure, \
     ArchitectureVariant, ComplexSimilarityMeasure, TrainTestSplitMode, AdjacencyMatrixPreprossingCNN2DWithAddInput,\
@@ -244,7 +245,7 @@ def calculate_most_relevant_attributes(sim_mat_casebase_test, sim_mat_casebase_c
                 ###
                 #'''
 
-                if test_example_idx in [3047]:#3047:
+                if test_example_idx in [3047,3386]:#3047:
                      print_it=True
                      csfont = {'Times New Roman'}
                 else:
@@ -564,7 +565,8 @@ def calculate_most_relevant_attributes(sim_mat_casebase_test, sim_mat_casebase_c
                         pyplot.xticks(fontsize=5, fontname='Times New Roman')
 
 
-                        fig, axes = pyplot.subplots(nrows=int(cnt/3), ncols=1, sharex=True, squeeze=False, figsize=(40, 40))
+                        fig, axes = pyplot.subplots(nrows=int(cnt/3), ncols=1, sharex=True, squeeze=False, figsize=(15, 15))
+
                         cnt = 0
                         print("anomalous_score_over_time.keys(): ", anomalous_score_over_time.keys())
                         print("df.head:", df.head())
@@ -572,17 +574,26 @@ def calculate_most_relevant_attributes(sim_mat_casebase_test, sim_mat_casebase_c
                         for key in anomalous_score_over_time.keys():
                             print("key: ", key)
                             #df[str(attr_names[key]) + " normal"].plot(color='seagreen', ax=axes[cnt])
-                            axes[cnt,0].plot(df[str(attr_names[key]) + " normal"], color='seagreen', linewidth=1.1, label=str(attr_names[key]) + " normal")
+                            axes[cnt,0].plot(df[str(attr_names[key]) + " normal"], color='seagreen', linewidth=2.7, label=str(attr_names[key]) + " normal")
                             #df[str(attr_names[key]) + " anomalous"].plot(color='indianred', ax=axes[cnt])
-                            axes[cnt,0].plot(df[str(attr_names[key]) + " anomalous"], color='indianred', linewidth=0.8, label=str(attr_names[key]) + " anomalous")
+                            axes[cnt,0].plot(df[str(attr_names[key]) + " anomalous"], color='indianred', linewidth=2.3, label=str(attr_names[key]) + " anomalous")
                             #df[str(attr_names[key]) + " score"].plot(secondary_y=True, color='cornflowerblue', ax=axes[cnt], linestyle = 'dotted')
-                            axes[cnt,0].plot(df[str(attr_names[key]) + " score"], color='cornflowerblue', linestyle = 'dotted', linewidth=0.6, label=str(attr_names[key]) + " score" )
+                            axes[cnt,0].plot(df[str(attr_names[key]) + " score"], color='cornflowerblue', linestyle = 'dotted', linewidth=1.8, label=str(attr_names[key]) + " score" )
                             axes[cnt,0].grid(True)
                             axes[cnt,0].legend(loc="upper right")
+
+
+
+                            ano_scores = df[str(attr_names[key]) + " score"].values
+                            pos_1 = np.argwhere(ano_scores >= 0.8)
+                            for x in pos_1:
+                                #print("x:",x,"ano_socre:",ano_scores[x])
+                                axes[cnt,0].axvline(x, color='r', linewidth=3, alpha=(float(0.05*ano_scores[x]*0.5)))
 
                             cnt = cnt + 1
                             #axes[cnt].set_title("Counterfactual Explanation for Test Example: "+str(test_example_idx)+" with Train Example: "+str(curr_idx)+ " for "+str(attr_names[key]), fontname='Times New Roman')
                         #pyplot.legend(loc='best')
+                        pyplot.ylim(-0.05, 1.05)
                         pyplot.savefig('ano_expl_test_idx_' + str(test_example_idx) + "_with_train_idx_" + str(curr_idx) + " _" + str(i) + '_with_ano_score_curr_test_example_raw.png')
                         #except:
                         #    print("Plot could not be generated ...")
@@ -1480,7 +1491,7 @@ def plotHistogram(anomaly_scores, labels, filename="plotHistogramWithMissingFile
 
     # Get idx of examples with this label
     example_idx_of_no_failure_label = np.where(labels == 'no_failure')
-    example_idx_of_opposite_labels = np.squeeze(np.array(np.where(labels != 'no_failure')))
+    example_idx_of_opposite_labels = np.where(labels != 'no_failure')
     #feature_data = np.expand_dims(feature_data, -1)
     anomaly_scores_normal = anomaly_scores[example_idx_of_no_failure_label[0]]
     anomaly_scores_unnormal = anomaly_scores[example_idx_of_opposite_labels[0]]
@@ -1492,10 +1503,52 @@ def plotHistogram(anomaly_scores, labels, filename="plotHistogramWithMissingFile
 
     bins = np.linspace(min, max, num_of_bins)
     pyplot.clf()
-    pyplot.hist(anomaly_scores_normal, bins, alpha=0.5, label='normal')
-    pyplot.hist(anomaly_scores_unnormal, bins, alpha=0.5, label='unnormal')
+    pyplot.hist(anomaly_scores_normal, bins, alpha=0.5, label='normal', color="seagreen")
+    pyplot.hist(anomaly_scores_unnormal, bins, alpha=0.5, label='unnormal', color="crimson")
     pyplot.legend(loc='upper right')
     pyplot.savefig(filename) #pyplot.show()
+
+def plotHistogram2(anomaly_scores, labels,filename="plotHistogramWithMissingFilename_.png", min=0, max=1, num_of_bins=100):
+    print("DOES NOT WORK!")
+    # divide examples in normal and anomalous
+
+    # Get idx of examples with this label
+    example_idx_of_no_failure_label = np.where(labels == 'no_failure')
+    example_idx_of_opposite_labels = np.where(labels != 'no_failure')
+    #feature_data = np.expand_dims(feature_data, -1)
+    anomaly_scores_normalized = (anomaly_scores - np.min(anomaly_scores)) / np.ptp(anomaly_scores)
+    anomaly_scores_normal = anomaly_scores_normalized[example_idx_of_no_failure_label[0]]
+    anomaly_scores_unnormal = anomaly_scores_normalized[example_idx_of_opposite_labels[0]]
+    print("Num of normal examples: ", anomaly_scores_normal.shape[0], " and unnormal examples: ", anomaly_scores_unnormal.shape[0], "in the set (used for histogram plot).")
+    print("Mean Anomaly score normal: ", np.mean(anomaly_scores_normal), "Mean Anomaly score unnomal: ", np.mean(anomaly_scores_unnormal) )
+
+    bins = np.linspace(min, max, num_of_bins)#(0.0, 1, 100)
+    pyplot.clf()
+    pyplot.hist(anomaly_scores_normal, bins, alpha=0.5, label='normal', color="seagreen")
+    pyplot.hist(anomaly_scores_unnormal, bins, alpha=0.5, label='unnormal', color="crimson")
+    pyplot.legend(loc='upper right')
+    pyplot.savefig(filename) #pyplot.show()
+
+def plotRocAucCurve(y_true, anomaly_scores_test, roc_auc, filename="plotRocAucCurveWithMissingFilename_.png", lw=2, run=""):
+    score_per_example_test_normalized = (anomaly_scores_test - np.min(anomaly_scores_test)) / np.ptp(anomaly_scores_test)
+    #print("score_per_example_test_normalized: ", score_per_example_test_normalized)
+    #print("NAN found np.ptp(score_per_example: ", np.where(np.isnan(np.ptp(anomaly_scores_test))))
+    #print("NAN found score_per_example: ", np.where(np.isnan(anomaly_scores_test)))
+    score_per_example_test_normalized = np.nan_to_num(score_per_example_test_normalized)
+    y_true = np.where(y_true == 'no_failure', 1, 0)
+    y_true = np.reshape(y_true, y_true.shape[0])
+    fpr, tpr, thresholds = metrics.roc_curve(y_true, score_per_example_test_normalized)
+    pyplot.clf()
+    pyplot.plot(fpr, tpr, color='darkorange',
+             lw=lw, label='ROC curve (area = %0.2f)' % roc_auc)
+    pyplot.plot([0, 1], [0, 1], color='navy', lw=lw, linestyle='--')
+    pyplot.xlim([0.0, 1.0])
+    pyplot.ylim([0.0, 1.05])
+    pyplot.xlabel('False Positive Rate')
+    pyplot.ylabel('True Positive Rate')
+    pyplot.title('Receiver operating characteristic example')
+    pyplot.legend(loc="lower right")
+    pyplot.savefig(filename)
 
 def change_model(config: Configuration, start_time_string, num_of_selction_iteration = None, get_model_by_loss_value = None):
     search_dir = config.models_folder
@@ -1644,7 +1697,7 @@ def get_labels_from_knowledge_graph_from_anomalous_data_streams(most_relevant_at
 
     # execute a query for each example
 
-def create_a_TSNE_plot_from_encoded_data(x_train_encoded,x_test_encoded,train_labels,test_labels, config, architecture):
+def create_a_TSNE_plot_from_encoded_data(x_train_encoded,x_test_encoded,train_labels,test_labels, config, architecture,run=""):
     print("Start with TSNE plot ...")
     data4TSNE = x_train_encoded
     data4TSNE = np.concatenate((data4TSNE, x_test_encoded), axis=0)
@@ -1660,7 +1713,7 @@ def create_a_TSNE_plot_from_encoded_data(x_train_encoded,x_test_encoded,train_la
     else:
         x_trainTest_labels_EncodedAsNumber = le.transform(train_labels)
 
-    tsne_embedder = TSNE(n_components=2, perplexity=50.0, learning_rate=10, early_exaggeration=10, n_iter=10000,
+    tsne_embedder = TSNE(n_components=2, perplexity=50.0, #learning_rate=10, early_exaggeration=10, n_iter=10000,
                          random_state=123, metric='cosine')
     X_embedded = tsne_embedder.fit_transform(data4TSNE)
 
@@ -1719,7 +1772,7 @@ def create_a_TSNE_plot_from_encoded_data(x_train_encoded,x_test_encoded,train_la
             lgd.legendHandles[i].set_label(le.classes_[i])
     # plt.show()
     pyplot.savefig(architecture.hyper.encoder_variant + '_' + str(
-        data4TSNE.shape[0]) + '.png',
+        data4TSNE.shape[0]) + str(run)+'.png',
                 bbox_extra_artists=(lgd,), bbox_inches='tight')
     print("Start with TSNE plot saved!")
 
@@ -2011,9 +2064,9 @@ def main(run=0, val_split_rates=[0.0]):
     k_pred = [1,2,3,5,7]
     measure = ['cosine','l1','l2']
     '''
-    k_clean = [1]
+    k_clean = [2]
     fraction_clean = [0.0]
-    k_pred = [1]
+    k_pred = [2]
     measure = ['cosine']
 
     results = {} # key:valid, value: roc_auc test
@@ -2092,18 +2145,19 @@ def main(run=0, val_split_rates=[0.0]):
                         print("-------------------------------------------------")
 
                         plotHistogram(labels=x_valid_labels_, anomaly_scores=nn_distance_valid,
-                                      filename='Anomaly_Score_Histogram_valid_'+str(curr_run_identifier)+'.png',
+                                      filename='Anomaly_Score_Histogram_valid_'+str(curr_run_identifier)+"_"+str(run)+'.pdf',
                                       min=np.amin(nn_distance_valid), max=np.amax(nn_distance_valid),
-                                      num_of_bins=10)
+                                      num_of_bins=200)
 
                         f1_weigh_thold, f1_macro_thold, dict_results = find_anomaly_threshold(nn_distance_valid=nn_distance_valid, labels_valid=x_valid_labels_, results_dict=dict_results)
 
 
                         # Plot Anomaly Score distribution as histogram
                         plotHistogram(labels=x_test_labels, anomaly_scores=nn_distance_test,
-                                      filename='Anomaly_Score_Histogram_test_'+str(curr_run_identifier)+'.png',
+                                      filename='Anomaly_Score_Histogram_test_'+str(curr_run_identifier)+"_"+str(run)+'.pdf',
                                       min=np.amin(nn_distance_test), max=np.amax(nn_distance_test),
-                                      num_of_bins=25)
+                                      num_of_bins=200)
+
                         # Calculate mean distance of the valid examples to the train examples (case base)
                         mean_distance_valid = np.mean(nn_distance_valid_cleaned)
                         second_percentile = np.percentile(nn_distance_valid_cleaned,2)
@@ -2125,6 +2179,9 @@ def main(run=0, val_split_rates=[0.0]):
                         print("*** test avgpr kNN:\t\t", avgpr_test_knn, " ***")
                         print("*** test pr_auc kNN:\t\t", pr_auc_test_knn, " ***")
                         print("-------------------------------------------------")
+
+                        # RocAucCurve
+                        plotRocAucCurve(y_test_strings, nn_distance_test, filename='Anomaly_Score_RocAucCurve_test_'+str(curr_run_identifier)+"-"+str(run)+'.pdf', roc_auc=roc_auc_test_knn, run=run)
 
                         # Store results
                         results[mean_distance_valid] = roc_auc_test_knn

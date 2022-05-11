@@ -106,6 +106,7 @@ class FullDataset(Dataset):
         self.graph_pooling_relation_attr2ws_file = None                # ?
         self.additional_static_attribute_features = None
         self.owl2vec_embedding_dim = None
+        self.mapping_attr_to_ftonto_df = None
 
         self.is_third_party_dataset = False #True if self.config.data_folder_prefix != '../../../../data/pklein/PredMSiamNN/data/' else False
 
@@ -426,13 +427,13 @@ class FullDataset(Dataset):
                 self.owl2vec_embedding_dim = 16
             # Define an arrary (owl2vec_attr_embeddings) according chosen embedding size [emb_dim, num_of_attributes]
             owl2vec_attr_embeddings = np.zeros((self.owl2vec_embedding_dim, self.feature_names_all.shape[0]))
-            mapping_attr_to_ftonto_df = pd.read_csv(self.config.mapping_attr_to_ftonto_file, sep=';', index_col=0)
+            self.mapping_attr_to_ftonto_df = pd.read_csv(self.config.mapping_attr_to_ftonto_file, sep=';', index_col=0)
             owl2vec_node_embeddings_df = pd.read_csv(self.config.graph_owl2vec_node_embeddings_file, sep=',',index_col=0)
             owl2vec_node_embeddings_df.index = owl2vec_node_embeddings_df.index.map(str)
 
             for idx, attr_name in enumerate(self.feature_names_all):
                 # Get ftOnto uri for each attribute
-                ftOnto_uri = mapping_attr_to_ftonto_df.loc[attr_name]
+                ftOnto_uri = self.mapping_attr_to_ftonto_df.loc[attr_name]
                 # Get its embedding by its uri and store it according the attribute order
                 # print(owl2vec_node_embeddings_df.loc[ftOnto_uri].values)
                 owl2vec_attr_embeddings[:,idx] = owl2vec_node_embeddings_df.loc[ftOnto_uri].values

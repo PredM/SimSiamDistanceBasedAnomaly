@@ -441,11 +441,12 @@ def main(run=0):
     print(" LOADED DATA IS OVERWRITTEN WITH SIGNATURE MATRICES FROM MSCRED")
     print("####################")
 
-    x_train_encoded = np.load('../../../../data/pklein/MSCRED_Input_Data/sig_mat_train_2.npy')
-    x_valid_encoded = np.load('../../../../data/pklein/MSCRED_Input_Data/sig_mat_valid.npy')
-    x_test_encoded = np.load('../../../../data/pklein/MSCRED_Input_Data/sig_mat_test.npy')
+    x_train_encoded = np.load('../../../../data/pklein/MSCRED_Input_Data_2/sig_mat_train_2.npy')
+    x_valid_encoded = np.load('../../../../data/pklein/MSCRED_Input_Data_2/sig_mat_valid.npy')
+    x_test_encoded = np.load('../../../../data/pklein/MSCRED_Input_Data_2/sig_mat_test.npy')
     x_train_labels = x_train_labels[(x_train_labels =='no_failure')]
-    x_valid_labels= np.load('../../../../data/pklein/MSCRED_Input_Data/valid_labels.npy')
+    x_valid_labels= np.load('../../../../data/pklein/MSCRED_Input_Data_2/valid_labels.npy', allow_pickle=True)
+    x_test_labels = np.load('../../../../data/pklein/MSCRED_Input_Data_2/test_labels.npy', allow_pickle=True)
 
     print("Shape of Sig Mat train:", x_train_encoded.shape,"valid:",x_valid_encoded.shape,"test:",x_test_encoded.shape)
 
@@ -578,7 +579,7 @@ def main(run=0):
                     #'''
 
                     #'''
-                    for i in range (5):
+                    for i in range (1):
                         print(i,"- iteration with seed:",(2022+i))
                         np.random.seed(2022+i)
                         # Use OC-SVM

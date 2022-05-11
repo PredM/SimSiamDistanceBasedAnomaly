@@ -251,7 +251,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
 
         # Investigate Collapsing:
         ###
-        # '''
+        #'''
         # context_vectors_ = context_vectors
         print("context_vectors: ", context_vectors_.shape)
         z_a_l2_norm = tf.math.l2_normalize(context_vectors_, axis=0)
@@ -284,7 +284,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
         # context vectors shape: (batchsize / entries, features)
         tf.print("std_axis_0_mean:", std_axis_0_mean, "| std_axis_1_mean:", std_axis_1_mean, "| 1/sqrt(d):",
                  (1 / (tf.sqrt(128.0))), "| center loss:", center_loss_a, center_loss_b)
-        # '''
+        #'''
         ###
 
         ###
@@ -308,29 +308,29 @@ class SimpleSNN(AbstractSimilarityMeasure):
 
             # predictions p_a, p_b from prediction MLP h
             p_a = self.complex_sim_measure.model(z_a, training=self.training)
-            # '''
+            '''
             p_a_res1 = p_a[1]  # residual term
             p_a_res2 = p_a[2]
-            '''
+            
             p_a_res3 = p_a[3]
             p_a_res4 = p_a[4]
             p_a_res5 = p_a[5]
             '''
-            p_a = p_a[0]  # normal state
+            #p_a = p_a[0]  # normal state
 
             # p_a_res1 = p_a[1]  # residual term
             # p_a = p_a[0]    # normal state
             # p_a_mul2 = p_a[2]
             p_b = self.complex_sim_measure.model(z_b, training=self.training)
-            # '''
+            '''
             p_b_res1 = p_b[1]
             p_b_res2 = p_b[2]
-            '''
+            
             p_b_res3 = p_b[3]
             p_b_res4 = p_b[4]
             p_b_res5 = p_b[5]
             '''
-            p_b = p_b[0]
+            #p_b = p_b[0]
 
             # p_b_res1 = p_b[1]
             # p_b_mul2 = p_b[2]
@@ -341,10 +341,16 @@ class SimpleSNN(AbstractSimilarityMeasure):
             # SimSiam Algo 1. normlize according dim=1 whereas Barlow Twin normalise along the batch dimension (i.e. dim=0)
             # Cosine similarity according: https://github.com/keras-team/keras/blob/d8fcb9d4d4dad45080ecfdd575483653028f8eda/keras/metrics.py#L4162
 
-            p_a_1 = tf.math.l2_normalize(p_a, axis=1)
-            p_b_1 = tf.math.l2_normalize(p_b, axis=1)
-            z_a_l2_norm = tf.math.l2_normalize(z_a, axis=1)
-            z_b_l2_norm = tf.math.l2_normalize(z_b, axis=1)
+            p_a_1 = tf.math.l2_normalize((p_a - o_z_a)**2, axis=1)
+            p_b_1 = tf.math.l2_normalize((p_b - o_z_a)**2, axis=1)
+            z_a_l2_norm = tf.math.l2_normalize((z_a - o_z_a)**2, axis=1)
+            z_b_l2_norm = tf.math.l2_normalize((z_b - o_z_a)**2, axis=1)
+
+            #p_a_1_ = tf.math.l2_normalize((tf.math.multiply(p_a, o_z_a))**2, axis=1)
+            #p_b_1_ = tf.math.l2_normalize((tf.math.multiply(p_b, o_z_a))**2, axis=1)
+            #z_a_l2_norm_ = tf.math.l2_normalize((tf.math.multiply(z_a, o_z_a))**2, axis=1)
+            #z_b_l2_norm_ = tf.math.l2_normalize((tf.math.multiply(z_b, o_z_a))**2 , axis=1)
+
             '''
             p_a_1 = (p_a - tf.reduce_mean(p_a, axis=0)) / tf.math.reduce_std(p_a, axis=0)
             p_b_1 = (p_b - tf.reduce_mean(p_b, axis=0)) / tf.math.reduce_std(p_b, axis=0)
@@ -362,7 +368,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
             p_b_res3_norm = tf.math.l2_normalize(p_b_res3, axis=1)
             '''
 
-            # '''
+            '''
             p_b_res1_p_a_norm = tf.math.l2_normalize(p_a - (p_b_res1), axis=1)
             p_b_res1_p_a_norm = tf.math.l2_normalize(p_b - (p_a_res1), axis=1)
             p_a_res1_p_a_norm = tf.math.l2_normalize((p_a_res1) + p_a, axis=1)
@@ -382,7 +388,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
             b_2 = tf.math.l2_normalize((p_b - p_a_res1) / p_a_res2, axis=1)
             b_neg = tf.math.l2_normalize(z_b + (p_a_res1), axis=1)
             b_neg2 = tf.math.l2_normalize(z_b - (p_a_res1), axis=1)
-            # '''
+            '''
             if self.config.stop_gradient:
                 # D_pa1_zb = tf.matmul(p_a_1, tf.stop_gradient(z_b_l2_norm), transpose_b=True)
                 # D_pb1_za = tf.matmul(p_b_1, tf.stop_gradient(z_a_l2_norm), transpose_b=True)
@@ -394,6 +400,8 @@ class SimpleSNN(AbstractSimilarityMeasure):
                 # D_pb1_za = tf.matmul(p_b_1, z_a_l2_norm, transpose_b=True)
                 D_pa1_zb = tf.reduce_sum(p_a_1 * z_b_l2_norm, axis=1)
                 D_pb1_za = tf.reduce_sum(p_b_1 * z_a_l2_norm, axis=1)
+                #D_pa1_zb_ = tf.reduce_sum(p_a_1_ * z_b_l2_norm_, axis=1)
+                #D_pb1_za_ = tf.reduce_sum(p_b_1_ * z_a_l2_norm_, axis=1)
 
             # Residuals
             '''
@@ -410,10 +418,9 @@ class SimpleSNN(AbstractSimilarityMeasure):
             D_p_a_x_p_b_x_3 = tf.reduce_sum(p_a_res3 * p_b_res3, axis=1)
             #D_p_a_x_p_b_x = tf.matmul(p_a_res1, p_b_res2, transpose_b=True)
             '''
-
+            '''
             D_a_zb = tf.reduce_sum(a * tf.stop_gradient(z_b_l2_norm), axis=1)
-            D_b_zb = tf.reduce_sum(b * tf.stop_gradient(z_a_l2_norm), axis=1)
-
+            D_b_zb = tf.reduce_sum(b * tf.stop_gradient(z_a_l2_norm), axis=1) 
             D_a_zb_neg = tf.reduce_sum(a_neg * tf.stop_gradient(p_b_1), axis=1)
             D_b_zb_neg = tf.reduce_sum(b_neg * tf.stop_gradient(p_a_1), axis=1)
             D_a_zb2 = tf.reduce_sum(a_2 * z_b_l2_norm, axis=1)
@@ -446,8 +453,11 @@ class SimpleSNN(AbstractSimilarityMeasure):
             #loss = 0.5 * D_a_zb2 + 0.5 * D_b_zb2 - (10 * tf.abs( std_axis_0_mean -(1/(tf.sqrt(128.0))))) + 0.5  * D_p_a_p_b + 0.5 * D_pres1 #+ 0.4*(D_p_a_p_b - D_z_a_z_b) + 0.4 * D_pres1 # Loss-nr4
             #loss = 0.45 * D_p_a_p_b + 0.1 * -D_z_a_z_b + 0.45 * (0.5 * D_a_zb2 + 0.5 * D_b_zb2)  # Loss-nr3
             #loss = D_p_a_p_b +  (0.5 * D_a_zb2 + 0.5 * D_b_zb2)  # Loss-nr2
-
-            # loss = 0.5 * D_a_zb2 + 0.5 * D_b_zb2
+            '''
+            z_a_o_z_a = (tf.sqrt(tf.reduce_sum(tf.square(z_a - o_z_a), 1)))
+            z_b_o_z_a = (tf.sqrt(tf.reduce_sum(tf.square(z_b - o_z_a), 1)))
+            loss = 0.5 * D_pa1_zb + 0.5 * D_pb1_za #- z_a_o_z_a - z_b_o_z_a
+            #loss = 0.25 * D_pa1_zb + 0.25 * D_pb1_za #+0.25 * D_pa1_zb_ + 0.25 * D_pb1_za_ #- z_a_o_z_a - z_b_o_z_a
 
             # loss = 2* (0.5 * D_a_zb2 + 0.5 * D_b_zb2) - (0.5 * D_a_zb_neg + 0.5 * D_b_zb_neg) + 2* D_p_a_p_b - (10 * tf.abs( std_axis_0_mean -(1/(tf.sqrt(128.0)))))
             # loss = D_p_a_p_b
@@ -455,6 +465,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
             # tf.print("Loss:", loss, "D_p_a_p_b: ", D_p_a_p_b, "0.5 * D_1 + 0.5 * D_2:", 0.5 * D_1 + 0.5 * D_2," 0.5 * D_1_z + 0.5 * D_2_z:", 0.5 * D_1_z + 0.5 * D_2_z,"D_z_a_z_b:",D_z_a_z_b,"D_pres:",D_pres1)
             # tf.print("Loss:", tf.reduce_mean(loss), "D_p_a_p_b: ", tf.reduce_mean(D_p_a_p_b), "(0.5 * D_1 + 0.5 * D_2):", tf.reduce_mean(0.5 * D_1 + 0.5 * D_2),"D_z_a_z_b:",tf.reduce_mean(D_z_a_z_b),"D_pres:",tf.reduce_mean(D_pres1),tf.reduce_mean(D_pres2),tf.reduce_mean(D_pres3))
             # tf.print("Loss:", tf.reduce_mean(loss), "D_p_a_p_b: ", tf.reduce_mean(D_p_a_p_b), "(0.5 * D_1 + 0.5 * D_2):", tf.reduce_mean(0.5 * D_1 + 0.5 * D_2), "(0.5 * D_1_z + 0.5 * D_2_z):", tf.reduce_mean(0.5 * D_1_z + 0.5 * D_2_z),"D_z_a_z_b:",tf.reduce_mean(D_z_a_z_b),"D_pres:",tf.reduce_mean(D_pres1))
+            '''
             tf.print("Loss:", tf.reduce_mean(loss), "D_p_a_p_b: ", tf.reduce_mean(D_p_a_p_b),
                      "(0.5 * D_1 + 0.5 * D_2):", tf.reduce_mean(0.5 * D_1 + 0.5 * D_2),
                      "(0.5 * D_a_zb_neg + 0.5 * D_b_zb_neg):", tf.reduce_mean(0.5 * D_a_zb_neg + 0.5 * D_b_zb_neg),
@@ -462,7 +473,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
                      tf.reduce_mean(D_z_a_z_b), "D_pres:", tf.reduce_mean(D_pres1))
             # Term 1: extract underlying normal state  - should be similar, maximize towards 1
             term_1 = D_p_a_p_b
-
+            '''
             # loss = (0.5 * D_pa1_zb + 0.5 * D_pb1_za)
             # Term 2: residuals should be different, distance is used which is zero if similar and 2 if dissimilar
             # term_2 = 0.5 * ((1 / 3 * (1 - D_p_a_x_p_b_x_1)) + 1 / 3 * (1 - D_p_a_x_p_b_x_2) + 1 / 3 * (1 - D_p_a_x_p_b_x_3))
@@ -659,8 +670,9 @@ class SimpleSNN(AbstractSimilarityMeasure):
         elif self.encoder.hyper.encoder_variant in ['graphcnn2d', 'graphattributeconvolution']:
             print("self.config.type_of_loss_function: ", self.config.type_of_loss_function)
             if self.config.type_of_loss_function == LossFunction.COSINE_LOSS:  # Cosine
-                a = context_vectors[0][2 * pair_index, :]
-                b = context_vectors[0][2 * pair_index + 1, :]
+                print("context_vectors shape: ",context_vectors.shape)
+                a = context_vectors[2 * pair_index, :]
+                b = context_vectors[2 * pair_index + 1, :]
             else:
                 a = context_vectors[2 * pair_index, :]
                 b = context_vectors[2 * pair_index + 1, :]
@@ -1446,11 +1458,16 @@ class SNN(SimpleSNN):
                 z_a_l2_norm = tf.math.l2_normalize(z_a, axis=0)
                 z_b_l2_norm = tf.math.l2_normalize(z_b, axis=0)
                 if self.config.stop_gradient:
-                    D_pa1_zb = tf.matmul(p_a_1, tf.stop_gradient(z_b_l2_norm), transpose_a=True)
-                    D_pb1_za = tf.matmul(p_b_1, tf.stop_gradient(z_a_l2_norm), transpose_a=True)
+                    # D_pa1_zb = tf.matmul(p_a_1, tf.stop_gradient(z_b_l2_norm), transpose_b=True)
+                    # D_pb1_za = tf.matmul(p_b_1, tf.stop_gradient(z_a_l2_norm), transpose_b=True)
+                    D_pa1_zb = tf.reduce_sum(p_a_1 * tf.stop_gradient(z_b_l2_norm), axis=0)
+                    D_pb1_za = tf.reduce_sum(p_b_1 * tf.stop_gradient(z_a_l2_norm), axis=0)
+
                 else:
-                    D_pa1_zb = tf.matmul(p_a_1, z_b_l2_norm, transpose_a=True)
-                    D_pb1_za = tf.matmul(p_b_1, z_a_l2_norm, transpose_a=True)
+                    # D_pa1_zb = tf.matmul(p_a_1, z_b_l2_norm, transpose_b=True)
+                    # D_pb1_za = tf.matmul(p_b_1, z_a_l2_norm, transpose_b=True)
+                    D_pa1_zb = tf.reduce_sum(p_a_1 * z_b_l2_norm, axis=0)
+                    D_pb1_za = tf.reduce_sum(p_b_1 * z_a_l2_norm, axis=0)
                 # L1
                 # D_pa1_zb = tf.reduce_mean(tf.abs(p_a_1 - z_b))
                 # D_pb1_za = tf.reduce_mean(tf.abs(p_b_1 - z_a))

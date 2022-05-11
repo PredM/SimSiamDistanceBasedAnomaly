@@ -523,7 +523,7 @@ class GraphCNN2D(CNN2D):
                 for index, channels in enumerate(self.hyper.graph_conv_channels):
 
                     if self.hyper.use_linear_transformation_in_context == "True":
-                        output_L = LinearTransformationLayer(size=(output.shape[2], channels))(output)
+                        output_L = tf.keras.layers.Dense(channels)(output) #LinearTransformationLayer(size=(output.shape[2], channels))(output)
                     output = spektral.layers.GCNConv(channels=channels, activation=None, use_bias=True)([output, adj_matrix_input_ds])
                     #output = spektral.layers.GATConv(channels=channels, attn_heads=3, concat_heads=False, dropout_rate=0.1, activation=None)([output, adj_matrix_input_ds])
                     if self.hyper.use_linear_transformation_in_context == "True":
@@ -1877,7 +1877,7 @@ class LinearTransformationLayer(tf.keras.layers.Layer):
 
     # noinspection PyMethodOverridingd
     def call(self, input_):
-        tf.print(input_)
+        #tf.print(input_)
         #linear_transformed_input = tf.matmul(input_, self.weightmatrix)
         #linear_transformed_input = tf.math.multiply(input_, self.weightmatrix)
         linear_transformed_input = tf.matmul(input_, self.weightmatrix)
@@ -1968,7 +1968,7 @@ class FFNN_BarlowTwin_MLP_Dummy(NN):
         output = input
         self.model = tf.keras.Model(inputs=input, outputs=output, name='Dummy')
 
-class FFNN_SimpleSiam_Prediction_MLP__NORMAL(NN):
+class FFNN_SimpleSiam_Prediction_MLP(NN):
     def __init__(self, hyperparameters, input_shape):
         super().__init__(hyperparameters, input_shape)
 
@@ -1985,7 +1985,7 @@ class FFNN_SimpleSiam_Prediction_MLP__NORMAL(NN):
 
         x = input
         ''''''
-        x = tf.keras.layers.Dropout(rate = 0.1)(x)
+        x = tf.keras.layers.Dropout(rate = 0.0)(x)
 
         print("Note that Prediction MLP in Simple Siam should be a bottleneck structure!")
         for units in layers:
@@ -2363,7 +2363,7 @@ class FFNN_SimpleSiam_Prediction_MLP_Backup_03_05(NN):
         self.model = tf.keras.Model(inputs=[input, input_2], outputs=[output,output_2,output_3,x,i_x2,i_x3])
         #self.model = tf.keras.Model(inputs=[input, input_2], outputs=[output])
 
-class FFNN_SimpleSiam_Prediction_MLP(NN):
+class FFNN_SimpleSiam_Prediction_MLP_RESIDUAL_ANO_06_05_22(NN):
 
     def __init__(self, hyperparameters, input_shape):
         super().__init__(hyperparameters, input_shape)
