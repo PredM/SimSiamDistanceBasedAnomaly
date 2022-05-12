@@ -802,9 +802,9 @@ def shuffle_idx_with_maximum_values(dis,idx):
     #print(" max(dis): ",  max(dis))
     #print("length: ", length_highest_anomaly_score)
     idx = np.array(idx)
-    #print("idx[0:length_highest_anomaly_score-1]:", idx[0:length_highest_anomaly_score-1])
-    np.random.shuffle(idx[0:length_highest_anomaly_score-1])
-    #print("idx[0:length_highest_anomaly_score-1]:", idx[0:length_highest_anomaly_score-1])
+    #print("idx[0:length_highest_anomaly_score-1]:", idx[0:length_highest_anomaly_score])
+    np.random.shuffle(idx[0:length_highest_anomaly_score])
+    #print("idx[0:length_highest_anomaly_score-1]:", idx[0:length_highest_anomaly_score])
     return idx
 
 def check_tsfresh_features(dataset,label, datastream, test_idx, healthy_idx, ):
@@ -2322,18 +2322,18 @@ def main(run=0):
     file_ano_pred   = "predicted_anomaliesFin_Standard_wAdjMat_newAdj_2"
     '''
     # Finally reported models for MSCRED: (Contain 3929 entries (normal test (3389) + FaFs from train split (540))
-    #'''
+    '''
     file_name       = "store_relevant_attribut_name_Fin_Standard_wAdjMat_newAdj_2_fixed"
     file_idx        = "store_relevant_attribut_idx_Fin_Standard_wAdjMat_newAdj_2_fixed"
     file_dis        = "store_relevant_attribut_dis_Fin_Standard_wAdjMat_newAdj_2_fixed"
     file_ano_pred   = "predicted_anomaliesFin_Standard_wAdjMat_newAdj_2_fixed"
-    #'''
     '''
+    #'''
     file_name       = "store_relevant_attribut_name_Fin_MSCRED_standard_repeat"
     file_idx        = "store_relevant_attribut_idx_Fin_MSCRED_standard_repeat"
     file_dis        = "store_relevant_attribut_dis_Fin_MSCRED_standard_repeat"
     file_ano_pred   = "predicted_anomaliesFin_MSCRED_standard_repeat"
-    '''
+    #'''
 
     '''
     folder = "cnn1d_with_fc_simsiam_128-32-3-/"
@@ -2420,6 +2420,14 @@ def main(run=0):
         store_relevant_attribut_dis = pickle.load(a_file)
         a_file.close()
         y_pred_anomalies = np.load('../../ADD_MA-Huneke/anomaly_detection/'+file_ano_pred + str(run) + '.npy')
+        '''
+        for i in store_relevant_attribut_name:
+            print("store_relevant_attribut_name:", store_relevant_attribut_name[i])
+            store_relevant_attribut_name[i] = dataset.feature_names_all[store_relevant_attribut_idx[i]]
+            print("store_relevant_attribut_idx[i]", store_relevant_attribut_idx[i])
+            print("store_relevant_attribut_dis[i]", store_relevant_attribut_dis[i])
+            print("+ store_relevant_attribut_name:", store_relevant_attribut_name[i])
+        '''
     else:
         a_file = open(file_name+str(run)+'.pkl', "rb")
         store_relevant_attribut_name = pickle.load(a_file)
@@ -2507,23 +2515,24 @@ def main(run=0):
     store_relevant_attribut_name_shortened = store_relevant_attribut_name.copy()
 
     #Shuffle order of anomalous data streams if multiple have the same score:
+    '''
     for i in store_relevant_attribut_idx.keys():
         print("store_relevant_attribut_idx: ", store_relevant_attribut_idx[i])
         if len(store_relevant_attribut_idx[i]) > 0 and len(store_relevant_attribut_dis[i]) > 0:
             store_relevant_attribut_idx[i] = shuffle_idx_with_maximum_values(idx=store_relevant_attribut_idx[i], dis=store_relevant_attribut_dis[i])
         print("store_relevant_attribut_idx shuffled: ", store_relevant_attribut_idx[i])
-
+    '''
 
     if is_randomly_selected_featues:
         print("RANDOMIZATION IS USED ++++++++++++++++++++++++++++++")
         for i in store_relevant_attribut_dis:
             # randomly change the order of anomaly scores
-            print("store_relevant_attribut_dis[i]: ", store_relevant_attribut_dis[i])
+            #print("store_relevant_attribut_dis[i]: ", store_relevant_attribut_dis[i])
             np.random.shuffle(store_relevant_attribut_dis[i])
             # randomly change idx and name anomaly scores
-            print("store_relevant_attribut_dis[i] random: ", store_relevant_attribut_dis[i])
-            print("store_relevant_attribut_idx[i]: ", store_relevant_attribut_idx_shortened[i])
-            print("store_relevant_attribut_dis[i]: ", store_relevant_attribut_dis[i])
+            #print("store_relevant_attribut_dis[i] random: ", store_relevant_attribut_dis[i])
+            #print("store_relevant_attribut_idx[i]: ", store_relevant_attribut_idx_shortened[i])
+            #print("store_relevant_attribut_dis[i]: ", store_relevant_attribut_dis[i])
 
             # If considers cases in which no explanation was found (e.g. siamese network with counterfactual approach)
             if len(store_relevant_attribut_dis[i]) > 0:
@@ -2537,6 +2546,7 @@ def main(run=0):
 
 
     ### clear attributes
+    avg_attr = 0
     if is_jenks_nat_break_used:
         print("JENKS NATURAL BREAK SELECTION IS USED")
         for i in store_relevant_attribut_dis:
@@ -2561,8 +2571,11 @@ def main(run=0):
                 #print("store_relevant_attribut_idx_shortened[i]: ", store_relevant_attribut_idx_shortened[i])
                 store_relevant_attribut_name_shortened[i] = dataset.feature_names_all[store_relevant_attribut_idx_shortened[i]]
                 #print("store_relevant_attribut_name_shortened[i]: ", store_relevant_attribut_name_shortened[i])
+                avg_attr += len(store_relevant_attribut_idx_shortened[i])
+        print("avg_attr:", avg_attr / int(len(store_relevant_attribut_idx_shortened.keys())))
 
     if is_elbow_selection_used:
+        avg_attr = 0
         print("ELLBOW SELECTION IS USED")
         for i in store_relevant_attribut_dis:
             # Elbow
@@ -2579,13 +2592,30 @@ def main(run=0):
             #print("store_relevant_attribut_idx_shortened[i] new: ", store_relevant_attribut_idx_shortened[i])
             store_relevant_attribut_name_shortened[i] = dataset.feature_names_all[np.argsort(-store_relevant_attribut_dis[i])[:selected_index_for_cut + 1]]
             #print("store_relevant_attribut_idx_shortened[i] new: ", store_relevant_attribut_name_shortened[i])
+            avg_attr += len(store_relevant_attribut_idx_shortened[i])
+        print("avg_attr:", avg_attr / int(len(store_relevant_attribut_idx_shortened.keys())))
 
     if is_fix_k_selection_used:
-        print("FIX SELECTION WITH k="+str(fix_k_for_selection)+" IS USED")
+        #print("FIX SELECTION WITH k="+str(fix_k_for_selection)+" IS USED")
         for i in store_relevant_attribut_dis:
-            store_relevant_attribut_dis[i] = store_relevant_attribut_dis[i][np.argsort(-store_relevant_attribut_dis[i])[:fix_k_for_selection]]
+
+            #print("store_relevant_attribut_name:", store_relevant_attribut_name[i],
+                  "store_relevant_attribut_idx:", store_relevant_attribut_idx[i],
+                  "store_relevant_attribut_dis:", store_relevant_attribut_dis[i])
             store_relevant_attribut_idx_shortened[i] = np.argsort(-store_relevant_attribut_dis[i])[:fix_k_for_selection]
-            store_relevant_attribut_name_shortened[i] = dataset.feature_names_all[np.argsort(-store_relevant_attribut_dis[i])[:fix_k_for_selection]]
+            store_relevant_attribut_dis[i] = store_relevant_attribut_dis[i][np.argsort(-store_relevant_attribut_dis[i])[:fix_k_for_selection]]
+            if len(store_relevant_attribut_idx[i]) > 0 and len(store_relevant_attribut_dis[i]) > 0:
+                store_relevant_attribut_idx_shortened[i] = shuffle_idx_with_maximum_values(idx=store_relevant_attribut_idx_shortened[i], dis=store_relevant_attribut_dis[i])
+            #print("store_relevant_attribut_idx shuffled: ", store_relevant_attribut_idx_shortened[i])
+
+            store_relevant_attribut_name_shortened[i] = dataset.feature_names_all[store_relevant_attribut_idx_shortened[i]]
+
+            #print("store_relevant_attribut_idx: ", store_relevant_attribut_idx[i])
+
+            #print("store_relevant_attribut_name_shortened:", store_relevant_attribut_name_shortened[i],
+                  "store_relevant_attribut_idx_shortened:", store_relevant_attribut_idx_shortened[i],
+                  "store_relevant_attribut_dis:", store_relevant_attribut_dis[i])
+            #print("------")
     if is_oracle:
         print("ORACLE MODE ACTIVE!")
         for i in range(dataset.y_test_strings.shape[0]):
