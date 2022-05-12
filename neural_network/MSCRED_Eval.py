@@ -2163,7 +2163,7 @@ def execute_kNN_label_embedding_search(query_embedding, embedding_df, dataset, g
 def get_labels_from_knowledge_graph_embeddings_from_anomalous_data_streams_permuted(most_relevant_attributes, y_test_labels, dataset, y_pred_anomalies, dict_measures, not_selection_label="no_failure",
                                                                                     only_true_positive_prediction=False, restrict_to_top_k_results = 3, restict_to_top_k_data_streams = 3,
                                                                                     tsv_file='', is_siam=False):
-    store_relevant_attribut_idx, store_relevant_attribut_dis, store_relevant_attribut_name = most_relevant_attributes[0], \
+    store_relevant_attribut_attr_name, store_relevant_attribut_index, store_relevant_attribut_distance = most_relevant_attributes[0], \
                                                                                              most_relevant_attributes[1], \
                                                                                              most_relevant_attributes[2]
     num_test_examples = y_test_labels.shape[0]
@@ -2199,6 +2199,7 @@ def get_labels_from_knowledge_graph_embeddings_from_anomalous_data_streams_permu
     provided_labels_top_k_sum = 0
     skipped_cnt= 0
     not_found_cnt = 0
+    avg_num_ordered_data_streams = 0
     for i in range(num_test_examples):
         curr_label = y_test_labels[i]
         # Fix:
@@ -2221,17 +2222,19 @@ def get_labels_from_knowledge_graph_embeddings_from_anomalous_data_streams_permu
         if (not curr_label == not_selection_label) and true_positive_prediction:
             print("\n##############################################################################")
             print("Example:",i,"| Gold Label:", y_test_labels[i],"\n")
-            ordered_data_streams = store_relevant_attribut_idx[i]
+            ordered_data_streams = store_relevant_attribut_attr_name[i]
             print("Relevant attributes ordered asc: ", ordered_data_streams,"\n")
-            print(len(store_relevant_attribut_name[i])," - ", len(ordered_data_streams), " - ", len(store_relevant_attribut_dis[i]))
-            if len(store_relevant_attribut_name[i]) != 0 and len(ordered_data_streams) != 0:
+            print(len(store_relevant_attribut_distance[i])," - ", len(ordered_data_streams), " - ", len(store_relevant_attribut_index[i]))
+            print("store_relevant_attribut_name[i]", store_relevant_attribut_distance[i],"| store_relevant_attribut_idx[i]:", store_relevant_attribut_attr_name[i],"| store_relevant_attribut_dis[i]:", store_relevant_attribut_index[i])
+            if len(ordered_data_streams) != 0:
                 # Iterate over each data streams defined as anomalous and query the related labels:
                 cnt_anomaly_examples += 1
+                avg_num_ordered_data_streams += len(ordered_data_streams)
 
                 # Generate the query embeddings:
                 gen_q_emb_add, gen_q_emb_add_avg, gen_q_emb_add_weighted = generated_embedding_query(
                     set_of_anomalous_data_streams=ordered_data_streams, embeddings_df=embedding_df,
-                    aggrgation_method="", dataset=dataset, weight=store_relevant_attribut_name[i], is_siam=is_siam)
+                    aggrgation_method="", dataset=dataset, weight=store_relevant_attribut_distance[i], is_siam=is_siam)
                 # set_of_anomalous_data_streams, embeddings_df, aggrgation_method, dataset
 
                 # Get position of correct label according to the query embedding
@@ -2276,6 +2279,7 @@ def get_labels_from_knowledge_graph_embeddings_from_anomalous_data_streams_permu
     print(used_emb_marker + ": From the first "+str(restict_to_top_k_data_streams)+" data streams, the first "+str(restrict_to_top_k_results)+"results are considered",provided_labels_top_k_sum / cnt_anomaly_examples)
     print(used_emb_marker + ": No label found From the first "+str(restict_to_top_k_data_streams)+" data streams, the first "+str(restrict_to_top_k_results)+"results",not_found_cnt)
     print(used_emb_marker + ": Examples for which no anomalous data streams were provided:",skipped_cnt)
+    print(used_emb_marker + ": Average number of data streams used for query:",avg_num_ordered_data_streams)
 
     # Return dictonary
     dict_measures[used_emb_marker + ": Average label position using all data streams (add)"] = pos_add_allDS_sum / cnt_anomaly_examples
@@ -2284,6 +2288,7 @@ def get_labels_from_knowledge_graph_embeddings_from_anomalous_data_streams_permu
     dict_measures[used_emb_marker + ": From the first "+str(restict_to_top_k_data_streams)+" data streams, the first "+str(restrict_to_top_k_results)+"results are considered"] = provided_labels_top_k_sum / cnt_anomaly_examples
     dict_measures[used_emb_marker + ": No label found From the first "+str(restict_to_top_k_data_streams)+" data streams, the first "+str(restrict_to_top_k_results)+"results"] = not_found_cnt
     dict_measures[used_emb_marker + ": Examples for which no anomalous data streams were provided:"] = skipped_cnt
+    dict_measures[used_emb_marker + ": Average number of data streams used for query:"] = avg_num_ordered_data_streams
 
     return dict_measures
     # execute a query for each example
@@ -2310,19 +2315,19 @@ def main(run=0):
     file_idx        = "store_relevant_attribut_idx_Fin_Standard_3_"
     file_dis        = "store_relevant_attribut_dis_Fin_Standard_3_"
     file_ano_pred   = "predicted_anomaliesFin_Standard_3_"
-    #'''
+    '''
     file_name       = "store_relevant_attribut_name_Fin_Standard_wAdjMat_newAdj_2"
     file_idx        = "store_relevant_attribut_idx_Fin_Standard_wAdjMat_newAdj_2"
     file_dis        = "store_relevant_attribut_dis_Fin_Standard_wAdjMat_newAdj_2"
     file_ano_pred   = "predicted_anomaliesFin_Standard_wAdjMat_newAdj_2"
-    #'''
-    # Finally reported models for MSCRED:
     '''
+    # Finally reported models for MSCRED: (Contain 3929 entries (normal test (3389) + FaFs from train split (540))
+    #'''
     file_name       = "store_relevant_attribut_name_Fin_Standard_wAdjMat_newAdj_2_fixed"
     file_idx        = "store_relevant_attribut_idx_Fin_Standard_wAdjMat_newAdj_2_fixed"
     file_dis        = "store_relevant_attribut_dis_Fin_Standard_wAdjMat_newAdj_2_fixed"
     file_ano_pred   = "predicted_anomaliesFin_Standard_wAdjMat_newAdj_2_fixed"
-    '''
+    #'''
     '''
     file_name       = "store_relevant_attribut_name_Fin_MSCRED_standard_repeat"
     file_idx        = "store_relevant_attribut_idx_Fin_MSCRED_standard_repeat"
@@ -2385,11 +2390,11 @@ def main(run=0):
     use_only_true_positive_pred     = False
     evaluate_hitsAtK_hitRateAtP     = False
     is_memory                       = False
-    is_jenks_nat_break_used         = True
+    is_jenks_nat_break_used         = False
     is_elbow_selection_used         = False
-    is_fix_k_selection_used         = False
-    fix_k_for_selection             = 1
-    is_randomly_selected_featues    = True
+    is_fix_k_selection_used         = True
+    fix_k_for_selection             = 7
+    is_randomly_selected_featues    = False
     is_oracle                       = False
     q1                              = False
     q2                              = False
@@ -2404,67 +2409,95 @@ def main(run=0):
     if is_memory:
         dataset.y_test_strings = dataset.y_test_strings[:-1]
 
-    #'''
-    a_file = open('../../ADD_MA-Huneke/anomaly_detection/'+file_name+str(run)+'.pkl', "rb")
-    store_relevant_attribut_name = pickle.load(a_file)
-    a_file.close()
-    a_file = open('../../ADD_MA-Huneke/anomaly_detection/'+file_idx+str(run)+'.pkl', "rb")
-    store_relevant_attribut_idx = pickle.load(a_file)
-    a_file.close()
-    a_file = open('../../ADD_MA-Huneke/anomaly_detection/'+file_dis+str(run)+'.pkl', "rb")
-    store_relevant_attribut_dis = pickle.load(a_file)
-    a_file.close()
-    y_pred_anomalies = np.load('../../ADD_MA-Huneke/anomaly_detection/'+file_ano_pred + str(run) + '.npy')
-    #'''
-    '''
-    a_file = open(file_name+str(run)+'.pkl', "rb")
-    store_relevant_attribut_name = pickle.load(a_file)
-    a_file.close()
-    a_file = open(file_idx+str(run)+'.pkl',"rb")
-    store_relevant_attribut_idx = pickle.load(a_file)
-    a_file.close()
-    a_file = open(file_dis+str(run)+'.pkl',"rb")
-    store_relevant_attribut_dis = pickle.load(a_file)
-    a_file.close()
+    if is_siam == False:
+        a_file = open('../../ADD_MA-Huneke/anomaly_detection/'+file_name+str(run)+'.pkl', "rb")
+        store_relevant_attribut_name = pickle.load(a_file)
+        a_file.close()
+        a_file = open('../../ADD_MA-Huneke/anomaly_detection/'+file_idx+str(run)+'.pkl', "rb")
+        store_relevant_attribut_idx = pickle.load(a_file)
+        a_file.close()
+        a_file = open('../../ADD_MA-Huneke/anomaly_detection/'+file_dis+str(run)+'.pkl', "rb")
+        store_relevant_attribut_dis = pickle.load(a_file)
+        a_file.close()
+        y_pred_anomalies = np.load('../../ADD_MA-Huneke/anomaly_detection/'+file_ano_pred + str(run) + '.npy')
+    else:
+        a_file = open(file_name+str(run)+'.pkl', "rb")
+        store_relevant_attribut_name = pickle.load(a_file)
+        a_file.close()
+        a_file = open(file_idx+str(run)+'.pkl',"rb")
+        store_relevant_attribut_idx = pickle.load(a_file)
+        a_file.close()
+        a_file = open(file_dis+str(run)+'.pkl',"rb")
+        store_relevant_attribut_dis = pickle.load(a_file)
+        a_file.close()
 
-    a_file = open(file_name_2+str(run)+'.pkl', "rb")
-    store_relevant_attribut_name_2 = pickle.load(a_file)
-    a_file.close()
-    a_file = open(file_idx_2+str(run)+'.pkl',"rb")
-    store_relevant_attribut_idx_2 = pickle.load(a_file)
-    a_file.close()
-    a_file = open(file_dis_2+str(run)+'.pkl',"rb")
-    store_relevant_attribut_dis_2 = pickle.load(a_file)
-    a_file.close()
+        a_file = open(file_name_2+str(run)+'.pkl', "rb")
+        store_relevant_attribut_name_2 = pickle.load(a_file)
+        a_file.close()
+        a_file = open(file_idx_2+str(run)+'.pkl',"rb")
+        store_relevant_attribut_idx_2 = pickle.load(a_file)
+        a_file.close()
+        a_file = open(file_dis_2+str(run)+'.pkl',"rb")
+        store_relevant_attribut_dis_2 = pickle.load(a_file)
+        a_file.close()
 
-    y_pred_anomalies = np.load(file_ano_pred + str(run) + '.npy')
+        y_pred_anomalies = np.load(file_ano_pred + str(run) + '.npy')
     
-    # Fill missing entries from the second nearest neighbor
+        # Fill missing entries from the second nearest neighbor
+        last_i = 0
+        for i in range (y_pred_anomalies.shape[0]):
+            '''
+            print("INTERSECTION ACTIVE!")
+            if i in store_relevant_attribut_idx and i in store_relevant_attribut_idx_2:
+                k = len(store_relevant_attribut_dis_2[i])
+                has_intersection_idx = [value for value in store_relevant_attribut_idx_2[i][:k] if
+                                value in store_relevant_attribut_idx[i][:k]]
+                print("store_relevant_attribut_idx[i][:k]: ", store_relevant_attribut_idx[i][:k])
+                print("Intersection between both: ", has_intersection_idx)
+                if len(has_intersection_idx) > 0:
+                    store_relevant_attribut_name[i] = dataset.feature_names_all[has_intersection_idx]
+                    store_relevant_attribut_idx[i] = has_intersection_idx #store_relevant_attribut_idx[i][:len(has_intersection_idx)]
+                    store_relevant_attribut_dis[i] = store_relevant_attribut_dis[i][:len(has_intersection_idx)]
+                print("store_relevant_attribut_dis[i]:", store_relevant_attribut_dis[i])
+            '''
+            print("i",i)
+            # if no entry is available since it was not recognized, go to the second nearest neighbour
+            if not i in store_relevant_attribut_dis:
+                print("hier")
+                if i in store_relevant_attribut_dis_2:
+                    store_relevant_attribut_name[i] = store_relevant_attribut_name_2[i]
+                    store_relevant_attribut_idx[i] = store_relevant_attribut_idx_2[i]
+                    store_relevant_attribut_dis[i] = store_relevant_attribut_dis_2[i]
+                else:
+                    # if no second nn is available, obtain previously entries to just have some, otherwise add empty entries
+                    if last_i in store_relevant_attribut_name:
+                        store_relevant_attribut_name[i] = store_relevant_attribut_name[last_i]
+                        store_relevant_attribut_idx[i] = store_relevant_attribut_idx[last_i]
+                        store_relevant_attribut_dis[i] = store_relevant_attribut_dis[last_i]
+                    else:
+                        store_relevant_attribut_name[i] = []
+                        store_relevant_attribut_idx[i] = []
+                        store_relevant_attribut_dis[i] = []
+
+            # cut the size to the only obtained / relevant entries
+            if i in store_relevant_attribut_name:
+                print("store_relevant_attribut_name:", len(store_relevant_attribut_name[i]),
+                      "store_relevant_attribut_idx:", len(store_relevant_attribut_idx[i]),
+                      "store_relevant_attribut_dis:", len(store_relevant_attribut_dis[i]))
+                num_relevant_attributes = len(store_relevant_attribut_dis[i])
+                store_relevant_attribut_name[i] = store_relevant_attribut_name[i][:num_relevant_attributes]
+                store_relevant_attribut_idx[i] = store_relevant_attribut_idx[i][:num_relevant_attributes]
+                print("store_relevant_attribut_name:", len(store_relevant_attribut_name[i]),
+                      "store_relevant_attribut_idx:", len(store_relevant_attribut_idx[i]),
+                      "store_relevant_attribut_dis:", len(store_relevant_attribut_dis[i]))
+            # Cut to correct length:
+            last_i = i
+    '''
     for i in range (y_pred_anomalies.shape[0]):
-        print("INTERSECTION ACTIVE!")
-        if i in store_relevant_attribut_idx and i in store_relevant_attribut_idx_2:
-            k = len(store_relevant_attribut_dis_2[i])
-            has_intersection_idx = [value for value in store_relevant_attribut_idx_2[i][:k] if
-                            value in store_relevant_attribut_idx[i][:k]]
-            print("store_relevant_attribut_idx[i][:k]: ", store_relevant_attribut_idx[i][:k])
-            print("Intersection between both: ", has_intersection_idx)
-            if len(has_intersection_idx) > 0:
-                store_relevant_attribut_name[i] = dataset.feature_names_all[has_intersection_idx]
-                store_relevant_attribut_idx[i] = has_intersection_idx #store_relevant_attribut_idx[i][:len(has_intersection_idx)]
-                store_relevant_attribut_dis[i] = store_relevant_attribut_dis[i][:len(has_intersection_idx)]
-            print("store_relevant_attribut_dis[i]:", store_relevant_attribut_dis[i])
-        #
-        if not i in store_relevant_attribut_name:
-            if i in store_relevant_attribut_name_2:
-                store_relevant_attribut_name[i] = store_relevant_attribut_name_2[i]
-                store_relevant_attribut_idx[i] = store_relevant_attribut_idx_2[i]
-            else:
-                store_relevant_attribut_name[i] = []
-                store_relevant_attribut_idx[i] = []
-            if i in store_relevant_attribut_dis_2:
-                store_relevant_attribut_dis[i] = store_relevant_attribut_dis_2[i]
-            else:
-                store_relevant_attribut_dis[i] =[]
+        if i in store_relevant_attribut_name and i < 3389:
+            #print(dataset.y_test_strings[i])
+            print(i,"store_relevant_attribut_name:",len(store_relevant_attribut_name[i]),"store_relevant_attribut_idx:",len(store_relevant_attribut_idx[i]),"store_relevant_attribut_dis:",len(store_relevant_attribut_dis[i]))
+            print("store_relevant_attribut_name:",store_relevant_attribut_name[i],"store_relevant_attribut_idx:",store_relevant_attribut_idx[i],"store_relevant_attribut_dis:",store_relevant_attribut_dis[i])
     '''
 
     print("Loaded data finsished ...")
@@ -2473,20 +2506,24 @@ def main(run=0):
     store_relevant_attribut_idx_shortened = store_relevant_attribut_idx.copy()
     store_relevant_attribut_name_shortened = store_relevant_attribut_name.copy()
 
-    #generate_class_embeddings(config,labels=dataset.y_test_strings , tsv_file='../data/training_data/knowledge/owl2vecstar_eval_proj_False_dims_22_epochs_1_wk_random_wd_4_wm_none_uriDoc_yes_litDoc_no_mixDoc_no.tsv', mapping_file='../data/training_data/label_2_iri.json')
+    #Shuffle order of anomalous data streams if multiple have the same score:
+    for i in store_relevant_attribut_idx.keys():
+        print("store_relevant_attribut_idx: ", store_relevant_attribut_idx[i])
+        if len(store_relevant_attribut_idx[i]) > 0 and len(store_relevant_attribut_dis[i]) > 0:
+            store_relevant_attribut_idx[i] = shuffle_idx_with_maximum_values(idx=store_relevant_attribut_idx[i], dis=store_relevant_attribut_dis[i])
+        print("store_relevant_attribut_idx shuffled: ", store_relevant_attribut_idx[i])
 
-    #print("store_relevant_attribut_idx:", store_relevant_attribut_idx_2.keys())
 
     if is_randomly_selected_featues:
         print("RANDOMIZATION IS USED ++++++++++++++++++++++++++++++")
         for i in store_relevant_attribut_dis:
             # randomly change the order of anomaly scores
-            #print("store_relevant_attribut_dis[i]: ", store_relevant_attribut_dis[i])
+            print("store_relevant_attribut_dis[i]: ", store_relevant_attribut_dis[i])
             np.random.shuffle(store_relevant_attribut_dis[i])
             # randomly change idx and name anomaly scores
-            #print("store_relevant_attribut_dis[i] random: ", store_relevant_attribut_dis[i])
-            #print("store_relevant_attribut_idx[i]: ", store_relevant_attribut_idx_shortened[i])
-            #print("store_relevant_attribut_dis[i]: ", store_relevant_attribut_dis[i])
+            print("store_relevant_attribut_dis[i] random: ", store_relevant_attribut_dis[i])
+            print("store_relevant_attribut_idx[i]: ", store_relevant_attribut_idx_shortened[i])
+            print("store_relevant_attribut_dis[i]: ", store_relevant_attribut_dis[i])
 
             # If considers cases in which no explanation was found (e.g. siamese network with counterfactual approach)
             if len(store_relevant_attribut_dis[i]) > 0:
@@ -2503,25 +2540,27 @@ def main(run=0):
     if is_jenks_nat_break_used:
         print("JENKS NATURAL BREAK SELECTION IS USED")
         for i in store_relevant_attribut_dis:
-            #print(store_relevant_attribut_dis[i])
-            res = jenkspy.jenks_breaks(store_relevant_attribut_dis[i], nb_class=2)
-            lower_bound_exclusive = res[-2]
-            is_symptom = np.greater(store_relevant_attribut_dis[i], lower_bound_exclusive)
-            is_symptom_idx = np.argwhere(is_symptom).T
-            #print("is_symptom: ", is_symptom)
-            #print("indexes of symptoms: ", np.argwhere(is_symptom).T)
-            #print("Jenks Natural Break found symptoms org: ", dataset.feature_names_all[is_symptom])
-            mask = np.where(is_symptom,1,0)
-            #print("store_relevant_attribut_idx[i]: ", store_relevant_attribut_idx[i])
-            #print("store_relevant_attribut_dis[i][mask]: ", store_relevant_attribut_dis[i][mask])
-            #print("-store_relevant_attribut_dis[i][mask]: ", -store_relevant_attribut_dis[i][mask])
-            #print("np.argsort(-store_relevant_attribut_dis[i][mask]): ", np.argsort(-store_relevant_attribut_dis[i][mask]))
+            #print("len(store_relevant_attribut_dis):", len(store_relevant_attribut_dis[i]))
+            if len(store_relevant_attribut_dis[i]) > 3:
+                #print(store_relevant_attribut_dis[i])
+                res = jenkspy.jenks_breaks(store_relevant_attribut_dis[i], nb_class=2)
+                lower_bound_exclusive = res[-2]
+                is_symptom = np.greater(store_relevant_attribut_dis[i], lower_bound_exclusive)
+                is_symptom_idx = np.argwhere(is_symptom).T
+                #print("is_symptom: ", is_symptom)
+                #print("indexes of symptoms: ", np.argwhere(is_symptom).T)
+                #print("Jenks Natural Break found symptoms org: ", dataset.feature_names_all[is_symptom])
+                mask = np.where(is_symptom,1,0)
+                #print("store_relevant_attribut_idx[i]: ", store_relevant_attribut_idx[i])
+                #print("store_relevant_attribut_dis[i][mask]: ", store_relevant_attribut_dis[i][mask])
+                #print("-store_relevant_attribut_dis[i][mask]: ", -store_relevant_attribut_dis[i][mask])
+                #print("np.argsort(-store_relevant_attribut_dis[i][mask]): ", np.argsort(-store_relevant_attribut_dis[i][mask]))
 
-            store_relevant_attribut_idx_shortened[i] = np.argsort(-store_relevant_attribut_dis[i])[:np.sum(mask)]
-            #print("store_relevant_attribut_idx[i]: ", store_relevant_attribut_idx[i])
-            #print("store_relevant_attribut_idx_shortened[i]: ", store_relevant_attribut_idx_shortened[i])
-            store_relevant_attribut_name_shortened[i] = dataset.feature_names_all[store_relevant_attribut_idx_shortened[i]]
-            #print("store_relevant_attribut_name_shortened[i]: ", store_relevant_attribut_name_shortened[i])
+                store_relevant_attribut_idx_shortened[i] = np.argsort(-store_relevant_attribut_dis[i])[:np.sum(mask)]
+                #print("store_relevant_attribut_idx[i]: ", store_relevant_attribut_idx[i])
+                #print("store_relevant_attribut_idx_shortened[i]: ", store_relevant_attribut_idx_shortened[i])
+                store_relevant_attribut_name_shortened[i] = dataset.feature_names_all[store_relevant_attribut_idx_shortened[i]]
+                #print("store_relevant_attribut_name_shortened[i]: ", store_relevant_attribut_name_shortened[i])
 
     if is_elbow_selection_used:
         print("ELLBOW SELECTION IS USED")
@@ -2544,9 +2583,9 @@ def main(run=0):
     if is_fix_k_selection_used:
         print("FIX SELECTION WITH k="+str(fix_k_for_selection)+" IS USED")
         for i in store_relevant_attribut_dis:
+            store_relevant_attribut_dis[i] = store_relevant_attribut_dis[i][np.argsort(-store_relevant_attribut_dis[i])[:fix_k_for_selection]]
             store_relevant_attribut_idx_shortened[i] = np.argsort(-store_relevant_attribut_dis[i])[:fix_k_for_selection]
             store_relevant_attribut_name_shortened[i] = dataset.feature_names_all[np.argsort(-store_relevant_attribut_dis[i])[:fix_k_for_selection]]
-
     if is_oracle:
         print("ORACLE MODE ACTIVE!")
         for i in range(dataset.y_test_strings.shape[0]):
@@ -2578,11 +2617,6 @@ def main(run=0):
 
     #check_tsfresh_features("","","","")
 
-    #Shuffle order of anomalous data streams if multiple have the same score:
-    for i in store_relevant_attribut_idx_shortened.keys():
-        if len(store_relevant_attribut_idx_shortened[i]) > 0 and len(store_relevant_attribut_dis[i]) > 0:
-            store_relevant_attribut_idx_shortened[i] = shuffle_idx_with_maximum_values(idx=store_relevant_attribut_idx_shortened[i], dis=store_relevant_attribut_dis[i])
-
     most_rel_att = [store_relevant_attribut_name_shortened, store_relevant_attribut_idx_shortened, store_relevant_attribut_dis]
 
     if q1 or q3:
@@ -2593,6 +2627,7 @@ def main(run=0):
         dict_measures = {}
         dict_measures = get_labels_from_knowledge_graph_embeddings_from_anomalous_data_streams_permuted(most_rel_att, dataset.y_test_strings, dataset, y_pred_anomalies, dict_measures, not_selection_label="no_failure", only_true_positive_prediction=use_only_true_positive_pred,
                                                                                                         restrict_to_top_k_results = 3, restict_to_top_k_data_streams = 3, tsv_file='../data/training_data/knowledge/StSp_eval_lr_0.100001_d_25_e_150_bs_5_doLHS_0.0_doRHS_0.0_mNS_50_nSL_100_l_hinge_s_cosine_m_0.7_iM_False.tsv', is_siam=is_siam)
+        #'''
         list_embedding_models = [
             '../data/training_data/knowledge/owl2vecstar_eval_proj_False_dims_50_epochs_10_wk_random_wd_4_wm_none_uriDoc_yes_litDoc_no_mixDoc_no.tsv',
             '../data/training_data/knowledge/owl2vecstar_eval_proj_True_dims_10_epochs_25_wk_wl_wd_4_wm_none_uriDoc_yes_litDoc_yes_mixDoc_yes.tsv',
@@ -2610,7 +2645,7 @@ def main(run=0):
                                                                                                         restrict_to_top_k_results=3,
                                                                                                         restict_to_top_k_data_streams=3,
                                                                                                         tsv_file=emb_mod, is_siam=is_siam)
-
+        #'''
     else:
         print("Query not specified!")
         dict_measures = {}
