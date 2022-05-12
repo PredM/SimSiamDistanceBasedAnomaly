@@ -2598,12 +2598,10 @@ def main(run=0):
     if is_fix_k_selection_used:
         #print("FIX SELECTION WITH k="+str(fix_k_for_selection)+" IS USED")
         for i in store_relevant_attribut_dis:
-
-            #print("store_relevant_attribut_name:", store_relevant_attribut_name[i],
-                  "store_relevant_attribut_idx:", store_relevant_attribut_idx[i],
-                  "store_relevant_attribut_dis:", store_relevant_attribut_dis[i])
+            #print("store_relevant_attribut_name:", store_relevant_attribut_name[i], "store_relevant_attribut_idx:", store_relevant_attribut_idx[i], "store_relevant_attribut_dis:", store_relevant_attribut_dis[i])
             store_relevant_attribut_idx_shortened[i] = np.argsort(-store_relevant_attribut_dis[i])[:fix_k_for_selection]
             store_relevant_attribut_dis[i] = store_relevant_attribut_dis[i][np.argsort(-store_relevant_attribut_dis[i])[:fix_k_for_selection]]
+
             if len(store_relevant_attribut_idx[i]) > 0 and len(store_relevant_attribut_dis[i]) > 0:
                 store_relevant_attribut_idx_shortened[i] = shuffle_idx_with_maximum_values(idx=store_relevant_attribut_idx_shortened[i], dis=store_relevant_attribut_dis[i])
             #print("store_relevant_attribut_idx shuffled: ", store_relevant_attribut_idx_shortened[i])
@@ -2612,9 +2610,7 @@ def main(run=0):
 
             #print("store_relevant_attribut_idx: ", store_relevant_attribut_idx[i])
 
-            #print("store_relevant_attribut_name_shortened:", store_relevant_attribut_name_shortened[i],
-                  "store_relevant_attribut_idx_shortened:", store_relevant_attribut_idx_shortened[i],
-                  "store_relevant_attribut_dis:", store_relevant_attribut_dis[i])
+            #print("store_relevant_attribut_name_shortened:", store_relevant_attribut_name_shortened[i],"store_relevant_attribut_idx_shortened:", store_relevant_attribut_idx_shortened[i], "store_relevant_attribut_dis:", store_relevant_attribut_dis[i])
             #print("------")
     if is_oracle:
         print("ORACLE MODE ACTIVE!")
