@@ -36,6 +36,7 @@ from matplotlib import colors
 import itertools
 import pickle
 import json
+import random
 
 from configuration.Enums import BatchSubsetType, LossFunction, BaselineAlgorithm, SimpleSimilarityMeasure, \
     ArchitectureVariant, ComplexSimilarityMeasure, TrainTestSplitMode, AdjacencyMatrixPreprossingCNN2DWithAddInput,\
@@ -2018,7 +2019,7 @@ def map_onto_iri_to_data_set_label(label_onto, inv=True):
 
     return label_data_set
 
-def generated_embedding_query(set_of_anomalous_data_streams, embeddings_df, aggrgation_method, dataset,weight=None):
+def generated_embedding_query(set_of_anomalous_data_streams, embeddings_df, aggrgation_method, dataset,weight=None,is_siam=False):
     #
     generated_query_embedding_add = np.zeros((len(embeddings_df.columns)))
     generated_query_embedding_add_avg = np.zeros((len(embeddings_df.columns)))
@@ -2027,14 +2028,19 @@ def generated_embedding_query(set_of_anomalous_data_streams, embeddings_df, aggr
 
     # normalize weights
     sum = 0
-    for attr_name in set_of_anomalous_data_streams:
-        pos_attr = np.argwhere(dataset.feature_names_all == attr_name)
-        sum = sum + weight[pos_attr]
+    if is_siam:
+        for i, attr_name in enumerate(set_of_anomalous_data_streams):
+            sum = sum + weight[i]
+    else:
+        for i, attr_name in enumerate(set_of_anomalous_data_streams):
+            pos_attr = np.argwhere(dataset.feature_names_all == attr_name)
+            sum = sum + weight[pos_attr]
     #print("Sum:",sum)
+
 
     for iteration, attr_name in enumerate(set_of_anomalous_data_streams):
         # Get iri of attribute
-        ftOnto_uri = dataset.mapping_attr_to_ftonto_df.loc[attr_name]
+        ftOnto_uri = dataset.mapping_attr_to_ftonto_df.loc[set_of_anomalous_data_streams[iteration]]
         pos_attr = np.argwhere(dataset.feature_names_all == attr_name)
         #print(pos_attr," - ", iteration," - ", ftOnto_uri.tolist())
 
@@ -2046,11 +2052,17 @@ def generated_embedding_query(set_of_anomalous_data_streams, embeddings_df, aggr
         generated_query_embedding_add = generated_query_embedding_add + embeddings_df.loc[ftOnto_uri].values
         #print("weight: ", weight)
         #print("weight[pos_attr]: ", weight[pos_attr])
-        generated_query_embedding_add_weighted = generated_query_embedding_add_weighted + ( (weight[pos_attr] / sum)* embeddings_df.loc[ftOnto_uri].values )
+        if is_siam:
+            generated_query_embedding_add_weighted = generated_query_embedding_add_weighted + ( (weight[iteration] / sum)* embeddings_df.loc[ftOnto_uri].values )
+        else:
+            generated_query_embedding_add_weighted = generated_query_embedding_add_weighted + ((weight[pos_attr] / sum) * embeddings_df.loc[ftOnto_uri].values)
 
     generated_query_embedding_add_avg = generated_query_embedding_add / len(set_of_anomalous_data_streams)
     #print(dataset.mapping_attr_to_ftonto_df)
     #print(sdsdsd)
+    #print("generated_query_embedding_add:",generated_query_embedding_add)
+    #print("generated_query_embedding_add_avg:",generated_query_embedding_add_avg)
+    #print("generated_query_embedding_add_weighted:",generated_query_embedding_add_weighted)
 
     return generated_query_embedding_add, generated_query_embedding_add_avg, generated_query_embedding_add_weighted
 
@@ -2103,7 +2115,7 @@ def execute_kNN_label_embedding_search(query_embedding, embedding_df, dataset, g
     pos = 0
     found_a_label = False
     for rank, found_embedding in enumerate(query_results):
-        if "PredM#Label_" in found_embedding:
+        if "PredM#Label_" in found_embedding and not "__label__" in found_embedding:
             idx = found_embedding.find("PredM#Label_")
             extracted_emb = found_embedding[idx:].lower()
             if extracted_emb in mappingDict.values():
@@ -2148,9 +2160,9 @@ def execute_kNN_label_embedding_search(query_embedding, embedding_df, dataset, g
 
     return pos, found_a_label
 
-def get_labels_from_knowledge_graph_embeddings_from_anomalous_data_streams_permuted(most_relevant_attributes, y_test_labels, dataset, y_pred_anomalies, not_selection_label="no_failure",
+def get_labels_from_knowledge_graph_embeddings_from_anomalous_data_streams_permuted(most_relevant_attributes, y_test_labels, dataset, y_pred_anomalies, dict_measures, not_selection_label="no_failure",
                                                                                     only_true_positive_prediction=False, restrict_to_top_k_results = 3, restict_to_top_k_data_streams = 3,
-                                                                                    tsv_file='', dict_measures = {}):
+                                                                                    tsv_file='', is_siam=False):
     store_relevant_attribut_idx, store_relevant_attribut_dis, store_relevant_attribut_name = most_relevant_attributes[0], \
                                                                                              most_relevant_attributes[1], \
                                                                                              most_relevant_attributes[2]
@@ -2166,7 +2178,7 @@ def get_labels_from_knowledge_graph_embeddings_from_anomalous_data_streams_permu
     embedding_df = pd.read_csv(tsv_file, sep='\t', skiprows=1, header=None,
                                error_bad_lines=False, warn_bad_lines=False, index_col=0)
 
-    used_emb_marker = tsv_file.split("_")[0]
+    used_emb_marker = tsv_file.split("/")[-1]
 
     # Add the url in case of starspace file
     if "StSp" in tsv_file:
@@ -2211,18 +2223,20 @@ def get_labels_from_knowledge_graph_embeddings_from_anomalous_data_streams_permu
             print("Example:",i,"| Gold Label:", y_test_labels[i],"\n")
             ordered_data_streams = store_relevant_attribut_idx[i]
             print("Relevant attributes ordered asc: ", ordered_data_streams,"\n")
-            if len(ordered_data_streams) != 0:
+            print(len(store_relevant_attribut_name[i])," - ", len(ordered_data_streams), " - ", len(store_relevant_attribut_dis[i]))
+            if len(store_relevant_attribut_name[i]) != 0 and len(ordered_data_streams) != 0:
                 # Iterate over each data streams defined as anomalous and query the related labels:
                 cnt_anomaly_examples += 1
 
                 # Generate the query embeddings:
                 gen_q_emb_add, gen_q_emb_add_avg, gen_q_emb_add_weighted = generated_embedding_query(
-                    set_of_anomalous_data_streams=ordered_data_streams, embeddings_df=embedding_df, aggrgation_method="", dataset=dataset,
-                    weight=store_relevant_attribut_name[
-                        i])  # set_of_anomalous_data_streams, embeddings_df, aggrgation_method, dataset
+                    set_of_anomalous_data_streams=ordered_data_streams, embeddings_df=embedding_df,
+                    aggrgation_method="", dataset=dataset, weight=store_relevant_attribut_name[i], is_siam=is_siam)
+                # set_of_anomalous_data_streams, embeddings_df, aggrgation_method, dataset
 
                 # Get position of correct label according to the query embedding
-                print("dataset.unique:", dataset.y_test_strings_unique)
+                #print("dataset.unique:", dataset.y_test_strings_unique)
+                print("gen_q_emb_add shape:", gen_q_emb_add.shape)
                 pos_add_allDS, b_ = execute_kNN_label_embedding_search(gen_q_emb_add, embedding_df, dataset, y_test_labels[i])
                 pos_add_avg_allDS, b_ = execute_kNN_label_embedding_search(gen_q_emb_add_avg, embedding_df, dataset, y_test_labels[i])
                 pos_add_weighted_allDS, b_ = execute_kNN_label_embedding_search(gen_q_emb_add_weighted, embedding_df, dataset, y_test_labels[i])
@@ -2231,10 +2245,14 @@ def get_labels_from_knowledge_graph_embeddings_from_anomalous_data_streams_permu
                 pos_add_avg_allDS_sum += pos_add_avg_allDS
                 pos_add_weighted_allDS_sum += pos_add_weighted_allDS
 
-                # Do second variant
+                # Do second variant, check first top k results for first top k anomalous data streams
                 for iterations, datastream in enumerate(ordered_data_streams[:restict_to_top_k_data_streams]):
+                    ftOnto_uri = dataset.mapping_attr_to_ftonto_df.loc[ordered_data_streams[iterations]]
+                    if ftOnto_uri.tolist()[0] == "http://iot.uni-trier.de/FTOnto#BF_Lamp_8":
+                        ftOnto_uri = ["http://iot.uni-trier.de/FTOnto#BF_Radiator_8"]
+                    q_embedding = embedding_df.loc[ftOnto_uri].values
                     # Get position of correct label according to the query embedding
-                    pos_, found_ = execute_kNN_label_embedding_search(gen_q_emb_add, embedding_df, dataset, y_test_labels[i], restrict_to_top_k_results=restrict_to_top_k_results)
+                    pos_, found_ = execute_kNN_label_embedding_search(q_embedding, embedding_df, dataset, y_test_labels[i], restrict_to_top_k_results=restrict_to_top_k_results)
 
                     if found_:
                         pos_first_three = iterations * restrict_to_top_k_results + pos_
@@ -2250,6 +2268,14 @@ def get_labels_from_knowledge_graph_embeddings_from_anomalous_data_streams_permu
                 #print(sdds)
             else:
                 skipped_cnt += 1
+
+    # Current results:
+    print(used_emb_marker + ": Average label position using all data streams (add)", pos_add_allDS_sum / cnt_anomaly_examples)
+    print(used_emb_marker + ": Average label position using all data streams (add_avg)", pos_add_avg_allDS_sum / cnt_anomaly_examples)
+    print(used_emb_marker + ": Average label position using all data streams (add_weighted)", pos_add_weighted_allDS_sum / cnt_anomaly_examples)
+    print(used_emb_marker + ": From the first "+str(restict_to_top_k_data_streams)+" data streams, the first "+str(restrict_to_top_k_results)+"results are considered",provided_labels_top_k_sum / cnt_anomaly_examples)
+    print(used_emb_marker + ": No label found From the first "+str(restict_to_top_k_data_streams)+" data streams, the first "+str(restrict_to_top_k_results)+"results",not_found_cnt)
+    print(used_emb_marker + ": Examples for which no anomalous data streams were provided:",skipped_cnt)
 
     # Return dictonary
     dict_measures[used_emb_marker + ": Average label position using all data streams (add)"] = pos_add_allDS_sum / cnt_anomaly_examples
@@ -2291,12 +2317,12 @@ def main(run=0):
     file_ano_pred   = "predicted_anomaliesFin_Standard_wAdjMat_newAdj_2"
     #'''
     # Finally reported models for MSCRED:
-    #'''
+    '''
     file_name       = "store_relevant_attribut_name_Fin_Standard_wAdjMat_newAdj_2_fixed"
     file_idx        = "store_relevant_attribut_idx_Fin_Standard_wAdjMat_newAdj_2_fixed"
     file_dis        = "store_relevant_attribut_dis_Fin_Standard_wAdjMat_newAdj_2_fixed"
     file_ano_pred   = "predicted_anomaliesFin_Standard_wAdjMat_newAdj_2_fixed"
-    #'''
+    '''
     '''
     file_name       = "store_relevant_attribut_name_Fin_MSCRED_standard_repeat"
     file_idx        = "store_relevant_attribut_idx_Fin_MSCRED_standard_repeat"
@@ -2355,6 +2381,7 @@ def main(run=0):
     print("Ano Pred file used: ", file_ano_pred)
     print("")
 
+    is_siam                         = False
     use_only_true_positive_pred     = False
     evaluate_hitsAtK_hitRateAtP     = False
     is_memory                       = False
@@ -2362,7 +2389,7 @@ def main(run=0):
     is_elbow_selection_used         = False
     is_fix_k_selection_used         = False
     fix_k_for_selection             = 1
-    is_randomly_selected_featues    = False
+    is_randomly_selected_featues    = True
     is_oracle                       = False
     q1                              = False
     q2                              = False
@@ -2411,13 +2438,22 @@ def main(run=0):
     a_file.close()
 
     y_pred_anomalies = np.load(file_ano_pred + str(run) + '.npy')
-
-
-
-
     
     # Fill missing entries from the second nearest neighbor
     for i in range (y_pred_anomalies.shape[0]):
+        print("INTERSECTION ACTIVE!")
+        if i in store_relevant_attribut_idx and i in store_relevant_attribut_idx_2:
+            k = len(store_relevant_attribut_dis_2[i])
+            has_intersection_idx = [value for value in store_relevant_attribut_idx_2[i][:k] if
+                            value in store_relevant_attribut_idx[i][:k]]
+            print("store_relevant_attribut_idx[i][:k]: ", store_relevant_attribut_idx[i][:k])
+            print("Intersection between both: ", has_intersection_idx)
+            if len(has_intersection_idx) > 0:
+                store_relevant_attribut_name[i] = dataset.feature_names_all[has_intersection_idx]
+                store_relevant_attribut_idx[i] = has_intersection_idx #store_relevant_attribut_idx[i][:len(has_intersection_idx)]
+                store_relevant_attribut_dis[i] = store_relevant_attribut_dis[i][:len(has_intersection_idx)]
+            print("store_relevant_attribut_dis[i]:", store_relevant_attribut_dis[i])
+        #
         if not i in store_relevant_attribut_name:
             if i in store_relevant_attribut_name_2:
                 store_relevant_attribut_name[i] = store_relevant_attribut_name_2[i]
@@ -2554,9 +2590,10 @@ def main(run=0):
     elif q2:
         dict_measures = get_labels_from_knowledge_graph_from_anomalous_data_streams_permuted(most_rel_att, dataset.y_test_strings, dataset, y_pred_anomalies, not_selection_label="no_failure", only_true_positive_prediction=use_only_true_positive_pred, k_data_streams=[2, 3, 5, 10], k_permutations=[3, 2, 1], rel_type="Context")
     elif q4:
-        dict_measures = get_labels_from_knowledge_graph_embeddings_from_anomalous_data_streams_permuted(most_rel_att, dataset.y_test_strings, dataset, y_pred_anomalies, not_selection_label="no_failure", only_true_positive_prediction=use_only_true_positive_pred,
-                                                                                                        restrict_to_top_k_results = 3, restict_to_top_k_data_streams = 3, tsv_file='../data/training_data/knowledge/StSp_eval_lr_0.100001_d_25_e_150_bs_5_doLHS_0.0_doRHS_0.0_mNS_50_nSL_100_l_hinge_s_cosine_m_0.7_iM_False.tsv')
-        list_embedding_models = var = [
+        dict_measures = {}
+        dict_measures = get_labels_from_knowledge_graph_embeddings_from_anomalous_data_streams_permuted(most_rel_att, dataset.y_test_strings, dataset, y_pred_anomalies, dict_measures, not_selection_label="no_failure", only_true_positive_prediction=use_only_true_positive_pred,
+                                                                                                        restrict_to_top_k_results = 3, restict_to_top_k_data_streams = 3, tsv_file='../data/training_data/knowledge/StSp_eval_lr_0.100001_d_25_e_150_bs_5_doLHS_0.0_doRHS_0.0_mNS_50_nSL_100_l_hinge_s_cosine_m_0.7_iM_False.tsv', is_siam=is_siam)
+        list_embedding_models = [
             '../data/training_data/knowledge/owl2vecstar_eval_proj_False_dims_50_epochs_10_wk_random_wd_4_wm_none_uriDoc_yes_litDoc_no_mixDoc_no.tsv',
             '../data/training_data/knowledge/owl2vecstar_eval_proj_True_dims_10_epochs_25_wk_wl_wd_4_wm_none_uriDoc_yes_litDoc_yes_mixDoc_yes.tsv',
             '../data/training_data/knowledge/rdf2vec_eval_proj_False_dims_50_epochs_10_wk_wl_wd_2.tsv',
@@ -2567,16 +2604,17 @@ def main(run=0):
                                                                                                         dataset.y_test_strings,
                                                                                                         dataset,
                                                                                                         y_pred_anomalies,
+                                                                                                        dict_measures,
                                                                                                         not_selection_label="no_failure",
                                                                                                         only_true_positive_prediction=use_only_true_positive_pred,
                                                                                                         restrict_to_top_k_results=3,
                                                                                                         restict_to_top_k_data_streams=3,
-                                                                                                        tsv_file=emb_mod,
-                                                                                                        dict_measures=dict_measures)
+                                                                                                        tsv_file=emb_mod, is_siam=is_siam)
 
     else:
         print("Query not specified!")
-        raise Exception("!")
+        dict_measures = {}
+        #raise Exception("!")
 
     most_rel_att = [store_relevant_attribut_idx_shortened, store_relevant_attribut_dis, store_relevant_attribut_name_shortened]
     #most_rel_att = [store_relevant_attribut_idx, store_relevant_attribut_dis, store_relevant_attribut_name]
