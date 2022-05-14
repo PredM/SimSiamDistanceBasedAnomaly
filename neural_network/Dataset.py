@@ -205,17 +205,18 @@ class FullDataset(Dataset):
             if self.config.simulate_anomaly_detection_w_supervised_snn:
                 self.x_train = np.load(self.dataset_folder + 'valid_features_new2.npy')  # data training
                 self.y_train_strings = np.expand_dims(np.load(self.dataset_folder + 'valid_labels_new2.npy'), axis=-1)
-                # Load original training data
-                #'''
-                x_train_ = np.load(self.dataset_folder + 'train_features_new2.npy')  # data training
-                y_train_strings_ = np.expand_dims(np.load(self.dataset_folder + 'train_labels_new2.npy'), axis=-1)
-                # remove failure examples
-                x_train_no_failure, y_train_strings_no_failure = self.extract_no_failure_examples_raw(lables=y_train_strings_, raw_data=x_train_, label_to_retain="no_failure")
-                # add to validation data
-                self.y_train_strings = np.concatenate((self.y_train_strings,  np.expand_dims(y_train_strings_no_failure, axis=-1)), axis=0)
-                self.x_train = np.concatenate((self.x_train, x_train_no_failure), axis=0)
-                print("Shape merged labels:", self.y_train_strings.shape,"| Shape merged training data:", self.x_train.shape)
-                #'''
+                if not self.dataset_folder == self.config.case_base_folder:
+                    # Load original training data
+                    #'''
+                    x_train_ = np.load(self.dataset_folder + 'train_features_new2.npy')  # data training
+                    y_train_strings_ = np.expand_dims(np.load(self.dataset_folder + 'train_labels_new2.npy'), axis=-1)
+                    # remove failure examples
+                    x_train_no_failure, y_train_strings_no_failure = self.extract_no_failure_examples_raw(lables=y_train_strings_, raw_data=x_train_, label_to_retain="no_failure")
+                    # add to validation data
+                    self.y_train_strings = np.concatenate((self.y_train_strings,  np.expand_dims(y_train_strings_no_failure, axis=-1)), axis=0)
+                    self.x_train = np.concatenate((self.x_train, x_train_no_failure), axis=0)
+                    print("Shape merged labels:", self.y_train_strings.shape,"| Shape merged training data:", self.x_train.shape)
+                    #'''
             else:
                 self.x_train = np.load(self.dataset_folder + 'train_features_new2.npy')  # data training
                 self.y_train_strings = np.expand_dims(np.load(self.dataset_folder + 'train_labels_new2.npy'), axis=-1)

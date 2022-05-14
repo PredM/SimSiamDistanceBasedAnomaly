@@ -14,7 +14,8 @@ from neural_network.Optimizer import SNNOptimizer
 from neural_network.SNN import initialise_snn
 from neural_network.Inference import Inference
 from baseline.Representations import Representation
-
+gpus = tf.config.list_physical_devices('GPU')
+tf.config.experimental.set_memory_growth(gpus[0], True)
 
 def change_model(config: Configuration, start_time_string):
     search_dir = config.models_folder

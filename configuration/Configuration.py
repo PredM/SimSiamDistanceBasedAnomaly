@@ -253,7 +253,7 @@ class InferenceConfiguration:
         # similarity assessment during inference.
         # Please note that the case base extraction only reduces the training data but fully copies the test data
         # so all test example will still be evaluated even if this is enabled
-        self.case_base_for_inference = False  # default: False
+        self.case_base_for_inference = True  # default: False
 
         # Parameter to control the size / number of the queries used for evaluation
         self.inference_with_failures_only = False  # default: False
@@ -279,7 +279,7 @@ class InferenceConfiguration:
         #self.num_of_train_select_test_runs = 1
 
         # Use valid data set instead of test (e.g., during inference)
-        self.use_valid_instead_of_test = True                                                           # default False
+        self.use_valid_instead_of_test = False                                                           # default False
 
         # Loads only the FaF examples from the validation set and adds the no_failure from the training set
         self.simulate_anomaly_detection_w_supervised_snn = True
@@ -445,9 +445,9 @@ class StaticConfiguration:
         #3W self.data_folder_prefix = '/../../../../../data/datasets/PredMSiamNN/data/3rd_party/3w_dataset/'
 
         # Folder where the trained models are saved to during learning process
-        self.hyper_file = self.hyper_file_folder + 'cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2.json' #cnn1d_with_fc_simsiam_128-32.json 'cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2.json'  #cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2.json #cnn2d_withAddInput_ContextStrang.json  'cnn2d_with_graph-26-10.json'  #cnn2d_with_graph_test.json #cnn2d_withAddInput_nwApproach.json
+        self.hyper_file = self.hyper_file_folder + 'cnn1d_with_fc_simsiam_128-32.json' #cnn1d_with_fc_simsiam_128-32.json 'cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2.json'  #cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2.json #cnn2d_withAddInput_ContextStrang.json  'cnn2d_with_graph-26-10.json'  #cnn2d_with_graph_test.json #cnn2d_withAddInput_nwApproach.json
         #3W self.models_folder = '../../../../data/pklein/PredMSiamNN/data/' + 'trained_model2/' #
-        self.models_folder = self.data_folder_prefix + 'trained_models/'
+        self.models_folder = self.data_folder_prefix + 'trained_models2/'
         self.save_results_as_file = False
         self.curr_run_identifier = self.hyper_file.split("/")[-1].split(".")[0] + "repeat"
         self.use_train_FaF_in_eval = True
@@ -458,7 +458,7 @@ class StaticConfiguration:
         self.plot_embeddings_via_TSNE = False
         self.plot_train_test = False
 
-        self.early_stopping_epochs_limit = 1
+        self.early_stopping_epochs_limit = 20
 
         # Matches each time step with each time step from the other encoding which is implemented as a subtraction
         # of the attention weights multiplied with the other time series
