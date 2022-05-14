@@ -458,7 +458,7 @@ class StaticConfiguration:
         self.plot_embeddings_via_TSNE = False
         self.plot_train_test = False
 
-        self.early_stopping_epochs_limit = 20
+        self.early_stopping_epochs_limit = 25
 
         # Matches each time step with each time step from the other encoding which is implemented as a subtraction
         # of the attention weights multiplied with the other time series

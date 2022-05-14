@@ -113,7 +113,7 @@ def main():
 
 
 if __name__ == '__main__':
-    num_of_runs = 1
+    num_of_runs = 5
     try:
         for run in range(num_of_runs):
             print("Experiment ", run, " started!")

@@ -231,9 +231,21 @@ class Evaluator:
         avgpr_test_no_failure_sim, pr_auc_test_no_failure_sim = self.calculate_PRCurve(y_test_strings, np.asarray(self.sim_pred_no_failure), 'cosine')
 
         print("-------------------------------------------------")
-        print("*** roc_auc_test_no_failure:", roc_auc_test_no_failure_sim, " ***")
-        print("*** avgpr_test_no_failure", avgpr_test_no_failure_sim, " ***")
-        print("*** pr_auc_test_no_failure:", pr_auc_test_no_failure_sim, " ***")
+        print("*** roc_auc_test_no_failure_sim:", roc_auc_test_no_failure_sim, " ***")
+        print("*** avgpr_test_no_failure_sim", avgpr_test_no_failure_sim, " ***")
+        print("*** pr_auc_test_no_failure_sim:", pr_auc_test_no_failure_sim, " ***")
+        print("-------------------------------------------------")
+
+        # Calculate roc-auc and pr-auc score
+        y_test_strings = np.expand_dims(self.dataset.y_test_strings, axis=-1)
+        y_true_numeric = np.where(np.asarray(self.y_pred) == 'no_failure', 1, 0)
+        roc_auc_test_no_failure_sim = self.calculate_RocAuc(y_test_strings, y_true_numeric , 'cosine')
+        avgpr_test_no_failure_sim, pr_auc_test_no_failure_sim = self.calculate_PRCurve(y_test_strings, np.asarray(self.sim_pred_no_failure), 'cosine')
+
+        print("-------------------------------------------------")
+        print("*** roc_auc_test_no_failure_pred:", roc_auc_test_no_failure_sim, " ***")
+        print("*** avgpr_test_no_failure_pred", avgpr_test_no_failure_sim, " ***")
+        print("*** pr_auc_test_no_failure_pred:", pr_auc_test_no_failure_sim, " ***")
         print("-------------------------------------------------")
 
         self.one_class_eval_report(y_true_strings=y_test_strings, y_pred_class_labels=np.asarray(self.y_pred))
