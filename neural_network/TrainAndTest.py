@@ -112,7 +112,11 @@ def main():
 
 
 if __name__ == '__main__':
+    num_of_runs = 1
     try:
-        main()
+        for run in range(num_of_runs):
+            print("Experiment ", run, " started!")
+            main()
+            print("Experiment ", run, " finished!")
     except KeyboardInterrupt:
         pass

@@ -114,6 +114,16 @@ def extract_failure_examples_raw(lables, raw_data, label_to_NOT_retain="no_failu
     raw_data = raw_data[example_idx_of_curr_label[0],:,:]
     return raw_data
 
+def extract_no_failure_examples_raw(lables, raw_data, label_to_retain="no_failure"):
+    # Similar to extract_failure_examples() but for raw data / 3d
+
+    # Get idx of examples with this label
+    example_idx_of_curr_label = np.where(lables == label_to_retain)
+    #feature_data = np.expand_dims(feature_data, -1)
+    raw_data = raw_data[example_idx_of_curr_label[0],:,:]
+    lables = lables[example_idx_of_curr_label]
+    return raw_data, lables
+
 def calculate_nn_distance(sim_mat_casebase_test, k=1):
     # Returns the mean distance of the k nereast neighbors for each test example with size (a,)
     # from a similarity matrix with size (a,b) where a is the number of test examples and b the number of train/case examples

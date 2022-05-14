@@ -187,11 +187,38 @@ class FullDataset(Dataset):
         print("feature_data_valid_reduced shape: ", feature_data_valid_reduced.shape, "lables_valid_reduced: ", lables_valid_reduced.shape)
         return lables_train_reduced, feature_data_train_reduced, lables_valid_reduced, feature_data_valid_reduced
 
+    def extract_no_failure_examples_raw(self,lables, raw_data, label_to_retain="no_failure"):
+        # Similar to extract_failure_examples() but for raw data / 3d
+
+        # Get idx of examples with this label
+        example_idx_of_curr_label = np.where(lables == label_to_retain)
+        # feature_data = np.expand_dims(feature_data, -1)
+        raw_data = raw_data[example_idx_of_curr_label[0], :, :]
+        lables = lables[example_idx_of_curr_label]
+        return raw_data, lables
+
     def load_files(self, selected_class):
         # In difference to 2020 version, 2021 considers a validation set
         if self.config.ft_data_set_version == FtDataSetVersion.FT_DataSet_2021:
-            self.x_train = np.load(self.dataset_folder + 'train_features_new2.npy')  # data training
-            self.y_train_strings = np.expand_dims(np.load(self.dataset_folder + 'train_labels_new2.npy'), axis=-1)
+
+            # This configuration should simulate the data basis similar to an anomaly detection setting
+            if self.config.simulate_anomaly_detection_w_supervised_snn:
+                self.x_train = np.load(self.dataset_folder + 'valid_features_new2.npy')  # data training
+                self.y_train_strings = np.expand_dims(np.load(self.dataset_folder + 'valid_labels_new2.npy'), axis=-1)
+                # Load original training data
+                #'''
+                x_train_ = np.load(self.dataset_folder + 'train_features_new2.npy')  # data training
+                y_train_strings_ = np.expand_dims(np.load(self.dataset_folder + 'train_labels_new2.npy'), axis=-1)
+                # remove failure examples
+                x_train_no_failure, y_train_strings_no_failure = self.extract_no_failure_examples_raw(lables=y_train_strings_, raw_data=x_train_, label_to_retain="no_failure")
+                # add to validation data
+                self.y_train_strings = np.concatenate((self.y_train_strings,  np.expand_dims(y_train_strings_no_failure, axis=-1)), axis=0)
+                self.x_train = np.concatenate((self.x_train, x_train_no_failure), axis=0)
+                print("Shape merged labels:", self.y_train_strings.shape,"| Shape merged training data:", self.x_train.shape)
+                #'''
+            else:
+                self.x_train = np.load(self.dataset_folder + 'train_features_new2.npy')  # data training
+                self.y_train_strings = np.expand_dims(np.load(self.dataset_folder + 'train_labels_new2.npy'), axis=-1)
             #self.x_train = np.load(self.dataset_folder + 'train_features_new2_noFailureOnly.npy')  # data training
             #self.y_train_strings = np.expand_dims(np.load(self.dataset_folder + 'train_labels_new2_noFailureOnly.npy'), axis=-1)
 

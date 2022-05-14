@@ -2034,7 +2034,7 @@ def generated_embedding_query(set_of_anomalous_data_streams, embeddings_df, aggr
     else:
         for i, attr_name in enumerate(set_of_anomalous_data_streams):
             pos_attr = np.argwhere(dataset.feature_names_all == attr_name)
-            sum = sum + weight[pos_attr]
+            sum = 1#sum + weight[pos_attr]
     #print("Sum:",sum)
 
 
@@ -2055,7 +2055,7 @@ def generated_embedding_query(set_of_anomalous_data_streams, embeddings_df, aggr
         if is_siam:
             generated_query_embedding_add_weighted = generated_query_embedding_add_weighted + ( (weight[iteration] / sum)* embeddings_df.loc[ftOnto_uri].values )
         else:
-            generated_query_embedding_add_weighted = generated_query_embedding_add_weighted + ((weight[pos_attr] / sum) * embeddings_df.loc[ftOnto_uri].values)
+            generated_query_embedding_add_weighted = embeddings_df.loc[ftOnto_uri].values # generated_query_embedding_add_weighted + ((weight[pos_attr] / sum) * embeddings_df.loc[ftOnto_uri].values)
 
     generated_query_embedding_add_avg = generated_query_embedding_add / len(set_of_anomalous_data_streams)
     #print(dataset.mapping_attr_to_ftonto_df)
@@ -2066,7 +2066,307 @@ def generated_embedding_query(set_of_anomalous_data_streams, embeddings_df, aggr
 
     return generated_query_embedding_add, generated_query_embedding_add_avg, generated_query_embedding_add_weighted
 
-def execute_kNN_label_embedding_search(query_embedding, embedding_df, dataset, gold_label, restrict_to_top_k_results=1000):
+def generated_embedding_query_2(set_of_anomalous_data_streams, embeddings_df, aggrgation_method, dataset,weight=None,is_siam=False):
+    #
+    mappingDict = {
+        'txt15_conveyor_failure_mode_driveshaft_slippage_failure': 'PredM#Label_txt15_conveyor_failure_mode_driveshaft_slippage_class',
+        'txt15_i1_lightbarrier_failure_mode_1': 'PredM#Label_txt15_i1_lightbarrier_failure_mode_1_class',
+        'txt15_i1_lightbarrier_failure_mode_2': 'PredM#Label_txt15_i1_lightbarrier_failure_mode_2_class',
+        'txt15_i3_lightbarrier_failure_mode_2': 'PredM#Label_txt15_i3_lightbarrier_failure_mode_2_class',
+        'txt15_pneumatic_leakage_failure_mode_1': 'PredM#Label_txt15_pneumatic_leakage_failure_mode_1_class',
+        'txt15_pneumatic_leakage_failure_mode_2': 'PredM#Label_txt15_pneumatic_leakage_failure_mode_2_class',
+        'txt15_pneumatic_leakage_failure_mode_3': 'PredM#Label_txt15_pneumatic_leakage_failure_mode_3_class',
+        'txt16_conveyor_failure_mode_driveshaft_slippage_failure': 'PredM#Label_txt16_conveyor_failure_mode_driveshaft_slippage_class',
+        'txt16_conveyorbelt_big_gear_tooth_broken_failure': 'PredM#Label_txt16_conveyor_big_gear_tooth_broken_failure_class',
+        'txt16_conveyorbelt_small_gear_tooth_broken_failure': 'PredM#Label_txt16_conveyor_small_gear_tooth_broken_failure_class',
+        'txt16_i3_switch_failure_mode_2': 'PredM#Label_txt16_i3_switch_failure_mode_2_class',
+        'txt16_m3_t1_high_wear': 'PredM#Label_txt16_m3_t1_high_wear_class',
+        'txt16_m3_t1_low_wear': 'PredM#Label_txt16_m3_t1_low_wear_class',
+        'txt16_m3_t2_wear': 'PredM#Label_txt16_m3_t2_class',
+        'txt17_i1_switch_failure_mode_1': 'PredM#Label_txt17_i1_switch_failure_mode_1_class',
+        'txt17_i1_switch_failure_mode_2': 'PredM#Label_txt17_i1_switch_failure_mode_2_class',
+        'txt17_pneumatic_leakage_failure_mode_1': 'PredM#Label_txt17_pneumatic_leakage_failure_mode_1_class',
+        'txt17_workingstation_transport_failure_mode_wout_workpiece': 'PredM#Label_txt17_workingstation_transport_failure_mode_wou_class',
+        'txt18_pneumatic_leakage_failure_mode_1': 'PredM#Label_txt18_pneumatic_leakage_failure_mode_1_class',
+        'txt18_pneumatic_leakage_failure_mode_2_faulty': 'PredM#Label_txt18_pneumatic_leakage_failure_mode_2_faulty_class',
+        "txt18_pneumatic_leakage_failure_mode_2": "PredM#Label_txt18_pneumatic_leakage_failure_mode_2_failed_class",
+        'txt18_transport_failure_mode_wout_workpiece': 'PredM#Label_txt18_transport_failure_mode_wout_workpiece_class',
+        'txt19_i4_lightbarrier_failure_mode_1': 'PredM#Label_txt19_i4_lightbarrier_failure_mode_1_class',
+        'txt19_i4_lightbarrier_failure_mode_2': 'PredM#Label_txt19_i4_lightbarrier_failure_mode_2_class',
+        "txt16_i4_lightbarrier_failure_mode_1": "PredM#Label_txt16_i4_lightbarrier_failure_mode_1_class",
+        "txt15_m1_t1_high_wear": "PredM#Label_txt15_m1_t1_high_wear_class",
+        "txt15_m1_t1_low_wear": "PredM#Label_txt15_m1_t1_low_wear_class",
+        "txt15_m1_t2_wear": "PredM#Label_txt15_m1_t2_class",
+        "no_failure": "PredM#Label_No_Failure"
+    }
+    inv_mappingDict = {v: k for k, v in mappingDict.items()}
+    mappingDict = {k.lower(): v.lower() for k, v in mappingDict.items()}
+    inv_mappingDict = {k.lower(): v.lower() for k, v in inv_mappingDict.items()}
+
+    embeddings_df.index = embeddings_df.index.str.lower()
+    # Get all label uris
+    classes_dict = {}
+    cnt_classes = 0
+    emb_dim = len(embeddings_df.columns)
+
+    #for i in range(mappingDict.keys()) # HIER WEITER MACHEN!
+
+    for i, row in embeddings_df.iterrows():
+        ind = i.lower()
+        if "label_txt" in ind and "_class" in ind and "__label__" in ind and "predm#" in ind:
+            # its a class representing a label of the data set
+            #print("ind.split("/")[-1]", ind.split("/")[-1])
+            print(ind)
+            print(ind.split("__")[-1])
+            if ind.split("__")[-1] in mappingDict.values():
+                print("hiere!")
+            classes_dict[ind] =  row.values #embeddings_df.loc[ind.split("/")[-1]].values
+            cnt_classes += 1
+
+    print("classes_dict:", len(classes_dict.keys()))
+    #http://iot.uni-trier.de/fmeca#haspotentialfailuremode
+    #http://iot-uni.trier.de/FMECA#hasPotentialFailureMode
+    # Generate the triplets
+    lefthandside = np.zeros((len(classes_dict)*len(set_of_anomalous_data_streams),emb_dim))
+    righthandside = np.zeros((len(classes_dict) * len(set_of_anomalous_data_streams), emb_dim))
+    tiple_dict = {}
+    for iteration_a, attr_name in enumerate(set_of_anomalous_data_streams):
+        #Generate a triplet between each anomalous entry and the label
+        for iteration_c, class_name in enumerate(classes_dict):
+            lefthandside[iteration_a*len(classes_dict)+iteration_c] = classes_dict[class_name]
+
+            ftOnto_uri = dataset.mapping_attr_to_ftonto_df.loc[set_of_anomalous_data_streams[iteration_a]]
+            if ftOnto_uri.tolist()[0] == "http://iot.uni-trier.de/FTOnto#BF_Lamp_8":
+                ftOnto_uri = ["http://iot.uni-trier.de/FTOnto#BF_Radiator_8".lower()]
+                q_embedding = embeddings_df.loc[ftOnto_uri].values
+            else:
+                q_embedding = embeddings_df.loc[ftOnto_uri.str.lower()].values
+            #print("q_embedding: ", q_embedding)
+            '''
+            print("mapping_attr_to_ftonto_df:",dataset.mapping_attr_to_ftonto_df.head())
+            ftOnto_uri = dataset.mapping_attr_to_ftonto_df.loc[attr_name].to_string()
+            string = "http://iot.uni-trier.de/"+str(ftOnto_uri).split("/")[-1].split(" ")[0].lower()
+            print("-"+str(string)+"-")
+            print("-" + str(string).split("#")[-1] + "-")
+            for i in embeddings_df.index:
+                if "accsensor" in i:
+                    print("i: ", str(i))
+            '''
+            righthandside[iteration_a*len(classes_dict)+iteration_c] = q_embedding + embeddings_df.loc['http://iot.uni-trier.de/fmeca#haspotentialfailuremode'].values
+            tiple_dict[iteration_a*len(classes_dict)+iteration_c] = attr_name +"-"+class_name #str(ftOnto_uri[0].str.lower()) + "-" + str(classes_dict[class_name])
+
+    print("Execute similarity evaluation for lefthandside:",lefthandside.shape," and righthandside:",righthandside.shape)
+    triple_eval_store = np.zeros((lefthandside.shape[0]))
+    for triple_idx in range(lefthandside.shape[0]):
+        sim_triple = cosine_similarity(np.expand_dims(lefthandside[triple_idx,:],0), np.expand_dims(righthandside[triple_idx,:],0))
+        # Apply Relu to cut out negativ values
+        sim_triple = sim_triple * (sim_triple > 0)
+        triple_eval_store[triple_idx] = sim_triple
+    #print("P shape:", P.shape)
+    print("triple_eval_store shape:", triple_eval_store.shape)
+    print(np.argsort(-triple_eval_store)[0])
+    print(tiple_dict[np.argsort(-triple_eval_store)[0]])
+
+    class_score_dict = {}
+    score_class_dict = {}
+    for iteration_c, class_name in enumerate(classes_dict):
+        # Get only examples for the current class
+        first_entry = len(set_of_anomalous_data_streams) * iteration_c
+        last_etnry = first_entry +len(set_of_anomalous_data_streams)
+        # product of the similarity of each tripple with all anomalous data streams per class label, (datastream_x, FM)
+        class_score = np.sum(np.abs(triple_eval_store[first_entry:last_etnry]))
+        class_score_dict[class_name] = class_score
+        #print("iteration_c:", iteration_c, class_name,":",class_score)
+        score_class_dict[class_score] = class_name
+
+    print("score_class_dict:", score_class_dict)
+    sorted_acc_values = dict(sorted(score_class_dict.items(), reverse=True)) #sorted(class_score_dict, key=class_score_dict.get) #sorted(((v, k) for k, v in class_score_dict.items()), reverse=True)
+    print("Scores: ", sorted_acc_values)
+
+    return sorted_acc_values.items()
+
+def eval_found_labels(query_results, sim_list, gold_label,restrict_to_top_k_results=100):
+    # Query the k-nearest neighbor labels
+    # print("embedding_df.values shape:", embedding_df.values.shape)
+
+    mappingDict = {
+        'txt15_conveyor_failure_mode_driveshaft_slippage_failure': 'PredM#Label_txt15_conveyor_failure_mode_driveshaft_slippage_class',
+        'txt15_i1_lightbarrier_failure_mode_1': 'PredM#Label_txt15_i1_lightbarrier_failure_mode_1_class',
+        'txt15_i1_lightbarrier_failure_mode_2': 'PredM#Label_txt15_i1_lightbarrier_failure_mode_2_class',
+        'txt15_i3_lightbarrier_failure_mode_2': 'PredM#Label_txt15_i3_lightbarrier_failure_mode_2_class',
+        'txt15_pneumatic_leakage_failure_mode_1': 'PredM#Label_txt15_pneumatic_leakage_failure_mode_1_class',
+        'txt15_pneumatic_leakage_failure_mode_2': 'PredM#Label_txt15_pneumatic_leakage_failure_mode_2_class',
+        'txt15_pneumatic_leakage_failure_mode_3': 'PredM#Label_txt15_pneumatic_leakage_failure_mode_3_class',
+        'txt16_conveyor_failure_mode_driveshaft_slippage_failure': 'PredM#Label_txt16_conveyor_failure_mode_driveshaft_slippage_class',
+        'txt16_conveyorbelt_big_gear_tooth_broken_failure': 'PredM#Label_txt16_conveyor_big_gear_tooth_broken_failure_class',
+        'txt16_conveyorbelt_small_gear_tooth_broken_failure': 'PredM#Label_txt16_conveyor_small_gear_tooth_broken_failure_class',
+        'txt16_i3_switch_failure_mode_2': 'PredM#Label_txt16_i3_switch_failure_mode_2_class',
+        'txt16_m3_t1_high_wear': 'PredM#Label_txt16_m3_t1_high_wear_class',
+        'txt16_m3_t1_low_wear': 'PredM#Label_txt16_m3_t1_low_wear_class',
+        'txt16_m3_t2_wear': 'PredM#Label_txt16_m3_t2_class',
+        'txt17_i1_switch_failure_mode_1': 'PredM#Label_txt17_i1_switch_failure_mode_1_class',
+        'txt17_i1_switch_failure_mode_2': 'PredM#Label_txt17_i1_switch_failure_mode_2_class',
+        'txt17_pneumatic_leakage_failure_mode_1': 'PredM#Label_txt17_pneumatic_leakage_failure_mode_1_class',
+        'txt17_workingstation_transport_failure_mode_wout_workpiece': 'PredM#Label_txt17_workingstation_transport_failure_mode_wou_class',
+        'txt18_pneumatic_leakage_failure_mode_1': 'PredM#Label_txt18_pneumatic_leakage_failure_mode_1_class',
+        'txt18_pneumatic_leakage_failure_mode_2_faulty': 'PredM#Label_txt18_pneumatic_leakage_failure_mode_2_faulty_class',
+        "txt18_pneumatic_leakage_failure_mode_2": "PredM#Label_txt18_pneumatic_leakage_failure_mode_2_failed_class",
+        'txt18_transport_failure_mode_wout_workpiece': 'PredM#Label_txt18_transport_failure_mode_wout_workpiece_class',
+        'txt19_i4_lightbarrier_failure_mode_1': 'PredM#Label_txt19_i4_lightbarrier_failure_mode_1_class',
+        'txt19_i4_lightbarrier_failure_mode_2': 'PredM#Label_txt19_i4_lightbarrier_failure_mode_2_class',
+        "txt16_i4_lightbarrier_failure_mode_1": "PredM#Label_txt16_i4_lightbarrier_failure_mode_1_class",
+        "txt15_m1_t1_high_wear": "PredM#Label_txt15_m1_t1_high_wear_class",
+        "txt15_m1_t1_low_wear": "PredM#Label_txt15_m1_t1_low_wear_class",
+        "txt15_m1_t2_wear": "PredM#Label_txt15_m1_t2_class",
+        "no_failure": "PredM#Label_No_Failure"
+    }
+    inv_mappingDict = {v: k for k, v in mappingDict.items()}
+    mappingDict = {k.lower(): v.lower() for k, v in mappingDict.items()}
+    inv_mappingDict = {k.lower(): v.lower() for k, v in inv_mappingDict.items()}
+
+    pos = 0
+    found_a_label = False
+    print("########################")
+    print("query_results:",len(query_results))
+    for rank, found_embedding in enumerate(query_results):
+            name_converted = found_embedding[1].split("__")[-1].lower().split("/__label__predm#")[-1]
+            print("string_converted: ", name_converted)
+            if name_converted in mappingDict.values():
+                print(rank, "-", found_embedding)
+                # found_embedding_ = mappingDict.get found_embedding.split("#Label_")[1]
+                '''
+                if found_embedding_ == "txt16_conveyor_big_gear_tooth_broken_failure":
+                    found_embedding_ = "txt16_conveyorbelt_big_gear_tooth_broken_failure"
+                if found_embedding_ == "txt16_conveyor_failure_mode_driveshaft_slippage":
+                    found_embedding_ = "txt16_conveyor_failure_mode_driveshaft_slippage_failure"
+                if found_embedding_ == "txt17_i1_switch_failure_mode_2_class":
+                    found_embedding_ = "txt17_i1_switch_failure_mode_2"
+                #  http://iot.uni-trier.de/FTOnto#Label_txt17_i1_switch_failure_mode_2_class
+                '''
+
+                pos = pos + 1
+                # get label from embedding
+
+                if gold_label.lower() in inv_mappingDict.get(name_converted):
+                    print("found it")
+                    found_a_label = True
+                    break
+                if pos == restrict_to_top_k_results:
+                    found_a_label = False
+                    break
+            else:
+                print("### NOT in LIST? ###")
+                print("gold_label.lower():", gold_label.lower())
+                print("found_embedding_:",name_converted)
+                print("###              ###")
+                #print("np.char.lower(dataset.y_test_strings_unique):", np.char.lower(dataset.y_test_strings_unique))
+            print("")
+
+    if found_a_label:
+        print("Found correct label at position: ", pos)
+    else:
+        print("NOTHING FOUND FOR LABEL:", gold_label, "with restrict_to_top_k_results:", restrict_to_top_k_results)
+        # print("RESULTS:", query_results)
+        print("##########################################")
+
+    return pos, found_a_label
+
+def execute_kNN_label_embedding_search(query_embedding, embedding_df, dataset, gold_label,
+                                       restrict_to_top_k_results=1000):
+    # Query the k-nearest neighbor labels
+    # print("embedding_df.values shape:", embedding_df.values.shape)
+
+    mappingDict = {
+        'txt15_conveyor_failure_mode_driveshaft_slippage_failure': 'PredM#Label_txt15_conveyor_failure_mode_driveshaft_slippage_class',
+        'txt15_i1_lightbarrier_failure_mode_1': 'PredM#Label_txt15_i1_lightbarrier_failure_mode_1_class',
+        'txt15_i1_lightbarrier_failure_mode_2': 'PredM#Label_txt15_i1_lightbarrier_failure_mode_2_class',
+        'txt15_i3_lightbarrier_failure_mode_2': 'PredM#Label_txt15_i3_lightbarrier_failure_mode_2_class',
+        'txt15_pneumatic_leakage_failure_mode_1': 'PredM#Label_txt15_pneumatic_leakage_failure_mode_1_class',
+        'txt15_pneumatic_leakage_failure_mode_2': 'PredM#Label_txt15_pneumatic_leakage_failure_mode_2_class',
+        'txt15_pneumatic_leakage_failure_mode_3': 'PredM#Label_txt15_pneumatic_leakage_failure_mode_3_class',
+        'txt16_conveyor_failure_mode_driveshaft_slippage_failure': 'PredM#Label_txt16_conveyor_failure_mode_driveshaft_slippage_class',
+        'txt16_conveyorbelt_big_gear_tooth_broken_failure': 'PredM#Label_txt16_conveyor_big_gear_tooth_broken_failure_class',
+        'txt16_conveyorbelt_small_gear_tooth_broken_failure': 'PredM#Label_txt16_conveyor_small_gear_tooth_broken_failure_class',
+        'txt16_i3_switch_failure_mode_2': 'PredM#Label_txt16_i3_switch_failure_mode_2_class',
+        'txt16_m3_t1_high_wear': 'PredM#Label_txt16_m3_t1_high_wear_class',
+        'txt16_m3_t1_low_wear': 'PredM#Label_txt16_m3_t1_low_wear_class',
+        'txt16_m3_t2_wear': 'PredM#Label_txt16_m3_t2_class',
+        'txt17_i1_switch_failure_mode_1': 'PredM#Label_txt17_i1_switch_failure_mode_1_class',
+        'txt17_i1_switch_failure_mode_2': 'PredM#Label_txt17_i1_switch_failure_mode_2_class',
+        'txt17_pneumatic_leakage_failure_mode_1': 'PredM#Label_txt17_pneumatic_leakage_failure_mode_1_class',
+        'txt17_workingstation_transport_failure_mode_wout_workpiece': 'PredM#Label_txt17_workingstation_transport_failure_mode_wou_class',
+        'txt18_pneumatic_leakage_failure_mode_1': 'PredM#Label_txt18_pneumatic_leakage_failure_mode_1_class',
+        'txt18_pneumatic_leakage_failure_mode_2_faulty': 'PredM#Label_txt18_pneumatic_leakage_failure_mode_2_faulty_class',
+        "txt18_pneumatic_leakage_failure_mode_2": "PredM#Label_txt18_pneumatic_leakage_failure_mode_2_failed_class",
+        'txt18_transport_failure_mode_wout_workpiece': 'PredM#Label_txt18_transport_failure_mode_wout_workpiece_class',
+        'txt19_i4_lightbarrier_failure_mode_1': 'PredM#Label_txt19_i4_lightbarrier_failure_mode_1_class',
+        'txt19_i4_lightbarrier_failure_mode_2': 'PredM#Label_txt19_i4_lightbarrier_failure_mode_2_class',
+        "txt16_i4_lightbarrier_failure_mode_1": "PredM#Label_txt16_i4_lightbarrier_failure_mode_1_class",
+        "txt15_m1_t1_high_wear": "PredM#Label_txt15_m1_t1_high_wear_class",
+        "txt15_m1_t1_low_wear": "PredM#Label_txt15_m1_t1_low_wear_class",
+        "txt15_m1_t2_wear": "PredM#Label_txt15_m1_t2_class",
+        "no_failure": "PredM#Label_No_Failure"
+    }
+    inv_mappingDict = {v: k for k, v in mappingDict.items()}
+    mappingDict = {k.lower(): v.lower() for k, v in mappingDict.items()}
+    inv_mappingDict = {k.lower(): v.lower() for k, v in inv_mappingDict.items()}
+
+    sim_list = cosine_similarity(embedding_df.values, query_embedding, 0)
+    # print("P shape:", P.shape)
+    sorted_sim_values = np.sort(np.squeeze(sim_list))[::-1]
+    sorted_indexes = np.argsort(np.squeeze(sim_list))[::-1]
+
+    query_results = embedding_df.index[sorted_indexes].to_list()
+    # Iterate over the found nearest neighbor and look where the correct label is found
+    pos = 0
+    found_a_label = False
+    for rank, found_embedding in enumerate(query_results):
+        if "PredM#Label_" in found_embedding and not "__label__" in found_embedding:
+            idx = found_embedding.find("PredM#Label_")
+            extracted_emb = found_embedding[idx:].lower()
+            if extracted_emb in mappingDict.values():
+                print(rank, "-", sorted_sim_values[rank], "-", found_embedding)
+                # found_embedding_ = mappingDict.get found_embedding.split("#Label_")[1]
+                '''
+                if found_embedding_ == "txt16_conveyor_big_gear_tooth_broken_failure":
+                    found_embedding_ = "txt16_conveyorbelt_big_gear_tooth_broken_failure"
+                if found_embedding_ == "txt16_conveyor_failure_mode_driveshaft_slippage":
+                    found_embedding_ = "txt16_conveyor_failure_mode_driveshaft_slippage_failure"
+                if found_embedding_ == "txt17_i1_switch_failure_mode_2_class":
+                    found_embedding_ = "txt17_i1_switch_failure_mode_2"
+                #  http://iot.uni-trier.de/FTOnto#Label_txt17_i1_switch_failure_mode_2_class
+
+                # Check if embedding is one of the labels of the data set:
+                #print("found_embedding_:",found_embedding_)
+                #print("np.char.lower(dataset.y_test_strings_unique):", np.char.lower(dataset.y_test_strings_unique))
+                if np.char.lower(found_embedding_) in list(np.char.lower(dataset.y_test_strings_unique)) or found_embedding_ in list(np.char.lower(dataset.y_train_strings_unique)):
+                    # Check if it is the right label!
+                '''
+                pos = pos + 1
+                # get label from embedding
+
+                if gold_label.lower() in inv_mappingDict.get(extracted_emb.lower()):
+                    print("found it")
+                    found_a_label = True
+                    break
+                if pos == restrict_to_top_k_results:
+                    found_a_label = False
+                    break
+            # else:
+            # print("NOT in LIST?")
+            # print("found_embedding_:",found_embedding)
+            # print("np.char.lower(dataset.y_test_strings_unique):", np.char.lower(dataset.y_test_strings_unique))
+
+    if found_a_label:
+        print("Found correct label at position: ", pos)
+    else:
+        print("NOTHING FOUND FOR LABEL:", gold_label, "with restrict_to_top_k_results:", restrict_to_top_k_results)
+        # print("RESULTS:", query_results)
+        print("##########################################")
+
+    return pos, found_a_label
+
+def execute_embedding_eval(sim_list, query_results, gold_label, restrict_to_top_k_results=1000):
     # Query the k-nearest neighbor labels
     #print("embedding_df.values shape:", embedding_df.values.shape)
 
@@ -2199,6 +2499,7 @@ def get_labels_from_knowledge_graph_embeddings_from_anomalous_data_streams_permu
     provided_labels_top_k_sum = 0
     skipped_cnt= 0
     not_found_cnt = 0
+    found_cnt = 0
     avg_num_ordered_data_streams = 0
     for i in range(num_test_examples):
         curr_label = y_test_labels[i]
@@ -2232,11 +2533,23 @@ def get_labels_from_knowledge_graph_embeddings_from_anomalous_data_streams_permu
                 avg_num_ordered_data_streams += len(ordered_data_streams)
 
                 # Generate the query embeddings:
+                sorted_acc_values = generated_embedding_query_2(
+                    set_of_anomalous_data_streams=ordered_data_streams, embeddings_df=embedding_df,
+                    aggrgation_method="", dataset=dataset, weight=store_relevant_attribut_distance[i], is_siam=is_siam)
+                pos_add_allDS, b_ =  eval_found_labels(sorted_acc_values, sorted_acc_values, gold_label=y_test_labels[i], restrict_to_top_k_results=1000)
+                if b_ == False:
+                    not_found_cnt += 1
+                else:
+                    found_cnt += 1
+                    pos_add_allDS_sum += pos_add_allDS
+                print(" +++++ not_found_cnt:",not_found_cnt,"pos_add_allDS:", (pos_add_allDS_sum/found_cnt))
+                '''
                 gen_q_emb_add, gen_q_emb_add_avg, gen_q_emb_add_weighted = generated_embedding_query(
                     set_of_anomalous_data_streams=ordered_data_streams, embeddings_df=embedding_df,
                     aggrgation_method="", dataset=dataset, weight=store_relevant_attribut_distance[i], is_siam=is_siam)
                 # set_of_anomalous_data_streams, embeddings_df, aggrgation_method, dataset
-
+                '''
+                '''
                 # Get position of correct label according to the query embedding
                 #print("dataset.unique:", dataset.y_test_strings_unique)
                 print("gen_q_emb_add shape:", gen_q_emb_add.shape)
@@ -2269,6 +2582,7 @@ def get_labels_from_knowledge_graph_embeddings_from_anomalous_data_streams_permu
                 provided_labels_top_k_sum += pos_first_three
                 print("pos_first_three:", pos_first_three)
                 #print(sdds)
+                '''
             else:
                 skipped_cnt += 1
 
@@ -2328,12 +2642,12 @@ def main(run=0):
     file_dis        = "store_relevant_attribut_dis_Fin_Standard_wAdjMat_newAdj_2_fixed"
     file_ano_pred   = "predicted_anomaliesFin_Standard_wAdjMat_newAdj_2_fixed"
     '''
-    #'''
+    '''
     file_name       = "store_relevant_attribut_name_Fin_MSCRED_standard_repeat"
     file_idx        = "store_relevant_attribut_idx_Fin_MSCRED_standard_repeat"
     file_dis        = "store_relevant_attribut_dis_Fin_MSCRED_standard_repeat"
     file_ano_pred   = "predicted_anomaliesFin_MSCRED_standard_repeat"
-    #'''
+    '''
 
     '''
     folder = "cnn1d_with_fc_simsiam_128-32-3-/"
@@ -2362,7 +2676,7 @@ def main(run=0):
     file_ano_pred    = folder + "predicted_anomalies__cnn1d_with_fc_simsiam_128-32-3-__"
     '''
 
-    '''
+    #'''
     folder = "cnn2d_gcn/"
 
     #file_name       = "store_relevant_attribut_name_Fin_Standard_wAdjMat_newAdj_2"
@@ -2376,7 +2690,7 @@ def main(run=0):
     file_dis_2           = folder + "store_relevant_attribut_dis__2_nn2_cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2__"
     #file_ano_pred   = "predicted_anomaliesFin_Standard_wAdjMat_newAdj_2"
     file_ano_pred    = folder + "predicted_anomalies_cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2__"
-    '''
+    #'''
 
     print("")
     print(" ### Used Files ###")
@@ -2386,14 +2700,14 @@ def main(run=0):
     print("Ano Pred file used: ", file_ano_pred)
     print("")
 
-    is_siam                         = False
+    is_siam                         = True
     use_only_true_positive_pred     = False
     evaluate_hitsAtK_hitRateAtP     = False
     is_memory                       = False
     is_jenks_nat_break_used         = False
     is_elbow_selection_used         = False
-    is_fix_k_selection_used         = True
-    fix_k_for_selection             = 7
+    is_fix_k_selection_used         = False
+    fix_k_for_selection             = 10
     is_randomly_selected_featues    = False
     is_oracle                       = False
     q1                              = False
@@ -2515,13 +2829,13 @@ def main(run=0):
     store_relevant_attribut_name_shortened = store_relevant_attribut_name.copy()
 
     #Shuffle order of anomalous data streams if multiple have the same score:
-    '''
+    #'''
     for i in store_relevant_attribut_idx.keys():
-        print("store_relevant_attribut_idx: ", store_relevant_attribut_idx[i])
+        #print("store_relevant_attribut_idx: ", store_relevant_attribut_idx[i])
         if len(store_relevant_attribut_idx[i]) > 0 and len(store_relevant_attribut_dis[i]) > 0:
             store_relevant_attribut_idx[i] = shuffle_idx_with_maximum_values(idx=store_relevant_attribut_idx[i], dis=store_relevant_attribut_dis[i])
-        print("store_relevant_attribut_idx shuffled: ", store_relevant_attribut_idx[i])
-    '''
+        #print("store_relevant_attribut_idx shuffled: ", store_relevant_attribut_idx[i])
+    #'''
 
     if is_randomly_selected_featues:
         print("RANDOMIZATION IS USED ++++++++++++++++++++++++++++++")
@@ -2567,6 +2881,8 @@ def main(run=0):
                 #print("np.argsort(-store_relevant_attribut_dis[i][mask]): ", np.argsort(-store_relevant_attribut_dis[i][mask]))
 
                 store_relevant_attribut_idx_shortened[i] = np.argsort(-store_relevant_attribut_dis[i])[:np.sum(mask)]
+                store_relevant_attribut_idx_shortened[i] = shuffle_idx_with_maximum_values(idx=store_relevant_attribut_idx_shortened[i],
+                                                                                 dis=store_relevant_attribut_dis[i])
                 #print("store_relevant_attribut_idx[i]: ", store_relevant_attribut_idx[i])
                 #print("store_relevant_attribut_idx_shortened[i]: ", store_relevant_attribut_idx_shortened[i])
                 store_relevant_attribut_name_shortened[i] = dataset.feature_names_all[store_relevant_attribut_idx_shortened[i]]

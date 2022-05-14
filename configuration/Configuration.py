@@ -97,7 +97,7 @@ class ModelConfiguration:
         ##
 
         # Selection which basic architecture is used, see enum class for details
-        self.architecture_variant = ArchitectureVariant.STANDARD_COMPLEX
+        self.architecture_variant = ArchitectureVariant.STANDARD_SIMPLE
 
         ##
         # Determines how the similarity between two embedding vectors is determined (when a simple architecture is used)
@@ -108,9 +108,9 @@ class ModelConfiguration:
 
         # Attention: Implementation expects a simple measure to return a similarity in the interval of [0,1]!
         # Only use euclidean_dis for TRAINING with contrastive loss
-        self.simple_measure = SimpleSimilarityMeasure.COSINE
+        self.simple_measure = SimpleSimilarityMeasure.ABS_MEAN
 
-        self.complex_measure = ComplexSimilarityMeasure.SIMPLE_SIAM
+        self.complex_measure = 9 #ComplexSimilarityMeasure.SIMPLE_SIAM
 
         ###
         # Hyperparameters
@@ -185,7 +185,7 @@ class TrainingConfiguration:
         self.features_used = None
 
         # TODO Distance-Based Logistic Loss
-        self.type_of_loss_function = LossFunction.SIMPLE_SIAM_LOSS
+        self.type_of_loss_function = LossFunction.BINARY_CROSS_ENTROPY
 
         # Settings for constrative_loss
         self.margin_of_loss_function = 2
@@ -208,7 +208,7 @@ class TrainingConfiguration:
         # Definition of batch compositions
         # Key = Enum for selecting how the pairs are chosen, value = size of the subset of this type, must add up to 1.0
         # The same number of positive and negative pairs are generated for each type
-        '''
+        #'''
         self.batch_distribution = {
             BatchSubsetType.DISTRIB_BASED_ON_DATASET: 0.5,
             BatchSubsetType.EQUAL_CLASS_DISTRIB: 0.5
@@ -217,7 +217,7 @@ class TrainingConfiguration:
         self.batch_distribution = {
             BatchSubsetType.ONLY_NO_FAILURE_PAIRS: 1,
         }
-
+        '''
 
         # Use a custom similarity values instead of 0 for unequal / negative pairs during batch creation
         # These are based on the similarity matrices loaded in the dataset
@@ -279,7 +279,10 @@ class InferenceConfiguration:
         #self.num_of_train_select_test_runs = 1
 
         # Use valid data set instead of test (e.g., during inference)
-        self.use_valid_instead_of_test = False                                                           # default False
+        self.use_valid_instead_of_test = True                                                           # default False
+
+        # Loads only the FaF examples from the validation set and adds the no_failure from the training set
+        self.simulate_anomaly_detection_w_supervised_snn = True
 
 
 class ClassificationConfiguration:
@@ -446,7 +449,7 @@ class StaticConfiguration:
         #3W self.models_folder = '../../../../data/pklein/PredMSiamNN/data/' + 'trained_model2/' #
         self.models_folder = self.data_folder_prefix + 'trained_models/'
         self.save_results_as_file = False
-        self.curr_run_identifier = self.hyper_file.split("/")[-1].split(".")[0]
+        self.curr_run_identifier = self.hyper_file.split("/")[-1].split(".")[0] + "repeat"
         self.use_train_FaF_in_eval = True
 
         self.use_pairwise_sim_siam = False
@@ -455,7 +458,7 @@ class StaticConfiguration:
         self.plot_embeddings_via_TSNE = False
         self.plot_train_test = False
 
-        self.early_stopping_epochs_limit = 100
+        self.early_stopping_epochs_limit = 1
 
         # Matches each time step with each time step from the other encoding which is implemented as a subtraction
         # of the attention weights multiplied with the other time series

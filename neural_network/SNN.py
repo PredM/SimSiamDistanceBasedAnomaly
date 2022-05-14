@@ -251,7 +251,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
 
         # Investigate Collapsing:
         ###
-        #'''
+        '''
         # context_vectors_ = context_vectors
         print("context_vectors: ", context_vectors_.shape)
         z_a_l2_norm = tf.math.l2_normalize(context_vectors_, axis=0)
@@ -284,7 +284,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
         # context vectors shape: (batchsize / entries, features)
         tf.print("std_axis_0_mean:", std_axis_0_mean, "| std_axis_1_mean:", std_axis_1_mean, "| 1/sqrt(d):",
                  (1 / (tf.sqrt(128.0))), "| center loss:", center_loss_a, center_loss_b)
-        #'''
+        '''
         ###
 
         ###
@@ -341,15 +341,21 @@ class SimpleSNN(AbstractSimilarityMeasure):
             # SimSiam Algo 1. normlize according dim=1 whereas Barlow Twin normalise along the batch dimension (i.e. dim=0)
             # Cosine similarity according: https://github.com/keras-team/keras/blob/d8fcb9d4d4dad45080ecfdd575483653028f8eda/keras/metrics.py#L4162
 
-            p_a_1 = tf.math.l2_normalize((p_a - o_z_a)**2, axis=1)
-            p_b_1 = tf.math.l2_normalize((p_b - o_z_a)**2, axis=1)
-            z_a_l2_norm = tf.math.l2_normalize((z_a - o_z_a)**2, axis=1)
-            z_b_l2_norm = tf.math.l2_normalize((z_b - o_z_a)**2, axis=1)
+            #p_a_1 = tf.math.l2_normalize((p_a - o_z_a)**2, axis=1)
+            #p_b_1 = tf.math.l2_normalize((p_b - o_z_a)**2, axis=1)
+            #z_a_l2_norm = tf.math.l2_normalize((z_a - o_z_a)**2, axis=1)
+            #z_b_l2_norm = tf.math.l2_normalize((z_b - o_z_a)**2, axis=1)
 
             #p_a_1_ = tf.math.l2_normalize((tf.math.multiply(p_a, o_z_a))**2, axis=1)
             #p_b_1_ = tf.math.l2_normalize((tf.math.multiply(p_b, o_z_a))**2, axis=1)
             #z_a_l2_norm_ = tf.math.l2_normalize((tf.math.multiply(z_a, o_z_a))**2, axis=1)
             #z_b_l2_norm_ = tf.math.l2_normalize((tf.math.multiply(z_b, o_z_a))**2 , axis=1)
+
+            # single view
+            p_a_1 = tf.math.l2_normalize(p_a, axis=1)
+            p_b_1 = tf.math.l2_normalize(p_b, axis=1)
+            z_a_l2_norm = tf.math.l2_normalize(z_a, axis=1)
+            z_b_l2_norm = tf.math.l2_normalize(z_b, axis=1)
 
             '''
             p_a_1 = (p_a - tf.reduce_mean(p_a, axis=0)) / tf.math.reduce_std(p_a, axis=0)
@@ -454,8 +460,8 @@ class SimpleSNN(AbstractSimilarityMeasure):
             #loss = 0.45 * D_p_a_p_b + 0.1 * -D_z_a_z_b + 0.45 * (0.5 * D_a_zb2 + 0.5 * D_b_zb2)  # Loss-nr3
             #loss = D_p_a_p_b +  (0.5 * D_a_zb2 + 0.5 * D_b_zb2)  # Loss-nr2
             '''
-            z_a_o_z_a = (tf.sqrt(tf.reduce_sum(tf.square(z_a - o_z_a), 1)))
-            z_b_o_z_a = (tf.sqrt(tf.reduce_sum(tf.square(z_b - o_z_a), 1)))
+            #z_a_o_z_a = (tf.sqrt(tf.reduce_sum(tf.square(z_a - o_z_a), 1)))
+            #z_b_o_z_a = (tf.sqrt(tf.reduce_sum(tf.square(z_b - o_z_a), 1)))
             loss = 0.5 * D_pa1_zb + 0.5 * D_pb1_za #- z_a_o_z_a - z_b_o_z_a
             #loss = 0.25 * D_pa1_zb + 0.25 * D_pb1_za #+0.25 * D_pa1_zb_ + 0.25 * D_pb1_za_ #- z_a_o_z_a - z_b_o_z_a
 

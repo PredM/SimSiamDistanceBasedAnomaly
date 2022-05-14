@@ -4,6 +4,9 @@ from sklearn import metrics
 
 from neural_network.Dataset import FullDataset
 from sklearn.metrics import roc_auc_score, auc, average_precision_score, precision_recall_curve
+from sklearn.metrics import classification_report
+from sklearn.metrics import precision_recall_fscore_support
+from sklearn.metrics import confusion_matrix
 
 class Evaluator:
 
@@ -33,6 +36,7 @@ class Evaluator:
         self.report_dict = None
 
         self.sim_pred = []
+        self.sim_pred_no_failure = []
 
         if not self.dataset.is_third_party_dataset:
             self.unique_test_failures = np.unique(self.dataset.failure_times_test)
@@ -89,6 +93,13 @@ class Evaluator:
         # Get the similarity value of the best example
         max_sim = np.asanyarray(sims[nearest_neighbors_ranked_indices[0]])
 
+        # Get the similarity to the nearest healthy example
+        max_sim_no_failure = 0
+        for i, label_found in enumerate(self.dataset.y_train_strings[nearest_neighbors_ranked_indices]):
+            if label_found == "no_failure":
+                max_sim_no_failure = sims[nearest_neighbors_ranked_indices[i]]
+                break
+
         ###
         # Store the information about the results of this example
         ###
@@ -97,6 +108,7 @@ class Evaluator:
         self.y_true.append(true_class)
         self.y_pred.append(max_sim_class)
         self.sim_pred.append(max_sim)
+        self.sim_pred_no_failure.append(max_sim_no_failure)
 
         # Increase the value of this "label pair"
         self.multi_class_results.loc[max_sim_class, true_class] += 1
@@ -215,14 +227,16 @@ class Evaluator:
 
         # Calculate roc-auc and pr-auc score
         y_test_strings = np.expand_dims(self.dataset.y_test_strings, axis=-1)
-        roc_auc_test_DTW = self.calculate_RocAuc(y_test_strings, np.asarray(self.sim_pred), 'cosine')
-        avgpr_test_DTW, pr_auc_test_DTW = self.calculate_PRCurve(y_test_strings, np.asarray(self.sim_pred), 'cosine')
+        roc_auc_test_no_failure_sim = self.calculate_RocAuc(y_test_strings, np.asarray(self.sim_pred_no_failure), 'cosine')
+        avgpr_test_no_failure_sim, pr_auc_test_no_failure_sim = self.calculate_PRCurve(y_test_strings, np.asarray(self.sim_pred_no_failure), 'cosine')
 
         print("-------------------------------------------------")
-        print("*** roc_auc_test_DTW:", roc_auc_test_DTW, " ***")
-        print("*** avgpr_test_DTW", avgpr_test_DTW, " ***")
-        print("*** pr_auc_test_DTW:", pr_auc_test_DTW, " ***")
+        print("*** roc_auc_test_no_failure:", roc_auc_test_no_failure_sim, " ***")
+        print("*** avgpr_test_no_failure", avgpr_test_no_failure_sim, " ***")
+        print("*** pr_auc_test_no_failure:", pr_auc_test_no_failure_sim, " ***")
         print("-------------------------------------------------")
+
+        self.one_class_eval_report(y_true_strings=y_test_strings, y_pred_class_labels=np.asarray(self.y_pred))
 
         # A few auxiliary calculations required to calculate true positive (TP),
         # true negative (TN), false positive (FP) and false negative (FN) values for each class.
@@ -335,6 +349,46 @@ class Evaluator:
             precision, recall, _ = precision_recall_curve(y_true, score_per_example_test_normalized)
             auc_score = auc(recall, precision)
         return avgP, auc_score
+
+    def one_class_eval_report(self, y_true_strings, y_pred_class_labels):
+        # apply threshold for anomaly decision
+        #y_pred = np.where(nn_distance_test <= anomaly_threshold, 1, 0)
+        y_true = np.where(y_true_strings == 'no_failure', 0, 1)
+        y_true = np.reshape(y_true, y_true.shape[0])
+        y_pred = np.where(y_pred_class_labels == 'no_failure', 0, 1)
+        y_pred = np.reshape(y_pred, y_pred.shape[0])
+
+        TN, FP, FN, TP = confusion_matrix(y_true, y_pred).ravel()
+        # p_r_f_s_weighted = precision_recall_fscore_support(y_true, y_pred, average='weighted')
+        # p_r_f_s_macro = precision_recall_fscore_support(y_true, y_pred, average='weighted')
+        # Sensitivity, hit rate, recall, or true positive rate
+        TPR = TP / (TP + FN)
+        # Specificity or true negative rate
+        TNR = TN / (TN + FP)
+        # Precision or positive predictive value
+        PPV = TP / (TP + FP)
+        # Negative predictive value
+        NPV = TN / (TN + FN)
+        # Fall out or false positive rate
+        FPR = FP / (FP + TN)
+        # False negative rate
+        FNR = FN / (TP + FN)
+        # False discovery rate
+        FDR = FP / (TP + FP)
+
+        # Overall accuracy
+        ACC = (TP + TN) / (TP + FP + FN + TN)
+
+        print("")
+        print(" +++ +++ +++ +++ +++ FINAL EVAL TEST (Anomaly Perspective) +++ +++ +++ +++ +++ +++ +++")
+        print("")
+        print(classification_report(y_true, y_pred, target_names=['normal', 'anomaly'], digits=4))
+        print("")
+        print("FPR: ", FPR)
+        print("FNR: ", FNR)
+        print("")
+        print(" +++ +++ +++ +++ +++ +++ +++ +++ +++ +++ +++ +++ +++ +++ +++ +++")
+        print("")
 
     @staticmethod
     def rate_calculation(numerator, denominator_part2):
