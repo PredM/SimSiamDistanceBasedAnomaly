@@ -819,7 +819,7 @@ def check_tsfresh_features(dataset,label, datastream, test_idx, healthy_idx, ):
     # kurosis
 
 
-def evaluate_most_relevant_examples(most_relevant_attributes, y_test_labels, dataset, y_pred_anomalies, ks=[1, 3, 5], dict_measures={},hitrateAtK=[100,150,200], only_true_positive_prediction=True, not_selection_label=["no_failure"]):
+def evaluate_most_relevant_examples(most_relevant_attributes, y_test_labels, dataset, y_pred_anomalies, ks=[1, 3, 5], dict_measures={},hitrateAtK=[100,150,200], only_true_positive_prediction=True,use_train_FaFs_in_Test=False, not_selection_label=["no_failure"]):
 
     store_relevant_attribut_idx, store_relevant_attribut_dis, store_relevant_attribut_name= most_relevant_attributes[0], most_relevant_attributes[1], most_relevant_attributes[2]
 
@@ -865,6 +865,7 @@ def evaluate_most_relevant_examples(most_relevant_attributes, y_test_labels, dat
         found_context_hitsAtK = {}
         found_strict_hitrateAtK = {}
         found_context_hitrateAtK = {}
+        num_without_attributes = 0
         for i in range(num_test_examples):
             # Get data needed to process and evaluate the current example
             curr_label = y_test_labels[i]
@@ -912,6 +913,9 @@ def evaluate_most_relevant_examples(most_relevant_attributes, y_test_labels, dat
                         if predicted_attribute in curr_gold_standard_attributes_context_idx:
                             print("found idx ",predicted_attribute," in context:", curr_gold_standard_attributes_context_idx)
                             found_context_hitsAtK[i] = 1
+                    if len(k_predicted_attributes) < 1:
+                        print("Found an empty prediction")
+                        num_without_attributes += 1
 
                     # Calculate hitrate @k
                     #
@@ -981,6 +985,7 @@ def evaluate_most_relevant_examples(most_relevant_attributes, y_test_labels, dat
         found_hitRateAtK_context[curr_k] = found_context_hitrateAtK
         #print("found_for_k[",curr_k,"]: ", found_rank_strict[curr_k])
         #print("found_hitRateAtK_strict:",found_hitRateAtK_strict)
+        print("Examples with no attributes: ",num_without_attributes)
 
 
     # print results
@@ -1026,6 +1031,7 @@ def evaluate_most_relevant_examples(most_relevant_attributes, y_test_labels, dat
         dict_measures[str(k_key) + "_rank_context"]     = (sum_of_mean_rank_context / counter)
         dict_measures[str(hitrateAtK[ks.index(k_key)]) + "_hitrate_strict"] = (found_strict_hitrateAtK / counter)
         dict_measures[str(hitrateAtK[ks.index(k_key)]) + "_hitrate_context"] = (found_context_hitrateAtK / counter)
+        dict_measures["TruePositives/Counter"] = counter
 
 
         for label in dataset.classes_total:
@@ -1040,7 +1046,11 @@ def evaluate_most_relevant_examples(most_relevant_attributes, y_test_labels, dat
 
             if only_true_positive_prediction:
                 #print("y_pred_anomalies shape:", y_pred_anomalies.shape)
-                y_test_labels_failure_only = np.delete(y_test_labels, np.argwhere((y_test_labels == 'no_failure') | (y_pred_anomalies[:3389] == 0)))
+                if use_train_FaFs_in_Test:
+                    y_test_labels_failure_only = np.delete(y_test_labels, np.argwhere(
+                        (y_test_labels == 'no_failure') | (y_pred_anomalies[:3929] == 0)))
+                else:
+                    y_test_labels_failure_only = np.delete(y_test_labels, np.argwhere((y_test_labels == 'no_failure') | (y_pred_anomalies[:3389] == 0)))
                 #print("y_pred_anomalies shape:", y_pred_anomalies.shape)
                 #print("y_test_labels_failure_only shape: ", y_test_labels_failure_only.shape)
                 #y_test_labels_failure_only = np.delete(y_test_labels_failure_only, np.argwhere(y_pred_anomalies == 1))
@@ -2636,19 +2646,25 @@ def main(run=0):
     file_ano_pred   = "predicted_anomaliesFin_Standard_wAdjMat_newAdj_2"
     '''
     # Finally reported models for MSCRED: (Contain 3929 entries (normal test (3389) + FaFs from train split (540))
-    '''
+    #'''
     file_name       = "store_relevant_attribut_name_Fin_Standard_wAdjMat_newAdj_2_fixed"
     file_idx        = "store_relevant_attribut_idx_Fin_Standard_wAdjMat_newAdj_2_fixed"
     file_dis        = "store_relevant_attribut_dis_Fin_Standard_wAdjMat_newAdj_2_fixed"
     file_ano_pred   = "predicted_anomaliesFin_Standard_wAdjMat_newAdj_2_fixed"
-    '''
+    #'''
     '''
     file_name       = "store_relevant_attribut_name_Fin_MSCRED_standard_repeat"
     file_idx        = "store_relevant_attribut_idx_Fin_MSCRED_standard_repeat"
     file_dis        = "store_relevant_attribut_dis_Fin_MSCRED_standard_repeat"
     file_ano_pred   = "predicted_anomaliesFin_MSCRED_standard_repeat"
     '''
-
+    '''
+    #Fin_MSCRED_AM_Fin_repeat_
+    file_name       = "store_relevant_attribut_name_Fin_MSCRED_AM_Fin_repeat_"
+    file_idx        = "store_relevant_attribut_idx_Fin_MSCRED_AM_Fin_repeat_"
+    file_dis        = "store_relevant_attribut_dis_Fin_MSCRED_AM_Fin_repeat_"
+    file_ano_pred   = "predicted_anomaliesFin_MSCRED_AM_Fin_repeat_"
+    #'''
     '''
     folder = "cnn1d_with_fc_simsiam_128-32-3-/"
 
@@ -2662,8 +2678,23 @@ def main(run=0):
     file_dis         = folder + "store_relevant_attribut_dis_wTrainFaF_cnn1d_with_fc_simsiam_128-32-3-__"
     file_dis_2           = folder + "store_relevant_attribut_dis_wTrainFaF_nn2_cnn1d_with_fc_simsiam_128-32-3-__"
     
-    file_ano_pred    = folder + "predicted_anomalies_wTrainFaF_2_cnn1d_with_fc_simsiam_128-32-3-__"
+    file_ano_pred    = folder + "predicted_anomalies_wTrainFaF_cnn1d_with_fc_simsiam_128-32-3-__"
     '''
+
+    # '''
+    folder = "cnn1d_with_fc_simsiam_128-32-3-/"
+
+    file_name = folder + "store_relevant_attribut_name_wTrainFaF_2_cnn1d_with_fc_simsiam_128-32-3-__"
+    file_name_2 = folder + "store_relevant_attribut_name_wTrainFaF_2_nn2_cnn1d_with_fc_simsiam_128-32-3-__"
+
+    file_idx = folder + "store_relevant_attribut_idx_wTrainFaF_2_cnn1d_with_fc_simsiam_128-32-3-__"
+    file_idx_2 = folder + "store_relevant_attribut_idx_wTrainFaF_2_nn2_cnn1d_with_fc_simsiam_128-32-3-__"
+
+    file_dis = folder + "store_relevant_attribut_dis_wTrainFaF_2_cnn1d_with_fc_simsiam_128-32-3-__"
+    file_dis_2 = folder + "store_relevant_attribut_dis_wTrainFaF_2_nn2_cnn1d_with_fc_simsiam_128-32-3-__"
+
+    file_ano_pred = folder + "predicted_anomalies_wTrainFaF_2_cnn1d_with_fc_simsiam_128-32-3-__"
+    # '''
     '''
     folder = "cnn1d_with_fc_simsiam_128-32-3-/"
 
@@ -2676,7 +2707,7 @@ def main(run=0):
     file_ano_pred    = folder + "predicted_anomalies__cnn1d_with_fc_simsiam_128-32-3-__"
     '''
 
-    #'''
+    '''
     folder = "cnn2d_gcn/"
 
     #file_name       = "store_relevant_attribut_name_Fin_Standard_wAdjMat_newAdj_2"
@@ -2690,7 +2721,23 @@ def main(run=0):
     file_dis_2           = folder + "store_relevant_attribut_dis__2_nn2_cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2__"
     #file_ano_pred   = "predicted_anomaliesFin_Standard_wAdjMat_newAdj_2"
     file_ano_pred    = folder + "predicted_anomalies_cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2__"
-    #'''
+    '''
+
+    '''
+    folder = "cnn2d_gcn/"
+
+    #file_name       = "store_relevant_attribut_name_Fin_Standard_wAdjMat_newAdj_2"
+    file_name        = folder + "store_relevant_attribut_name_wTrainFaF_2_cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2__"
+    file_name_2          = folder + "store_relevant_attribut_name_wTrainFaF_2_nn2_cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2__"
+    #file_idx        = "store_relevant_attribut_idx_Fin_Standard_wAdjMat_newAdj_2"
+    file_idx        = folder + "store_relevant_attribut_idx_wTrainFaF_2_cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2__"
+    file_idx_2           = folder + "store_relevant_attribut_idx_wTrainFaF_2_nn2_cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2__"
+    #file_dis        = "store_relevant_attribut_dis_Fin_Standard_wAdjMat_newAdj_2"
+    file_dis         = folder + "store_relevant_attribut_dis_wTrainFaF_2_cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2__"
+    file_dis_2           = folder + "store_relevant_attribut_dis_wTrainFaF_2_nn2_cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2__"
+    #file_ano_pred   = "predicted_anomaliesFin_Standard_wAdjMat_newAdj_2"
+    file_ano_pred    = folder + "predicted_anomalies_wTrainFaF_cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2__"
+    '''
 
     print("")
     print(" ### Used Files ###")
@@ -2701,8 +2748,8 @@ def main(run=0):
     print("")
 
     is_siam                         = True
-    use_only_true_positive_pred     = False
-    evaluate_hitsAtK_hitRateAtP     = False
+    use_only_true_positive_pred     = True
+    evaluate_hitsAtK_hitRateAtP     = True
     is_memory                       = False
     is_jenks_nat_break_used         = False
     is_elbow_selection_used         = False
@@ -2710,10 +2757,11 @@ def main(run=0):
     fix_k_for_selection             = 10
     is_randomly_selected_featues    = False
     is_oracle                       = False
+    use_train_FaFs_in_Test          = True
     q1                              = False
     q2                              = False
     q3                              = False
-    q4                              = True
+    q4                              = False
 
     print("Used config: use_only_true_positive_pred:", use_only_true_positive_pred,"is_jenks_nat_break_used:", is_jenks_nat_break_used,"is_randomly_selected_featues", is_randomly_selected_featues,"is_oracle",is_oracle,"q1:",q1,"q2:",q2,"q3:",q3,"q4:",q4)
 
@@ -2834,8 +2882,12 @@ def main(run=0):
         #print("store_relevant_attribut_idx: ", store_relevant_attribut_idx[i])
         if len(store_relevant_attribut_idx[i]) > 0 and len(store_relevant_attribut_dis[i]) > 0:
             store_relevant_attribut_idx[i] = shuffle_idx_with_maximum_values(idx=store_relevant_attribut_idx[i], dis=store_relevant_attribut_dis[i])
+            store_relevant_attribut_idx_shortened[i] = store_relevant_attribut_idx[i]
+            store_relevant_attribut_name_shortened[i] = dataset.feature_names_all[
+                np.argsort(-store_relevant_attribut_dis[i])]
         #print("store_relevant_attribut_idx shuffled: ", store_relevant_attribut_idx[i])
     #'''
+
 
     if is_randomly_selected_featues:
         print("RANDOMIZATION IS USED ++++++++++++++++++++++++++++++")
@@ -2949,6 +3001,19 @@ def main(run=0):
 
                 #store_relevant_attribut_idx, store_relevant_attribut_dis, store_relevant_attribut_name
 
+    y_labels = []
+    if use_train_FaFs_in_Test:
+        test_labels = dataset.y_test_strings
+        train_labels = dataset.y_train_strings
+        example_idx_of_curr_label = np.where(train_labels != "no_failure")
+        # feature_data = np.expand_dims(feature_data, -1)
+        train_labels_wf = train_labels[example_idx_of_curr_label]
+        test_train_wf_labels_y = np.concatenate((test_labels, train_labels_wf), axis=0)
+        y_labels = test_train_wf_labels_y
+
+    else:
+        y_labels = dataset.y_test_strings
+
     print()
     print("store_relevant_attribut_name: ", len(store_relevant_attribut_name), " | store_relevant_attribut_idx: ", len(store_relevant_attribut_idx), " | store_relevant_attribut_dis: ", len(store_relevant_attribut_dis))
     print("y_pred_anomalies: ", y_pred_anomalies.shape)
@@ -2996,7 +3061,7 @@ def main(run=0):
     most_rel_att = [store_relevant_attribut_idx_shortened, store_relevant_attribut_dis, store_relevant_attribut_name_shortened]
     #most_rel_att = [store_relevant_attribut_idx, store_relevant_attribut_dis, store_relevant_attribut_name]
     if evaluate_hitsAtK_hitRateAtP:
-        dict_measures = evaluate_most_relevant_examples(most_rel_att, dataset.y_test_strings, dataset, y_pred_anomalies, ks=[1, 3, 5], dict_measures=dict_measures, hitrateAtK=[100, 200, 500], only_true_positive_prediction=use_only_true_positive_pred)
+        dict_measures = evaluate_most_relevant_examples(most_rel_att, y_labels, dataset, y_pred_anomalies, ks=[1, 3, 5], dict_measures=dict_measures, hitrateAtK=[100, 200, 500], only_true_positive_prediction=use_only_true_positive_pred, use_train_FaFs_in_Test=use_train_FaFs_in_Test)
 
     return dict_measures
 
