@@ -446,11 +446,11 @@ class StaticConfiguration:
         #3W self.data_folder_prefix = '/../../../../../data/datasets/PredMSiamNN/data/3rd_party/3w_dataset/'
 
         # Folder where the trained models are saved to during learning process
-        self.hyper_file = self.hyper_file_folder + 'cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2-ECCConv.json' #cnn1d_with_fc_simsiam_128-32.json 'cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2.json'  #cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2.json #cnn2d_withAddInput_ContextStrang.json  'cnn2d_with_graph-26-10.json'  #cnn2d_with_graph_test.json #cnn2d_withAddInput_nwApproach.json
+        self.hyper_file = self.hyper_file_folder + 'cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2.json' #cnn1d_with_fc_simsiam_128-32.json 'cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2.json'  #cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2.json #cnn2d_withAddInput_ContextStrang.json  'cnn2d_with_graph-26-10.json'  #cnn2d_with_graph_test.json #cnn2d_withAddInput_nwApproach.json
         #3W self.models_folder = '../../../../data/pklein/PredMSiamNN/data/' + 'trained_model2/' #
-        self.models_folder = self.data_folder_prefix + 'trained_models3/'
+        self.models_folder = self.data_folder_prefix + 'trained_models4/'
         self.save_results_as_file = False
-        self.curr_run_identifier = self.hyper_file.split("/")[-1].split(".")[0] + "repeat"
+        self.curr_run_identifier = self.hyper_file.split("/")[-1].split(".")[0] + "cnn2-GCN-GSL-RanInit-Var6"
         self.use_train_FaF_in_eval = True
 
         self.use_pairwise_sim_siam = False
@@ -528,6 +528,8 @@ class StaticConfiguration:
             self.graph_owl2vec_node_embeddings_file = self.training_data_folder + 'owl2vec_node_embeddings_dim16.csv'
         elif self.use_additional_static_node_features_for_graphNN == NodeFeaturesForGraphVariants.OWL2VEC_EMBEDDINGS_DIM32:
             self.graph_owl2vec_node_embeddings_file = self.training_data_folder + 'owl2vec_node_embeddings_dim32.csv'
+        elif self.use_additional_static_node_features_for_graphNN == NodeFeaturesForGraphVariants.STARSPACE_EMBEDDINGS_DIM25:
+            self.graph_owl2vec_node_embeddings_file = '../data/training_data/knowledge/StSp_eval_lr_0.100001_d_25_e_150_bs_5_doLHS_0.0_doRHS_0.0_mNS_50_nSL_100_l_hinge_s_cosine_m_0.7_iM_False.tsv'
 
         # TS Fresh feature files
         self.ts_fresh_filtered_file = 'ts_fresh_extracted_features_filtered.pkl'

@@ -514,8 +514,8 @@ class GraphCNN2D(CNN2D):
 
             # Graph Structure Learning Component (Learns an adjacency matrix)
             variant = 6
-            gsl_module = GraphStructureLearningModule(a_input=adj_matrix_input_ds, a_variant=variant, random_init=True,
-                                         use_knn_reduction=True, convert_to_binary_knn=False, k_knn_red=5, name='adjmat_learning', gcn_prepro=True, norm_adjmat=False, embsize=32,
+            gsl_module = GraphStructureLearningModule(a_input=adj_matrix_input_ds, a_variant=variant, random_init=False,
+                                         use_knn_reduction=True, convert_to_binary_knn=False, k_knn_red=5, name='adjmat_learning', gcn_prepro=True, norm_adjmat=False, embsize=16,
                                          use_softmax_reduction=False)
 
             gsl_output = gsl_module([adj_matrix_input_ds, output_swapped]) #output_swapped in form: (batch, Nodes / Data Streams, Features / Time Steps)
@@ -1866,13 +1866,15 @@ class GraphStructureLearningModule(tf.keras.layers.Layer):
             if random_init:
                 initializer = tf.keras.initializers.RandomNormal
                 e1_init, e2_init = initializer(mean=0.5, stddev=0.25), initializer(mean=0.5, stddev=0.25)
+                emb_size = self.embsize
             else:
                 e1_init, e2_init = tf.keras.initializers.constant(self.embeddings), tf.keras.initializers.constant(self.embeddings)
                 trainable = False
+                emb_size = self.embeddings.shape[1]
 
-            self.e1 = self.add_weight(shape=(a_input.shape[1], self.embsize), trainable=trainable, name='e1', initializer=e1_init)
+            self.e1 = self.add_weight(shape=(a_input.shape[1], emb_size), trainable=trainable, name='e1', initializer=e1_init)
             if not self.a_variant in [6,8,9]:
-                self.e2 = self.add_weight(shape=(a_input.shape[1], self.embsize), trainable=trainable, name='e2', initializer=e2_init)
+                self.e2 = self.add_weight(shape=(a_input.shape[1], emb_size), trainable=trainable, name='e2', initializer=e2_init)
             self.e1_lin_layer = tf.keras.layers.Dense(self.embsize, activation=None, name='e1_lin_transform')
             if not self.a_variant in [6,8,9]:
                 self.e2_lin_layer = tf.keras.layers.Dense(self.embsize, activation=None, name='e2_lin_transform')
@@ -2017,6 +2019,8 @@ class GraphStructureLearningModule(tf.keras.layers.Layer):
 
             m = tf.keras.layers.Activation('tanh', name='m_tanh_alpha')(self.a_emb_alpha * m)
             a = tf.keras.layers.ReLU(name='a_emb_relu', activity_regularizer=ar)(m)
+            #a = tf.keras.layers.ELU(name='a_emb_elu', activity_regularizer=ar)(m)
+            #a = tf.add(a, 1, name='a_opt_add')
 
         elif self.a_variant == 7:
             # Pairwise Cosine similarity of knowledge graph embeddings

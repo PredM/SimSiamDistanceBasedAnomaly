@@ -91,6 +91,7 @@ class NodeFeaturesForGraphVariants(Enum):
     ONE_HOT_ENCODED = 1
     OWL2VEC_EMBEDDINGS_DIM16 = 2
     OWL2VEC_EMBEDDINGS_DIM32 = 3
+    STARSPACE_EMBEDDINGS_DIM25 = 4
 
 class AdjacencyMatrixType(Enum):
     # The type of adj matrix used

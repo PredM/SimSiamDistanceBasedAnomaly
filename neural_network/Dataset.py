@@ -449,24 +449,38 @@ class FullDataset(Dataset):
             attribute_features = np.eye(61, dtype=int)
             self.additional_static_attribute_features = attribute_features
         if self.config.use_additional_static_node_features_for_graphNN == NodeFeaturesForGraphVariants.OWL2VEC_EMBEDDINGS_DIM32 or \
-                self.config.use_additional_static_node_features_for_graphNN == NodeFeaturesForGraphVariants.OWL2VEC_EMBEDDINGS_DIM16:
+                self.config.use_additional_static_node_features_for_graphNN == NodeFeaturesForGraphVariants.OWL2VEC_EMBEDDINGS_DIM16 or \
+                self.config.use_additional_static_node_features_for_graphNN == NodeFeaturesForGraphVariants.STARSPACE_EMBEDDINGS_DIM25:
 
             if self.config.use_additional_static_node_features_for_graphNN == NodeFeaturesForGraphVariants.OWL2VEC_EMBEDDINGS_DIM32:
                 self.owl2vec_embedding_dim = 32
             elif self.config.use_additional_static_node_features_for_graphNN == NodeFeaturesForGraphVariants.OWL2VEC_EMBEDDINGS_DIM16:
                 self.owl2vec_embedding_dim = 16
+            elif self.config.use_additional_static_node_features_for_graphNN == NodeFeaturesForGraphVariants.STARSPACE_EMBEDDINGS_DIM25:
+                self.owl2vec_embedding_dim = 25
+
             # Define an arrary (owl2vec_attr_embeddings) according chosen embedding size [emb_dim, num_of_attributes]
             owl2vec_attr_embeddings = np.zeros((self.owl2vec_embedding_dim, self.feature_names_all.shape[0]))
             self.mapping_attr_to_ftonto_df = pd.read_csv(self.config.mapping_attr_to_ftonto_file, sep=';', index_col=0)
-            owl2vec_node_embeddings_df = pd.read_csv(self.config.graph_owl2vec_node_embeddings_file, sep=',',index_col=0)
+            if self.config.use_additional_static_node_features_for_graphNN == NodeFeaturesForGraphVariants.STARSPACE_EMBEDDINGS_DIM25:
+                owl2vec_node_embeddings_df = pd.read_csv(self.config.graph_owl2vec_node_embeddings_file, sep='\t', skiprows=1, header=None, error_bad_lines=False, warn_bad_lines=False, index_col=0)
+                owl2vec_node_embeddings_df = owl2vec_node_embeddings_df.set_index('http://iot.uni-trier.de/' + owl2vec_node_embeddings_df.index.astype(str))
+                print("StarSpace: ",owl2vec_node_embeddings_df.head())
+            else:
+                owl2vec_node_embeddings_df = pd.read_csv(self.config.graph_owl2vec_node_embeddings_file, sep=',',index_col=0)
             owl2vec_node_embeddings_df.index = owl2vec_node_embeddings_df.index.map(str)
-
+            #print(sdssd)
             for idx, attr_name in enumerate(self.feature_names_all):
                 # Get ftOnto uri for each attribute
                 ftOnto_uri = self.mapping_attr_to_ftonto_df.loc[attr_name]
+                if ftOnto_uri.tolist()[0] == "http://iot.uni-trier.de/FTOnto#BF_Lamp_8" and self.config.use_additional_static_node_features_for_graphNN == NodeFeaturesForGraphVariants.STARSPACE_EMBEDDINGS_DIM25:
+                    ftOnto_uri = ["http://iot.uni-trier.de/FTOnto#BF_Radiator_8"]
+                    owl2vec_attr_embeddings[:,idx] = owl2vec_node_embeddings_df.loc[ftOnto_uri].values
+                else:
+                    owl2vec_attr_embeddings[:,idx] = owl2vec_node_embeddings_df.loc[ftOnto_uri].values
                 # Get its embedding by its uri and store it according the attribute order
                 # print(owl2vec_node_embeddings_df.loc[ftOnto_uri].values)
-                owl2vec_attr_embeddings[:,idx] = owl2vec_node_embeddings_df.loc[ftOnto_uri].values
+                # owl2vec_attr_embeddings[:,idx] = owl2vec_node_embeddings_df.loc[ftOnto_uri].values
 
             self.additional_static_attribute_features = owl2vec_attr_embeddings
 
