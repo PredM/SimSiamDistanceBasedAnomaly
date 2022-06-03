@@ -448,7 +448,7 @@ class StaticConfiguration:
         # Folder where the trained models are saved to during learning process
         self.hyper_file = self.hyper_file_folder + 'cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2.json' #cnn1d_with_fc_simsiam_128-32.json 'cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2.json'  #cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2.json #cnn2d_withAddInput_ContextStrang.json  'cnn2d_with_graph-26-10.json'  #cnn2d_with_graph_test.json #cnn2d_withAddInput_nwApproach.json
         #3W self.models_folder = '../../../../data/pklein/PredMSiamNN/data/' + 'trained_model2/' #
-        self.models_folder = self.data_folder_prefix + 'trained_models4/'
+        self.models_folder = self.data_folder_prefix + 'trained_models2/'
         self.save_results_as_file = False
         self.curr_run_identifier = self.hyper_file.split("/")[-1].split(".")[0] + "cnn2-GCN-GSL-RanInit-Var6"
         self.use_train_FaF_in_eval = True
@@ -530,6 +530,10 @@ class StaticConfiguration:
             self.graph_owl2vec_node_embeddings_file = self.training_data_folder + 'owl2vec_node_embeddings_dim32.csv'
         elif self.use_additional_static_node_features_for_graphNN == NodeFeaturesForGraphVariants.STARSPACE_EMBEDDINGS_DIM25:
             self.graph_owl2vec_node_embeddings_file = '../data/training_data/knowledge/StSp_eval_lr_0.100001_d_25_e_150_bs_5_doLHS_0.0_doRHS_0.0_mNS_50_nSL_100_l_hinge_s_cosine_m_0.7_iM_False.tsv'
+        elif self.use_additional_static_node_features_for_graphNN == NodeFeaturesForGraphVariants.OWL2VEC_EMBEDDINGS_DIM10:
+            self.graph_owl2vec_node_embeddings_file = '../data/training_data/knowledge/owl2vecstar_eval_proj_True_dims_10_epochs_25_wk_wl_wd_4_wm_none_uriDoc_yes_litDoc_yes_mixDoc_yes.tsv'
+        elif self.use_additional_static_node_features_for_graphNN == NodeFeaturesForGraphVariants.RDF2VEC_EMBEDDINGS_DIM100:
+            self.graph_owl2vec_node_embeddings_file = '../data/training_data/knowledge/rdf2vec_eval_proj_False_dims_100_epochs_50_wk_wl_wd_2.tsv'
 
         # TS Fresh feature files
         self.ts_fresh_filtered_file = 'ts_fresh_extracted_features_filtered.pkl'

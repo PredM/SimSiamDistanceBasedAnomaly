@@ -515,7 +515,7 @@ class GraphCNN2D(CNN2D):
             # Graph Structure Learning Component (Learns an adjacency matrix)
             variant = 6
             gsl_module = GraphStructureLearningModule(a_input=adj_matrix_input_ds, a_variant=variant, random_init=False,
-                                         use_knn_reduction=True, convert_to_binary_knn=False, k_knn_red=5, name='adjmat_learning', gcn_prepro=True, norm_adjmat=False, embsize=16,
+                                         use_knn_reduction=True, convert_to_binary_knn=False, k_knn_red=5, name='adjmat_learning', gcn_prepro=True, norm_adjmat=False, embsize=32,
                                          use_softmax_reduction=False)
 
             gsl_output = gsl_module([adj_matrix_input_ds, output_swapped]) #output_swapped in form: (batch, Nodes / Data Streams, Features / Time Steps)
