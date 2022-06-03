@@ -513,12 +513,12 @@ class GraphCNN2D(CNN2D):
             output_swapped = tf.transpose(output, perm=[0, 2, 1])
 
             # Graph Structure Learning Component (Learns an adjacency matrix)
-            variant = 7
-            gsl_module = GraphStructureLearningModule(a_input=adj_matrix_input_ds, a_variant=variant, random_init=True,
+            variant = 2
+            gsl_module = GraphStructureLearningModule(a_input=adj_matrix_input_ds, a_variant=variant, random_init=True, ar=0.01,
                                          use_knn_reduction=True, convert_to_binary_knn=False,
-                                         knn_red_in=True, knn_red_out=True, k_knn_red_in=3, k_knn_red_out=5,
-                                         name='adjmat_learning', gcn_prepro=True, norm_adjmat=False, embsize=16,
-                                         use_softmax_reduction=False, merge_with_predefined=True, merge_beta=0.1)
+                                         knn_red_in=False, knn_red_out=True, k_knn_red_in=3, k_knn_red_out=5,
+                                         name='adjmat_learning', gcn_prepro=True, norm_adjmat=False, embsize=64,
+                                         use_softmax_reduction=False, merge_with_predefined=False, merge_beta=0.1)
 
             gsl_output = gsl_module([adj_matrix_input_ds, output_swapped]) #output_swapped in form: (batch, Nodes / Data Streams, Features / Time Steps)
 
@@ -2034,7 +2034,6 @@ class GraphStructureLearningModule(tf.keras.layers.Layer):
             # dot product between each embedding
             m_1_2 = tf.matmul(e1, e2, transpose_b=True, name='a_emb_mat_mul_e1_e2')
 
-            # Proposed Unidirected-A of connection the dots by Wu et al.
             m = m_1_2
 
             m = tf.keras.layers.Activation('tanh', name='m_tanh_alpha')(self.a_emb_alpha * m)
@@ -2049,7 +2048,6 @@ class GraphStructureLearningModule(tf.keras.layers.Layer):
             # dot product between each embedding
             m_1_1 = tf.matmul(e1, e1, transpose_b=True, name='a_emb_mat_mul_e1_e2')
 
-            # Proposed Unidirected-A of connection the dots by Wu et al.
             m = m_1_1
 
             m = tf.keras.layers.Activation('tanh', name='m_tanh_alpha')(self.a_emb_alpha * m)
@@ -2070,7 +2068,6 @@ class GraphStructureLearningModule(tf.keras.layers.Layer):
             x = tf.nn.l2_normalize(e1, axis=-1)
             y = tf.nn.l2_normalize(e2, axis=-1)
             m = tf.matmul(x, y, transpose_b=True)
-
             a = tf.keras.layers.ReLU(name='a_emb_relu', activity_regularizer=ar)(m)
 
         elif self.a_variant == 8:
