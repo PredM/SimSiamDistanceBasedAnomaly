@@ -97,7 +97,7 @@ class ModelConfiguration:
         ##
 
         # Selection which basic architecture is used, see enum class for details
-        self.architecture_variant = ArchitectureVariant.STANDARD_SIMPLE
+        self.architecture_variant = ArchitectureVariant.STANDARD_COMPLEX
 
         ##
         # Determines how the similarity between two embedding vectors is determined (when a simple architecture is used)
@@ -108,9 +108,9 @@ class ModelConfiguration:
 
         # Attention: Implementation expects a simple measure to return a similarity in the interval of [0,1]!
         # Only use euclidean_dis for TRAINING with contrastive loss
-        self.simple_measure = SimpleSimilarityMeasure.ABS_MEAN
+        self.simple_measure = SimpleSimilarityMeasure.COSINE
 
-        self.complex_measure = 9 #ComplexSimilarityMeasure.SIMPLE_SIAM
+        self.complex_measure = ComplexSimilarityMeasure.SIMPLE_SIAM
 
         ###
         # Hyperparameters
@@ -185,7 +185,7 @@ class TrainingConfiguration:
         self.features_used = None
 
         # TODO Distance-Based Logistic Loss
-        self.type_of_loss_function = LossFunction.BINARY_CROSS_ENTROPY
+        self.type_of_loss_function = LossFunction.SIMPLE_SIAM_LOSS
 
         # Settings for constrative_loss
         self.margin_of_loss_function = 2
@@ -208,16 +208,16 @@ class TrainingConfiguration:
         # Definition of batch compositions
         # Key = Enum for selecting how the pairs are chosen, value = size of the subset of this type, must add up to 1.0
         # The same number of positive and negative pairs are generated for each type
-        #'''
+        '''
         self.batch_distribution = {
             BatchSubsetType.DISTRIB_BASED_ON_DATASET: 0.5,
             BatchSubsetType.EQUAL_CLASS_DISTRIB: 0.5
         }
-        '''
+        #'''
         self.batch_distribution = {
             BatchSubsetType.ONLY_NO_FAILURE_PAIRS: 1,
         }
-        '''
+        #'''
 
         # Use a custom similarity values instead of 0 for unequal / negative pairs during batch creation
         # These are based on the similarity matrices loaded in the dataset
@@ -253,7 +253,7 @@ class InferenceConfiguration:
         # similarity assessment during inference.
         # Please note that the case base extraction only reduces the training data but fully copies the test data
         # so all test example will still be evaluated even if this is enabled
-        self.case_base_for_inference = True  # default: False
+        self.case_base_for_inference = False  # default: False
 
         # Parameter to control the size / number of the queries used for evaluation
         self.inference_with_failures_only = False  # default: False
@@ -282,7 +282,7 @@ class InferenceConfiguration:
         self.use_valid_instead_of_test = False                                                           # default False
 
         # Loads only the FaF examples from the validation set and adds the no_failure from the training set
-        self.simulate_anomaly_detection_w_supervised_snn = True
+        self.simulate_anomaly_detection_w_supervised_snn = False
 
 
 class ClassificationConfiguration:
@@ -442,12 +442,13 @@ class StaticConfiguration:
         #self.data_folder_prefix = '../../../../data/pklein/PredMSiamNN/data/'
         #self.data_folder_prefix = '../../../../data/pklein/PredMSiamNN/data/'
         self.data_folder_prefix = '../data/'
+        #self.data_folder_prefix = '../../../../data/pklein/Datensatz2/training_data/' # '../data/'
         #3W self.data_folder_prefix = '/../../../../../data/datasets/PredMSiamNN/data/3rd_party/3w_dataset/'
 
         # Folder where the trained models are saved to during learning process
-        self.hyper_file = self.hyper_file_folder + 'cnn1d_with_fc_simsiam_128-32.json' #cnn1d_with_fc_simsiam_128-32.json 'cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2.json'  #cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2.json #cnn2d_withAddInput_ContextStrang.json  'cnn2d_with_graph-26-10.json'  #cnn2d_with_graph_test.json #cnn2d_withAddInput_nwApproach.json
+        self.hyper_file = self.hyper_file_folder + 'cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2.json' #cnn1d_with_fc_simsiam_128-32.json 'cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2.json'  #cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2.json #cnn2d_withAddInput_ContextStrang.json  'cnn2d_with_graph-26-10.json'  #cnn2d_with_graph_test.json #cnn2d_withAddInput_nwApproach.json
         #3W self.models_folder = '../../../../data/pklein/PredMSiamNN/data/' + 'trained_model2/' #
-        self.models_folder = self.data_folder_prefix + 'trained_models2/'
+        self.models_folder = self.data_folder_prefix + 'trained_models3/'
         self.save_results_as_file = False
         self.curr_run_identifier = self.hyper_file.split("/")[-1].split(".")[0] + "repeat"
         self.use_train_FaF_in_eval = True
@@ -458,7 +459,7 @@ class StaticConfiguration:
         self.plot_embeddings_via_TSNE = False
         self.plot_train_test = False
 
-        self.early_stopping_epochs_limit = 25
+        self.early_stopping_epochs_limit = 100
 
         # Matches each time step with each time step from the other encoding which is implemented as a subtraction
         # of the attention weights multiplied with the other time series
@@ -507,7 +508,8 @@ class StaticConfiguration:
 
         # CSV file containing the adjacency information of features used by the graph cnn2d encoder
         if self.adj_matrix_type == AdjacencyMatrixType.ADJ_MAT_TYPE_AS_ONE_GRAPH_SPARSE:
-            self.graph_adjacency_matrix_attributes_file = self.training_data_folder + 'adjmat_new.csv' #'adjacency_matrix_v3_fullGraph_sparse.CSV'
+            #self.graph_adjacency_matrix_attributes_file = self.training_data_folder + 'a_pre.csv' # 'adjmat_new.csv' #'adjacency_matrix_v3_fullGraph_sparse.CSV'
+            self.graph_adjacency_matrix_attributes_file = self.training_data_folder + 'adjmat_new.csv'
         elif self.adj_matrix_type == AdjacencyMatrixType.ADJ_MAT_TYPE_AS_ONE_GRAPH_WS_FULLY:
             self.graph_adjacency_matrix_attributes_file = self.training_data_folder + 'adjacency_matrix_v3_fullGraph_wsFullyConnected.CSV'
         elif self.adj_matrix_type == AdjacencyMatrixType.ADJ_MAT_TYPE_FIRST_VARIANT:
@@ -519,8 +521,10 @@ class StaticConfiguration:
         #self.graph_adjacency_matrix_attributes_file = self.training_data_folder + 'adjacency_matrix_v3_fullGraph_sparse.CSV' #'adjacency_matrix.CSV'#'adjacency_matrix_v3_fullGraph_sparse.CSV' #'adjacency_matrix_all_attributes_allOne.csv'
         self.graph_adjacency_matrix_ws_file = self.training_data_folder + 'adjacency_matrix_wokstation.csv'
         self.graph_attr_to_workstation_relation_file = self.training_data_folder + 'attribute_to_txtcontroller.csv'
+        #self.mapping_attr_to_ftonto_file = self.training_data_folder + 'feature_2_iri_2.json'
         self.mapping_attr_to_ftonto_file = self.training_data_folder + 'mapping_attr_to_ftonto-uri.csv'
         if self.use_additional_static_node_features_for_graphNN == NodeFeaturesForGraphVariants.OWL2VEC_EMBEDDINGS_DIM16:
+            #self.graph_owl2vec_node_embeddings_file = self.training_data_folder + 'embeddings.tsv'
             self.graph_owl2vec_node_embeddings_file = self.training_data_folder + 'owl2vec_node_embeddings_dim16.csv'
         elif self.use_additional_static_node_features_for_graphNN == NodeFeaturesForGraphVariants.OWL2VEC_EMBEDDINGS_DIM32:
             self.graph_owl2vec_node_embeddings_file = self.training_data_folder + 'owl2vec_node_embeddings_dim32.csv'
@@ -713,6 +717,7 @@ class Configuration(
         print("- use_GCN_adj_matrix_preprocessing_sym: ", self.use_GCN_adj_matrix_preprocessing_sym)
         print("- add_selfloop_to_adj_matrix: ", self.add_selfloop_to_adj_matrix)
         print("- adj_matrix_preprocessing: ", self.adj_matrix_preprocessing)
+        print(" - graph_adjacency_matrix_attributes_file: ", self.graph_adjacency_matrix_attributes_file)
 
         print("Static Node Features: ")
         print("use_additional_static_node_features_for_graphNN: " ,self.use_additional_static_node_features_for_graphNN)

@@ -246,6 +246,8 @@ class SimpleSNN(AbstractSimilarityMeasure):
 
         if not self.config.use_pairwise_sim_siam:
             if self.hyper.encoder_variant in ['graphcnn2d']:
+                input_data = context_vectors[2] # [64, 500, 78, 1]
+                #tf.print("a_out shape: ", input_data.shape)
                 context_vectors = context_vectors[0]
                 context_vectors_ = context_vectors
 
@@ -286,7 +288,6 @@ class SimpleSNN(AbstractSimilarityMeasure):
                  (1 / (tf.sqrt(128.0))), "| center loss:", center_loss_a, center_loss_b)
         '''
         ###
-
         ###
         # "Official Way of Impementation for SimSiam
         ###
@@ -300,6 +301,20 @@ class SimpleSNN(AbstractSimilarityMeasure):
             entries_b = np.arange(1, context_vectors.shape[0], 2)
             a = tf.gather(context_vectors, entries_a)  # context_vectors[entries_a, :, 0]
             b = tf.gather(context_vectors, entries_b)  # context_vectors[entries_b, :, 0]
+            '''
+            e = tf.gather(input_data, entries_a) # [64, 500, 78, 1]
+            f = tf.gather(input_data, entries_b)
+            e = tf.reshape(e, (e.shape[0],e.shape[1]*e.shape[2]*e.shape[3])) # [64, 39000]
+            f = tf.reshape(f, (f.shape[0], f.shape[1] * f.shape[2] * f.shape[3]))
+            #tf.print("e:",e.shape)
+            '''
+            '''
+            e = tf.gather(input_data, entries_a) # input_data: [128, 78, 78]
+            f = tf.gather(input_data, entries_b)
+            e = tf.reshape(e, (e.shape[0],e.shape[1]*e.shape[2])) # [64, 39000]
+            f = tf.reshape(f, (f.shape[0], f.shape[1] * f.shape[2]))
+            #tf.print("e:",e.shape)
+            '''
 
             # projections z_a, z_b from encoder f (backbone + projection mlp); shape (batchsize, features)
             z_a = tf.squeeze(a)
@@ -316,11 +331,12 @@ class SimpleSNN(AbstractSimilarityMeasure):
             p_a_res4 = p_a[4]
             p_a_res5 = p_a[5]
             '''
-            #p_a = p_a[0]  # normal state
-
-            # p_a_res1 = p_a[1]  # residual term
-            # p_a = p_a[0]    # normal state
-            # p_a_mul2 = p_a[2]
+            '''
+            p_a_res1 = p_a[1]  # residual term
+            p_a_mul2 = p_a[2]
+            #tf.print("p_a_res1: ", p_a_res1.shape)
+            p_a = p_a[0]    # normal state
+            '''
             p_b = self.complex_sim_measure.model(z_b, training=self.training)
             '''
             p_b_res1 = p_b[1]
@@ -330,10 +346,15 @@ class SimpleSNN(AbstractSimilarityMeasure):
             p_b_res4 = p_b[4]
             p_b_res5 = p_b[5]
             '''
-            #p_b = p_b[0]
 
-            # p_b_res1 = p_b[1]
-            # p_b_mul2 = p_b[2]
+            #tf.print("z_a:",z_a.shape,"| p_a:", p_a.shape)
+            #h_z =(1 + f_x_2) * z + f_x_1
+            '''
+            p_b_res1 = p_b[1]
+            p_b_mul2 = p_b[2]
+            #tf.print("p_b_res1: ", p_b_res1.shape)
+            p_b = p_b[0]
+            '''
             # p_b = p_b[0]
             # p_a, p_b Shape: (batch, features)
             # tf.print("p_a shape:", tf.shape(p_a))
@@ -341,21 +362,36 @@ class SimpleSNN(AbstractSimilarityMeasure):
             # SimSiam Algo 1. normlize according dim=1 whereas Barlow Twin normalise along the batch dimension (i.e. dim=0)
             # Cosine similarity according: https://github.com/keras-team/keras/blob/d8fcb9d4d4dad45080ecfdd575483653028f8eda/keras/metrics.py#L4162
 
-            #p_a_1 = tf.math.l2_normalize((p_a - o_z_a)**2, axis=1)
-            #p_b_1 = tf.math.l2_normalize((p_b - o_z_a)**2, axis=1)
-            #z_a_l2_norm = tf.math.l2_normalize((z_a - o_z_a)**2, axis=1)
-            #z_b_l2_norm = tf.math.l2_normalize((z_b - o_z_a)**2, axis=1)
+            # Batch mean
+            #z_a_l2_norm = tf.math.l2_normalize(context_vectors_, axis=0)
+            #o_z_a = tf.reduce_mean(z_a_l2_norm, axis=0)
+            o_z_a = tf.reduce_mean(context_vectors, axis=0)
+            o_z_a_norm = tf.math.l2_normalize(o_z_a)
+            o_z_a = tf.expand_dims(o_z_a_norm, 0)
+
+            #p_a_1 = tf.math.l2_normalize((p_a - o_z_a)**3, axis=1)
+            #p_b_1 = tf.math.l2_normalize((p_b - o_z_a)**3, axis=1)
+            #z_a_l2_norm = tf.math.l2_normalize((z_a - o_z_a)**3, axis=1)
+            #z_b_l2_norm = tf.math.l2_normalize((z_b - o_z_a)**3, axis=1)
 
             #p_a_1_ = tf.math.l2_normalize((tf.math.multiply(p_a, o_z_a))**2, axis=1)
             #p_b_1_ = tf.math.l2_normalize((tf.math.multiply(p_b, o_z_a))**2, axis=1)
             #z_a_l2_norm_ = tf.math.l2_normalize((tf.math.multiply(z_a, o_z_a))**2, axis=1)
             #z_b_l2_norm_ = tf.math.l2_normalize((tf.math.multiply(z_b, o_z_a))**2 , axis=1)
 
+            #e_norm = tf.math.l2_normalize(e, axis=1)
+            #f_norm = tf.math.l2_normalize(f, axis=1)
+            #D_e_norm_f_norm = tf.reduce_sum(e_norm * f_norm, axis=1)
+
             # single view
             p_a_1 = tf.math.l2_normalize(p_a, axis=1)
+            #p_a_1 = tf.math.l2_normalize(p_a_1-o_z_a, axis=1)
             p_b_1 = tf.math.l2_normalize(p_b, axis=1)
+            #p_b_1 = tf.math.l2_normalize(p_b_1-o_z_a, axis=1)
             z_a_l2_norm = tf.math.l2_normalize(z_a, axis=1)
+           # z_a_l2_norm = tf.math.l2_normalize(z_a_l2_norm - o_z_a, axis=1)
             z_b_l2_norm = tf.math.l2_normalize(z_b, axis=1)
+            #z_b_l2_norm = tf.math.l2_normalize(z_b_l2_norm - o_z_a, axis=1)
 
             '''
             p_a_1 = (p_a - tf.reduce_mean(p_a, axis=0)) / tf.math.reduce_std(p_a, axis=0)
@@ -387,11 +423,11 @@ class SimpleSNN(AbstractSimilarityMeasure):
 
             # a = tf.math.l2_normalize(p_a + (p_b_res1+p_b_res2 +p_b_res3), axis=1)
             a = tf.math.l2_normalize(p_a - (p_b_res1), axis=1)
-            a_2 = tf.math.l2_normalize((p_a - p_b_res1) / p_b_res2, axis=1)
+            #a_2 = tf.math.l2_normalize((p_a - p_b_res1) / p_b_res2, axis=1)
             a_neg = tf.math.l2_normalize(z_a + (p_b_res1), axis=1)
             # b = tf.math.l2_normalize(p_b + (p_a_res1+p_a_res2+p_a_res3), axis=1)
             b = tf.math.l2_normalize(p_b - (p_a_res1), axis=1)
-            b_2 = tf.math.l2_normalize((p_b - p_a_res1) / p_a_res2, axis=1)
+            #b_2 = tf.math.l2_normalize((p_b - p_a_res1) / p_a_res2, axis=1)
             b_neg = tf.math.l2_normalize(z_b + (p_a_res1), axis=1)
             b_neg2 = tf.math.l2_normalize(z_b - (p_a_res1), axis=1)
             '''
@@ -408,6 +444,43 @@ class SimpleSNN(AbstractSimilarityMeasure):
                 D_pb1_za = tf.reduce_sum(p_b_1 * z_a_l2_norm, axis=1)
                 #D_pa1_zb_ = tf.reduce_sum(p_a_1_ * z_b_l2_norm_, axis=1)
                 #D_pb1_za_ = tf.reduce_sum(p_b_1_ * z_a_l2_norm_, axis=1)
+
+            D_oz_za = tf.reduce_sum(o_z_a * z_a_l2_norm, axis=1)
+            D_oz_zb = tf.reduce_sum(o_z_a * z_b_l2_norm, axis=1)
+            #tf.print("D_oz_za shape: ", D_oz_za.shape)
+            #tf.print("D_pa1_zb:", D_pa1_zb.shape, "| D_pb1_za:", D_pb1_za.shape)
+            D_p_a_p_b = tf.reduce_sum(p_a_1 * p_b_1, axis=1)
+
+            # Distances with Residual / Mul network:
+            '''
+            a = tf.math.l2_normalize((p_a - p_b_res1)/(1+p_b_mul2), axis=1)
+            #a = tf.math.l2_normalize((p_a - p_b_res1 - p_b_mul2), axis=1)
+            #a = tf.math.l2_normalize((p_a - p_b_res1), axis=1)
+            a_neg = tf.math.l2_normalize(((1 + p_b_mul2) * z_a_l2_norm + p_b_res1), axis=1) # (1 + f_x_2) * z + f_x_1
+            #a_neg = tf.math.l2_normalize((z_a_l2_norm + p_b_res1+p_b_mul2), axis=1)
+            #a_neg = tf.math.l2_normalize((p_a - p_a_res1 - p_a_mul2), axis=1)
+            # h_z =(1 + f_x_2) * z + f_x_1
+            b = tf.math.l2_normalize((p_b - p_a_res1)/(1+p_a_mul2), axis=1)
+            #b = tf.math.l2_normalize((p_b - p_a_res1 - p_a_mul2), axis=1)
+            #b = tf.math.l2_normalize((p_b - p_a_res1), axis=1)
+            #b_neg = tf.math.l2_normalize((z_b_l2_norm + p_a_res1 + p_a_mul2), axis=1)
+            #b_neg = tf.math.l2_normalize((p_b - p_b_res1 - p_b_mul2), axis=1)
+            b_neg = tf.math.l2_normalize(((1 + p_a_mul2) * z_b_l2_norm + p_a_res1), axis=1)
+            D_pa_z_b_l2_norm     = tf.reduce_sum(a * z_b_l2_norm, axis=1)
+            D_pa_z_b_l2_norm_neg     = tf.reduce_sum(a_neg * z_b_l2_norm, axis=1)
+            D_pb_z_a_l2_norm    = tf.reduce_sum(b * z_a_l2_norm, axis=1)
+            D_pb_z_a_l2_norm_neg = tf.reduce_sum(b_neg * z_a_l2_norm, axis=1)
+            p_a_res1_norm =  tf.math.l2_normalize(p_a_res1, axis=1)
+            p_b_res1_norm = tf.math.l2_normalize(p_b_res1, axis=1)
+            #tf.print("p_b_res1_norm.shape: ",p_b_res1.shape,"vs",p_a_1.shape)
+            D_p_b_res1_p_a_res1 = tf.reduce_sum(p_a_res1_norm * p_b_res1_norm, axis=1)
+            p_a_mul1_norm = tf.math.l2_normalize(p_a_mul2, axis=1)
+            p_b_mul1_norm = tf.math.l2_normalize(p_b_mul2, axis=1)
+            D_p_a_mul1_p_b_mul1 = tf.reduce_sum(p_a_mul1_norm * p_b_mul1_norm, axis=1)
+            D_z_a_z_b = tf.reduce_sum(z_a_l2_norm * z_b_l2_norm, axis=1)
+            '''
+
+            # Attention
 
             # Residuals
             '''
@@ -462,15 +535,35 @@ class SimpleSNN(AbstractSimilarityMeasure):
             '''
             #z_a_o_z_a = (tf.sqrt(tf.reduce_sum(tf.square(z_a - o_z_a), 1)))
             #z_b_o_z_a = (tf.sqrt(tf.reduce_sum(tf.square(z_b - o_z_a), 1)))
-            loss = 0.5 * D_pa1_zb + 0.5 * D_pb1_za #- z_a_o_z_a - z_b_o_z_a
+            #D_e_f = tf.reduce_sum(tf.abs(tf.math.l2_normalize(e, axis=1) * tf.math.l2_normalize(f, axis=1)), axis=1)
+            #D_e_f = tf.reduce_mean(tf.abs(e - f), axis=1)
+            #tf.print("D_e_f: ",D_e_f.shape)
+            loss = 0.5 * D_pa1_zb + 0.5 * D_pb1_za #+1-D_e_f * 0.01 #- 0.1 * (tf.reduce_mean(tf.reduce_mean(tf.abs(p_a_1 - p_b_1),axis=1)))#+ 0.5 * D_oz_za + 0.5 * D_oz_zb #- z_a_o_z_a - z_b_o_z_a
             #loss = 0.25 * D_pa1_zb + 0.25 * D_pb1_za #+0.25 * D_pa1_zb_ + 0.25 * D_pb1_za_ #- z_a_o_z_a - z_b_o_z_a
 
             # loss = 2* (0.5 * D_a_zb2 + 0.5 * D_b_zb2) - (0.5 * D_a_zb_neg + 0.5 * D_b_zb_neg) + 2* D_p_a_p_b - (10 * tf.abs( std_axis_0_mean -(1/(tf.sqrt(128.0)))))
-            # loss = D_p_a_p_b
-            # tf.print("Loss:", loss, "D_p_a_p_b: ", D_p_a_p_b, "(0.5 * D_1 + 0.5 * D_2):", 0.5 * D_1 + 0.5 * D_2,"D_z_a_z_b:",D_z_a_z_b,"D_pres:",D_pres1,D_pres2,D_pres3)
+            #loss =  (1/3) * D_p_a_p_b + (1/3) * D_pa_z_b_l2_norm + (1/3) * D_pb_z_a_l2_norm #+ 0.1 * (1-D_pa_z_b_l2_norm_neg) + 0.1 * (1-D_pb_z_a_l2_norm_neg) - (10 * tf.abs( std_axis_0_mean -(1/(tf.sqrt(128.0)))))
+            #loss =  (1/3) * D_p_a_p_b + (1/3) * D_pa_z_b_l2_norm + (1/3) * D_pb_z_a_l2_norm #+(1/3) * (1-D_e_norm_f_norm) #+ (1/3)*(1-D_pa_z_b_l2_norm_neg) + (1/3) *(1-D_pb_z_a_l2_norm_neg) + (1/3) * (1-D_p_a_mul1_p_b_mul1) + (1/3) * (1-D_p_b_res1_p_a_res1) #+ (1/3) * D_z_a_z_b  #- (10 * tf.abs( D_z_a_z_b - D_p_b_res1_p_a_res1)) - (10 * tf.abs( D_z_a_z_b - D_p_a_mul1_p_b_mul1))
+            '''
+            z_a_l2_norm = tf.math.l2_normalize(p_b_res1, axis=0)
+            z_b_l2_norm = tf.math.l2_normalize(p_b_res1, axis=1)
+            std_axis_0 = tf.math.reduce_std(z_a_l2_norm, 0)
+            std_axis_1 = tf.math.reduce_std(z_b_l2_norm, 1)
+            std_axis_0_mean = tf.math.reduce_mean(std_axis_0)
+            std_axis_1_mean = tf.math.reduce_mean(std_axis_1)
+            loss_term = -(10 * tf.abs( std_axis_0_mean -(1/(tf.sqrt(128.0)))))
+            tf.print("std_axis_0_mean:",std_axis_0_mean,"std_axis_1_mean:",std_axis_1_mean,"loss_term:",loss_term)
+            loss = loss + loss_term
+            '''
+            #tf.print("D_e_norm_f_norm: ", tf.reduce_mean(D_e_norm_f_norm))
+
+            #+ 0.1 * (1-D_p_b_res1_p_a_res1) + 0.2 * (1 - D_p_a_mul1_p_b_mul1)  + 0.1 * (1-D_pb_z_a_l2_norm_neg) + 0.1 * (1-D_pa_z_b_l2_norm_neg) # + 0.5 * (1-D_p_b_res1_p_a_res1)
+            #tf.print("Loss:", loss, "D_p_a_p_b: ", D_p_a_p_b, "(0.5 * D_1 + 0.5 * D_2):", 0.5 * D_1 + 0.5 * D_2,"D_z_a_z_b:",D_z_a_z_b,"D_pres:",D_pres1,D_pres2,D_pres3)
             # tf.print("Loss:", loss, "D_p_a_p_b: ", D_p_a_p_b, "0.5 * D_1 + 0.5 * D_2:", 0.5 * D_1 + 0.5 * D_2," 0.5 * D_1_z + 0.5 * D_2_z:", 0.5 * D_1_z + 0.5 * D_2_z,"D_z_a_z_b:",D_z_a_z_b,"D_pres:",D_pres1)
             # tf.print("Loss:", tf.reduce_mean(loss), "D_p_a_p_b: ", tf.reduce_mean(D_p_a_p_b), "(0.5 * D_1 + 0.5 * D_2):", tf.reduce_mean(0.5 * D_1 + 0.5 * D_2),"D_z_a_z_b:",tf.reduce_mean(D_z_a_z_b),"D_pres:",tf.reduce_mean(D_pres1),tf.reduce_mean(D_pres2),tf.reduce_mean(D_pres3))
-            # tf.print("Loss:", tf.reduce_mean(loss), "D_p_a_p_b: ", tf.reduce_mean(D_p_a_p_b), "(0.5 * D_1 + 0.5 * D_2):", tf.reduce_mean(0.5 * D_1 + 0.5 * D_2), "(0.5 * D_1_z + 0.5 * D_2_z):", tf.reduce_mean(0.5 * D_1_z + 0.5 * D_2_z),"D_z_a_z_b:",tf.reduce_mean(D_z_a_z_b),"D_pres:",tf.reduce_mean(D_pres1))
+            #tf.print("Loss:", tf.reduce_mean(loss), "| D_pa1_zb:", tf.reduce_mean(D_pa1_zb), "| D_pb1_za:", tf.reduce_mean(D_pb1_za), "| D_oz_za:", tf.reduce_mean(D_oz_za),"| D_oz_zb:",tf.reduce_mean(D_oz_zb),"| D_p_a_p_b:",(tf.reduce_mean(D_p_a_p_b)))
+            #tf.print("Loss:", tf.reduce_mean(loss), "| D_pa1_zb:", tf.reduce_mean(D_pa1_zb), "| D_pb1_za:", tf.reduce_mean(D_pb1_za), "| D_oz_za:", tf.reduce_mean(D_oz_za),"| D_oz_zb:", tf.reduce_mean(D_oz_zb),"| D_p_a_p_b:", (tf.reduce_mean(D_p_a_p_b)),"| D_pa_z_b_l2_norm_neg:", (tf.reduce_mean(D_pa_z_b_l2_norm_neg)),
+            #         "| D_pa_z_b_l2_norm:", (tf.reduce_mean(D_pa_z_b_l2_norm)),"| D_p_b_res1_p_a_res1:", tf.reduce_mean(D_p_b_res1_p_a_res1),"| D_p_a_mul1_p_b_mul1_:", tf.reduce_mean(D_p_a_mul1_p_b_mul1),"D_z_a_z_b:",tf.reduce_mean(D_z_a_z_b),"std_axis_0_mean:", std_axis_0_mean)
             '''
             tf.print("Loss:", tf.reduce_mean(loss), "D_p_a_p_b: ", tf.reduce_mean(D_p_a_p_b),
                      "(0.5 * D_1 + 0.5 * D_2):", tf.reduce_mean(0.5 * D_1 + 0.5 * D_2),
@@ -888,7 +981,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
         elif self.hyper.encoder_variant == 'graphcnn2d':
             print("self.dataset.owl2vec_embedding_dim: ", self.dataset.owl2vec_embedding_dim)
             input_shape_encoder = [(self.hyper.time_series_length, self.hyper.time_series_depth),
-                                   (self.hyper.time_series_depth,), (5,),
+                                   (self.hyper.time_series_depth,self.hyper.time_series_depth), (5,),
                                    (self.dataset.owl2vec_embedding_dim, self.hyper.time_series_depth)]
             self.encoder = GraphCNN2D(self.hyper, input_shape_encoder)
         elif self.hyper.encoder_variant == 'attributeconvolution':
@@ -964,10 +1057,10 @@ class SimpleSNN(AbstractSimilarityMeasure):
                 last_chancel_size_GCN = self.hyper.graph_conv_channels[len(self.hyper.graph_conv_channels) - 1]
                 last_attfeaturewise_fc_layer_size = self.hyper.cnn2d_AttributeWiseAggregation[
                     len(self.hyper.cnn2d_AttributeWiseAggregation) - 1]
-                input_shape = (last_chancel_size_GCN, 61)
+                input_shape = (last_chancel_size_GCN, self.hyper.time_series_depth)
                 if self.hyper.provide_output_for_on_top_network == "True":
                     # Define additional input shapes
-                    input_shape_dis_vec = (last_chancel_size_GCN, 61)
+                    input_shape_dis_vec = (last_chancel_size_GCN, self.hyper.time_series_depth)
                     if self.config.use_additional_strict_masking_for_attribute_sim:
                         input_shape_masking_vec = self.hyper.time_series_depth * 2
                     else:
@@ -983,7 +1076,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
                         self.complex_sim_measure = Cnn2DWithAddInput_Network_OnTop(self.hyper,
                                                                                    [1, 1, input_shape_masking_vec])
                     elif use_case == "global":
-                        self.complex_sim_measure = Cnn2DWithAddInput_Network_OnTop(self.hyper, [61 * 3])
+                        self.complex_sim_measure = Cnn2DWithAddInput_Network_OnTop(self.hyper, [self.hyper.time_series_depth * 3])
 
                     elif use_case == "graph":
                         self.complex_sim_measure = Cnn2DWithAddInput_Network_OnTop(self.hyper, [input_shape_dis_vec,
@@ -999,7 +1092,7 @@ class SimpleSNN(AbstractSimilarityMeasure):
                         self.complex_sim_measure = Cnn2DWithAddInput_Network_OnTop(self.hyper,
                                                                                    [deep_feature_size,
                                                                                     # [last_chancel_size_GCN * 2 + 61 + 16,
-                                                                                    61])
+                                                                                    self.hyper.time_series_depth])
                 else:
                     self.complex_sim_measure = Cnn2DWithAddInput_Network_OnTop(self.hyper, input_shape)
 

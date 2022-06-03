@@ -383,6 +383,7 @@ class FullDataset(Dataset):
     def load_adjacency_matrix(self):
         # Load adjacency matrix for attributes
         adj_matrix_attr_df = pd.read_csv(self.config.graph_adjacency_matrix_attributes_file, sep=';', index_col=0)
+        #print("adj_matrix_attr_df: ", adj_matrix_attr_df.head())
 
         col_values = adj_matrix_attr_df.columns.values
         index_values = adj_matrix_attr_df.index.values
@@ -396,7 +397,8 @@ class FullDataset(Dataset):
                 'Ordering of features in the adjacency matrix (index) does not match the one in the dataset.')
 
         self.graph_adjacency_matrix_attributes = adj_matrix_attr_df.values.astype(dtype=np.float)
-
+        #print(self.graph_adjacency_matrix_attributes)
+        #print(sdsds)
         #Add self loop:
         if self.config.add_selfloop_to_adj_matrix:
             self.graph_adjacency_matrix_attributes = self.graph_adjacency_matrix_attributes + np.eye(61)
@@ -467,6 +469,9 @@ class FullDataset(Dataset):
                 owl2vec_attr_embeddings[:,idx] = owl2vec_node_embeddings_df.loc[ftOnto_uri].values
 
             self.additional_static_attribute_features = owl2vec_attr_embeddings
+
+            #print(self.additional_static_attribute_features)
+            #print(sdsds)
 
     def calculate_maskings(self):
         print("classes_total: ", self.classes_total)

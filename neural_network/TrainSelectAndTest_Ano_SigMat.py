@@ -441,12 +441,22 @@ def main(run=0):
     print(" LOADED DATA IS OVERWRITTEN WITH SIGNATURE MATRICES FROM MSCRED")
     print("####################")
 
-    x_train_encoded = np.load('../../../../data/pklein/MSCRED_Input_Data_2/sig_mat_train_2.npy')
-    x_valid_encoded = np.load('../../../../data/pklein/MSCRED_Input_Data_2/sig_mat_valid.npy')
-    x_test_encoded = np.load('../../../../data/pklein/MSCRED_Input_Data_2/sig_mat_test.npy')
+    x_train_encoded = np.load('../../../../data/pklein/MSCRED_Input_Data/sig_mat_train_2.npy')
+    x_valid_encoded = np.load('../../../../data/pklein/MSCRED_Input_Data/sig_mat_valid.npy')
+    x_test_encoded = np.load('../../../../data/pklein/MSCRED_Input_Data/sig_mat_test.npy')
     x_train_labels = x_train_labels[(x_train_labels =='no_failure')]
-    x_valid_labels= np.load('../../../../data/pklein/MSCRED_Input_Data_2/valid_labels.npy', allow_pickle=True)
-    x_test_labels = np.load('../../../../data/pklein/MSCRED_Input_Data_2/test_labels.npy', allow_pickle=True)
+    x_valid_labels= np.load('../../../../data/pklein/MSCRED_Input_Data/valid_labels.npy', allow_pickle=True)
+    x_test_labels = np.load('../../../../data/pklein/MSCRED_Input_Data/test_labels.npy', allow_pickle=True)
+
+
+    x_train_encoded_wFaF = np.load('../../../../data/pklein/MSCRED_Input_Data/sig_mat_train_failures4Test.npy')
+    x_train_labels_wFaF = np.load('../../../../data/pklein/MSCRED_Input_Data/sig_mat_train_failures4Test_labels.npy')
+
+
+    print("test_labels_y SHape:", x_test_labels.shape, "train_labels_y_wF shape:", x_train_labels_wFaF.shape)
+    x_test_labels = np.concatenate((x_test_labels, np.squeeze(x_train_labels_wFaF)), axis=0)
+    x_test_encoded = np.concatenate((x_test_encoded, x_train_encoded_wFaF), axis=0)
+    print("Shape merged labels:", x_test_labels.shape, "| Shape merged recon matrix:", x_test_encoded.shape)
 
     print("Shape of Sig Mat train:", x_train_encoded.shape,"valid:",x_valid_encoded.shape,"test:",x_test_encoded.shape)
 

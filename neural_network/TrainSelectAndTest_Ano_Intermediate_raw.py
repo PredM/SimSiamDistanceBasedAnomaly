@@ -1453,7 +1453,6 @@ def get_Similarity_Matrix(valid_vector, test_vector, measure):
         pairwise_sim_matrix = np.exp(-manhattan_distances(examples_matrix))
     elif measure == 'l2':
         pairwise_sim_matrix = 1 / (1 + euclidean_distances(examples_matrix))
-
     pairwise_sim_matrix = pairwise_sim_matrix[valid_vector.shape[0]:, :valid_vector.shape[0]]
 
     return pairwise_sim_matrix
@@ -2095,6 +2094,15 @@ def main(run=0, val_split_rates=[0.0]):
                         print("Parameter Config: k_clean: ", k_clean_, " | fraction_clean:", fraction_clean_," | k_pred:",k_pred_," | measure:", measure_," | val_split_rate_:", val_split_rate_ )
                         print()
 
+                        k_mean = np.expand_dims(np.mean(x_train_encoded, axis=0), 0)
+                        k_mean = k_mean / np.linalg.norm(k_mean)
+                        #x_train_encoded = x_train_encoded / np.linalg.norm(x_train_encoded, axis=1, keepdims=True)
+                        #x_valid_encoded = x_valid_encoded / np.linalg.norm(x_valid_encoded, axis=1, keepdims=True)
+                        #x_test_encoded = x_test_encoded / np.linalg.norm(x_test_encoded, axis=1, keepdims=True)
+                        #x_train_encoded = x_train_encoded - k_mean
+                        #x_valid_encoded = x_valid_encoded - k_mean
+                        #x_test_encoded = x_test_encoded - k_mean
+
                         # Clean case base
                         x_train_cb_cleaned = clean_case_base(x_case_base=x_train_encoded, k=k_clean_,
                                                              fraction=fraction_clean_, measure=measure_)  # k=5, fraction=0.4
@@ -2120,7 +2128,7 @@ def main(run=0, val_split_rates=[0.0]):
                             nn_distance_train_wf = calculate_nn_distance(sim_mat_casebase_test=sim_mat_trainCb_train_wf, k=k_pred_)
 
                         # k-mean distance
-                        k_mean= np.expand_dims(np.mean(x_train_encoded,axis=0),0)
+
                         sim_mat_kMean_test = get_Similarity_Matrix(valid_vector=k_mean,
                                                                      test_vector=x_test_encoded, measure=measure_)
                         nn_distance_k_mean = calculate_nn_distance(sim_mat_casebase_test=sim_mat_kMean_test, k=k_pred_)
@@ -2437,6 +2445,22 @@ def main(run=0, val_split_rates=[0.0]):
     #print("Run;",run,"val_splits_results: ", val_splits_results)
     return val_splits_results
 
+def reset_state(state):
+    # Set seeds in order to get consistent results
+    seeds = [2022, 1988, 1990, 1992, 2202]
+    seed = seeds[state]
+
+    os.environ['PYTHONHASHSEED'] = str(seed)
+    os.environ['TF_DETERMINISTIC_OPS'] = '1'
+    np.random.seed(seed)
+    import random
+    random.seed(seed)
+
+    # Reimporting tensorflow in necessary!
+    import tensorflow as tf
+    tf.random.set_seed(seed)
+
+
 if __name__ == '__main__':
     use_train_FaF_in_eval = True
     dict_measures_collection = {}
@@ -2452,6 +2476,9 @@ if __name__ == '__main__':
         #print("result: ", results)
         dict_measures_collection[run] = {}
         dict_measures_collection_2[run] = {}
+
+        # set random state
+        reset_state(run)
 
         #for val_split_rate in eval_with_reduced_val_split:
         if use_train_FaF_in_eval:

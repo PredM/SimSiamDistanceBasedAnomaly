@@ -146,7 +146,7 @@ class BatchComposer:
                 class_of_second = np.nonzero(self.y[second_idx] == 1)[0][0]
                 #print("class_of_first: ", self.dataset.one_hot_index_to_string.get(class_of_first), class_of_first)
                 #print("class_of_second: ", self.dataset.one_hot_index_to_string.get(class_of_second), class_of_second)
-                if class_of_first == 0: #(0 = no_failure) in FT, but 12 in W3
+                if class_of_first == 0: #(0 = no_failure) in FT, but 12 in W3, and 7 in FT 2021 (MANW)
                     #print("NoFailurePair!")
                     return first_idx, second_idx
             #'''

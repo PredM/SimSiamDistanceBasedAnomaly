@@ -4,6 +4,9 @@ from os import listdir, path
 import spektral
 import tensorflow as tf
 #tf.config.run_functions_eagerly(True)
+#tf.compat.v1.disable_eager_execution()
+from spektral import utils
+import numpy as np
 
 from configuration.Hyperparameter import Hyperparameters
 from neural_network.attn_augconv import augmented_conv2d
@@ -377,6 +380,7 @@ class CNN2D(NN):
             input = tf.keras.Input(shape=(self.input_shape[0][0], self.input_shape[0][1], 1), name="Input0")
             adj_matrix_input_ds = tf.keras.layers.Input(shape=self.input_shape[1], name="AdjMatDS")
             adj_matrix_input_ws = tf.keras.layers.Input(shape=self.input_shape[2], name="AdjMatWS")
+            print("self.input_shape[3]: ", self.input_shape[3])
             static_attribute_features_input = tf.keras.layers.Input(shape=self.input_shape[3], name="StaticAttributeFeatures")
         else:
             print("Encoder variant not implemented: ", self.hyper.encoder_variant)
@@ -506,26 +510,111 @@ class GraphCNN2D(CNN2D):
             adj_matrix_input_ws = input[2]
             static_attribute_features_input = input[3]
             print("adj_matrix_input_ds: ", adj_matrix_input_ds, "adj_matrix_input_ws: ", adj_matrix_input_ws, "static_attribute_features_input: ", static_attribute_features_input)
-            output_new2 = tf.transpose(output, perm=[0, 2, 1])
+            output_swapped = tf.transpose(output, perm=[0, 2, 1])
+
+            # Graph Structure Learning Component (Learns an adjacency matrix)
+            variant = 1
+            gsl_module = GraphStructureLearningModule(a_input=adj_matrix_input_ds, a_variant=variant, random_init=True,
+                                         use_knn_reduction=True, convert_to_binary_knn=False, k_knn_red=5, name='adjmat_learning', gcn_prepro=True, norm_adjmat=False, embsize=32,
+                                         use_softmax_reduction=False)
+
+            gsl_output = gsl_module([adj_matrix_input_ds, output_swapped]) #output_swapped in form: (batch, Nodes / Data Streams, Features / Time Steps)
+
+            if variant in [6, 8]:
+                al, e1_emb = gsl_output
+                # Learned embedddings with additional batch dim for further use in NN architecutre
+                e1_emb = e1_emb[None, :, :]  # add batch dimension
+                tiled = tf.tile(e1_emb, [tf.shape(output)[0], 1, 1])  # repeat embeddings acc. to batch size
+                e1_emb = tf.transpose(tiled, perm=[0, 2, 1])  # change the dimension acc. to the other embeddings
+                print("Learned Adjacency Matrix shape:", al.shape,"output shape:", output.shape, "e1_emb:", e1_emb.shape, "static_attribute_features_input shape:",
+                      static_attribute_features_input.shape)
+            else:
+                al = gsl_output
+                # Edge Features for ECCConv
+                #e = e[None, :, :,:]  # add batch dimension
+                #e = tf.tile(e, [tf.shape(output)[0], 1, 1,1])  # repeat embeddings acc. to batch size
+                #al = al[None, :, :]  # add batch dimension
+                #al = tf.tile(al, [tf.shape(output)[0], 1, 1])  # repeat embeddings acc. to batch size
+                print("Learned Adjacency Matrix shape:", al.shape,"output shape:", output.shape, "static_attribute_features_input shape:", static_attribute_features_input.shape)
+
+            # al = adj_matrix_input_ds
+
+            #al = GraphStructureLearningModule(a_input=adj_matrix_input_ds, a_variant=7, random_init=True, use_knn_reduction=False, k_knn_red=5, name='a_l', gcn_prepro=False, embsize=32, use_softmax_reduction=False, embeddings=static_attribute_features_input)([adj_matrix_input_ds, output_new2]) #ar=0.0
+            '''
+            output = self.att_based_adj_mat_learning(a_input=al, mts_input=output_swapped,
+                                                     e1emb_input=e1_emb)  # def att_based_adj_mat_learning( a_input, mts_input, e1emb_input, embsize=32, random_init=True, use_knn_reduction=True, k_knn_red=5, gcn_prepro=True):
+            print("output shape + :",output.shape)
+
+            output = tf.transpose(output, perm=[0, 3, 1,2])
+
+            output = tf.reshape(output, [-1,32,61])
+            print("output shape ++:", output.shape)
+            '''
+
+            #al = gcn_preprocessing(al, symmetric=False, outside_of_graph=False, add_I=False)
 
             # Concat time series features with additional static node features
             if self.hyper.use_owl2vec_node_features_in_graph_layers == "True":
                 output = tf.concat([output, static_attribute_features_input], axis=1)
 
             # print('Shape of output before transpose:', output.shape)
-
             # Input of Graph Conv layer: ([batch], Nodes, Features)
             # Here: Nodes = Attributes (univariate time series), Features = Time steps
             # Shape of output: ([batch], Time steps, Attributes, so we must "switch" the second and third dimension
             output = tf.transpose(output, perm=[0, 2, 1])
+
+            #output_ = tf.transpose(static_attribute_features_input, perm=[0, 2, 1])
+            #outputEmb = tf.transpose(outputEmb, perm=[0, 2, 1])
+
             print("self.hyper.graph_conv_channels: ", self.hyper.graph_conv_channels)
+
+            # Build the Graph Convolution Network
             if self.hyper.use_GCNGlobAtt_Fusion == "True":
+                # Add Graph Convolutional Layers
                 for index, channels in enumerate(self.hyper.graph_conv_channels):
 
                     if self.hyper.use_linear_transformation_in_context == "True":
                         output_L = tf.keras.layers.Dense(channels)(output) #LinearTransformationLayer(size=(output.shape[2], channels))(output)
-                    output = spektral.layers.GCNConv(channels=channels, activation=None, use_bias=True)([output, adj_matrix_input_ds])
-                    #output = spektral.layers.GATConv(channels=channels, attn_heads=3, concat_heads=False, dropout_rate=0.1, activation=None)([output, adj_matrix_input_ds])
+
+                    # Graph Convolutions
+                    output = spektral.layers.GCNConv(channels=channels, activation=None, use_bias=True)([output, al])
+                    #output = spektral.layers.GCSConv(channels=channels, activation=None, use_bias=True)([output, al])
+
+                    # WIP - Learn AdjMat with GAT attention
+                    '''
+                    #output, a_out = spektral.layers.GATConv(channels=channels, attn_heads=3, concat_heads=True, dropout_rate=0.1, activation=None, return_attn_coef=True, use_bias=False)([output, adj_matrix_input_ds])
+                    gat_layer = spektral.layers.GATConv(channels=channels, attn_heads=7, concat_heads=True, dropout_rate=0.4, activation=None, return_attn_coef=True, use_bias=False, add_self_loops=True)
+                    gat_layer_static = spektral.layers.GATConv(channels=32, attn_heads=5, concat_heads=True, dropout_rate=0.2, activation=None, return_attn_coef=True, use_bias=False, add_self_loops=True)
+                    #output, a_out = gat_layer([output, adj_matrix_input_ds])
+                    output_, a_out = gat_layer_static([output_, adj_matrix_input_ds])
+                    a_out = tf.transpose(a_out, perm=[0, 1, 3, 2])
+                    a_out = tf.reduce_mean(a_out,axis=3)
+                    #tf.print("a_out shape:", a_out.shape)
+
+                    # Attention
+                    #attention_layer_3 = tf.keras.layers.Dense(output.shape[2], activation="sigmoid")
+                    #attn2 = attention_layer_3(output_)
+                    #output = output * attn2
+
+                    a_out = knn_reduction(a_out, 5, convert_to_binary=False)
+                    #tf.print("a_out shape:", a_out.shape)
+                    #output = spektral.layers.GCNConv(channels=channels, activation=None, use_bias=True)(
+                    #    [output, a_out])
+                    output, a_out = gat_layer([output, a_out])
+
+                    #a_out = gcn_preprocessing(a_out, symmetric=False,add_I=False)
+                    #a_out = utils.gcn_filter(a_out, symmetric=False)
+                    #output = spektral.layers.GCNConv(channels=channels, activation=None, use_bias=True)([output, a_out])
+                    '''
+
+                    #output = spektral.layers.GATConv(channels=channels, attn_heads=3, concat_heads=False, dropout_rate=0.1, activation=None)([output, al])
+                    #output = spektral.layers.GATConv(channels=channels, attn_heads=7, concat_heads=True, dropout_rate=0.4, activation=None, return_attn_coef=False, use_bias=True, add_self_loops=True)([output, al])
+                    #output = spektral.layers.ECCConv(channels=channels)([output, al, e])
+
+                    #output, att_coeff = Graph_Embeding_Att_Conv(output.shape[-1], e1_emb.shape[-2], num_channels=channels, attn_heads=1, concat_heads=True, add_self_loops=True, dropout_rate=0.2, use_bias=False)([output, al, e1_emb])
+
+                    print(str(index), "-th Graph Conv Output Shape:", output.shape)
+
                     if self.hyper.use_linear_transformation_in_context == "True":
                         output = tf.keras.layers.Add()([output, output_L])
                     output = tf.keras.layers.BatchNormalization()(output)
@@ -534,12 +623,21 @@ class GraphCNN2D(CNN2D):
                     #output = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate / 2)(output)
                     # Add Owl2Vec
                     if index < len(self.hyper.graph_conv_channels)-1:
-                        output = tf.transpose(output, perm=[0, 2, 1])
-                        output = tf.concat([output, static_attribute_features_input], axis=1)
-                        output = tf.transpose(output, perm=[0, 2, 1])
+                        if self.hyper.use_owl2vec_node_features_in_graph_layers == "True":
+                            output = tf.transpose(output, perm=[0, 2, 1])
+                            #output_ = tf.transpose(output_, perm=[0, 2, 1])
+                            #output_ = tf.concat([output_, static_attribute_features_input], axis=1)
+                            #output_ = tf.transpose(output_, perm=[0, 2, 1])
+                            output = tf.concat([output, static_attribute_features_input], axis=1)
+                            #outputEmb = tf.transpose(outputEmb, perm=[0, 2, 1])
+                            output = tf.transpose(output, perm=[0, 2, 1])
+
+                        #output_ = tf.transpose(output_, perm=[0, 2, 1])
+                        #output_ = tf.concat([output_, static_attribute_features_input], axis=1)
+                        #output_ = tf.transpose(output_, perm=[0, 2, 1])
                     #output = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate/2)(output)
-                    #output = spektral.layers.GATConv(channels=channels, activation="relu")([output, adj_matrix_input_ds])
-                    #output_GCN_ds = output
+
+                # Final Layer for obtaining the output representation
                 for channels in self.hyper.global_attention_pool_channels:
                     output = spektral.layers.GlobalAttentionPool(channels)(output)
                     #tf.print("output shape: ", output.shape)
@@ -551,16 +649,45 @@ class GraphCNN2D(CNN2D):
                     '''
                     features_layer = tf.keras.layers.Dense(channels, name="features_layer")
                     attention_layer = tf.keras.layers.Dense(channels, activation="sigmoid", name="attn_layer")
+                    attention_layer_2 = tf.keras.layers.Dense(channels, activation="sigmoid", name="attn_layer2")
                     inputs_linear = features_layer(output)  # 128x61x64
                     attn = attention_layer(output)  # 128x64
+                    attn2 = attention_layer_2(output_)  # 128x64
                     print("inputs_linear shape: ", inputs_linear.shape, "attn shape:",attn.shape)
-                    masked_inputs = inputs_linear * attn  # tf.keras.layers.Multiply()([inputs_linear, attn])
+                    masked_inputs = inputs_linear * attn * attn2  # tf.keras.layers.Multiply()([inputs_linear, attn])
                     output = tf.keras.backend.sum(masked_inputs, axis=-2)
                     print("masked_inputs shape: ", inputs_linear.shape, "output shape:", output.shape)
                     #output = tf.expand_dims(output, -1)
                     print("output fin shape:", output.shape)
                     '''
+                    #Readout Variant
+                    '''
+                    output_glob_mean_3 = spektral.layers.GlobalAvgPool()(output)
+                    output_glob_max_3 = spektral.layers.GlobalMaxPool()(output)
+                    output = tf.keras.layers.Concatenate()([output_glob_mean_3, output_glob_max_3])
 
+                    # output = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate/2)(output)
+                    output = tf.keras.layers.BatchNormalization()(output)
+                    output = tf.keras.layers.Dense(units=256, activation="relu")(output)
+                    # output = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate / 2)(output)
+                    output = tf.keras.layers.BatchNormalization()(output)
+                    output = tf.keras.layers.Dense(units=128, activation="relu")(output)
+                    '''
+
+                    # Graph Ano Variant Deng 2021 like
+                    '''
+                    e1_emb_swapped = tf.transpose(e1_emb, perm=[0, 2, 1])
+                    print("output shape:",output.shape,"e1_emb shape:",e1_emb_swapped.shape)
+                    multiplied = tf.keras.layers.Multiply()([output, e1_emb_swapped])
+                    print("multiplied shape:", multiplied.shape)
+                    multiplied = tf.keras.layers.Flatten()(multiplied)
+                    print("flatten shape:", multiplied.shape)
+                    output = tf.keras.layers.BatchNormalization()(multiplied)
+                    output = tf.keras.layers.Dense(units=256, activation="relu")(output)
+                    # output = tf.keras.layers.Dropout(rate=self.hyper.dropout_rate / 2)(output)
+                    output = tf.keras.layers.BatchNormalization()(output)
+                    output = tf.keras.layers.Dense(units=128, activation="relu")(output)
+                    '''
 
             else: # Readout Version
                 #''' Readout layer
@@ -684,8 +811,1331 @@ class GraphCNN2D(CNN2D):
                 # Redefine input of madel as normal input + additional adjacency matrix input
                 #input = [input, adj_matrix_input_ds, adj_matrix_input_ws, static_attribute_features_input]
 
-        return input, [output, output_new2, input[0]]
+        return input, [output, output_swapped, input[0]]
         #return input, [output,output,output]
+
+
+def gcn_preprocessing(A: tf.Tensor, symmetric, add_I=True):
+    #print("A", A.shape)
+    #A = A[0,:,:]
+    #A = tf.squeeze(A)
+    #print("A", A.shape)
+    # ArmaConv uses the same preprocessing just without the added self loops.
+    if add_I:
+        o = tf.ones(shape=(A.shape[0]), dtype='float32')
+        #print("o", o.shape)
+        i = tf.linalg.diag(o, name='I')
+        #print("i", i.shape)
+        A = tf.add(A, i , 'add_I')
+    else:
+        A = tf.add(A, 0, 'add_zeros')
+        #A = tf.expand_dims(A, axis=0)
+    #print("A", A.shape)
+
+    D_diag_values = tf.math.reduce_sum(A, axis=1, name='row_sum')
+    D = tf.linalg.diag(D_diag_values, name='D')
+    #print("D_diag_values", D_diag_values.shape)
+    #print("D", D.shape)
+
+    if symmetric:
+        # https://de.wikipedia.org/wiki/Matrixpotenz#Negative_Exponenten
+        # https://de.wikipedia.org/wiki/Quadratwurzel_einer_Matrix#Definition
+        D_pow = tf.linalg.sqrtm(tf.linalg.inv(D))
+        A_hat = tf.linalg.matmul(tf.linalg.matmul(D_pow, A), D_pow, name='A_hat')
+    else:
+        # https://github.com/tkipf/gcn/issues/91#issuecomment-469181790
+        D_pow = tf.linalg.inv(D)
+        A_hat = tf.linalg.matmul(D_pow, A, name='A_hat')
+    #print("D_pow", D_pow.shape)
+    #print("A_hat", A_hat.shape)
+
+    return A_hat
+
+def normalized_laplacian(A: tf.Tensor, symmetric):
+    normalized_adj = gcn_preprocessing(A, symmetric, add_I=False)
+    I = tf.eye(tf.shape(normalized_adj)[-1])
+    A_hat = I - normalized_adj
+    return A_hat
+
+def normalized_adjmat(A: tf.Tensor, symmetric):
+    normalized_adj = gcn_preprocessing(A, symmetric, add_I=False)
+    A_hat = normalized_adj
+    return A_hat
+
+def knn_reduction(a, k, convert_to_binary=False):
+    # Transpose because neighbourhood is defined column wise but top_k is calculated per row.
+    #print("len(a.shape):",len(a.shape))
+    if len(a.shape) == 2:
+        a = tf.transpose(a, perm=[1, 0])
+    elif len(a.shape) == 3:
+        # AdjMat has batchsize
+        a = tf.transpose(a, perm=[0, 2, 1])
+    else:
+        print("UNKNOWN ADJ MAT SIZE!!!")
+
+    # Get the kth largest value per row, transpose in necessary such that a row wise comparison is done in tf.where.
+    top_k = tf.math.top_k(a, k).values
+    kth_largest = tf.reduce_min(top_k, axis=-1, keepdims=True)
+
+    # If convert_to_binary a connection is added for the k nearest neighbours,
+    # otherwise the weight values of those are kept and only the ones below the threshold are set to 0.
+    # results in gradient issues: value = 1.0 if convert_to_binary else a
+    #a = tf.where(a < kth_largest, 0.0, value)
+    a = tf.where(a < kth_largest, 0.0, a)
+    if convert_to_binary:
+        a = tf.where(a > 0.0, 1.0, a)
+
+    # Reverse initial transpose.
+    if len(a.shape) == 2:
+        a = tf.transpose(a, perm=[1, 0])
+    elif len(a.shape) == 3:
+        a = tf.transpose(a, perm=[0, 1, 2])
+    else:
+        print("UNKNOWN ADJ MAT SIZE!!!")
+
+    return a
+
+class Graph_Embeding_Att_Conv(tf.keras.layers.Layer):
+    def __init__(self, num_mts_features, num_emb_features, num_channels=128, attn_heads=1, concat_heads = True, add_self_loops=True, dropout_rate=0.2, use_bias=False):
+        super(Graph_Embeding_Att_Conv, self).__init__()
+
+        # Implementation of: Graph neural network-based anomaly detection in multivariate time series by Deng & Hoi (AAAI 2021)
+        # The final returned output corresponds to Eq. 5 / z_i^(t) wo ReLU
+        # Based on GAT implementation of spektral libary
+
+        # Initialize variables
+        self.add_self_loops = add_self_loops
+        self.use_bias = use_bias
+        self.dropout_rate = dropout_rate
+        input_dim = num_mts_features
+        self.attn_heads = attn_heads
+        self.channels = num_channels
+        self.kernel_initializer = "glorot_uniform"
+        self.attn_kernel_initializer = "glorot_uniform"
+        self.kernel_regularizer = None
+        self.kernel_constraint = None
+        self.attn_kernel_regularizer = None
+        self.attn_kernel_constraint = None
+        self.bias_initializer = "zeros"
+        self.bias_regularizer = None
+        self.bias_constraint = None
+        self.concat_heads = concat_heads
+
+        if self.concat_heads:
+            self.output_dim = self.channels * self.attn_heads
+        else:
+            self.output_dim = self.channels
+
+        self.kernel = self.add_weight(
+            name="kernel",
+            shape=[input_dim, self.attn_heads, self.channels],
+            initializer=self.kernel_initializer,
+            regularizer=self.kernel_regularizer,
+            constraint=self.kernel_constraint,
+        )
+        self.attn_kernel_self = self.add_weight(
+            name="attn_kernel_self",
+            shape=[self.channels + num_emb_features, self.attn_heads, 1],
+            initializer=self.attn_kernel_initializer,
+            regularizer=self.attn_kernel_regularizer,
+            constraint=self.attn_kernel_constraint,
+        )
+        self.attn_kernel_neighs = self.add_weight(
+            name="attn_kernel_neigh",
+            shape=[self.channels + num_emb_features, self.attn_heads, 1],
+            initializer=self.attn_kernel_initializer,
+            regularizer=self.attn_kernel_regularizer,
+            constraint=self.attn_kernel_constraint,
+        )
+        if self.use_bias:
+            self.bias = self.add_weight(
+                shape=[self.output_dim],
+                initializer=self.bias_initializer,
+                regularizer=self.bias_regularizer,
+                constraint=self.bias_constraint,
+                name="bias",
+            )
+        self.dropout = tf.keras.layers.Dropout(self.dropout_rate)
+
+
+    def call(self, inputs):
+        x, a, e1 = inputs
+
+        shape = tf.shape(a)[:-1]
+        if self.add_self_loops:
+            a = tf.linalg.set_diag(a, tf.ones(shape, a.dtype))
+        # print("x shape: ", x.shape, "self.kernel shape:", self.kernel.shape)
+        # Apply linear transformation on time series
+        x = tf.einsum("...NI , IHO -> ...NHO", x, self.kernel)
+        #  with input shapes: [?,61,1,32], [?,32,61], [].
+        # print("x shape: ", x.shape, "e1 shape:", e1.shape)
+
+        # insert dimension to support additional attention heads in embeddings
+        e1 = tf.expand_dims(tf.transpose(e1, perm=[0, 2, 1]), -2)
+        e1 = tf.tile(e1, [1, 1, self.attn_heads, 1])
+        # print("x shape: ",x.shape,"e1 shape:",e1.shape)
+
+        # Corresponds to Eq. 6:
+        x_e1 = tf.concat([x, e1], axis=-1)
+        # print("x_e1 shape: ", x_e1.shape)
+
+        # Calculate attention
+        attn_for_self = tf.einsum("...NHI , IHO -> ...NHO", x_e1, self.attn_kernel_self)
+        attn_for_neighs = tf.einsum("...NHI , IHO -> ...NHO", x_e1, self.attn_kernel_neighs)
+        attn_for_neighs = tf.einsum("...ABC -> ...CBA", attn_for_neighs)
+
+        # Original GAT code from spektral lib
+        '''
+        attn_coef = attn_for_self + attn_for_neighs
+        attn_coef = tf.nn.leaky_relu(attn_coef, alpha=0.2)
+        mask = tf.where(a == 0.0, -10e9, 0.0)
+        mask = tf.cast(mask, dtype=attn_coef.dtype)
+        attn_coef += mask[..., None, :]
+        attn_coef = tf.nn.softmax(attn_coef, axis=-1)
+        attn_coef_drop = self.dropout(attn_coef)
+
+        output = tf.einsum("...NHM , ...MHI -> ...NHI", attn_coef_drop, x)
+        '''
+        # attn_coef = attn_for_self + attn_for_neighs
+        attn_for_self = tf.nn.leaky_relu(attn_for_self, alpha=0.2)
+        attn_for_neighs = tf.nn.leaky_relu(attn_for_neighs, alpha=0.2)
+        mask = tf.where(a == 0.0, -10e9, 0.0)
+        mask_self = tf.cast(mask, dtype=attn_for_self.dtype)
+        mask_neighs = tf.cast(mask, dtype=attn_for_neighs.dtype)
+        attn_for_self += mask_self[..., None, :]
+        attn_for_neighs += mask_neighs[..., None, :]
+        attn_coef_self = tf.nn.softmax(attn_for_self, axis=-1)
+        attn_coef_neighs = tf.nn.softmax(attn_for_neighs, axis=-1)
+        attn_coef_self_drop = self.dropout(attn_coef_self)
+        attn_coef_neighs_drop = self.dropout(attn_coef_neighs)
+
+        output_self = tf.einsum("...NHM , ...MHI -> ...NHI", attn_coef_self_drop, x)
+        output_neighs = tf.einsum("...NHM , ...MHI -> ...NHI", attn_coef_neighs_drop, x)
+        output = output_self + output_neighs
+        if self.concat_heads:
+            shape = tf.concat((tf.shape(output)[:-2], [self.attn_heads * self.channels]), axis=0)
+            output = tf.reshape(output, shape)
+        else:
+            output = tf.reduce_mean(output, axis=-2)
+
+        '''
+        a_out = attn_coef
+
+        print("a_out:", a_out)
+        #a_out = tf.transpose(a_out, perm=[0, 1, 3, 2])
+        #a_out = tf.transpose(a_out, perm=[0, -1, -2])
+        #a = tf.squeeze(a_out)
+        a = tf.reshape(a_out,(61,61))
+        #a = tf.reduce_mean(a_out, axis=-1)
+        #a = a_out
+        print("a_out:", a)
+
+        # kNN Reduction:
+        if use_knn_reduction:
+            a = knn_reduction(a, k_knn_red, convert_to_binary=False)
+        # GCN version:
+        if gcn_prepro:
+            # GCN as normally used: al = gcn_preprocessing(a, symmetric=False, add_I=True)
+            al = gcn_preprocessing(a, symmetric=False, add_I=True)
+        else:
+            al = a
+
+        return al
+        '''
+        # Returns encoded time series and used attention / adj mat
+        return output, attn_coef_neighs + attn_coef_neighs
+
+
+# This class contains the logic for learning the graph structure in form an adjacency matrix.
+# Manually to define:
+# Correct Adjancemy Matrix: via adj_mat
+# Correct Emb need to be used: emb_
+class GraphStructureLearningModule(tf.keras.layers.Layer):
+    def __init__(self, a_input, a_variant, random_init, a_emb_alpha=0.1, ar=0.01, use_knn_reduction=True, convert_to_binary_knn=False, k_knn_red=5, gcn_prepro=True, embeddings=None, use_softmax_reduction=False, embsize=4, norm_adjmat=False, norm_lap_prepro=False, **kwargs):
+        super().__init__(**kwargs)
+        self.a_variant = a_variant
+        self.a_emb_alpha = a_emb_alpha  # value of 3 based on: https://github.com/nnzhan/MTGNN/blob/f811746fa7022ebf336f9ecd2434af5f365ecbf6/layer.py#L257
+        self.ar = ar                    # L1 Regularization
+        self.use_knn_reduction = use_knn_reduction
+        self.k_knn_red = k_knn_red
+        self.gcn_prepro = gcn_prepro
+        self.embeddings = embeddings
+        self.use_softmax_reduction = use_softmax_reduction
+        self.embsize = embsize
+        self.norm_adjmat = norm_adjmat
+        self.norm_lap_prepro = norm_lap_prepro
+        self.convert_to_binary = convert_to_binary_knn
+
+        print()
+        print("GSL used with following config:")
+        print("a_variant:", a_variant, "| random_init:", random_init,"| a_emb_alpha:", a_emb_alpha, "| ar:",ar,"| use_knn_reduction:", use_knn_reduction,"| k_knn_red:",k_knn_red,"| gcn_prepro:",gcn_prepro)
+        print()
+
+        # Since a bug in the used TensorFlow version, the AdjMat need to be hard coded added:
+        # NotImplementedError: Cannot convert a symbolic Tensor (StaticAttributeFeatures:0) to a numpy array. This error may indicate that you're trying to pass a Tensor to a NumPy call, which is not supported
+        # Print them after loading and insert them here why copy and paste
+
+        # MA NW AdjMat pre
+        adj_mat = [
+            [0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1,
+             1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0,
+             1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0],
+            [1, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0,
+             1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0],
+            [1, 1, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0,
+             1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0],
+            [1, 1, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0,
+             1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0],
+            [1, 1, 1, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0,
+             1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0],
+            [1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0,
+             1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 1, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 1, 1, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0,
+             1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0,
+             1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0,
+             1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0,
+             1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 1, 0, 0, 0, 0, 0, 0,
+             1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0,
+             1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1,
+             0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 1, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+             0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 1, 1, 1,
+             0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 1, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+             0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 1, 1, 1,
+             0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 1, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+             0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 1, 1,
+             0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 1, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+             0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 1,
+             0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 1, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+             0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0,
+             0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 1, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+             0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0,
+             0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0,
+             1, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0,
+             1, 1, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0,
+             1, 1, 1, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0,
+             1, 1, 1, 1, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0,
+             1, 1, 1, 1, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0,
+             1, 1, 1, 1, 1, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0,
+             1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1,
+             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1,
+             0, 0, 0, 0, 0, 0],
+            [1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0,
+             1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0],
+            [1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0,
+             1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0],
+            [1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0,
+             1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0],
+            [1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0,
+             1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0],
+            [1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0,
+             1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0],
+            [1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0,
+             1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0],
+            [1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0,
+             1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0],
+            [1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 0, 0, 0, 0, 0,
+             1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0],
+            [1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0,
+             1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0,
+             0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 1],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0,
+             0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 1],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1,
+             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 1,
+             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 1,
+             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0,
+             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0],
+            [1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             1, 1, 1, 1, 1, 1],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1,
+             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+             0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1,
+             0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1,
+             0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1,
+             0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1,
+             0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1,
+             0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1,
+             0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1,
+             0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 1, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+             0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1,
+             0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 1, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+             0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1,
+             0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 1, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1,
+             0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1,
+             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1,
+             0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1,
+             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1,
+             0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1,
+             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1,
+             0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1,
+             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1,
+             0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1,
+             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1,
+             0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1,
+             0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 1, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1,
+             0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1,
+             0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 1, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1,
+             0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1,
+             0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 1, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0,
+             0, 0, 0, 0, 0, 0],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 1, 1, 1, 1, 1],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             1, 0, 1, 1, 1, 1],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             1, 1, 0, 1, 1, 1],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             1, 1, 1, 0, 1, 1],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             1, 1, 1, 1, 0, 1],
+            [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0,
+             0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+             1, 1, 1, 1, 1, 0]]
+
+        # FT IJCNN 2021 Dateset / derived from KG
+        adj_mat = [
+            [0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                     [1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                     [1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                     [0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                     [0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                     [0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                     [0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                     [0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 1,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                     [0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                     [0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                     [0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                     [1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                     [0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                     [0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                     [0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                     [0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1,
+                      1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 1,
+                      1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 1,
+                      1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0,
+                      1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1,
+                      0, 1, 1, 1, 1, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1,
+                      1, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1,
+                      1, 1, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                     [0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1,
+                      1, 1, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                     [0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1,
+                      1, 1, 1, 1, 0, 1, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                     [0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1,
+                      1, 1, 1, 1, 1, 0, 0, 0, 0, 1, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      1, 0, 0, 0, 0, 0, 1, 1, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      1, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                     [0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                     [0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                     [0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1,
+                      0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 1, 1, 1, 1, 1, 1,
+                      0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 1, 0, 1, 1, 1, 1, 1,
+                      0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 1, 1, 1, 1,
+                      1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 1, 1, 1,
+                      0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 0, 1, 1,
+                      0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                     [0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 0, 1,
+                      0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                     [0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0,
+                      0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0,
+                      0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0,
+                      1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0,
+                      1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+                     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1,
+                      0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+                     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1],
+                     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1],
+                     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1],
+                     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1],
+                     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1],
+                     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1],
+                     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1],
+                     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1],
+                     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                      0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0]]
+
+        self.adj_mat_predefined = adj_mat
+
+        emb_ = [
+            [ 2.26304940e+00,2.21689400e+00,1.63770260e+00,7.87842450e-01
+, 1.13781940e+00,1.22992870e+00,2.02294800e+00,1.83767010e+00
+, 7.86027900e-01,1.46293530e+00,1.61317180e-01,2.45136980e+00
+, 1.56095370e+00,1.69575640e+00,2.20542600e+00,3.35723110e+00
+, 1.08146830e+00,8.58095300e-01,2.48766630e-01,1.10832050e+00
+, 5.98371300e-01,5.69097340e-01,7.84125450e-01,2.08520030e+00
+, 2.11509850e+00,1.42680180e+00,2.65034130e+00,2.70594700e+00
+, 1.51652440e-01,1.12264740e+00,1.37703060e+00,1.31381930e+00
+, 1.71257770e+00,1.23635050e+00,2.32216450e+00,2.69306370e+00
+, 4.09810870e-01,-1.77792200e-01,4.11929040e-01,2.14435630e+00
+,-5.00504640e-02,5.70469740e-01,2.62502400e-01,1.49225920e-01
+, 1.15373960e+00,7.69617740e-01,-4.30785830e-01,-3.81902160e-01
+, 1.15680500e+00,9.08381160e-01,1.10224200e+00,2.70219700e+00
+, 2.84611560e+00,1.58853980e+00,1.41786850e+00,1.51029970e+00
+, 1.65845440e+00,2.55317660e+00,3.23936130e+00,2.64382580e+00
+, 2.21925300e+00],
+                 [ 7.02211740e-01,9.58492500e-01,1.25481100e+00,4.82693100e-01
+                ,-4.73028240e-02,2.83888370e-01,-7.87265060e-01,-1.21420620e+00
+                ,-1.03099630e+00,1.53722770e+00,1.50846840e+00,1.85577790e+00
+                , 6.60446050e-01,1.17377610e+00,1.51120530e+00,9.27267970e-01
+                ,-1.23918020e+00,-1.17870490e+00,-8.80678950e-01,-1.48059310e+00
+                , 1.61235920e+00,1.11863670e+00,1.80504560e+00,1.94732670e+00
+                , 8.51870200e-01,9.36575950e-01,5.40112600e-03,4.27137230e-01
+                ,-1.17070960e+00,-1.94908210e+00,1.09823180e+00,1.25140640e+00
+                , 4.46695740e-01,1.56104860e+00,1.06094190e+00,4.55026450e-01
+                ,-1.48174940e+00,-1.23277760e+00,-1.38654120e+00,-3.65689720e-01
+                , 2.07139700e+00,2.08676620e+00,2.13319160e+00,1.01756500e+00
+                , 1.44630240e+00,2.16602800e+00,-7.72828160e-01,-8.08701100e-01
+                , 7.86986600e-01,9.15295600e-01,7.51291930e-01,2.10693480e+00
+                , 2.21788550e+00,2.32223800e+00,2.40790680e+00,2.44503100e+00
+                , 2.31649640e+00,1.44664190e+00,2.21611210e+00,2.54209420e+00
+                , 1.03501050e+00],
+                 [-8.90247900e-01,-9.22722900e-01,-7.72044100e-01,-8.61921550e-01
+                ,-1.49409370e-01,-3.33898200e-01,-1.10841920e+00,-3.40540170e-01
+                ,-2.34818700e+00,-8.68432700e-01,-1.97789740e+00,-4.70221580e-01
+                ,-9.81478300e-02,-7.47729400e-01,-9.41086900e-01,-1.18212210e+00
+                ,-1.07054140e+00,-1.68307820e+00,-1.90570800e+00,-1.93226890e+00
+                ,-7.82789100e-01,-4.64911640e-01,-8.80815000e-01,-9.14575500e-02
+                , 2.01147720e-02,-1.84540470e+00,-9.01878200e-01,-8.92211850e-01
+                ,-1.15074270e+00,-1.19241700e+00,3.77196730e-01,5.43011370e-01
+                , 1.92514060e-01,-8.11663340e-02,-3.14356400e-01,-5.74835730e-02
+                ,-6.25519750e-01,-3.68107440e-01,-3.37085800e-01,-4.87987500e-01
+                ,-1.68315860e+00,-1.09268360e+00,-1.67659220e+00,-2.08769350e+00
+                ,-1.26653660e+00,-2.68235640e+00,-2.50301170e+00,-1.87238810e+00
+                ,-7.91384700e-01,-8.48073240e-01,-7.88566950e-01,-4.68927620e-01
+                ,-4.60609500e-01,-8.50539900e-01,-1.10403110e+00,-9.11464000e-01
+                ,-4.71217270e-01,-2.59603760e+00,-8.68733900e-01,-2.00769380e+00
+                ,-1.17842750e+00],
+                 [-1.08965600e+00,-8.41365640e-01,-1.77899490e+00,-2.49395870e+00
+                ,-1.43864940e+00,-1.49307760e+00,-1.98084160e+00,-2.49366900e+00
+                ,-3.31623050e+00,6.65105000e-03,-1.69981930e+00,3.27364400e-02
+                ,-1.79750470e-01,-1.39807950e+00,-8.63808800e-01,-1.62603860e+00
+                ,-2.88277820e+00,-2.74000400e+00,-3.67558800e+00,-2.61797570e+00
+                ,-1.05211100e+00,-1.07846150e+00,-1.11938430e+00,-6.48095200e-01
+                ,-1.52349650e-01,-1.19856260e+00,-1.83558630e+00,-2.28239370e+00
+                ,-3.59460690e+00,-2.52324600e+00,7.01260800e-02,5.00000680e-02
+                , 4.40046900e-02,2.42099930e-02,-6.18888400e-01,-5.27290640e-01
+                ,-2.22578000e+00,-2.56516270e+00,-3.10356380e+00,-1.65642320e+00
+                ,-8.37052640e-01,-1.05300270e+00,-1.62743690e+00,-1.80311780e+00
+                ,-1.93392250e+00,-2.23392530e+00,-3.90359930e+00,-3.34420940e+00
+                ,-1.20882230e+00,-1.46052240e+00,-1.58387950e+00,1.50271490e-02
+                , 8.58347300e-03,-1.03511240e+00,-7.04136600e-01,-6.80758950e-01
+                ,-2.80122160e-01,-2.68598700e+00,-1.11007390e+00,-1.69505270e+00
+                ,-1.52356400e+00],
+                 [ 7.81926800e-01,8.84309600e-01,1.07727280e+00,1.99167970e+00
+                , 2.57976100e+00,2.26130150e+00,4.73179500e-01,1.25423670e+00
+                , 7.28149530e-01,-2.99286200e-01,-3.29088960e-01,-1.07044460e+00
+                ,-1.19736460e+00,-1.98088740e+00,-2.50630570e+00,-1.58174220e+00
+                ,-6.33770900e-01,-1.40284120e+00,-8.48739400e-01,-2.00337150e+00
+                ,-1.26443890e+00,-1.05504130e+00,-1.40850890e+00,-1.68392290e+00
+                ,-1.33404520e+00,-1.58816990e+00,-1.59660160e+00,-1.84245740e+00
+                ,-7.98646200e-01,-1.64914950e+00,-6.18084670e-02,1.76586780e-01
+                ,-7.62599050e-01,1.08917450e-01,-1.26684920e-01,-7.13829400e-01
+                ,-2.50006740e-01,4.32492320e-01,5.72921750e-01,-6.24596200e-01
+                , 6.24628370e-01,-4.94839160e-01,-1.57129000e+00,1.23398020e-01
+                , 6.86982100e-02,-1.06242180e+00,-1.25660540e+00,-2.04874550e-01
+                , 1.99088550e+00,1.95677020e+00,1.84793280e+00,-2.28027100e+00
+                ,-2.34484220e+00,-1.15886280e+00,-1.92435790e+00,-1.91830520e+00
+                ,-1.12492850e+00,-2.89343020e+00,-7.25320700e-01,-1.76880490e+00
+                ,-1.28798280e+00],
+                 [ 1.22194270e+00,1.17282810e+00,9.26345170e-01,2.08919480e+00
+                , 2.40203620e+00,2.09495350e+00,8.89028850e-01,2.01755790e+00
+                , 7.12295900e-01,1.05656500e+00,2.03052460e-01,1.30335600e+00
+                , 2.23970700e+00,1.74158040e+00,1.79218240e+00,1.20372490e+00
+                , 1.36772470e+00,1.10219090e+00,7.14661700e-01,1.38551080e+00
+                , 2.95641610e+00,3.38113710e+00,2.96957140e+00,2.92307730e+00
+                , 3.55027300e+00,2.22867770e+00,2.43882080e+00,2.27579160e+00
+                , 2.48087840e+00,3.55419850e+00,3.06207230e+00,3.36033180e+00
+                , 3.05068200e+00,2.13075070e+00,2.46297300e+00,2.60660620e+00
+                , 2.51545620e+00,2.80749800e+00,2.48574570e+00,2.50216600e+00
+                , 1.08374610e+00,1.71270690e+00,1.96611820e+00,1.45244670e+00
+                , 1.78942750e+00,1.19239130e+00,1.75007140e+00,1.28466640e+00
+                , 1.68095270e+00,1.55036400e+00,1.62239090e+00,1.75619070e+00
+                , 1.86087350e+00,1.92394580e+00,2.18430920e+00,2.38355640e+00
+                , 2.26758700e+00,7.05815100e-01,1.47502670e+00,1.75077780e+00
+                , 2.09681560e+00],
+                 [ 5.16668140e-01,3.81578800e-01,5.34804500e-01,-1.06307770e-01
+                , 2.80996170e-02,6.90708500e-02,1.15367230e+00,1.32460000e-01
+                , 1.32211220e-01,3.86225700e-02,6.41876200e-02,3.82092400e-01
+                ,-6.40715200e-03,3.17116860e-01,3.65999670e-01,-8.93591400e-01
+                ,-6.51286100e-01,-2.42081030e-01,-1.53546400e-01,-3.47680240e-01
+                ,-7.72282660e-01,-7.57424530e-01,-8.01065000e-01,-6.06577930e-01
+                ,-8.78696800e-01,-1.73656990e+00,-1.85395680e+00,-1.69530650e+00
+                ,-1.52264920e+00,-1.92503940e+00,-5.13885000e-01,-6.64037940e-01
+                ,-6.92114350e-01,-4.79556230e-01,-1.48860130e+00,-1.56627180e+00
+                ,-9.51838850e-01,-1.60917640e+00,-1.06747440e+00,-9.83871900e-01
+                ,-9.68579650e-01,-3.53319850e-01,-3.94246900e-01,-1.62485840e+00
+                ,-1.80343430e+00,-1.63785270e+00,-1.08211870e+00,-7.92680200e-01
+                ,-5.52426100e-02,5.24791600e-02,-3.61696520e-02,5.33747700e-01
+                , 6.08591900e-01,-3.33274220e-01,-1.32922300e-01,-9.74305000e-02
+                , 1.84212460e-01,-1.04603180e+00,-7.28797700e-01,-1.47217490e+00
+                ,-1.21442300e+00],
+                 [-2.41830900e+00,-2.22331800e+00,-2.92130800e+00,-2.27232500e+00
+                ,-1.54698680e+00,-1.53290140e+00,-1.26265060e+00,-9.08872800e-01
+                ,-1.23364150e+00,-2.97716360e+00,-3.90177130e+00,-2.82550290e+00
+                ,-2.64023040e+00,-3.16333870e+00,-2.87460520e+00,-2.22575120e+00
+                ,-2.62620330e+00,-2.52298330e+00,-3.53340720e+00,-2.30330440e+00
+                ,-1.98681410e+00,-2.15940450e+00,-2.12171320e+00,-2.15269450e+00
+                ,-2.40837550e+00,-1.43293400e+00,-1.69255840e+00,-1.61628040e+00
+                ,-2.94732800e+00,-1.20313920e+00,-2.85707830e+00,-2.87512020e+00
+                ,-2.60463300e+00,-2.77797250e+00,-1.60267700e+00,-1.26176430e+00
+                ,-1.76619240e+00,-2.49747420e+00,-2.03883200e+00,-3.40197750e+00
+                ,-3.57322200e+00,-3.71004130e+00,-2.86244490e+00,-1.80170120e+00
+                ,-2.95818200e+00,-2.00023500e+00,-2.79630330e+00,-2.63124280e+00
+                ,-1.43707070e+00,-1.68535290e+00,-1.68256220e+00,-2.13656620e+00
+                ,-2.18708100e+00,-3.13394860e+00,-2.12843920e+00,-2.18290570e+00
+                ,-2.96950240e+00,-1.58658640e+00,-2.77517900e+00,-1.68554260e+00
+                ,-1.65264370e+00],
+                 [-1.29594410e+00,-1.32316760e+00,-1.81939600e+00,-1.93182370e+00
+                ,-9.77009800e-01,-8.00699530e-01,1.18671050e+00,1.18064860e+00
+                , 1.04801080e-01,5.10602400e-01,-1.45169650e+00,4.26499360e-02
+                ,-1.87110980e-01,-6.19873600e-01,3.35138980e-01,8.48431200e-01
+                , 1.14231920e+00,1.19824210e+00,-6.81607200e-02,-5.70934950e-01
+                ,-1.47930500e+00,-1.36016960e+00,-1.73840180e+00,-9.31169840e-02
+                ,-9.56964200e-01,4.75836300e-01,-4.93393350e-02,1.85924000e-01
+                ,-8.00138060e-01,-2.08917080e-01,2.16972370e-01,1.44770980e-01
+                ,-9.00299700e-02,1.41091900e+00,2.52463220e+00,2.10562940e+00
+                , 1.93498270e+00,1.76759450e-01,1.62527360e+00,8.38968300e-01
+                ,-1.23619500e+00,-7.51708600e-01,-1.42184220e+00,9.89647750e-01
+                , 1.40589170e+00,2.89863500e-01,-1.60968700e+00,6.02477600e-01
+                ,-2.75729500e-01,-5.47178150e-01,-7.59922270e-01,1.00969350e+00
+                , 7.76198500e-01,-1.34557680e+00,-1.10021820e+00,-1.01452610e+00
+                ,-1.00863926e-01,6.71068500e-01,1.84439950e+00,5.78688860e-01
+                , 2.03525600e+00],
+                 [ 2.15125440e+00,2.14771560e+00,2.05116270e+00,2.25434470e+00
+                , 2.21789720e+00,2.57852390e+00,1.38021140e+00,1.48521440e+00
+                ,-3.39756340e-01,8.50397000e-01,6.80838170e-01,1.82890000e+00
+                , 1.19648230e+00,2.21990850e+00,7.46537740e-01,2.02612330e+00
+                , 1.63131380e+00,2.23648240e-01,9.64859000e-01,9.27750400e-01
+                , 1.91728340e-01,1.15105070e-01,9.89199700e-02,1.58038700e+00
+                , 8.20019840e-01,-1.05370080e+00,1.37201550e+00,1.84554920e+00
+                , 1.17357030e+00,2.12631840e-01,6.34338200e-01,7.56589800e-01
+                , 6.60115240e-01,1.51119520e+00,9.99919300e-01,7.55265900e-01
+                , 1.31018430e-01,1.16689190e+00,1.28367470e+00,1.28194880e+00
+                ,-4.92652800e-01,-2.89709700e-01,-6.60691860e-01,-1.34312270e+00
+                ,-9.74576300e-01,-8.42483700e-01,-4.83071360e-01,-2.33758510e-01
+                , 3.02894950e-01,1.64819120e-01,3.08905360e-01,1.25100280e+00
+                , 1.49633320e+00,9.96469900e-01,3.96520560e-01,4.06722430e-01
+                , 3.21588670e-01,-2.73768980e-02,1.45104940e+00,7.54770200e-01
+                , 5.44981920e-02],
+                 [-2.01471600e+00,-2.13310050e+00,-1.98710130e+00,-3.18686430e-01
+                ,-3.47391870e-01,-4.09294340e-01,-1.15424380e+00,-5.73345100e-01
+                ,-3.20970120e-01,-6.32857260e-01,-5.12778100e-01,-1.36626140e+00
+                ,-2.76988000e-01,2.05804820e-01,6.90805240e-02,-3.04730870e+00
+                ,-8.31252160e-01,-1.12659610e-01,6.28375400e-02,-1.84535120e+00
+                , 8.00646250e-01,1.37261710e+00,7.59818900e-01,9.65253340e-02
+                ,-1.46119640e-01,2.21234930e-01,-2.60644170e+00,-1.45542870e+00
+                , 8.57635800e-01,-8.45071000e-01,1.08528550e+00,1.20576850e+00
+                , 3.67808860e-02,1.03168180e+00,-4.51264860e-01,-1.36013530e+00
+                , 1.01091840e+00,8.35757100e-01,6.88669500e-01,-3.65459080e-01
+                , 2.85997060e-01,1.25003960e+00,1.72904410e+00,6.14879500e-01
+                , 9.67228400e-01,8.24103300e-01,2.62407750e-01,8.03531470e-01
+                ,-6.57378800e-01,-6.84901900e-01,-8.59286900e-01,1.62428900e-02
+                ,-8.83483140e-02,2.17206390e-01,4.81792870e-01,5.54431900e-01
+                , 9.11284200e-01,-1.10621680e+00,-9.35654460e-01,-2.63968900e-01
+                ,-1.78772520e-01],
+                 [ 7.95421200e-02,1.71237130e-01,-2.47819960e-01,1.12732060e+00
+                , 9.62937600e-01,1.05724560e+00,2.41341730e+00,3.15948920e+00
+                , 3.15476660e+00,1.35658500e+00,3.77080980e-01,4.52828400e-01
+                ,-3.84324070e-01,-9.99218300e-01,8.93652400e-01,1.21494700e+00
+                ,-4.58188380e-01,9.98855770e-01,-3.36551430e-01,-2.67992880e-01
+                , 1.59750250e+00,1.53145490e+00,1.63541390e+00,1.59181240e+00
+                , 1.02280830e+00,3.63372100e+00,1.33004570e+00,2.02371640e+00
+                , 8.91236360e-01,1.52984340e+00,2.24338430e-01,5.17606900e-01
+                , 5.94031330e-01,5.02177300e-01,3.27579860e+00,2.13267330e+00
+                , 1.91555400e+00,4.19699250e-01,8.10972900e-01,-1.09932550e+00
+                , 1.14508450e+00,-3.89202480e-01,2.82034460e-01,3.08420040e+00
+                , 1.55163240e+00,2.05459020e+00,8.65982550e-02,2.31860220e-01
+                , 1.78188340e+00,1.60514960e+00,1.50377550e+00,9.00018000e-02
+                , 4.12438850e-02,-3.10508900e-01,3.17718360e-01,2.60243770e-01
+                ,-5.40552800e-01,1.66768070e+00,1.20533810e+00,2.41684320e+00
+                , 8.93015400e-01],
+                 [ 6.46634600e-01,5.56257400e-01,7.07088700e-01,1.46810940e+00
+                , 1.42495260e+00,1.30714060e+00,-9.76218200e-01,-2.38435980e-01
+                ,-7.45891100e-01,5.22532300e-01,7.20856250e-01,-6.79061860e-02
+                , 7.86633940e-02,2.55402420e-01,-2.51900400e-01,6.09086100e-01
+                , 8.34059660e-01,9.94008100e-02,8.00160500e-01,-1.06259010e+00
+                ,-1.71925260e-02,2.20545040e-01,2.50361520e-02,2.83872130e-02
+                , 2.89684500e-01,-2.41345760e-01,3.54595040e-01,-2.08792310e-02
+                , 1.03593410e+00,-8.01869100e-01,1.44965100e+00,1.55051490e+00
+                , 8.59527200e-01,1.58417860e+00,1.28471760e+00,6.05889200e-01
+                , 4.41041440e-01,1.44609940e+00,1.29820470e+00,2.36068820e+00
+                , 1.72952580e+00,2.03697940e+00,8.04541200e-01,1.33648720e+00
+                , 2.48795300e+00,1.23359680e+00,4.06378920e-01,1.28838110e+00
+                , 8.59950240e-01,9.26766600e-01,9.52919100e-01,-1.63514210e-01
+                ,-3.25429860e-01,9.68879040e-01,-7.36998900e-02,-3.05688260e-03
+                , 1.19062410e+00,-2.19323050e-01,1.76732720e+00,3.57173320e-01
+                , 1.14726040e+00],
+                 [-1.38884520e+00,-1.14901230e+00,-1.08358370e+00,-9.19808800e-01
+                ,-2.46531340e-01,7.08775100e-02,-2.10453500e-01,7.58739350e-01
+                , 1.58078580e+00,1.24109330e+00,5.21919500e-01,1.02668380e+00
+                , 2.49766450e+00,2.44479130e+00,3.15129760e+00,7.03892350e-01
+                , 6.59649970e-01,1.33776600e+00,6.57449660e-01,2.60081650e-01
+                , 9.51088150e-02,-2.95301620e-01,1.29620370e-01,2.96278450e+00
+                ,-6.96177000e-01,7.79887740e-01,9.06998040e-01,1.73255630e+00
+                , 1.52862640e+00,5.92220000e-01,-1.91936250e+00,-2.01697180e+00
+                ,-1.10682580e+00,4.50611000e-01,-4.91873400e-01,-5.38450960e-01
+                , 3.75073740e-02,-3.46128050e-01,-7.17859700e-01,-2.26107200e+00
+                ,-1.16606840e+00,-1.77018270e+00,-7.04887200e-01,-6.45031100e-01
+                ,-1.67453800e+00,-5.89857200e-01,-1.19560670e+00,-9.49783560e-01
+                ,-2.12872500e+00,-2.03286890e+00,-2.00411600e+00,9.76646600e-01
+                , 1.07665700e+00,-1.39558960e+00,-5.96889850e-01,-6.50667900e-01
+                ,-1.98935190e+00,1.42889000e+00,-1.94027250e+00,-4.90475300e-01
+                ,-1.92387490e+00],
+                 [-5.67263700e-01,-6.63807300e-01,-1.28348300e+00,2.19457500e-01
+                ,-3.38136700e-01,-4.66171060e-01,-2.10702850e+00,-1.31501140e+00
+                ,-2.17983480e+00,-1.46683660e+00,-8.57129200e-01,-1.03473380e+00
+                ,-3.05793700e-01,-1.05953634e-01,-9.09244700e-02,-4.03970360e-01
+                ,-1.86963490e+00,-1.30932320e+00,-1.58589550e+00,2.65498370e-01
+                , 1.86676200e+00,1.76608370e+00,1.90441500e+00,1.02523050e+00
+                , 1.72595580e+00,6.04345700e-01,1.26743290e+00,6.73123500e-01
+                , 7.46097400e-01,1.26561690e+00,-4.05474130e-01,-4.93578000e-01
+                , 8.80550740e-01,-1.95253530e+00,-1.38706680e+00,-2.32195350e-01
+                ,-1.29515720e+00,-3.78161340e-01,-1.83965180e+00,-1.57687890e+00
+                ,-6.15303640e-01,-7.55356670e-01,7.44996400e-01,-8.97980400e-01
+                ,-2.24448280e+00,-9.54997200e-01,4.56803470e-01,-1.74186480e+00
+                ,-1.36969570e+00,-1.34602690e+00,-9.03639730e-01,-8.04149400e-01
+                ,-6.11443040e-01,3.13239720e-01,9.79348960e-01,9.13730260e-01
+                ,-6.23508500e-01,-6.56420600e-01,-2.19563560e+00,-5.23416300e-01
+                ,-1.37921830e+00],
+                 [ 1.51657220e-01,6.48623800e-02,-6.89349200e-02,-2.69240950e-01
+                ,-4.47683300e-01,-2.05889840e-01,7.14821000e-01,-6.81977700e-02
+                , 4.28372650e-01,3.67564100e+00,3.19740700e+00,2.45663120e+00
+                , 2.91680400e+00,1.24484730e+00,2.81305930e+00,1.30051980e+00
+                , 2.02681920e+00,2.91897250e+00,2.38087650e+00,1.64950930e+00
+                ,-1.22057780e-01,1.75758590e-01,-2.13966520e-01,1.27641790e+00
+                , 1.44037980e-01,-4.30033480e-01,1.29034220e-01,-8.59853400e-01
+                , 1.62557100e+00,8.76796300e-01,5.17899330e-01,5.47563100e-01
+                , 7.90115830e-01,1.95550320e+00,6.57454500e-01,3.22867540e-01
+                , 1.83248400e+00,6.98639450e-01,6.35608000e-01,1.44321470e+00
+                , 2.08471600e+00,1.71654370e-01,-4.16828200e-01,7.74106500e-01
+                ,-9.62856500e-01,-1.63373760e+00,9.53617400e-01,1.22826610e+00
+                ,-8.45290960e-01,-9.95627000e-01,-1.09219120e+00,1.66412700e-01
+                , 7.15269900e-02,-1.24919040e+00,-1.35671930e+00,-1.37273360e+00
+                ,-7.58151800e-01,-1.82215250e+00,-1.35426800e+00,-2.84295900e+00
+                ,-1.90825260e+00]
+                ]
+        self.embeddings = np.asarray(emb_).transpose() # swap (16,61) to (61,16)
+
+        print("GSL module loaded embeddings with shape: ", np.asarray(self.embeddings).shape,"and an adjacency matrix with shape:", np.asarray(self.adj_mat_predefined).shape)
+
+        if self.a_variant in [1, 2, 3]:
+
+            if random_init:
+                initializer = tf.keras.initializers.RandomNormal(mean=0.5, stddev=0.25)
+                #self.a_params = self.add_weight(shape=(a_input.shape[1], a_input.shape[1]), initializer=initializer,trainable=True)
+            else:
+                #a_input = tf.convert_to_tensor(a_input, dtype=tf.float32)
+                #a_input = tf.keras.layers.Layer(name='a_l_passthrough')(a_input)
+                #initializer = tf.keras.initializers.constant(inputs)
+                #initializer = tf.keras.initializers.constant(value=tf.cast(a_input, tf.float32))
+                initializer = tf.keras.initializers.constant(self.adj_mat_predefined)
+
+            #self.a_params = tf.Variable(adj_mat, dtype=tf.float32, trainable=True)
+            self.a_params = self.add_weight(shape=(a_input.shape[1], a_input.shape[1]), initializer=initializer, trainable=True, name='AdjMat_params')
+            # Edge Features for ECCConv
+            #self.e_params = self.add_weight(shape=(a_input.shape[1], a_input.shape[1],embsize), initializer=initializer,trainable=True, name='EdgeMat_params')
+            #tf.print("a_params initialized:", self.a_params)
+
+        elif self.a_variant in [4, 5, 6, 7, 8, 9]:
+            trainable = True
+
+            if random_init:
+                initializer = tf.keras.initializers.RandomNormal
+                e1_init, e2_init = initializer(mean=0.5, stddev=0.25), initializer(mean=0.5, stddev=0.25)
+            else:
+                e1_init, e2_init = tf.keras.initializers.constant(self.embeddings), tf.keras.initializers.constant(self.embeddings)
+                trainable = False
+
+            self.e1 = self.add_weight(shape=(61, self.embsize), trainable=trainable, name='e1', initializer=e1_init)
+            if not self.a_variant in [6,8,9]:
+                self.e2 = self.add_weight(shape=(61, self.embsize), trainable=trainable, name='e2', initializer=e2_init)
+            self.e1_lin_layer = tf.keras.layers.Dense(self.embsize, activation=None, name='e1_lin_transform')
+            if not self.a_variant in [6,8,9]:
+                self.e2_lin_layer = tf.keras.layers.Dense(self.embsize, activation=None, name='e2_lin_transform')
+
+        elif self.a_variant == 0:
+            print("No parameter required since no AdjMat is learned with variant 0")
+
+        else:
+            raise ValueError('Undef. A_Variant:', self.a_variant)
+
+        if self.a_variant == 9:
+            #'''
+            initializer = tf.keras.initializers.constant(self.adj_mat_predefined)
+            self.a_params = self.add_weight(shape=(a_input.shape[1], a_input.shape[1]), initializer=initializer,
+                                            trainable=False, name='AdjMat_params')
+
+            self.add_self_loops = True
+            self.use_bias = False
+            self.dropout_rate = 0.2
+            input_dim = self.embsize #input_shape[0][-1]
+            self.attn_heads = 5
+            self.channels = 32
+            self.kernel_initializer = "glorot_uniform"
+            self.attn_kernel_initializer ="glorot_uniform"
+            self.kernel_regularizer = None
+            self.kernel_constraint = None
+            self.attn_kernel_regularizer = None
+            self.attn_kernel_constraint = None
+            self.bias_initializer = "zeros"
+            self.bias_regularizer = None
+            self.bias_constraint = None
+
+            self.kernel = self.add_weight(
+                name="kernel",
+                shape=[input_dim, self.attn_heads, self.channels],
+                initializer=self.kernel_initializer,
+                regularizer=self.kernel_regularizer,
+                constraint=self.kernel_constraint,
+            )
+            self.attn_kernel_self = self.add_weight(
+                name="attn_kernel_self",
+                shape=[self.channels, self.attn_heads, 1],
+                initializer=self.attn_kernel_initializer,
+                regularizer=self.attn_kernel_regularizer,
+                constraint=self.attn_kernel_constraint,
+            )
+            self.attn_kernel_neighs = self.add_weight(
+                name="attn_kernel_neigh",
+                shape=[self.channels, self.attn_heads, 1],
+                initializer=self.attn_kernel_initializer,
+                regularizer=self.attn_kernel_regularizer,
+                constraint=self.attn_kernel_constraint,
+            )
+            if self.use_bias:
+                self.bias = self.add_weight(
+                    shape=[self.output_dim],
+                    initializer=self.bias_initializer,
+                    regularizer=self.bias_regularizer,
+                    constraint=self.bias_constraint,
+                    name="bias",
+                )
+            self.dropout = tf.keras.layers.Dropout(self.dropout_rate, dtype=self.dtype)
+            #'''
+
+
+    def call(self, inputs, **kwargs):
+        if self.ar == None:
+            ar = tf.keras.regularizers.L1(self.ar)
+        else:
+            ar = None
+        al = None
+        if self.a_variant == 0:
+                # Nothing is learned, predefined matrix is directly used
+            a = self.adj_mat_predefined
+        elif self.a_variant == 1:  #
+            #Ensure positive values only
+            a = tf.keras.layers.ReLU(name='a_relu', activity_regularizer=ar)(self.a_params)
+            #e1 = tf.keras.layers.ReLU(name='e_node_features_relu', activity_regularizer=ar)(self.e_params)
+            #a = self.a_params
+            #tf.print("self.a_params:", a)
+
+        elif self.a_variant == 2:
+            # Based on Fatemi et al. 2021 https://arxiv.org/abs/2102.05034, apart from l1 norm regularization
+            a = tf.keras.layers.ELU(name='a_opt_act', activity_regularizer=ar)(self.a_params)
+            a = tf.add(a, 1, name='a_opt_add')
+
+        elif self.a_variant == 3:
+            # Residual variant
+            a = tf.keras.layers.ELU(name='a_emb_elu', activity_regularizer=ar)(self.a_params)
+            a = tf.add(a, 1, name='a_opt_add')
+            a = tf.add(a, self.adj_mat_predefined, name='a_opt_add')
+
+        elif self.a_variant == 4:
+            # Corresponds to Wu et al. Uni-directed-A (author's proposed variant)
+            # Please note that implementations use biases although it is not mentioned
+            # in the paper's equations (c.f. e.g. https://github.com/nnzhan/MTGNN/blob/f811746fa7022ebf336f9ecd2434af5f365ecbf6/layer.py#L223)
+            # linear transformation applied to the embedding matrix
+            #e1 = tf.keras.layers.Dense(16, activation=None, name='e1_lin_transform')(self.e1)
+            e1 = self.e1_lin_layer(self.e1)
+            #e2 = tf.keras.layers.Dense(16, activation=None, name='e2_lin_transform')(self.e2)
+            e2 = self.e2_lin_layer(self.e2)
+
+            # dot product between each embedding
+            m_1_2 = tf.matmul(e1, e2, transpose_b=True, name='a_emb_mat_mul_e1_e2')
+            m_2_1 = tf.matmul(e2, e1, transpose_b=True, name='a_emb_mat_mul_e2_e1')
+
+            # Proposed Unidirected-A of connection the dots by Wu et al.
+            m = m_1_2 - m_2_1
+
+            m = tf.keras.layers.Activation('tanh', name='m_tanh_alpha')(self.a_emb_alpha * m)
+            a = tf.keras.layers.ReLU(name='a_emb_relu', activity_regularizer=ar)(m)
+
+        elif self.a_variant == 5:
+            # Corresponds to Wu et al. directed-A
+
+            # linear transformation applied to the embedding matrix
+            #e1 = tf.keras.layers.Dense(16, activation=None, name='e1_lin_transform')(self.e1)
+            e1 = self.e1_lin_layer(self.e1)
+            #e2 = tf.keras.layers.Dense(16, activation=None, name='e2_lin_transform')(self.e2)
+            e2 = self.e2_lin_layer(self.e2)
+
+            # dot product between each embedding
+            m_1_2 = tf.matmul(e1, e2, transpose_b=True, name='a_emb_mat_mul_e1_e2')
+
+            # Proposed Unidirected-A of connection the dots by Wu et al.
+            m = m_1_2
+
+            m = tf.keras.layers.Activation('tanh', name='m_tanh_alpha')(self.a_emb_alpha * m)
+            a = tf.keras.layers.ReLU(name='a_emb_relu', activity_regularizer=ar)(m)
+
+        elif self.a_variant == 6:
+            # Corresponds to Wu et al. UNdirected-A
+
+            # linear transformation applied to the embedding matrix
+            e1 = self.e1_lin_layer(self.e1)
+
+            # dot product between each embedding
+            m_1_1 = tf.matmul(e1, e1, transpose_b=True, name='a_emb_mat_mul_e1_e2')
+
+            # Proposed Unidirected-A of connection the dots by Wu et al.
+            m = m_1_1
+
+            m = tf.keras.layers.Activation('tanh', name='m_tanh_alpha')(self.a_emb_alpha * m)
+            a = tf.keras.layers.ReLU(name='a_emb_relu', activity_regularizer=ar)(m)
+
+        elif self.a_variant == 7:
+            # Pairwise Cosine similarity of knowledge graph embeddings
+
+            # linear transformation applied to the embedding matrix
+            #e1 = tf.keras.layers.Dense(16, activation=None, name='e1_lin_transform')(self.e1)
+            e1 = self.e1_lin_layer(self.e1)
+            #e2 = tf.keras.layers.Dense(16, activation=None, name='e2_lin_transform')(self.e2)
+            e2 = self.e2_lin_layer(self.e2)
+
+            # pairwise cosine similarity
+            x = tf.nn.l2_normalize(e1, axis=-1)
+            y = tf.nn.l2_normalize(e2, axis=-1)
+            m = tf.matmul(x, y, transpose_b=True)
+
+            a = tf.keras.layers.ReLU(name='a_emb_relu', activity_regularizer=ar)(m)
+
+        elif self.a_variant == 8:
+            # Pairwise Cosine similarity of knowledge graph embeddings
+
+            # linear transformation applied to the embedding matrix
+            #e1 = tf.keras.layers.Dense(16, activation=None, name='e1_lin_transform')(self.e1)
+            e1 = self.e1_lin_layer(self.e1)
+            #e2 = tf.keras.layers.Dense(16, activation=None, name='e2_lin_transform')(self.e2)
+            #e2 = self.e2_lin_layer(self.e2)
+
+            # pairwise cosine similarity
+            x = tf.nn.l2_normalize(e1, axis=-1)
+            y = tf.nn.l2_normalize(e1, axis=-1)
+            m = tf.matmul(x, y, transpose_b=True)
+
+            a = tf.keras.layers.ReLU(name='a_emb_relu', activity_regularizer=ar)(m)
+
+        elif self.a_variant == 9:
+            # results in: https://github.com/xuannianz/EfficientDet/issues/240
+
+            #attention based
+
+            # linear transformation applied to the embedding matrix
+            e1 = self.e1_lin_layer(self.e1)
+
+            #inputs[1] = tf.concat([inputs[1], tf.expand_dims(e1, 0)], axis=2)
+            #tf.print("inputs[1].shape:", inputs[1].shape)
+            #x = inputs[1]
+            #a = inputs[0]
+            a = self.a_params
+            x = e1
+            shape = tf.shape(a)[:-1]
+            if self.add_self_loops:
+                a = tf.linalg.set_diag(a, tf.ones(shape, a.dtype))
+            x = tf.einsum("...NI , IHO -> ...NHO", x, self.kernel)
+            attn_for_self = tf.einsum("...NHI , IHO -> ...NHO", x, self.attn_kernel_self)
+            attn_for_neighs = tf.einsum(
+                "...NHI , IHO -> ...NHO", x, self.attn_kernel_neighs
+            )
+            attn_for_neighs = tf.einsum("...ABC -> ...CBA", attn_for_neighs)
+
+            attn_coef = attn_for_self + attn_for_neighs
+            attn_coef = tf.nn.leaky_relu(attn_coef, alpha=0.2)
+
+            mask = tf.where(a == 0.0, -10e9, 0.0)
+            mask = tf.cast(mask, dtype=attn_coef.dtype)
+            attn_coef += mask[..., None, :]
+            attn_coef = tf.nn.softmax(attn_coef, axis=-1)
+            attn_coef_drop = self.dropout(attn_coef)
+
+            output = tf.einsum("...NHM , ...MHI -> ...NHI", attn_coef_drop, x)
+
+            a_out = attn_coef
+
+            #print("a_out:", a_out)
+            #a_out = tf.transpose(a_out, perm=[0, 1, 3, 2])
+            a_out = tf.transpose(a_out, perm=[0, 2, 1])
+            a = tf.reduce_mean(a_out, axis=-1)
+            #print("a_out:", a)
+            #a = np.asarray(self.adj_mat_predefined)
+
+        else:
+            raise ValueError()
+
+        # Softmax Reduction:
+        if self.use_softmax_reduction:
+            softmax_1 = tf.keras.layers.Softmax(axis=-1)
+            softmax_2 = tf.keras.layers.Softmax(axis=-2)
+            a_1 = softmax_1(a)
+            a_2 = softmax_2(a)
+            a = tf.add(a_1, a_2)
+        # kNN Reduction:
+        if self.use_knn_reduction:
+            a = knn_reduction(a, self.k_knn_red, convert_to_binary=self.convert_to_binary)
+        # GCN version:
+        if self.gcn_prepro:
+            # GCN as normally used: al = gcn_preprocessing(a, symmetric=False, add_I=True)
+            al = gcn_preprocessing(a, symmetric=False, add_I=True)
+        # Normalized Laplacian
+        elif self.norm_adjmat:
+            al = normalized_adjmat(a, symmetric=False)
+        # Normalized Laplacian
+        elif self.norm_lap_prepro:
+            al = normalized_laplacian(a, symmetric=False)
+        else:
+            al = a
+        # tf.print("al:",al)
+
+        if self.a_variant in [6,8]:
+            return al,e1
+        else:
+            return al
+
+
+    def get_config(self):
+        config = super(GraphStructureLearningModule, self).get_config()
+
+        if self.a_variant == 3: #A_Variant.is_emb_variant(self.a_variant):
+            config.update({"e1": self.e1})
+            config.update({"e2": self.e2})
+        else:
+            config.update({"a_params": self.a_params})
+
+        return config
+
 
 class GraphSimilarity(NN):
 
@@ -1480,6 +2930,30 @@ class Dilated2DConvLayer(tf.keras.layers.Layer):
     def compute_output_shape(self, input_shape):
         return input_shape
 
+class GraphStructureLearningEmbLayer(tf.keras.layers.Layer):
+    def __init__(self, size, **kwargs):
+        super(GraphStructureLearningEmbLayer, self).__init__()
+        self.size = size
+
+    def build(self, input_shape):
+
+        self.embedding_weights = self.add_weight(name='embedding_weights',
+                                              shape=self.size,
+                                              initializer=tf.keras.initializers.glorot_uniform,
+                                              trainable=True)
+        super(GraphStructureLearningEmbLayer, self).build(input_shape)
+
+    # noinspection PyMethodOverridingd
+    def call(self, input_):
+        # Add weight
+        feature_map = tf.nn.conv2d(input_, self.kernel_weights,
+                                       strides=self.strides, padding="VALID",
+                                       dilations=self.dilation_rate)
+        return feature_map
+
+    def compute_output_shape(self, input_shape):
+        return input_shape
+
 class FilterRestricted1DConvLayer(tf.keras.layers.Layer):
     # Work in Progress (WIP del4pub)
     # This 1D Conv is restricted to only consider input for each data
@@ -1985,7 +3459,7 @@ class FFNN_SimpleSiam_Prediction_MLP(NN):
 
         x = input
         ''''''
-        x = tf.keras.layers.Dropout(rate = 0.0)(x)
+        x = tf.keras.layers.Dropout(rate = 0.2)(x)
 
         print("Note that Prediction MLP in Simple Siam should be a bottleneck structure!")
         for units in layers:
@@ -1994,7 +3468,7 @@ class FFNN_SimpleSiam_Prediction_MLP(NN):
             # Activation changed from relu to leakyrelu because of dying neurons
             #x_1_ = tf.keras.layers.LeakyReLU()(x_1_)
             x_1_ = tf.keras.layers.ReLU()(x_1_)
-            x_1_ = tf.keras.layers.BatchNormalization()(x_1_)
+            #x_1_ = tf.keras.layers.BatchNormalization()(x_1_)
             #x_1_ = tf.math.l2_normalize(x_1_, axis=1)
 
 
@@ -2363,7 +3837,7 @@ class FFNN_SimpleSiam_Prediction_MLP_Backup_03_05(NN):
         self.model = tf.keras.Model(inputs=[input, input_2], outputs=[output,output_2,output_3,x,i_x2,i_x3])
         #self.model = tf.keras.Model(inputs=[input, input_2], outputs=[output])
 
-class FFNN_SimpleSiam_Prediction_MLP_RESIDUAL_ANO_06_05_22(NN):
+class FFNN_SimpleSiam_Prediction_MLP_RESMUL_29_05_2022(NN):
 
     def __init__(self, hyperparameters, input_shape):
         super().__init__(hyperparameters, input_shape)
@@ -2402,14 +3876,23 @@ class FFNN_SimpleSiam_Prediction_MLP_RESIDUAL_ANO_06_05_22(NN):
         #x_1_ = tf.keras.layers.BatchNormalization()(x_1_)
         #x_1_ = tf.keras.layers.Dropout(rate=0.1)(x_1_)
         f_x_1 = tf.keras.layers.Dense(units=128, use_bias=True)(x_1_)
-
+        '''
+        x_1_ = tf.keras.layers.Dense(units=256, use_bias=True)(z + f_x_1)
+        x_1_ = tf.keras.layers.ReLU()(x_1_)
+        # x_1_ = tf.keras.layers.BatchNormalization()(x_1_)
+        # x_1_ = tf.keras.layers.Dropout(rate=0.1)(x_1_)
+        f_x_1_ = tf.keras.layers.Dense(units=128, use_bias=True)(x_1_)
+        '''
+        #'''
         x_2_ = tf.keras.layers.Dense(units=256, use_bias=True)(z)
         x_2_ = tf.keras.layers.ReLU()(x_2_)
         #x_1_ = tf.keras.layers.BatchNormalization()(x_1_)
         #x_1_ = tf.keras.layers.Dropout(rate=0.1)(x_1_)
         f_x_2 = tf.keras.layers.Dense(units=128, use_bias=True)(x_2_)
+        #'''
 
-        h_z =(1 + f_x_2) * z + f_x_1
+        h_z =(1 + f_x_2) * z + f_x_1 #+ f_x_1_
+        #h_z = z + f_x_1 + f_x_2
 
         #h_z = tf.keras.layers.Add()([f_x_1, z])
 

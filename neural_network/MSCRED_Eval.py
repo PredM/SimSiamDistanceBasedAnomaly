@@ -2123,7 +2123,7 @@ def generated_embedding_query_2(set_of_anomalous_data_streams, embeddings_df, ag
 
     for i, row in embeddings_df.iterrows():
         ind = i.lower()
-        if "label_txt" in ind and "_class" in ind and "__label__" in ind and "predm#" in ind:
+        if "label_txt" in ind and "_class" in ind and not "__label__" in ind and "predm#" in ind:
             # its a class representing a label of the data set
             #print("ind.split("/")[-1]", ind.split("/")[-1])
             print(ind)
@@ -2331,7 +2331,7 @@ def execute_kNN_label_embedding_search(query_embedding, embedding_df, dataset, g
     pos = 0
     found_a_label = False
     for rank, found_embedding in enumerate(query_results):
-        if "PredM#Label_" in found_embedding and not "__label__" in found_embedding:
+        if "PredM#Label_" in found_embedding and "__label__" in found_embedding:
             idx = found_embedding.find("PredM#Label_")
             extracted_emb = found_embedding[idx:].lower()
             if extracted_emb in mappingDict.values():
@@ -2535,14 +2535,15 @@ def get_labels_from_knowledge_graph_embeddings_from_anomalous_data_streams_permu
             print("Example:",i,"| Gold Label:", y_test_labels[i],"\n")
             ordered_data_streams = store_relevant_attribut_attr_name[i]
             print("Relevant attributes ordered asc: ", ordered_data_streams,"\n")
-            print(len(store_relevant_attribut_distance[i])," - ", len(ordered_data_streams), " - ", len(store_relevant_attribut_index[i]))
-            print("store_relevant_attribut_name[i]", store_relevant_attribut_distance[i],"| store_relevant_attribut_idx[i]:", store_relevant_attribut_attr_name[i],"| store_relevant_attribut_dis[i]:", store_relevant_attribut_index[i])
+            #print(len(store_relevant_attribut_distance[i])," - ", len(ordered_data_streams), " - ", len(store_relevant_attribut_index[i]))
+            #print("store_relevant_attribut_name[i]", store_relevant_attribut_distance[i],"| store_relevant_attribut_idx[i]:", store_relevant_attribut_attr_name[i],"| store_relevant_attribut_dis[i]:", store_relevant_attribut_index[i])
             if len(ordered_data_streams) != 0:
                 # Iterate over each data streams defined as anomalous and query the related labels:
                 cnt_anomaly_examples += 1
                 avg_num_ordered_data_streams += len(ordered_data_streams)
 
                 # Generate the query embeddings:
+                '''
                 sorted_acc_values = generated_embedding_query_2(
                     set_of_anomalous_data_streams=ordered_data_streams, embeddings_df=embedding_df,
                     aggrgation_method="", dataset=dataset, weight=store_relevant_attribut_distance[i], is_siam=is_siam)
@@ -2554,12 +2555,14 @@ def get_labels_from_knowledge_graph_embeddings_from_anomalous_data_streams_permu
                     pos_add_allDS_sum += pos_add_allDS
                 print(" +++++ not_found_cnt:",not_found_cnt,"pos_add_allDS:", (pos_add_allDS_sum/found_cnt))
                 '''
+                #'''
                 gen_q_emb_add, gen_q_emb_add_avg, gen_q_emb_add_weighted = generated_embedding_query(
                     set_of_anomalous_data_streams=ordered_data_streams, embeddings_df=embedding_df,
                     aggrgation_method="", dataset=dataset, weight=store_relevant_attribut_distance[i], is_siam=is_siam)
                 # set_of_anomalous_data_streams, embeddings_df, aggrgation_method, dataset
-                '''
-                '''
+
+                #'''
+                #'''
                 # Get position of correct label according to the query embedding
                 #print("dataset.unique:", dataset.y_test_strings_unique)
                 print("gen_q_emb_add shape:", gen_q_emb_add.shape)
@@ -2592,7 +2595,7 @@ def get_labels_from_knowledge_graph_embeddings_from_anomalous_data_streams_permu
                 provided_labels_top_k_sum += pos_first_three
                 print("pos_first_three:", pos_first_three)
                 #print(sdds)
-                '''
+                #'''
             else:
                 skipped_cnt += 1
 
@@ -2646,12 +2649,12 @@ def main(run=0):
     file_ano_pred   = "predicted_anomaliesFin_Standard_wAdjMat_newAdj_2"
     '''
     # Finally reported models for MSCRED: (Contain 3929 entries (normal test (3389) + FaFs from train split (540))
-    #'''
+    '''
     file_name       = "store_relevant_attribut_name_Fin_Standard_wAdjMat_newAdj_2_fixed"
     file_idx        = "store_relevant_attribut_idx_Fin_Standard_wAdjMat_newAdj_2_fixed"
     file_dis        = "store_relevant_attribut_dis_Fin_Standard_wAdjMat_newAdj_2_fixed"
     file_ano_pred   = "predicted_anomaliesFin_Standard_wAdjMat_newAdj_2_fixed"
-    #'''
+    '''
     '''
     file_name       = "store_relevant_attribut_name_Fin_MSCRED_standard_repeat"
     file_idx        = "store_relevant_attribut_idx_Fin_MSCRED_standard_repeat"
@@ -2664,7 +2667,7 @@ def main(run=0):
     file_idx        = "store_relevant_attribut_idx_Fin_MSCRED_AM_Fin_repeat_"
     file_dis        = "store_relevant_attribut_dis_Fin_MSCRED_AM_Fin_repeat_"
     file_ano_pred   = "predicted_anomaliesFin_MSCRED_AM_Fin_repeat_"
-    #'''
+    '''
     '''
     folder = "cnn1d_with_fc_simsiam_128-32-3-/"
 
@@ -2681,21 +2684,21 @@ def main(run=0):
     file_ano_pred    = folder + "predicted_anomalies_wTrainFaF_cnn1d_with_fc_simsiam_128-32-3-__"
     '''
 
-    # '''
+    '''
     folder = "cnn1d_with_fc_simsiam_128-32-3-/"
 
-    file_name = folder + "store_relevant_attribut_name_wTrainFaF_2_cnn1d_with_fc_simsiam_128-32-3-__"
-    file_name_2 = folder + "store_relevant_attribut_name_wTrainFaF_2_nn2_cnn1d_with_fc_simsiam_128-32-3-__"
+    file_name = folder + "store_relevant_attribut_name_wTrainFaF_cnn1d_with_fc_simsiam_128-32-3-__"
+    file_name_2 = folder + "store_relevant_attribut_name_wTrainFaF_nn2_cnn1d_with_fc_simsiam_128-32-3-__"
 
-    file_idx = folder + "store_relevant_attribut_idx_wTrainFaF_2_cnn1d_with_fc_simsiam_128-32-3-__"
-    file_idx_2 = folder + "store_relevant_attribut_idx_wTrainFaF_2_nn2_cnn1d_with_fc_simsiam_128-32-3-__"
+    file_idx = folder + "store_relevant_attribut_idx_wTrainFaF_cnn1d_with_fc_simsiam_128-32-3-__"
+    file_idx_2 = folder + "store_relevant_attribut_idx_wTrainFaF_nn2_cnn1d_with_fc_simsiam_128-32-3-__"
 
-    file_dis = folder + "store_relevant_attribut_dis_wTrainFaF_2_cnn1d_with_fc_simsiam_128-32-3-__"
-    file_dis_2 = folder + "store_relevant_attribut_dis_wTrainFaF_2_nn2_cnn1d_with_fc_simsiam_128-32-3-__"
+    file_dis = folder + "store_relevant_attribut_dis_wTrainFaF_cnn1d_with_fc_simsiam_128-32-3-__"
+    file_dis_2 = folder + "store_relevant_attribut_dis_wTrainFaF_nn2_cnn1d_with_fc_simsiam_128-32-3-__"
 
-    file_ano_pred = folder + "predicted_anomalies_wTrainFaF_2_cnn1d_with_fc_simsiam_128-32-3-__"
-    # '''
+    file_ano_pred = folder + "predicted_anomalies_wTrainFaF_cnn1d_with_fc_simsiam_128-32-3-__"
     '''
+    #'''
     folder = "cnn1d_with_fc_simsiam_128-32-3-/"
 
     file_name        = folder + "store_relevant_attribut_name__cnn1d_with_fc_simsiam_128-32-3-__"
@@ -2705,7 +2708,7 @@ def main(run=0):
     file_dis         = folder + "store_relevant_attribut_dis__cnn1d_with_fc_simsiam_128-32-3-__"
     file_dis_2           = folder + "store_relevant_attribut_dis__nn2_cnn1d_with_fc_simsiam_128-32-3-__"
     file_ano_pred    = folder + "predicted_anomalies__cnn1d_with_fc_simsiam_128-32-3-__"
-    '''
+    #'''
 
     '''
     folder = "cnn2d_gcn/"
@@ -2720,21 +2723,21 @@ def main(run=0):
     file_dis         = folder + "store_relevant_attribut_dis__2_cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2__"
     file_dis_2           = folder + "store_relevant_attribut_dis__2_nn2_cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2__"
     #file_ano_pred   = "predicted_anomaliesFin_Standard_wAdjMat_newAdj_2"
-    file_ano_pred    = folder + "predicted_anomalies_cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2__"
+    file_ano_pred    = folder + "predicted_anomalies_2_cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2__"
     '''
 
     '''
     folder = "cnn2d_gcn/"
 
     #file_name       = "store_relevant_attribut_name_Fin_Standard_wAdjMat_newAdj_2"
-    file_name        = folder + "store_relevant_attribut_name_wTrainFaF_2_cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2__"
-    file_name_2          = folder + "store_relevant_attribut_name_wTrainFaF_2_nn2_cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2__"
+    file_name        = folder + "store_relevant_attribut_name_wTrainFaF_cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2__"
+    file_name_2          = folder + "store_relevant_attribut_name_wTrainFaF_nn2_cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2__"
     #file_idx        = "store_relevant_attribut_idx_Fin_Standard_wAdjMat_newAdj_2"
-    file_idx        = folder + "store_relevant_attribut_idx_wTrainFaF_2_cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2__"
-    file_idx_2           = folder + "store_relevant_attribut_idx_wTrainFaF_2_nn2_cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2__"
+    file_idx        = folder + "store_relevant_attribut_idx_wTrainFaF_cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2__"
+    file_idx_2           = folder + "store_relevant_attribut_idx_wTrainFaF_nn2_cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2__"
     #file_dis        = "store_relevant_attribut_dis_Fin_Standard_wAdjMat_newAdj_2"
-    file_dis         = folder + "store_relevant_attribut_dis_wTrainFaF_2_cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2__"
-    file_dis_2           = folder + "store_relevant_attribut_dis_wTrainFaF_2_nn2_cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2__"
+    file_dis         = folder + "store_relevant_attribut_dis_wTrainFaF_cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2__"
+    file_dis_2           = folder + "store_relevant_attribut_dis_wTrainFaF_nn2_cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2__"
     #file_ano_pred   = "predicted_anomaliesFin_Standard_wAdjMat_newAdj_2"
     file_ano_pred    = folder + "predicted_anomalies_wTrainFaF_cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2__"
     '''
@@ -2749,7 +2752,7 @@ def main(run=0):
 
     is_siam                         = True
     use_only_true_positive_pred     = True
-    evaluate_hitsAtK_hitRateAtP     = True
+    evaluate_hitsAtK_hitRateAtP     = False
     is_memory                       = False
     is_jenks_nat_break_used         = False
     is_elbow_selection_used         = False
@@ -2761,7 +2764,7 @@ def main(run=0):
     q1                              = False
     q2                              = False
     q3                              = False
-    q4                              = False
+    q4                              = True
 
     print("Used config: use_only_true_positive_pred:", use_only_true_positive_pred,"is_jenks_nat_break_used:", is_jenks_nat_break_used,"is_randomly_selected_featues", is_randomly_selected_featues,"is_oracle",is_oracle,"q1:",q1,"q2:",q2,"q3:",q3,"q4:",q4)
 
