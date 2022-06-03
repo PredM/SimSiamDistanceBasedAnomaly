@@ -513,10 +513,12 @@ class GraphCNN2D(CNN2D):
             output_swapped = tf.transpose(output, perm=[0, 2, 1])
 
             # Graph Structure Learning Component (Learns an adjacency matrix)
-            variant = 6
-            gsl_module = GraphStructureLearningModule(a_input=adj_matrix_input_ds, a_variant=variant, random_init=False,
-                                         use_knn_reduction=True, convert_to_binary_knn=False, k_knn_red=5, name='adjmat_learning', gcn_prepro=True, norm_adjmat=False, embsize=32,
-                                         use_softmax_reduction=False)
+            variant = 7
+            gsl_module = GraphStructureLearningModule(a_input=adj_matrix_input_ds, a_variant=variant, random_init=True,
+                                         use_knn_reduction=True, convert_to_binary_knn=False,
+                                         knn_red_in=True, knn_red_out=True, k_knn_red_in=3, k_knn_red_out=5,
+                                         name='adjmat_learning', gcn_prepro=True, norm_adjmat=False, embsize=16,
+                                         use_softmax_reduction=False, merge_with_predefined=True, merge_beta=0.1)
 
             gsl_output = gsl_module([adj_matrix_input_ds, output_swapped]) #output_swapped in form: (batch, Nodes / Data Streams, Features / Time Steps)
 
@@ -864,37 +866,51 @@ def normalized_adjmat(A: tf.Tensor, symmetric):
     A_hat = normalized_adj
     return A_hat
 
-def knn_reduction(a, k, convert_to_binary=False):
-    # Transpose because neighbourhood is defined column wise but top_k is calculated per row.
+def knn_reduction(a, k_in, k_out, convert_to_binary=False, reduce_input=True, reduce_output=True):
     #print("len(a.shape):",len(a.shape))
-    if len(a.shape) == 2:
-        a = tf.transpose(a, perm=[1, 0])
-    elif len(a.shape) == 3:
-        # AdjMat has batchsize
-        a = tf.transpose(a, perm=[0, 2, 1])
-    else:
-        print("UNKNOWN ADJ MAT SIZE!!!")
+    # reduce_input: row-wise restricts the input nodes
+    # reduce_output column-wise restricts the output nodes
 
-    # Get the kth largest value per row, transpose in necessary such that a row wise comparison is done in tf.where.
-    top_k = tf.math.top_k(a, k).values
-    kth_largest = tf.reduce_min(top_k, axis=-1, keepdims=True)
+    if reduce_output:
+        if len(a.shape) == 2:
+            a_T = tf.transpose(a, perm=[1, 0])
+        elif len(a.shape) == 3:
+            # AdjMat has batchsize
+            a_T = tf.transpose(a, perm=[0, 2, 1])
+        else:
+            print("UNKNOWN ADJ MAT SIZE!!!")
 
-    # If convert_to_binary a connection is added for the k nearest neighbours,
-    # otherwise the weight values of those are kept and only the ones below the threshold are set to 0.
-    # results in gradient issues: value = 1.0 if convert_to_binary else a
-    #a = tf.where(a < kth_largest, 0.0, value)
-    a = tf.where(a < kth_largest, 0.0, a)
-    if convert_to_binary:
-        a = tf.where(a > 0.0, 1.0, a)
+        # Get the kth largest value per row, transpose in necessary such that a row wise comparison is done in tf.where.
+        top_k_T = tf.math.top_k(a_T, k_out).values
+        kth_largest_T = tf.reduce_min(top_k_T, axis=-1, keepdims=True)
+        a_T = tf.where(a_T < kth_largest_T, 0.0, a_T)
+        if convert_to_binary:
+            a_T = tf.where(a_T > 0.0, 1.0, a_T)
 
-    # Reverse initial transpose.
-    if len(a.shape) == 2:
-        a = tf.transpose(a, perm=[1, 0])
-    elif len(a.shape) == 3:
-        a = tf.transpose(a, perm=[0, 1, 2])
-    else:
-        print("UNKNOWN ADJ MAT SIZE!!!")
+        # Reverse initial transpose.
+        '''
+        if len(a.shape) == 2:
+            a = tf.transpose(a, perm=[1, 0])
+        elif len(a.shape) == 3:
+            a = tf.transpose(a, perm=[0, 1, 2])
+        else:
+            print("UNKNOWN ADJ MAT SIZE!!!")
+        '''
 
+    if reduce_input:
+        # Get the kth largest value per row, transpose in necessary such that a row wise comparison is done in tf.where.
+        top_k = tf.math.top_k(a, k_in).values
+        kth_largest = tf.reduce_min(top_k, axis=-1, keepdims=True)
+        a_ = tf.where(a < kth_largest, 0.0, a)
+        if convert_to_binary:
+            a_ = tf.where(a_ > 0.0, 1.0, a_)
+
+    if reduce_input & reduce_output:
+        a = a_ + a_T
+    elif reduce_input:
+        a = a_
+    elif reduce_output:
+        a = a_T
     return a
 
 class Graph_Embeding_Att_Conv(tf.keras.layers.Layer):
@@ -1053,13 +1069,15 @@ class Graph_Embeding_Att_Conv(tf.keras.layers.Layer):
 # Correct Adjancemy Matrix: via adj_mat
 # Correct Emb need to be used: emb_
 class GraphStructureLearningModule(tf.keras.layers.Layer):
-    def __init__(self, a_input, a_variant, random_init, a_emb_alpha=0.1, ar=0.01, use_knn_reduction=True, convert_to_binary_knn=False, k_knn_red=5, gcn_prepro=True, embeddings=None, use_softmax_reduction=False, embsize=4, norm_adjmat=False, norm_lap_prepro=False, **kwargs):
+    def __init__(self, a_input, a_variant, random_init, a_emb_alpha=0.1, ar=0.01, use_knn_reduction=True, convert_to_binary_knn=False,
+                 gcn_prepro=True, embeddings=None, use_softmax_reduction=False, embsize=4, norm_adjmat=False,
+                 norm_lap_prepro=False, knn_red_in=False, knn_red_out=True, k_knn_red_in=3, k_knn_red_out=5,
+                 merge_with_predefined=False, merge_beta=0.5, **kwargs):
         super().__init__(**kwargs)
         self.a_variant = a_variant
         self.a_emb_alpha = a_emb_alpha  # value of 3 based on: https://github.com/nnzhan/MTGNN/blob/f811746fa7022ebf336f9ecd2434af5f365ecbf6/layer.py#L257
         self.ar = ar                    # L1 Regularization
         self.use_knn_reduction = use_knn_reduction
-        self.k_knn_red = k_knn_red
         self.gcn_prepro = gcn_prepro
         self.embeddings = embeddings
         self.use_softmax_reduction = use_softmax_reduction
@@ -1067,10 +1085,19 @@ class GraphStructureLearningModule(tf.keras.layers.Layer):
         self.norm_adjmat = norm_adjmat
         self.norm_lap_prepro = norm_lap_prepro
         self.convert_to_binary = convert_to_binary_knn
+        self.knn_red_in = knn_red_in
+        self.knn_red_out = knn_red_out
+        self.k_knn_red_in = k_knn_red_in
+        self.k_knn_red_out = k_knn_red_out
+        self.merge_with_predefined = merge_with_predefined
+        self.merge_beta = merge_beta
 
         print()
         print("GSL used with following config:")
-        print("a_variant:", a_variant, "| random_init:", random_init,"| a_emb_alpha:", a_emb_alpha, "| ar:",ar,"| use_knn_reduction:", use_knn_reduction,"| k_knn_red:",k_knn_red,"| convert_to_binary_knn:",convert_to_binary_knn,"| embsize:", embsize,"| gcn_prepro:",norm_adjmat,"| norm_adjmat:",norm_adjmat,"| norm_lap_prepro:",norm_lap_prepro)
+        print("a_variant:", a_variant, "| random_init:", random_init,"| a_emb_alpha:", a_emb_alpha, "| ar:",ar,"| use_knn_reduction/in/out:",
+              use_knn_reduction,"/",knn_red_in,"/",knn_red_out,"| k_knn_red_in/out:",k_knn_red_in,"/",k_knn_red_out,"| convert_to_binary_knn:",convert_to_binary_knn,
+              "| embsize:", embsize,"| gcn_prepro:",norm_adjmat,"| norm_adjmat:",norm_adjmat,"| norm_lap_prepro:",norm_lap_prepro,
+              "|merge_with_predefined:",merge_with_predefined,"|merge_beta:",merge_beta)
         print()
 
         # Since a bug in the used TensorFlow version, the AdjMat need to be hard coded added:
@@ -1842,7 +1869,11 @@ class GraphStructureLearningModule(tf.keras.layers.Layer):
 
         print("GSL module loaded embeddings with shape: ", np.asarray(self.embeddings).shape,"and an adjacency matrix with shape:", np.asarray(self.adj_mat_predefined).shape)
 
-        if self.a_variant in [1, 2, 3]:
+        # Always initlize pre-defined matrix
+        initializer = tf.keras.initializers.constant(self.adj_mat_predefined)
+        self.adj_mat_predefined_as_weight = self.add_weight(shape=(a_input.shape[1], a_input.shape[1]), initializer=initializer,trainable=False, name='AdjMat_params')
+
+        if self.a_variant in [0, 1, 2, 3]:
 
             if random_init:
                 initializer = tf.keras.initializers.RandomNormal(mean=0.5, stddev=0.25)
@@ -1855,7 +1886,10 @@ class GraphStructureLearningModule(tf.keras.layers.Layer):
                 initializer = tf.keras.initializers.constant(self.adj_mat_predefined)
 
             #self.a_params = tf.Variable(adj_mat, dtype=tf.float32, trainable=True)
-            self.a_params = self.add_weight(shape=(a_input.shape[1], a_input.shape[1]), initializer=initializer, trainable=True, name='AdjMat_params')
+            if self.a_variant == 0:
+                self.a_params = self.add_weight(shape=(a_input.shape[1], a_input.shape[1]), initializer=initializer, trainable=False, name='AdjMat_params')
+            else:
+                self.a_params = self.add_weight(shape=(a_input.shape[1], a_input.shape[1]), initializer=initializer, trainable=True, name='AdjMat_params')
             # Edge Features for ECCConv
             #self.e_params = self.add_weight(shape=(a_input.shape[1], a_input.shape[1],embsize), initializer=initializer,trainable=True, name='EdgeMat_params')
             #tf.print("a_params initialized:", self.a_params)
@@ -1947,8 +1981,9 @@ class GraphStructureLearningModule(tf.keras.layers.Layer):
             ar = None
         al = None
         if self.a_variant == 0:
-                # Nothing is learned, predefined matrix is directly used
-            a = self.adj_mat_predefined
+            # Nothing is learned, predefined matrix is directly used
+            # a = tf.keras.layers.Layer(name='adjmat_passthrough')(self.adj_mat_predefined)
+            a = self.a_params
         elif self.a_variant == 1:  #
             #Ensure positive values only
             a = tf.keras.layers.ReLU(name='a_relu', activity_regularizer=ar)(self.a_params)
@@ -2101,6 +2136,9 @@ class GraphStructureLearningModule(tf.keras.layers.Layer):
         else:
             raise ValueError()
 
+        if self.merge_with_predefined:
+            a = self.merge_beta * self.adj_mat_predefined_as_weight + (1 - self.merge_beta) * a
+
         # Softmax Reduction:
         if self.use_softmax_reduction:
             softmax_1 = tf.keras.layers.Softmax(axis=-1)
@@ -2110,7 +2148,8 @@ class GraphStructureLearningModule(tf.keras.layers.Layer):
             a = tf.add(a_1, a_2)
         # kNN Reduction:
         if self.use_knn_reduction:
-            a = knn_reduction(a, self.k_knn_red, convert_to_binary=self.convert_to_binary)
+            #a = knn_reduction(a, self.k_knn_red_in, convert_to_binary=self.convert_to_binary)
+            a = knn_reduction(a=a, k_in=self.k_knn_red_in, k_out=self.k_knn_red_out, convert_to_binary=False, reduce_input=self.knn_red_in, reduce_output=self.knn_red_out)
         # GCN version:
         if self.gcn_prepro:
             # GCN as normally used: al = gcn_preprocessing(a, symmetric=False, add_I=True)
@@ -2123,7 +2162,7 @@ class GraphStructureLearningModule(tf.keras.layers.Layer):
             al = normalized_laplacian(a, symmetric=False)
         else:
             al = a
-        # tf.print("al:",al)
+        #tf.print(al, summarize=-1)
 
         if self.a_variant in [6, 8]:
             return al, e1
