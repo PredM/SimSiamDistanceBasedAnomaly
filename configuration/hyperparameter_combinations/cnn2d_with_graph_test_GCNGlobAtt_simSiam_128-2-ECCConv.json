@@ -17,9 +17,9 @@
   "cnn_strides": [
   ],
   "graph_conv_channels": [
-    8,
-    8,
-    8],
+    16,
+    16,
+    16],
   "global_attention_pool_channels": [
     128
   ],
@@ -51,7 +51,8 @@
     "useAttributeWiseAggregation": "True",
       "cnn2d_AttributeWiseAggregation": [
     256,
-        128
+        128,
+        64
       ],
   "useFilterwise1DConvBefore2DConv": "False",
       "use_additional_strict_masking": "True",

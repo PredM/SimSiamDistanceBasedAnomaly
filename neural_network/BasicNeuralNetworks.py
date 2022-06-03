@@ -513,7 +513,7 @@ class GraphCNN2D(CNN2D):
             output_swapped = tf.transpose(output, perm=[0, 2, 1])
 
             # Graph Structure Learning Component (Learns an adjacency matrix)
-            variant = 1
+            variant = 6
             gsl_module = GraphStructureLearningModule(a_input=adj_matrix_input_ds, a_variant=variant, random_init=True,
                                          use_knn_reduction=True, convert_to_binary_knn=False, k_knn_red=5, name='adjmat_learning', gcn_prepro=True, norm_adjmat=False, embsize=32,
                                          use_softmax_reduction=False)
@@ -530,6 +530,7 @@ class GraphCNN2D(CNN2D):
                       static_attribute_features_input.shape)
             else:
                 al = gsl_output
+                #al, e = gsl_output
                 # Edge Features for ECCConv
                 #e = e[None, :, :,:]  # add batch dimension
                 #e = tf.tile(e, [tf.shape(output)[0], 1, 1,1])  # repeat embeddings acc. to batch size
@@ -831,6 +832,7 @@ def gcn_preprocessing(A: tf.Tensor, symmetric, add_I=True):
         A = tf.add(A, 0, 'add_zeros')
         #A = tf.expand_dims(A, axis=0)
     #print("A", A.shape)
+    # wo self loops: tensorflow.python.framework.errors_impl.InternalError:  tensorflow/core/kernels/cuda_solvers.cc:492: cuSolverDN call failed with status =6
 
     D_diag_values = tf.math.reduce_sum(A, axis=1, name='row_sum')
     D = tf.linalg.diag(D_diag_values, name='D')
@@ -1068,7 +1070,7 @@ class GraphStructureLearningModule(tf.keras.layers.Layer):
 
         print()
         print("GSL used with following config:")
-        print("a_variant:", a_variant, "| random_init:", random_init,"| a_emb_alpha:", a_emb_alpha, "| ar:",ar,"| use_knn_reduction:", use_knn_reduction,"| k_knn_red:",k_knn_red,"| gcn_prepro:",gcn_prepro)
+        print("a_variant:", a_variant, "| random_init:", random_init,"| a_emb_alpha:", a_emb_alpha, "| ar:",ar,"| use_knn_reduction:", use_knn_reduction,"| k_knn_red:",k_knn_red,"| convert_to_binary_knn:",convert_to_binary_knn,"| embsize:", embsize,"| gcn_prepro:",norm_adjmat,"| norm_adjmat:",norm_adjmat,"| norm_lap_prepro:",norm_lap_prepro)
         print()
 
         # Since a bug in the used TensorFlow version, the AdjMat need to be hard coded added:
@@ -1868,9 +1870,9 @@ class GraphStructureLearningModule(tf.keras.layers.Layer):
                 e1_init, e2_init = tf.keras.initializers.constant(self.embeddings), tf.keras.initializers.constant(self.embeddings)
                 trainable = False
 
-            self.e1 = self.add_weight(shape=(61, self.embsize), trainable=trainable, name='e1', initializer=e1_init)
+            self.e1 = self.add_weight(shape=(a_input.shape[1], self.embsize), trainable=trainable, name='e1', initializer=e1_init)
             if not self.a_variant in [6,8,9]:
-                self.e2 = self.add_weight(shape=(61, self.embsize), trainable=trainable, name='e2', initializer=e2_init)
+                self.e2 = self.add_weight(shape=(a_input.shape[1], self.embsize), trainable=trainable, name='e2', initializer=e2_init)
             self.e1_lin_layer = tf.keras.layers.Dense(self.embsize, activation=None, name='e1_lin_transform')
             if not self.a_variant in [6,8,9]:
                 self.e2_lin_layer = tf.keras.layers.Dense(self.embsize, activation=None, name='e2_lin_transform')
@@ -2119,10 +2121,11 @@ class GraphStructureLearningModule(tf.keras.layers.Layer):
             al = a
         # tf.print("al:",al)
 
-        if self.a_variant in [6,8]:
-            return al,e1
+        if self.a_variant in [6, 8]:
+            return al, e1
         else:
             return al
+        #ECCConv: return al, e1
 
 
     def get_config(self):
