@@ -513,32 +513,43 @@ class GraphCNN2D(CNN2D):
             output_swapped = tf.transpose(output, perm=[0, 2, 1])
 
             # Graph Structure Learning Component (Learns an adjacency matrix)
-            variant = 7
-            gsl_module = GraphStructureLearningModule(a_input=adj_matrix_input_ds, a_variant=variant, random_init=True, ar=0.01,
-                                         use_knn_reduction=True, convert_to_binary_knn=False,
-                                         knn_red_in=False, knn_red_out=True, k_knn_red_in=3, k_knn_red_out=5,
-                                         name='adjmat_learning', gcn_prepro=True, norm_adjmat=False, embsize=64,
-                                         use_softmax_reduction=False, merge_with_predefined=True, merge_beta=0.1)
 
-            gsl_output = gsl_module([adj_matrix_input_ds, output_swapped]) #output_swapped in form: (batch, Nodes / Data Streams, Features / Time Steps)
+            variant = 6
+            gsl_module = GraphStructureLearningModule(a_input=adj_matrix_input_ds, a_variant=variant,
+                                                      random_init=True, ar=0.01,
+                                                      use_knn_reduction=True, convert_to_binary_knn=False,
+                                                      knn_red_in=False, knn_red_out=True, k_knn_red_in=5,
+                                                      k_knn_red_out=5,
+                                                      name='adjmat_learning', gcn_prepro=True,
+                                                      norm_adjmat=False, embsize=64,
+                                                      use_softmax_reduction=False,
+                                                      merge_with_predefined=False, merge_beta=0.1,
+                                                      mask_with_predfined=True, add_k_highest_edges=False,
+                                                      k_highest_outmasked_edges=20)
+
+            gsl_output = gsl_module([adj_matrix_input_ds,
+                                     output_swapped])  # output_swapped in form: (batch, Nodes / Data Streams, Features / Time Steps)
 
             if variant in [6, 8]:
                 al, e1_emb = gsl_output
                 # Learned embedddings with additional batch dim for further use in NN architecture
                 e1_emb = e1_emb[None, :, :]  # add batch dimension
                 tiled = tf.tile(e1_emb, [tf.shape(output)[0], 1, 1])  # repeat embeddings acc. to batch size
-                e1_emb = tf.transpose(tiled, perm=[0, 2, 1])  # change the dimension acc. to the other embeddings
-                print("Learned Adjacency Matrix shape:", al.shape,"output shape:", output.shape, "e1_emb:", e1_emb.shape, "static_attribute_features_input shape:",
+                e1_emb = tf.transpose(tiled,
+                                      perm=[0, 2, 1])  # change the dimension acc. to the other embeddings
+                print("Learned Adjacency Matrix shape:", al.shape, "output shape:", output.shape, "e1_emb:",
+                      e1_emb.shape, "static_attribute_features_input shape:",
                       static_attribute_features_input.shape)
             else:
                 al = gsl_output
-                #al, e = gsl_output
+                # al, e = gsl_output
                 # Edge Features for ECCConv
-                #e = e[None, :, :,:]  # add batch dimension
-                #e = tf.tile(e, [tf.shape(output)[0], 1, 1,1])  # repeat embeddings acc. to batch size
-                #al = al[None, :, :]  # add batch dimension
-                #al = tf.tile(al, [tf.shape(output)[0], 1, 1])  # repeat embeddings acc. to batch size
-                print("Learned Adjacency Matrix shape:", al.shape,"output shape:", output.shape, "static_attribute_features_input shape:", static_attribute_features_input.shape)
+                # e = e[None, :, :,:]  # add batch dimension
+                # e = tf.tile(e, [tf.shape(output)[0], 1, 1,1])  # repeat embeddings acc. to batch size
+                # al = al[None, :, :]  # add batch dimension
+                # al = tf.tile(al, [tf.shape(output)[0], 1, 1])  # repeat embeddings acc. to batch size
+                print("Learned Adjacency Matrix shape:", al.shape, "output shape:", output.shape,
+                      "static_attribute_features_input shape:", static_attribute_features_input.shape)
 
             # al = adj_matrix_input_ds
 
@@ -579,36 +590,27 @@ class GraphCNN2D(CNN2D):
                     if self.hyper.use_linear_transformation_in_context == "True":
                         output_L = tf.keras.layers.Dense(channels)(output) #LinearTransformationLayer(size=(output.shape[2], channels))(output)
 
+                    # WIP - Learn Dynmaic AdjMat with GAT attention
+                    '''
+                    #output, a_out = spektral.layers.GATConv(channels=channels, attn_heads=3, concat_heads=True, dropout_rate=0.1, activation=None, return_attn_coef=True, use_bias=False)([output, adj_matrix_input_ds])
+                    #gat_layer = spektral.layers.GATConv(channels=channels, attn_heads=7, concat_heads=True, dropout_rate=0.4, activation=None, return_attn_coef=True, use_bias=False, add_self_loops=True)
+                    gat_layer_static = spektral.layers.GATConv(channels=channels, attn_heads=3, concat_heads=True, dropout_rate=0.2, activation=None, return_attn_coef=True, use_bias=True, add_self_loops=True)
+                    output_not_used, a_out = gat_layer_static([output, al])
+                    a_out = tf.transpose(a_out, perm=[0, 1, 3, 2])
+                    a_out = tf.reduce_mean(a_out,axis=3)
+
+                    # Masking
+                    #tf.print("a_out shape:", a_out.shape,"al shape:", al.shape,"adj_matrix_input_ds shape:", adj_matrix_input_ds.shape)
+                    a_out = a_out * adj_matrix_input_ds
+                    #a_out = al + a_out
+
+                    a_out = knn_reduction(a_out, k_in=0, k_out=5, convert_to_binary=False, reduce_input=False, reduce_output=True)
+                    a_out = gcn_preprocessing(a_out, symmetric=False, add_I=True)
+                    '''
+
                     # Graph Convolutions
                     output = spektral.layers.GCNConv(channels=channels, activation=None, use_bias=True)([output, al])
                     #output = spektral.layers.GCSConv(channels=channels, activation=None, use_bias=True)([output, al])
-
-                    # WIP - Learn AdjMat with GAT attention
-                    '''
-                    #output, a_out = spektral.layers.GATConv(channels=channels, attn_heads=3, concat_heads=True, dropout_rate=0.1, activation=None, return_attn_coef=True, use_bias=False)([output, adj_matrix_input_ds])
-                    gat_layer = spektral.layers.GATConv(channels=channels, attn_heads=7, concat_heads=True, dropout_rate=0.4, activation=None, return_attn_coef=True, use_bias=False, add_self_loops=True)
-                    gat_layer_static = spektral.layers.GATConv(channels=32, attn_heads=5, concat_heads=True, dropout_rate=0.2, activation=None, return_attn_coef=True, use_bias=False, add_self_loops=True)
-                    #output, a_out = gat_layer([output, adj_matrix_input_ds])
-                    output_, a_out = gat_layer_static([output_, adj_matrix_input_ds])
-                    a_out = tf.transpose(a_out, perm=[0, 1, 3, 2])
-                    a_out = tf.reduce_mean(a_out,axis=3)
-                    #tf.print("a_out shape:", a_out.shape)
-
-                    # Attention
-                    #attention_layer_3 = tf.keras.layers.Dense(output.shape[2], activation="sigmoid")
-                    #attn2 = attention_layer_3(output_)
-                    #output = output * attn2
-
-                    a_out = knn_reduction(a_out, 5, convert_to_binary=False)
-                    #tf.print("a_out shape:", a_out.shape)
-                    #output = spektral.layers.GCNConv(channels=channels, activation=None, use_bias=True)(
-                    #    [output, a_out])
-                    output, a_out = gat_layer([output, a_out])
-
-                    #a_out = gcn_preprocessing(a_out, symmetric=False,add_I=False)
-                    #a_out = utils.gcn_filter(a_out, symmetric=False)
-                    #output = spektral.layers.GCNConv(channels=channels, activation=None, use_bias=True)([output, a_out])
-                    '''
 
                     #output = spektral.layers.GATConv(channels=channels, attn_heads=3, concat_heads=False, dropout_rate=0.1, activation=None)([output, al])
                     #output = spektral.layers.GATConv(channels=channels, attn_heads=7, concat_heads=True, dropout_rate=0.4, activation=None, return_attn_coef=False, use_bias=True, add_self_loops=True)([output, al])
@@ -1072,7 +1074,7 @@ class GraphStructureLearningModule(tf.keras.layers.Layer):
     def __init__(self, a_input, a_variant, random_init, a_emb_alpha=0.1, ar=0.01, use_knn_reduction=True, convert_to_binary_knn=False,
                  gcn_prepro=True, embeddings=None, use_softmax_reduction=False, embsize=4, norm_adjmat=False,
                  norm_lap_prepro=False, knn_red_in=False, knn_red_out=True, k_knn_red_in=3, k_knn_red_out=5,
-                 merge_with_predefined=False, merge_beta=0.5, **kwargs):
+                 merge_with_predefined=False, merge_beta=0.5, mask_with_predfined=False,add_k_highest_edges=False, k_highest_outmasked_edges=10, **kwargs):
         super().__init__(**kwargs)
         self.a_variant = a_variant
         self.a_emb_alpha = a_emb_alpha  # value of 3 based on: https://github.com/nnzhan/MTGNN/blob/f811746fa7022ebf336f9ecd2434af5f365ecbf6/layer.py#L257
@@ -1091,13 +1093,17 @@ class GraphStructureLearningModule(tf.keras.layers.Layer):
         self.k_knn_red_out = k_knn_red_out
         self.merge_with_predefined = merge_with_predefined
         self.merge_beta = merge_beta
+        self.mask_with_predfined = mask_with_predfined
+        self.add_k_highest_edges = add_k_highest_edges
+        self.k_highest_outmasked_edges = k_highest_outmasked_edges
 
         print()
         print("GSL used with following config:")
         print("a_variant:", a_variant, "| random_init:", random_init,"| a_emb_alpha:", a_emb_alpha, "| ar:",ar,"| use_knn_reduction/in/out:",
               use_knn_reduction,"/",knn_red_in,"/",knn_red_out,"| k_knn_red_in/out:",k_knn_red_in,"/",k_knn_red_out,"| convert_to_binary_knn:",convert_to_binary_knn,
-              "| embsize:", embsize,"| gcn_prepro:",norm_adjmat,"| norm_adjmat:",norm_adjmat,"| norm_lap_prepro:",norm_lap_prepro,
-              "|merge_with_predefined:",merge_with_predefined,"|merge_beta:",merge_beta)
+              "| embsize:", embsize,"| gcn_prepro:",gcn_prepro,"| norm_adjmat:",norm_adjmat,"| norm_lap_prepro:",norm_lap_prepro,
+              "|merge_with_predefined:",merge_with_predefined,"|merge_beta:",merge_beta,"|mask_with_predfined:",mask_with_predfined,
+              "|add_k_highest_edges:",add_k_highest_edges,"|k_highest_outmasked_edges:",k_highest_outmasked_edges)
         print()
 
         # Since a bug in the used TensorFlow version, the AdjMat need to be hard coded added:
@@ -1105,6 +1111,7 @@ class GraphStructureLearningModule(tf.keras.layers.Layer):
         # Print them after loading and insert them here why copy and paste
 
         # MA NW AdjMat pre
+        '''
         adj_mat = [
             [0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1,
              1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0,
@@ -1580,7 +1587,7 @@ class GraphStructureLearningModule(tf.keras.layers.Layer):
             -0.706374  , -0.5837044 , -1.1545601 , -1.1954932 , -0.6839523 ,
             -0.7304199 , -0.7619331 , -1.3124387 , -1.3625929 , -0.66433734,
             -1.2586019 , -1.1329576 , -1.2471619 ]]
-
+        '''
         # FT IJCNN 2021 Dateset / derived from KG
         #'''
         adj_mat = [
@@ -1769,6 +1776,7 @@ class GraphStructureLearningModule(tf.keras.layers.Layer):
                       0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0]]
         #'''
         self.adj_mat_predefined = adj_mat
+        self.adj_mat_predefined_0_1_changed = np.where(np.asarray(adj_mat) == 1,0,1)
         #'''
         emb_ = [
             [ 2.26304940e+00,2.21689400e+00,1.63770260e+00,7.87842450e-01
@@ -2047,6 +2055,7 @@ class GraphStructureLearningModule(tf.keras.layers.Layer):
                 #a_input = tf.keras.layers.Layer(name='a_l_passthrough')(a_input)
                 #initializer = tf.keras.initializers.constant(inputs)
                 #initializer = tf.keras.initializers.constant(value=tf.cast(a_input, tf.float32))
+                initializer_rand = tf.keras.initializers.RandomUniform(minval=-0.1, maxval=0.25, seed=2022)
                 initializer = tf.keras.initializers.constant(self.adj_mat_predefined)
 
             #self.a_params = tf.Variable(adj_mat, dtype=tf.float32, trainable=True)
@@ -2054,6 +2063,8 @@ class GraphStructureLearningModule(tf.keras.layers.Layer):
                 self.a_params = self.add_weight(shape=(a_input.shape[1], a_input.shape[1]), initializer=initializer, trainable=False, name='AdjMat_params')
             else:
                 self.a_params = self.add_weight(shape=(a_input.shape[1], a_input.shape[1]), initializer=initializer, trainable=True, name='AdjMat_params')
+                #self.a_params = self.add_weight(shape=(a_input.shape[1], a_input.shape[1]), initializer=initializer_rand, trainable=True, name='AdjMat_params')
+                #self.a_params = self.a_params + self.adj_mat_predefined_as_weight
             # Edge Features for ECCConv
             #self.e_params = self.add_weight(shape=(a_input.shape[1], a_input.shape[1],embsize), initializer=initializer,trainable=True, name='EdgeMat_params')
             #tf.print("a_params initialized:", self.a_params)
@@ -2086,8 +2097,7 @@ class GraphStructureLearningModule(tf.keras.layers.Layer):
         if self.a_variant == 9:
             #'''
             initializer = tf.keras.initializers.constant(self.adj_mat_predefined)
-            self.a_params = self.add_weight(shape=(a_input.shape[1], a_input.shape[1]), initializer=initializer,
-                                            trainable=False, name='AdjMat_params')
+            self.a_params = self.add_weight(shape=(a_input.shape[1], a_input.shape[1]), initializer=initializer, trainable=False, name='AdjMat_params')
 
             self.add_self_loops = True
             self.use_bias = False
@@ -2147,7 +2157,7 @@ class GraphStructureLearningModule(tf.keras.layers.Layer):
         if self.a_variant == 0:
             # Nothing is learned, predefined matrix is directly used
             # a = tf.keras.layers.Layer(name='adjmat_passthrough')(self.adj_mat_predefined)
-            a = self.a_params
+            a = self.adj_mat_predefined_as_weight
         elif self.a_variant == 1:  #
             #Ensure positive values only
             a = tf.keras.layers.ReLU(name='a_relu', activity_regularizer=ar)(self.a_params)
@@ -2162,9 +2172,8 @@ class GraphStructureLearningModule(tf.keras.layers.Layer):
 
         elif self.a_variant == 3:
             # Residual variant
-            a = tf.keras.layers.ReLU(name='a_emb_elu', activity_regularizer=ar)(self.a_params)
-            a = tf.add(a, 1, name='a_opt_add')
-            a = tf.add(a, self.adj_mat_predefined, name='a_opt_add')
+            a = tf.add(self.a_params, self.adj_mat_predefined_as_weight, name='a_opt_add')
+            a = tf.keras.layers.ReLU(name='a_emb_elu', activity_regularizer=ar)(a)
 
         elif self.a_variant == 4:
             # Corresponds to Wu et al. Uni-directed-A (author's proposed variant)
@@ -2269,9 +2278,7 @@ class GraphStructureLearningModule(tf.keras.layers.Layer):
                 a = tf.linalg.set_diag(a, tf.ones(shape, a.dtype))
             x = tf.einsum("...NI , IHO -> ...NHO", x, self.kernel)
             attn_for_self = tf.einsum("...NHI , IHO -> ...NHO", x, self.attn_kernel_self)
-            attn_for_neighs = tf.einsum(
-                "...NHI , IHO -> ...NHO", x, self.attn_kernel_neighs
-            )
+            attn_for_neighs = tf.einsum("...NHI , IHO -> ...NHO", x, self.attn_kernel_neighs)
             attn_for_neighs = tf.einsum("...ABC -> ...CBA", attn_for_neighs)
 
             attn_coef = attn_for_self + attn_for_neighs
@@ -2299,6 +2306,21 @@ class GraphStructureLearningModule(tf.keras.layers.Layer):
 
         if self.merge_with_predefined:
             a = self.merge_beta * self.adj_mat_predefined_as_weight + (1 - self.merge_beta) * a
+
+        if self.mask_with_predfined:
+            #a = tf.keras.layers.Multiply()([a, self.adj_mat_predefined_as_weight])
+            #tf.keras.layers.Multiply()()
+            a = a * self.adj_mat_predefined
+            #tf.print(a, summarize=-1)
+
+        if self.add_k_highest_edges:
+            a_outmasked = a * self.adj_mat_predefined_0_1_changed
+            a_outmasked_flat = tf.reshape(a_outmasked, [-1])
+            top_k_ = tf.math.top_k(a_outmasked_flat, 10).values
+            kth_largest = tf.reduce_min(top_k_, axis=-1, keepdims=True)
+            a_outmasked_cleaned = tf.where(a_outmasked < kth_largest, 0.0, a_outmasked)
+            a = a + a_outmasked_cleaned
+
 
         # Softmax Reduction:
         if self.use_softmax_reduction:
@@ -3675,7 +3697,7 @@ class FFNN_SimpleSiam_Prediction_MLP(NN):
             # Activation changed from relu to leakyrelu because of dying neurons
             #x_1_ = tf.keras.layers.LeakyReLU()(x_1_)
             x_1_ = tf.keras.layers.ReLU()(x_1_)
-            x_1_ = tf.keras.layers.BatchNormalization()(x_1_)
+            #x_1_ = tf.keras.layers.BatchNormalization()(x_1_)
             #x_1_ = tf.math.l2_normalize(x_1_, axis=1)
 
 

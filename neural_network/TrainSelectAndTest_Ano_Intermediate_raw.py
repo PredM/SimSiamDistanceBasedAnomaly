@@ -215,7 +215,7 @@ def calculate_most_relevant_attributes(sim_mat_casebase_test, sim_mat_casebase_c
         print("###################################################################################")
         print(" Example ",test_example_idx,"with label", test_label[test_example_idx])
 
-        if not test_label[test_example_idx] == "no_failure" or (test_label[test_example_idx] == "no_failure" and y_pred_anomalies[test_example_idx]==1) :
+        if not test_label[test_example_idx] == "no_failure": # If False Positive / False predicted anomalies should be evaluated: or (test_label[test_example_idx] == "no_failure" and y_pred_anomalies[test_example_idx]==1) :
             print()
             counterfactuals_entires = {}
             counterfactuals_entires_2 = {}
@@ -2365,7 +2365,6 @@ def main(run=0, val_split_rates=[0.0]):
                             print("-------------------------------------------------")
 
                             if config.evaluate_attribute_and_use_KG:
-                                # '''
                                 # Get most relevant data streams
                                 config.architecture_variant = ArchitectureVariant.STANDARD_SIMPLE
                                 if snn.hyper.encoder_variant in ["graphcnn2d"]:

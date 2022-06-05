@@ -448,14 +448,14 @@ class StaticConfiguration:
         # Folder where the trained models are saved to during learning process
         self.hyper_file = self.hyper_file_folder + 'cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2.json' #cnn1d_with_fc_simsiam_128-32.json 'cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2.json'  #cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2.json #cnn2d_withAddInput_ContextStrang.json  'cnn2d_with_graph-26-10.json'  #cnn2d_with_graph_test.json #cnn2d_withAddInput_nwApproach.json
         #3W self.models_folder = '../../../../data/pklein/PredMSiamNN/data/' + 'trained_model2/' #
-        self.models_folder = self.data_folder_prefix + 'trained_models3/'
+        self.models_folder = self.data_folder_prefix + 'trained_models5/'
         self.save_results_as_file = True
-        self.curr_run_identifier = self.hyper_file.split("/")[-1].split(".")[0] + "cnn2-GCN-GSL-RanInit-Var1-EmbSize64"
+        self.curr_run_identifier = self.hyper_file.split("/")[-1].split(".")[0] + "cnn2-GCN-GSL-RanInit-Var1"
         self.use_train_FaF_in_eval = True
 
         self.use_pairwise_sim_siam = False
         self.stop_gradient = False
-        self.evaluate_attribute_and_use_KG = False
+        self.evaluate_attribute_and_use_KG = True
         self.plot_embeddings_via_TSNE = False
         self.plot_train_test = False
 

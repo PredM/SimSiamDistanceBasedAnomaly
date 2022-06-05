@@ -2698,7 +2698,7 @@ def main(run=0):
 
     file_ano_pred = folder + "predicted_anomalies_wTrainFaF_cnn1d_with_fc_simsiam_128-32-3-__"
     '''
-    #'''
+    '''
     folder = "cnn1d_with_fc_simsiam_128-32-3-/"
 
     file_name        = folder + "store_relevant_attribut_name__cnn1d_with_fc_simsiam_128-32-3-__"
@@ -2708,6 +2708,30 @@ def main(run=0):
     file_dis         = folder + "store_relevant_attribut_dis__cnn1d_with_fc_simsiam_128-32-3-__"
     file_dis_2           = folder + "store_relevant_attribut_dis__nn2_cnn1d_with_fc_simsiam_128-32-3-__"
     file_ano_pred    = folder + "predicted_anomalies__cnn1d_with_fc_simsiam_128-32-3-__"
+    '''
+
+    #'''
+    folder = ""#"cnn1d_with_fc_simsiam_128-32-3-/"
+
+    file_name        = folder + "store_relevant_attribut_name__cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2cnn2-GCN-GSL-RanInit-Var1-Knn5Out-layerwiseRed__"
+    file_name_2          = folder + "store_relevant_attribut_name__nn2_cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2cnn2-GCN-GSL-RanInit-Var1-Knn5Out-layerwiseRed__"
+    file_idx         = folder + "store_relevant_attribut_idx__cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2cnn2-GCN-GSL-RanInit-Var1-Knn5Out-layerwiseRed__"
+    file_idx_2           = folder + "store_relevant_attribut_idx__nn2_cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2cnn2-GCN-GSL-RanInit-Var1-Knn5Out-layerwiseRed__"
+    file_dis         = folder + "store_relevant_attribut_dis__cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2cnn2-GCN-GSL-RanInit-Var1-Knn5Out-layerwiseRed__"
+    file_dis_2           = folder + "store_relevant_attribut_dis__nn2_cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2cnn2-GCN-GSL-RanInit-Var1-Knn5Out-layerwiseRed__"
+    file_ano_pred    = folder + "predicted_anomalies__cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2cnn2-GCN-GSL-RanInit-Var1-Knn5Out-layerwiseRed__"
+    #'''
+
+    #'''
+    folder = ""#"cnn1d_with_fc_simsiam_128-32-3-/"
+
+    file_name        = folder + "store_relevant_attribut_name__2_cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2cnn2-GCN-GSL-RanInit-Var1-Knn5Out-layerwiseRed__"
+    file_name_2          = folder + "store_relevant_attribut_name__2_nn2_cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2cnn2-GCN-GSL-RanInit-Var1-Knn5Out-layerwiseRed__"
+    file_idx         = folder + "store_relevant_attribut_idx__2_cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2cnn2-GCN-GSL-RanInit-Var1-Knn5Out-layerwiseRed__"
+    file_idx_2           = folder + "store_relevant_attribut_idx__2_nn2_cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2cnn2-GCN-GSL-RanInit-Var1-Knn5Out-layerwiseRed__"
+    file_dis         = folder + "store_relevant_attribut_dis__2_cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2cnn2-GCN-GSL-RanInit-Var1-Knn5Out-layerwiseRed__"
+    file_dis_2           = folder + "store_relevant_attribut_dis__2_nn2_cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2cnn2-GCN-GSL-RanInit-Var1-Knn5Out-layerwiseRed__"
+    file_ano_pred    = folder + "predicted_anomalies__cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2cnn2-GCN-GSL-RanInit-Var1-Knn5Out-layerwiseRed__"
     #'''
 
     '''
@@ -2752,7 +2776,7 @@ def main(run=0):
 
     is_siam                         = True
     use_only_true_positive_pred     = True
-    evaluate_hitsAtK_hitRateAtP     = False
+    evaluate_hitsAtK_hitRateAtP     = True
     is_memory                       = False
     is_jenks_nat_break_used         = False
     is_elbow_selection_used         = False
@@ -2760,7 +2784,7 @@ def main(run=0):
     fix_k_for_selection             = 10
     is_randomly_selected_featues    = False
     is_oracle                       = False
-    use_train_FaFs_in_Test          = True
+    use_train_FaFs_in_Test          = False
     q1                              = False
     q2                              = False
     q3                              = False
