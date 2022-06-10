@@ -4,6 +4,8 @@ import tensorflow as tf
 from sklearn.metrics import classification_report
 from sklearn.metrics import precision_recall_fscore_support
 from sklearn.metrics import confusion_matrix
+from statsmodels.genmod.families.links import inverse_power
+
 gpus = tf.config.list_physical_devices('GPU')
 import jenkspy
 import pandas as pd
@@ -1584,25 +1586,19 @@ def get_labels_from_knowledge_graph_from_anomalous_data_streams(most_relevant_at
                                                 WHERE 
                                                 {
                                                     {
-                                                     ?component ftonto:is_associated_with_data_stream "txt16_i4"^^xsd:string.
-                                                     ?workstation ftonto:hasComponent ?component.
+                                                     ?component ftonto:is_associated_with_data_stream "'''+data_stream_name+'''"^^xsd:string.
+                                                     ?workstation ftonto:hasComponent ?component .
                                                     }UNION{
-                                                     ?sensorStream ftonto:is_associated_with_data_stream "txt16_i4"^^xsd:string.
+                                                     ?sensorStream ftonto:is_associated_with_data_stream "'''+data_stream_name+'''"^^xsd:string.
                                                      ?sensor ftonto:hasComponent ?sensorStream .
                                                      ?sensor sosa:isHostedBy ?component .
                                                      ?workstation ftonto:hasComponent ?component .
-                                                    }
-                                                    {
-                                                        {
-                                                         ?workstation ftonto:hasComponent ?components.
-                                                         ?failureModes predm:isDetectableInDataStreamOf_Context ?components.
-                                                        }UNION{
-                                                         ?failureModes predm:isDetectableInDataStreamOf_Context  ?component.
-                                                        }
-                                                    }
-                                                    {
-                                                        ?failureModes predm:hasLabel ?labels
-                                                    }
+                                                    } 
+                                                    
+                                                     ?workstation ftonto:hasComponent ?components .
+                                                     ?failureModes predm:isDetectableInDataStreamOf_Context ?components .
+                                                    
+                                                    ?failureModes predm:hasLabel ?labels
                                                 }
                                                                     '''
 
@@ -1611,6 +1607,7 @@ def get_labels_from_knowledge_graph_from_anomalous_data_streams(most_relevant_at
                         result = list(default_world.sparql(sparql_query))
                         cnt_queries_per_example += 1
                         cnt_labels_per_example += len(result)
+                        #print("sparql_query:", sparql_query)
                         print(str(cnt_queries_per_example)+". query with ",data_stream_name, "has result:", result)
                         if result ==None:
                             continue
@@ -1699,6 +1696,211 @@ def get_labels_from_knowledge_graph_from_anomalous_data_streams(most_relevant_at
     return dict_measures
 
     # execute a query for each example
+
+def get_component_from_knowledge_graph_from_anomalous_data_streams(most_relevant_attributes, y_test_labels, dataset,y_pred_anomalies, not_selection_label="no_failure",only_true_positive_prediction=False, q5=False):
+    store_relevant_attribut_idx, store_relevant_attribut_dis, store_relevant_attribut_name = most_relevant_attributes[0], \
+                                                                                             most_relevant_attributes[1], \
+                                                                                             most_relevant_attributes[2]
+    num_test_examples = y_test_labels.shape[0]
+
+    attr_names = dataset.feature_names_all
+    print("attr_names:", attr_names)
+    # Get ontological knowledge graph
+    onto = get_ontology("FTOnto_with_PredM_w_Inferred_.owl")
+    onto.load()
+
+    # Iterate over the test data set
+    cnt_label_found = 0
+    cnt_anomaly_examples = 0
+    cnt_querry = 0
+    cnt_labels = 0
+    cnt_noDataStrem_detected = 0
+    cnt_true_positives = 0
+    cnt_masked_out = 0
+    for i in range(num_test_examples):
+        curr_label = y_test_labels[i]
+        # Fix:
+        #if curr_label == "txt16_conveyorbelt_big_gear_tooth_broken_failure":
+        #    curr_label = "txt16_conveyor_big_gear_tooth_broken_failure"
+        breaker = False
+
+        # Select which examples are used for evaluation
+        # a) all labeled as no_failure
+        # b) all examples selection_label=""
+        # c) only predicted anomalies
+        true_positive_prediction = False
+        if only_true_positive_prediction:
+            if y_pred_anomalies[i] == 1 and not curr_label == "no_failure":
+                true_positive_prediction = True
+                print("True Positive Found!")
+                cnt_true_positives += 1
+        else:
+            true_positive_prediction = True
+
+        # Get Component for label
+
+        already_provided_labels_not_further_counted = []
+        if not curr_label == not_selection_label and breaker == False and true_positive_prediction:
+            if breaker == True:
+                continue
+            print("")
+            print("##############################################################################")
+            print("Example:",i,"| Gold Label:", y_test_labels[i])
+            print("")
+            ordered_data_streams = store_relevant_attribut_idx[i]
+            print("Relevant attributes ordered asc: ", ordered_data_streams)
+            print("")
+            # Iterate over each data streams defined as anomalous and query the related labels:
+            cnt_anomaly_examples += 1
+            cnt_queries_per_example = 0
+            cnt_labels_per_example = 0
+            cnt_skipped = 0
+            curr_label_ = map_onto_iri_to_data_set_label(curr_label, inv=False)
+            print("curr_label_:", curr_label_)
+
+            if len(ordered_data_streams) > 0:
+                if len(ordered_data_streams) > 0 and breaker == False:
+                    print("Query the knowledge graph ... ")
+                    for data_stream in ordered_data_streams:
+                        '''
+                        if is_data_stream_not_relevant_for_anomalies(i, data_stream, dataset):
+                            print("Irrelevant data stream:", data_stream)
+                            cnt_masked_out += 1
+                            continue
+                        '''
+
+                        if breaker == True:
+                            break
+                        #print("data_stream: ", data_stream)
+                        data_stream_name = data_stream #attr_names[data_stream]
+                        if q5:
+                            # Check correctness: if data stream and label match
+                            sparql_query = '''  PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+                                                PREFIX owl: <http://www.w3.org/2002/07/owl#>
+                                                PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+                                                PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+                                                PREFIX ftonto: <http://iot.uni-trier.de/FTOnto#>
+                                                PREFIX fmeca: <http://iot.uni-trier.de/FMECA#>
+                                                PREFIX predm: <http://iot.uni-trier.de/PredM#>
+                                                PREFIX sosa: <http://www.w3.org/ns/sosa/>
+                                                SELECT  DISTINCT ?component
+                                                WHERE {
+                                                {
+                                                        ?component <http://iot.uni-trier.de/FTOnto#is_associated_with_data_stream> "'''+data_stream_name+'''"^^<http://www.w3.org/2001/XMLSchema#string>.
+                                                        ?component <http://iot.uni-trier.de/FMECA#hasPotentialFailureMode> ?failureModes.
+                                                        ?failureModes <http://iot.uni-trier.de/PredM#hasLabel> ?label.
+                                                        ?label a <http://iot.uni-trier.de/'''+curr_label_+'''>.
+                                                        }
+                                                UNION{
+                                                        ?component <http://iot.uni-trier.de/FTOnto#is_associated_with_data_stream> "'''+data_stream_name+'''"^^<http://www.w3.org/2001/XMLSchema#string>.
+                                                        ?failureModes <http://iot.uni-trier.de/PredM#isDetectableInDataStreamOf_Direct>  ?component.
+                                                        ?failureModes <http://iot.uni-trier.de/PredM#hasLabel> ?label.
+                                                        ?label a <http://iot.uni-trier.de/'''+curr_label_+'''>.
+                                                }
+                                                }
+                                                '''
+                            # Count the number of components provided
+                            sparql_query_2 = '''  PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+                                                    PREFIX owl: <http://www.w3.org/2002/07/owl#>
+                                                    PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+                                                    PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+                                                    PREFIX ftonto: <http://iot.uni-trier.de/FTOnto#>
+                                                    PREFIX fmeca: <http://iot.uni-trier.de/FMECA#>
+                                                    PREFIX predm: <http://iot.uni-trier.de/PredM#>
+                                                    PREFIX sosa: <http://www.w3.org/ns/sosa/>
+                                                    SELECT  DISTINCT ?items
+                                                    WHERE {
+                                                {
+                                                        ?component <http://iot.uni-trier.de/FTOnto#is_associated_with_data_stream> "'''+data_stream_name+'''"^^<http://www.w3.org/2001/XMLSchema#string>.
+                                                        ?component <http://iot.uni-trier.de/FMECA#hasPotentialFailureMode> ?failureModes.
+				                                        ?items <http://iot.uni-trier.de/FMECA#hasPotentialFailureMode> ?failureModes.}
+                                                UNION{
+                                                        ?component <http://iot.uni-trier.de/FTOnto#is_associated_with_data_stream> "'''+data_stream_name+'''"^^<http://www.w3.org/2001/XMLSchema#string>.
+                                                        ?failureModes <http://iot.uni-trier.de/PredM#isDetectableInDataStreamOf_Direct>  ?component.
+					                                    ?items <http://iot.uni-trier.de/FMECA#hasPotentialFailureMode> ?failureModes.
+                                                }
+                                                }
+                                                    '''
+
+                        else:
+                            raise Exception("NO QUERY IS SPECIFIED!")
+                        result_2 = list(default_world.sparql(sparql_query_2))
+                        #if result_2 == None or len(result_2)==0:
+                        #    print("For",curr_label," no failure mode ist found! xyz!")
+                        print("Components:", result_2)
+
+                        result = list(default_world.sparql(sparql_query))
+                        cnt_queries_per_example += 1
+                        cnt_labels_per_example += len(result)
+                        print(str(cnt_queries_per_example)+". query with ",data_stream_name, "has result:", result)
+                        # Counting
+                        cnt_labels += len(result_2)
+                        cnt_querry += 1
+                        if result ==None:
+                            continue
+                        if len(result) > 0:
+                            print("FOUND: ", str(curr_label), "in", str(result), "after queries:",
+                                  str(cnt_queries_per_example), "and after checking labels:", cnt_labels_per_example)
+                            cnt_label_found += 1
+                            print()
+                            print("### statistics ###")
+                            print("Queries conducted until now:", cnt_querry)
+                            print("Labels provided until now:", cnt_labels)
+                            print("Found labels until now:", cnt_label_found)
+                            print("Rate of found labels until now:", (cnt_label_found / cnt_anomaly_examples))
+                            print("Rate of queries per labelled Anomalie until now:",
+                                  (cnt_querry / (cnt_anomaly_examples - cnt_noDataStrem_detected)))
+                            print("Rate of labels provided per labelled Anomalie until now:",
+                                  (cnt_labels / (cnt_anomaly_examples - cnt_noDataStrem_detected)))
+                            print("###            ###")
+                            print()
+                            breaker = True
+                            break
+                        else:
+                            if data_stream_name in curr_label:
+                                print("+++ Check why no match? Datastream:", data_stream, "results_cleaned: ", result,
+                                      "and gold label:", curr_label)
+                else:
+                    cnt_noDataStrem_detected +=1
+            else:
+                cnt_skipped += 1
+    print("")
+    print("*** Statistics for Finding Failure Modes to Anomalies ***")
+    print("")
+    print("Queries conducted in sum: \t\t","\t"+str(cnt_querry))
+    print("Labels provided in sum: \t\t", "\t" + str(cnt_labels))
+    print("Found labels in sum: \t\t", "\t\t" + str(cnt_label_found),"of", cnt_anomaly_examples)
+    print("Examples wo any data stream: \t\t", "\t" + str(cnt_skipped))
+    print("Labelled anomalies with no data streams / symptoms:","\t\t"+str(cnt_noDataStrem_detected))
+    print("")
+    print("Queries executed per anomalous example: \t", "\t" + str(cnt_querry/cnt_anomaly_examples), "\t"+ str(cnt_querry/(cnt_anomaly_examples-cnt_noDataStrem_detected)))
+    print("Labels provided per anomalous example: \t", "\t\t" + str(cnt_labels / cnt_anomaly_examples), "\t"+ str(cnt_labels/(cnt_anomaly_examples-cnt_noDataStrem_detected)))
+    print("Rate of found labels: \t\t", "\t\t\t" + str(cnt_label_found / cnt_anomaly_examples), "\t"+ str(cnt_label_found/(cnt_anomaly_examples-cnt_noDataStrem_detected)))
+    print("Anomalous examples for which no label was found: ", "\t" + str(cnt_anomaly_examples-cnt_label_found))
+    print("")
+    if only_true_positive_prediction:
+        print("Found true positives: ", cnt_true_positives)
+        print("")
+
+    # Return dictonary
+    dict_measures = {}
+    dict_measures["Queries conducted in sum"]                   = cnt_querry
+    dict_measures["Labels provided in sum"]                     = cnt_labels
+    dict_measures["Found labels in sum"]                        = cnt_label_found
+    dict_measures["Examples for which no anomalous data streams were provided:"] = cnt_skipped
+    dict_measures["Labelled anomalies with no data streams / symptoms:"]        = cnt_noDataStrem_detected
+
+    dict_measures["Queries executed per anomalous example"]             = (cnt_querry/cnt_anomaly_examples)
+    dict_measures["Labels provided per anomalous example"]              = (cnt_labels / cnt_anomaly_examples)
+    dict_measures["Rate of found labels"]                               = (cnt_label_found / cnt_anomaly_examples)
+    dict_measures["Anomalous examples for which no label was found"]    = (cnt_anomaly_examples-cnt_label_found)
+
+    dict_measures["Queries executed per anomalous example_"]             = (cnt_querry/(cnt_anomaly_examples-cnt_noDataStrem_detected))
+    dict_measures["Labels provided per anomalous example_"]              = (cnt_labels/(cnt_anomaly_examples-cnt_noDataStrem_detected))
+    dict_measures["Rate of found labels_"]                               = (cnt_label_found/(cnt_anomaly_examples-cnt_noDataStrem_detected))
+    dict_measures["cnt_masked_out"] = cnt_masked_out
+
+    return dict_measures
 
 def get_labels_from_knowledge_graph_from_anomalous_data_streams_permuted(most_relevant_attributes, y_test_labels, dataset,y_pred_anomalies, not_selection_label="no_failure",only_true_positive_prediction=False, k_data_streams=[1,3,5,10], k_permutations=[2,3], rel_type="Context"):
     store_relevant_attribut_idx, store_relevant_attribut_dis, store_relevant_attribut_name = most_relevant_attributes[0], \
@@ -2000,12 +2202,13 @@ def map_onto_iri_to_data_set_label(label_onto, inv=True):
         'txt16_m3_t1_low_wear' : 'PredM#Label_txt16_m3_t1_low_wear_class',
         'txt16_m3_t2_wear': 'PredM#Label_txt16_m3_t2_class',
         'txt17_i1_switch_failure_mode_1': 'PredM#Label_txt17_i1_switch_failure_mode_1_class',
-        'txt17_i1_switch_failure_mode_2': 'PredM#Label_txt17_i1_switch_failure_mode_2_class',
+        'txt17_i1_switch_failure_mode_2': 'FTOnto#Label_txt17_i1_switch_failure_mode_2_class',
         'txt17_pneumatic_leakage_failure_mode_1': 'PredM#Label_txt17_pneumatic_leakage_failure_mode_1_class',
         'txt17_workingstation_transport_failure_mode_wout_workpiece': 'PredM#Label_txt17_workingstation_transport_failure_mode_wou_class',
         'txt18_pneumatic_leakage_failure_mode_1': 'PredM#Label_txt18_pneumatic_leakage_failure_mode_1_class',
         'txt18_pneumatic_leakage_failure_mode_2_faulty': 'PredM#Label_txt18_pneumatic_leakage_failure_mode_2_faulty_class',
         "txt18_pneumatic_leakage_failure_mode_2": "PredM#Label_txt18_pneumatic_leakage_failure_mode_2_failed_class",
+        "txt18_pneumatic_leakage_failure_mode_2": "PredM#Label_txt18_pneumatic_leakage_failure_mode_2_faulty_class",
         'txt18_transport_failure_mode_wout_workpiece': 'PredM#Label_txt18_transport_failure_mode_wout_workpiece_class',
         'txt19_i4_lightbarrier_failure_mode_1': 'PredM#Label_txt19_i4_lightbarrier_failure_mode_1_class',
         'txt19_i4_lightbarrier_failure_mode_2': 'PredM#Label_txt19_i4_lightbarrier_failure_mode_2_class',
@@ -2327,15 +2530,17 @@ def execute_kNN_label_embedding_search(query_embedding, embedding_df, dataset, g
     sorted_indexes = np.argsort(np.squeeze(sim_list))[::-1]
 
     query_results = embedding_df.index[sorted_indexes].to_list()
-    # Iterate over the found nearest neighbor and look where the correct label is found
+    # Iterate over the found nearest neighbor and look at which position the correct label is found
     pos = 0
     found_a_label = False
     for rank, found_embedding in enumerate(query_results):
-        if "PredM#Label_" in found_embedding and "__label__" in found_embedding:
+        #print(rank,":", found_embedding)
+        if "PredM#Label_" in found_embedding and not "__label__" in found_embedding and "_class" in found_embedding:
             idx = found_embedding.find("PredM#Label_")
             extracted_emb = found_embedding[idx:].lower()
+            #print("extracted_emb: ", extracted_emb)
             if extracted_emb in mappingDict.values():
-                print(rank, "-", sorted_sim_values[rank], "-", found_embedding)
+                #print(rank, "-",pos,"-", sorted_sim_values[rank], "-", found_embedding)
                 # found_embedding_ = mappingDict.get found_embedding.split("#Label_")[1]
                 '''
                 if found_embedding_ == "txt16_conveyor_big_gear_tooth_broken_failure":
@@ -2533,10 +2738,11 @@ def get_labels_from_knowledge_graph_embeddings_from_anomalous_data_streams_permu
         if (not curr_label == not_selection_label) and true_positive_prediction:
             print("\n##############################################################################")
             print("Example:",i,"| Gold Label:", y_test_labels[i],"\n")
-            ordered_data_streams = store_relevant_attribut_attr_name[i]
+            #ordered_data_streams = store_relevant_attribut_attr_name[i]
+            ordered_data_streams = dataset.feature_names_all[store_relevant_attribut_index[i]]
             print("Relevant attributes ordered asc: ", ordered_data_streams,"\n")
-            #print(len(store_relevant_attribut_distance[i])," - ", len(ordered_data_streams), " - ", len(store_relevant_attribut_index[i]))
-            #print("store_relevant_attribut_name[i]", store_relevant_attribut_distance[i],"| store_relevant_attribut_idx[i]:", store_relevant_attribut_attr_name[i],"| store_relevant_attribut_dis[i]:", store_relevant_attribut_index[i])
+            print(len(store_relevant_attribut_distance[i])," - ", len(ordered_data_streams), " - ", len(store_relevant_attribut_index[i]))
+            print("store_relevant_attribut_distance[i]", store_relevant_attribut_distance[i],"| store_relevant_attribut_attr_name[i]:", store_relevant_attribut_attr_name[i],"| store_relevant_attribut_index[i]:", store_relevant_attribut_index[i])
             if len(ordered_data_streams) != 0:
                 # Iterate over each data streams defined as anomalous and query the related labels:
                 cnt_anomaly_examples += 1
@@ -2596,8 +2802,50 @@ def get_labels_from_knowledge_graph_embeddings_from_anomalous_data_streams_permu
                 print("pos_first_three:", pos_first_three)
                 #print(sdds)
                 #'''
+                '''
+                if "a_15_1_x" in ordered_data_streams:
+                    # Get raw data:
+                    raw_data_test_example = dataset.x_test[i, :, :]
+                    print("raw_data_test_example shape: ", raw_data_test_example.shape)
+                    # Gat Actuator state:
+                    actuator_index = np.argwhere(dataset.feature_names_all == "txt15_m1.finished")
+
+                    print("np.mean(raw_data_test_example[:,actuator_index]): ", np.mean(raw_data_test_example[:,actuator_index]))
+                    #print(ssdds)
+                    # '' '' ''
+                    if np.mean(raw_data_test_example[:,actuator_index]) >= 0.9:
+                        print("Motor not active!")
+                        found_cnt += 1
+
+                if "txt15_m1" in y_test_labels[i]:
+                    print("hier")
+                    # Get raw data:
+                    raw_data_test_example = dataset.x_test[i,:,:]
+                    print("raw_data_test_example shape: ", raw_data_test_example.shape)
+
+                    # Gat Actuator state:
+                    actuator_index = np.argwhere(dataset.feature_names_all == "txt15_m1.finished")
+                    sensor_index_1 = np.argwhere(dataset.feature_names_all == "a_15_1_x")
+                    sensor_index_2 = np.argwhere(dataset.feature_names_all == "a_15_1_y")
+                    sensor_index_3 = np.argwhere(dataset.feature_names_all == "a_15_1_z")
+                    print("actuator_index: ", actuator_index)
+                    # Gat Actuator state:
+                    print("np.mean(raw_data_test_example[:,actuator_index]): ", np.mean(raw_data_test_example[:,actuator_index]))
+                    #print(ssdds)
+                    # '' '' ''
+                    if np.mean(raw_data_test_example[:,actuator_index]) <= 0.9:
+                        k1 = kurtosis(raw_data_test_example[:,sensor_index_1])
+                        k2 = kurtosis(raw_data_test_example[:, sensor_index_2])
+                        k3 = kurtosis(raw_data_test_example[:, sensor_index_3])
+                        print("Motor is active!")
+                        print("kurtosis:",k1,k2,k3)
+                        #print(ssdds)
+                '''
             else:
                 skipped_cnt += 1
+
+    avg_num_ordered_data_streams = avg_num_ordered_data_streams / cnt_anomaly_examples
+    print("found_cnt: ", found_cnt)
 
     # Current results:
     print(used_emb_marker + ": Average label position using all data streams (add)", pos_add_allDS_sum / cnt_anomaly_examples)
@@ -2607,6 +2855,7 @@ def get_labels_from_knowledge_graph_embeddings_from_anomalous_data_streams_permu
     print(used_emb_marker + ": No label found From the first "+str(restict_to_top_k_data_streams)+" data streams, the first "+str(restrict_to_top_k_results)+"results",not_found_cnt)
     print(used_emb_marker + ": Examples for which no anomalous data streams were provided:",skipped_cnt)
     print(used_emb_marker + ": Average number of data streams used for query:",avg_num_ordered_data_streams)
+    print(used_emb_marker + ": Count Anomaly Examples:",cnt_anomaly_examples)
 
     # Return dictonary
     dict_measures[used_emb_marker + ": Average label position using all data streams (add)"] = pos_add_allDS_sum / cnt_anomaly_examples
@@ -2616,9 +2865,198 @@ def get_labels_from_knowledge_graph_embeddings_from_anomalous_data_streams_permu
     dict_measures[used_emb_marker + ": No label found From the first "+str(restict_to_top_k_data_streams)+" data streams, the first "+str(restrict_to_top_k_results)+"results"] = not_found_cnt
     dict_measures[used_emb_marker + ": Examples for which no anomalous data streams were provided:"] = skipped_cnt
     dict_measures[used_emb_marker + ": Average number of data streams used for query:"] = avg_num_ordered_data_streams
+    dict_measures[used_emb_marker + ": Count Anomaly Examples:"] = cnt_anomaly_examples
 
     return dict_measures
     # execute a query for each example
+
+# Returns True or False
+def is_data_stream_not_relevant_for_anomalies(example_id, anomalous_data_stream, dataset):
+        print("Expert Masking")
+        active_threshold_actuator = 0.9
+
+        # List of rules
+        label_to_rule = {
+            'txt15_conveyor_failure_mode_driveshaft_slippage_failure':  ["txt15_m1.finished", "", ""],
+            'txt15_i1_lightbarrier_failure_mode_1':                     ["txt15_i1", "on-off", ""],
+            'txt15_i1_lightbarrier_failure_mode_2':                     ["txt15_i1", "inverse", ""],
+            'txt15_i3_lightbarrier_failure_mode_2':                     ["txt15_i3", "inverse", ""],
+            'txt15_pneumatic_leakage_failure_mode_1':                   ["txt15_o5", "on-off", ""],
+            'txt15_pneumatic_leakage_failure_mode_2':                   ["txt15_o5", "on-off", ""],
+            'txt15_pneumatic_leakage_failure_mode_3':                   ["txt15_o5", "on-off", ""],
+            'txt16_conveyor_failure_mode_driveshaft_slippage_failure':  ["txt16_m3.finished", "", ""],
+            'txt16_conveyorbelt_big_gear_tooth_broken_failure':         ["txt16_m3.finished", "", ""],
+            'txt16_conveyorbelt_small_gear_tooth_broken_failure':       ["txt16_m3.finished", "", ""],
+            'txt16_i3_switch_failure_mode_2':                           ["txt16_i3", "inverse", ""],
+            'txt16_m3_t1_high_wear':                                    ["txt16_m3.finished", "kurtosis", ""],
+            'txt16_m3_t1_low_wear':                                     ["txt16_m3.finished", "kurtosis", ""],
+            'txt16_m3_t2_wear':                                         ["txt16_m3.finished", "kurtosis", ""],
+            'txt17_i1_switch_failure_mode_1':                           ["txt17_i1", "on-off", ""],
+            'txt17_i1_switch_failure_mode_2':                           ["txt17_i1", "inverse", ""],
+            'txt17_pneumatic_leakage_failure_mode_1':                   ["txt16_o8", "", ""],
+            'txt17_workingstation_transport_failure_mode_wout_workpiece': ["txt16_o8,txt17_m2.finished", "", ""],
+            'txt18_pneumatic_leakage_failure_mode_1':                   ["txt18_o7", "", ""],
+            'txt18_pneumatic_leakage_failure_mode_2_faulty':            ["txt18_o7", "", ""],
+            "txt18_pneumatic_leakage_failure_mode_2":                   ["txt18_o7", "", ""],
+            'txt18_transport_failure_mode_wout_workpiece':              ["txt18_o7,txt18_m1.finished,txt18_m2.finished,txt18_m3.finished", "", ""],
+            'txt19_i4_lightbarrier_failure_mode_1':                     ["txt19_i4", "", ""],
+            'txt19_i4_lightbarrier_failure_mode_2':                     ["txt19_i4", "", ""],
+            "txt16_i4_lightbarrier_failure_mode_1":                     ["txt19_i4", "", ""],
+            "txt15_m1_t1_high_wear":                                    ["txt15_m1.finished","kurtosis",],
+            "txt15_m1_t1_low_wear":                                     ["txt15_m1.finished","kurtosis",],
+            "txt15_m1_t2_wear":                                         ["txt15_m1.finished","kurtosis",],
+            "no_failure":                                               ["","",""]
+        }
+        # Function/Actuator Active
+        # Symptom in data stream found
+        #
+
+        raw_data_test_example = dataset.x_test[example_id, :, :]
+        relevant_actuator = ""
+        active_threshold = 0.5
+        sensor_index = np.argwhere(dataset.feature_names_all == anomalous_data_stream)
+        symptom = 0
+        is_not_relevant = False
+
+        # To find an anomaly in these data streams, the actuator must be active
+        if anomalous_data_stream in ["a_15_1_x","a_15_1_y","a_15_1_z"]:
+            relevant_actuator = "txt15_m1.finished"
+            active_threshold = 0.2
+            symptom = kurtosis(raw_data_test_example[:, sensor_index])
+            actuator_index = np.argwhere(dataset.feature_names_all == relevant_actuator)
+            if np.mean(raw_data_test_example[:, actuator_index]) >= active_threshold:
+                is_not_relevant = True
+            '''
+            else:
+                if symptom < 0.0:
+                    is_not_relevant = True
+            '''
+        elif anomalous_data_stream in ["a_16_3_x","a_16_3_y","a_16_3_z"]:
+            relevant_actuator = "txt16_m3.finished"
+            active_threshold = 0.2
+            symptom = kurtosis(raw_data_test_example[:, sensor_index])
+            actuator_index = np.argwhere(dataset.feature_names_all == relevant_actuator)
+            if np.mean(raw_data_test_example[:, actuator_index]) >= active_threshold:
+                is_not_relevant = True
+            '''
+            else:
+                if anomalous_data_stream == "a_16_3_y" and  symptom < 0.1:
+                    is_not_relevant = True
+            '''
+        elif anomalous_data_stream in ["hPa_15"]:
+            relevant_actuator = "txt15_o5"
+            active_threshold = 0.8
+            actuator_index = np.argwhere(dataset.feature_names_all == relevant_actuator)
+            if np.mean(raw_data_test_example[:, actuator_index]) <= active_threshold:
+                is_not_relevant = True
+        elif anomalous_data_stream in ["hPa_17"]:
+            relevant_actuator = "txt16_o8"
+            active_threshold = 0.8
+            actuator_index = np.argwhere(dataset.feature_names_all == relevant_actuator)
+            if np.mean(raw_data_test_example[:, actuator_index]) <= active_threshold:
+                is_not_relevant = True
+        elif anomalous_data_stream in ["hPa_18"]:
+            relevant_actuator = "txt18_o7"
+            active_threshold = 0.8
+            actuator_index = np.argwhere(dataset.feature_names_all == relevant_actuator)
+            if np.mean(raw_data_test_example[:, actuator_index]) <= active_threshold:
+                is_not_relevant = True
+
+        return is_not_relevant
+
+def is_label_not_relevant_for_anomalies(example_id, anomalous_data_stream, dataset, label_to_verify):
+    print("Expert Masking")
+    active_threshold_actuator = 0.9
+
+    # List of rules
+    label_to_rule = {
+        'txt15_conveyor_failure_mode_driveshaft_slippage_failure': ["txt15_m1.finished", "", ""],
+        'txt15_i1_lightbarrier_failure_mode_1': ["txt15_i1", "on-off", ""],
+        'txt15_i1_lightbarrier_failure_mode_2': ["txt15_i1", "inverse", ""],
+        'txt15_i3_lightbarrier_failure_mode_2': ["txt15_i3", "inverse", ""],
+        'txt15_pneumatic_leakage_failure_mode_1': ["txt15_o5", "on-off", ""],
+        'txt15_pneumatic_leakage_failure_mode_2': ["txt15_o5", "on-off", ""],
+        'txt15_pneumatic_leakage_failure_mode_3': ["txt15_o5", "on-off", ""],
+        'txt16_conveyor_failure_mode_driveshaft_slippage_failure': ["txt16_m3.finished", "", ""],
+        'txt16_conveyorbelt_big_gear_tooth_broken_failure': ["txt16_m3.finished", "", ""],
+        'txt16_conveyorbelt_small_gear_tooth_broken_failure': ["txt16_m3.finished", "", ""],
+        'txt16_i3_switch_failure_mode_2': ["txt16_i3", "inverse", ""],
+        'txt16_m3_t1_high_wear': ["txt16_m3.finished", "kurtosis", ""],
+        'txt16_m3_t1_low_wear': ["txt16_m3.finished", "kurtosis", ""],
+        'txt16_m3_t2_wear': ["txt16_m3.finished", "kurtosis", ""],
+        'txt17_i1_switch_failure_mode_1': ["txt17_i1", "on-off", ""],
+        'txt17_i1_switch_failure_mode_2': ["txt17_i1", "inverse", ""],
+        'txt17_pneumatic_leakage_failure_mode_1': ["txt16_o8", "", ""],
+        'txt17_workingstation_transport_failure_mode_wout_workpiece': ["txt16_o8,txt17_m2.finished", "", ""],
+        'txt18_pneumatic_leakage_failure_mode_1': ["txt18_o7", "", ""],
+        'txt18_pneumatic_leakage_failure_mode_2_faulty': ["txt18_o7", "", ""],
+        "txt18_pneumatic_leakage_failure_mode_2": ["txt18_o7", "", ""],
+        'txt18_transport_failure_mode_wout_workpiece': [
+            "txt18_o7,txt18_m1.finished,txt18_m2.finished,txt18_m3.finished", "", ""],
+        'txt19_i4_lightbarrier_failure_mode_1': ["txt19_i4", "", ""],
+        'txt19_i4_lightbarrier_failure_mode_2': ["txt19_i4", "", ""],
+        "txt16_i4_lightbarrier_failure_mode_1": ["txt19_i4", "", ""],
+        "txt15_m1_t1_high_wear": ["txt15_m1.finished", "kurtosis", ],
+        "txt15_m1_t1_low_wear": ["txt15_m1.finished", "kurtosis", ],
+        "txt15_m1_t2_wear": ["txt15_m1.finished", "kurtosis", ],
+        "no_failure": ["", "", ""]
+    }
+    # Function/Actuator Active
+    # Symptom in data stream found
+    #
+
+    raw_data_test_example = dataset.x_test[example_id, :, :]
+    relevant_actuator = ""
+    active_threshold = 0.5
+    sensor_index = np.argwhere(dataset.feature_names_all == anomalous_data_stream)
+    symptom = 0
+    is_not_relevant = False
+
+    # To find an anomaly in these data streams, the actuator must be active
+    if anomalous_data_stream in ["a_15_1_x", "a_15_1_y", "a_15_1_z"]:
+        relevant_actuator = "txt15_m1.finished"
+        active_threshold = 0.2
+        symptom = kurtosis(raw_data_test_example[:, sensor_index])
+        actuator_index = np.argwhere(dataset.feature_names_all == relevant_actuator)
+        if np.mean(raw_data_test_example[:, actuator_index]) >= active_threshold:
+            is_not_relevant = True
+        '''
+        else:
+            if symptom < 0.0:
+                is_not_relevant = True
+        '''
+    elif anomalous_data_stream in ["a_16_3_x", "a_16_3_y", "a_16_3_z"]:
+        relevant_actuator = "txt16_m3.finished"
+        active_threshold = 0.2
+        symptom = kurtosis(raw_data_test_example[:, sensor_index])
+        actuator_index = np.argwhere(dataset.feature_names_all == relevant_actuator)
+        if np.mean(raw_data_test_example[:, actuator_index]) >= active_threshold:
+            is_not_relevant = True
+        '''
+        else:
+            if anomalous_data_stream == "a_16_3_y" and  symptom < 0.1:
+                is_not_relevant = True
+        '''
+    elif anomalous_data_stream in ["hPa_15"]:
+        relevant_actuator = "txt15_o5"
+        active_threshold = 0.8
+        actuator_index = np.argwhere(dataset.feature_names_all == relevant_actuator)
+        if np.mean(raw_data_test_example[:, actuator_index]) <= active_threshold:
+            is_not_relevant = True
+    elif anomalous_data_stream in ["hPa_17"]:
+        relevant_actuator = "txt16_o8"
+        active_threshold = 0.8
+        actuator_index = np.argwhere(dataset.feature_names_all == relevant_actuator)
+        if np.mean(raw_data_test_example[:, actuator_index]) <= active_threshold:
+            is_not_relevant = True
+    elif anomalous_data_stream in ["hPa_18"]:
+        relevant_actuator = "txt18_o7"
+        active_threshold = 0.8
+        actuator_index = np.argwhere(dataset.feature_names_all == relevant_actuator)
+        if np.mean(raw_data_test_example[:, actuator_index]) <= active_threshold:
+            is_not_relevant = True
+
+    return is_not_relevant
 
 def main(run=0):
     config = Configuration()
@@ -2637,11 +3075,12 @@ def main(run=0):
     # file_ano_pred - predictions of anomalies - 1d ndarray
 
     # store_relevant_attribut_name_FINAL_FINAL_FINAL_MSCRED_Standard_corrRelMat_inputLoss_epoch100
-
+    '''
     file_name       = "store_relevant_attribut_name_Fin_Standard_3_"
     file_idx        = "store_relevant_attribut_idx_Fin_Standard_3_"
     file_dis        = "store_relevant_attribut_dis_Fin_Standard_3_"
     file_ano_pred   = "predicted_anomaliesFin_Standard_3_"
+    '''
     '''
     file_name       = "store_relevant_attribut_name_Fin_Standard_wAdjMat_newAdj_2"
     file_idx        = "store_relevant_attribut_idx_Fin_Standard_wAdjMat_newAdj_2"
@@ -2701,13 +3140,13 @@ def main(run=0):
     '''
     folder = "cnn1d_with_fc_simsiam_128-32-3-/"
 
-    file_name        = folder + "store_relevant_attribut_name__cnn1d_with_fc_simsiam_128-32-3-__"
-    file_name_2          = folder + "store_relevant_attribut_name__nn2_cnn1d_with_fc_simsiam_128-32-3-__"
-    file_idx         = folder + "store_relevant_attribut_idx__cnn1d_with_fc_simsiam_128-32-3-__"
-    file_idx_2           = folder + "store_relevant_attribut_idx__nn2_cnn1d_with_fc_simsiam_128-32-3-__"
-    file_dis         = folder + "store_relevant_attribut_dis__cnn1d_with_fc_simsiam_128-32-3-__"
-    file_dis_2           = folder + "store_relevant_attribut_dis__nn2_cnn1d_with_fc_simsiam_128-32-3-__"
-    file_ano_pred    = folder + "predicted_anomalies__cnn1d_with_fc_simsiam_128-32-3-__"
+    file_name        = folder + "store_relevant_attribut_name_wTrainFaF_cnn1d_with_fc_simsiam_128-32-3-__"
+    file_name_2          = folder + "store_relevant_attribut_name_wTrainFaF_nn2_cnn1d_with_fc_simsiam_128-32-3-__"
+    file_idx         = folder + "store_relevant_attribut_idx_wTrainFaF_cnn1d_with_fc_simsiam_128-32-3-__"
+    file_idx_2           = folder + "store_relevant_attribut_idx_wTrainFaF_nn2_cnn1d_with_fc_simsiam_128-32-3-__"
+    file_dis         = folder + "store_relevant_attribut_dis_wTrainFaF_cnn1d_with_fc_simsiam_128-32-3-__"
+    file_dis_2           = folder + "store_relevant_attribut_dis_wTrainFaF_nn2_cnn1d_with_fc_simsiam_128-32-3-__"
+    file_ano_pred    = folder + "predicted_anomalies_wTrainFaF_cnn1d_with_fc_simsiam_128-32-3-__"
     '''
 
     #'''
@@ -2722,17 +3161,17 @@ def main(run=0):
     file_ano_pred    = folder + "predicted_anomalies__cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2cnn2-GCN-GSL-RanInit-Var1-Knn5Out-layerwiseRed__"
     #'''
 
-    #'''
+    '''
     folder = ""#"cnn1d_with_fc_simsiam_128-32-3-/"
 
-    file_name        = folder + "store_relevant_attribut_name__2_cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2cnn2-GCN-GSL-RanInit-Var1-Knn5Out-layerwiseRed__"
+    file_name        = folder + "store_relevant_attribut_name_cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2cnn2-GCN-GSL-RanInit-Var1-Knn5Out-layerwiseRed__"
     file_name_2          = folder + "store_relevant_attribut_name__2_nn2_cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2cnn2-GCN-GSL-RanInit-Var1-Knn5Out-layerwiseRed__"
     file_idx         = folder + "store_relevant_attribut_idx__2_cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2cnn2-GCN-GSL-RanInit-Var1-Knn5Out-layerwiseRed__"
     file_idx_2           = folder + "store_relevant_attribut_idx__2_nn2_cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2cnn2-GCN-GSL-RanInit-Var1-Knn5Out-layerwiseRed__"
     file_dis         = folder + "store_relevant_attribut_dis__2_cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2cnn2-GCN-GSL-RanInit-Var1-Knn5Out-layerwiseRed__"
     file_dis_2           = folder + "store_relevant_attribut_dis__2_nn2_cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2cnn2-GCN-GSL-RanInit-Var1-Knn5Out-layerwiseRed__"
     file_ano_pred    = folder + "predicted_anomalies__cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2cnn2-GCN-GSL-RanInit-Var1-Knn5Out-layerwiseRed__"
-    #'''
+    '''
 
     '''
     folder = "cnn2d_gcn/"
@@ -2776,19 +3215,20 @@ def main(run=0):
 
     is_siam                         = True
     use_only_true_positive_pred     = True
-    evaluate_hitsAtK_hitRateAtP     = True
+    evaluate_hitsAtK_hitRateAtP     = False
     is_memory                       = False
     is_jenks_nat_break_used         = False
     is_elbow_selection_used         = False
     is_fix_k_selection_used         = False
-    fix_k_for_selection             = 10
+    fix_k_for_selection             = 5
     is_randomly_selected_featues    = False
     is_oracle                       = False
     use_train_FaFs_in_Test          = False
     q1                              = False
     q2                              = False
     q3                              = False
-    q4                              = True
+    q4                              = False
+    q5                              = True
 
     print("Used config: use_only_true_positive_pred:", use_only_true_positive_pred,"is_jenks_nat_break_used:", is_jenks_nat_break_used,"is_randomly_selected_featues", is_randomly_selected_featues,"is_oracle",is_oracle,"q1:",q1,"q2:",q2,"q3:",q3,"q4:",q4)
 
@@ -2937,6 +3377,13 @@ def main(run=0):
                 store_relevant_attribut_idx[i] = store_relevant_attribut_dis[i]
                 store_relevant_attribut_name[i] = store_relevant_attribut_dis[i]
 
+        # prediction:
+        size = (y_pred_anomalies.shape)
+        proba_0 = (2907/3389) #~0.85  # resulting array will have 15% of zeros - corresponding to the contamination rate of the data set
+        y_pred_anomalies = np.random.choice([0, 1], size=size, p=[proba_0, 1 - proba_0])
+
+    print("y_pred_anomalies.shape:", y_pred_anomalies.shape)
+    print("Positives:",np.sum(y_pred_anomalies),"Rate:",np.sum(y_pred_anomalies) / y_pred_anomalies.shape[0])
 
     ### clear attributes
     avg_attr = 0
@@ -3059,8 +3506,8 @@ def main(run=0):
         dict_measures = get_labels_from_knowledge_graph_from_anomalous_data_streams_permuted(most_rel_att, dataset.y_test_strings, dataset, y_pred_anomalies, not_selection_label="no_failure", only_true_positive_prediction=use_only_true_positive_pred, k_data_streams=[2, 3, 5, 10], k_permutations=[3, 2, 1], rel_type="Context")
     elif q4:
         dict_measures = {}
-        dict_measures = get_labels_from_knowledge_graph_embeddings_from_anomalous_data_streams_permuted(most_rel_att, dataset.y_test_strings, dataset, y_pred_anomalies, dict_measures, not_selection_label="no_failure", only_true_positive_prediction=use_only_true_positive_pred,
-                                                                                                        restrict_to_top_k_results = 3, restict_to_top_k_data_streams = 3, tsv_file='../data/training_data/knowledge/StSp_eval_lr_0.100001_d_25_e_150_bs_5_doLHS_0.0_doRHS_0.0_mNS_50_nSL_100_l_hinge_s_cosine_m_0.7_iM_False.tsv', is_siam=is_siam)
+        #dict_measures = get_labels_from_knowledge_graph_embeddings_from_anomalous_data_streams_permuted(most_rel_att, dataset.y_test_strings, dataset, y_pred_anomalies, dict_measures, not_selection_label="no_failure", only_true_positive_prediction=use_only_true_positive_pred,
+        #                                                                                                restrict_to_top_k_results = 3, restict_to_top_k_data_streams = 3, tsv_file='../data/training_data/knowledge/StSp_eval_lr_0.100001_d_25_e_150_bs_5_doLHS_0.0_doRHS_0.0_mNS_50_nSL_100_l_hinge_s_cosine_m_0.7_iM_False.tsv', is_siam=is_siam)
         #'''
         list_embedding_models = [
             '../data/training_data/knowledge/owl2vecstar_eval_proj_False_dims_50_epochs_10_wk_random_wd_4_wm_none_uriDoc_yes_litDoc_no_mixDoc_no.tsv',
@@ -3080,6 +3527,14 @@ def main(run=0):
                                                                                                         restict_to_top_k_data_streams=3,
                                                                                                         tsv_file=emb_mod, is_siam=is_siam)
         #'''
+    elif q5:
+        dict_measures = get_component_from_knowledge_graph_from_anomalous_data_streams(most_rel_att,
+                                                                                    dataset.y_test_strings, dataset,
+                                                                                    y_pred_anomalies,
+                                                                                    not_selection_label="no_failure",
+                                                                                    only_true_positive_prediction=use_only_true_positive_pred,
+                                                                                    q5=q5)
+
     else:
         print("Query not specified!")
         dict_measures = {}
