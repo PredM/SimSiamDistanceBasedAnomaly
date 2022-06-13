@@ -1794,7 +1794,7 @@ def get_labels_from_knowledge_graph_from_anomalous_data_streams(most_relevant_at
 
     # execute a query for each example
 
-def get_component_from_knowledge_graph_from_anomalous_data_streams(most_relevant_attributes, y_test_labels, dataset,y_pred_anomalies, not_selection_label="no_failure",only_true_positive_prediction=False, q5=False):
+def get_component_from_knowledge_graph_from_anomalous_data_streams(most_relevant_attributes, y_test_labels, dataset,y_pred_anomalies, not_selection_label="no_failure",only_true_positive_prediction=False, q5=False, q7=False):
     store_relevant_attribut_idx, store_relevant_attribut_dis, store_relevant_attribut_name = most_relevant_attributes[0], \
                                                                                              most_relevant_attributes[1], \
                                                                                              most_relevant_attributes[2]
@@ -1922,6 +1922,107 @@ def get_component_from_knowledge_graph_from_anomalous_data_streams(most_relevant
                                                 }
                                                 }
                                                     '''
+
+                        if q7:
+                            is_not_relevant, Func_IRI, symptom_found, Symp_IRI = extract_fct_symp_of_raw_data_for_sparql_query_as_expert_knowledge(
+                                i, data_stream, dataset)
+
+                            if not Symp_IRI == "":
+                                if symptom_found:
+                                    Symp_IRI_part = "?failureModes fmeca:isIndicatedBy <" + Symp_IRI + ">."
+                                else:
+                                    Symp_IRI_part = "" #"FILTER NOT EXISTS {?failureModes fmeca:isIndicatedBy <" + Symp_IRI + ">.}"
+                            else:
+                                Symp_IRI_part = ""
+                            if not Func_IRI == "":
+                                if Func_IRI == "http://iot.uni-trier.de/PredM#Func_SM_M1_Drive_Conveyor_Belt":
+                                    Func_IRI_part = '''{
+                                                            <http://iot.uni-trier.de/PredM#Func_SM_M1_Drive_Conveyor_Belt> fmeca:definesFailureMode ?failureModes. 
+                                                        } UNION {
+                                                            <http://iot.uni-trier.de/PredM#Func_SM_CB_transport_workpieces> fmeca:definesFailureMode ?failureModes. 
+                                                        }'''
+                                elif Func_IRI == "http://iot.uni-trier.de/PredM#Func_VGR_Pneumatic_System_Provide_Pressure":
+                                    Func_IRI_part = '''{
+                                                            <http://iot.uni-trier.de/PredM#Func_VGR_Pneumatic_System_Provide_Pressure> fmeca:definesFailureMode ?failureModes. 
+                                                        } UNION {
+                                                            <http://iot.uni-trier.de/PredM#Func_VGR_Transport_workpieces_general_function> fmeca:definesFailureMode ?failureModes. 
+                                                        }'''
+                                elif Func_IRI == "http://iot.uni-trier.de/PredM#Func_MPS_M3_Drive_Conveyor_Belt":
+                                    Func_IRI_part = '''{
+                                                            <http://iot.uni-trier.de/PredM#Func_MPS_M3_Drive_Conveyor_Belt> fmeca:definesFailureMode ?failureModes. 
+                                                        } UNION {
+                                                            <http://iot.uni-trier.de/PredM#Func_MPS_CB_transport_workpieces> fmeca:definesFailureMode ?failureModes. 
+                                                        }'''
+                                elif Func_IRI == "http://iot.uni-trier.de/PredM#Func_MPS_BF_Pneumatic_System_Provide_Pressure":
+                                    Func_IRI_part = '''{
+                                                            <http://iot.uni-trier.de/PredM#Func_MPS_BF_Pneumatic_System_Provide_Pressure> fmeca:definesFailureMode ?failureModes. 
+                                                        } UNION {
+                                                            <http://iot.uni-trier.de/PredM#Func_MPS_BF_Transport_of_workpieces_from_milling_machine_to_sorting_station> fmeca:definesFailureMode ?failureModes. 
+                                                            }'''
+                                    #http://iot.uni-trier.de/PredM#Func_MPS_BF_Transport_of_workpieces_from_milling_machine_to_sorting_station
+                                else:
+                                    Func_IRI_part = "<" + Func_IRI + "> fmeca:definesFailureMode ?failureModes."
+
+                                # If the function is not relevant (i.e. not active), we expect for those function that a failure mode can also not active ...
+                                if is_not_relevant:
+                                    #Func_IRI_part = "FILTER NOT EXISTS {<"+Func_IRI+"> fmeca:definesFailureMode ?failureModes.}"
+                                    Func_IRI_part = "FILTER NOT EXISTS {"+Func_IRI_part+"}"
+                            else:
+                                Func_IRI_part = ""
+
+                            # Check correctness: if data stream and label match
+                            sparql_query = '''  PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+                                                                            PREFIX owl: <http://www.w3.org/2002/07/owl#>
+                                                                            PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+                                                                            PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+                                                                            PREFIX ftonto: <http://iot.uni-trier.de/FTOnto#>
+                                                                            PREFIX fmeca: <http://iot.uni-trier.de/FMECA#>
+                                                                            PREFIX predm: <http://iot.uni-trier.de/PredM#>
+                                                                            PREFIX sosa: <http://www.w3.org/ns/sosa/>
+                                                                            SELECT  DISTINCT ?component
+                                                                            WHERE {
+                                                                            {
+                                                                                    ?component <http://iot.uni-trier.de/FTOnto#is_associated_with_data_stream> "''' + data_stream_name + '''"^^<http://www.w3.org/2001/XMLSchema#string>.
+                                                                                    ?component <http://iot.uni-trier.de/FMECA#hasPotentialFailureMode> ?failureModes.
+                                                                                    ?failureModes <http://iot.uni-trier.de/PredM#hasLabel> ?label.
+                                                                                    ?label a <http://iot.uni-trier.de/''' + curr_label_ + '''>.
+                                                                                    }
+                                                                            UNION{
+                                                                                    ?component <http://iot.uni-trier.de/FTOnto#is_associated_with_data_stream> "''' + data_stream_name + '''"^^<http://www.w3.org/2001/XMLSchema#string>.
+                                                                                    ?failureModes <http://iot.uni-trier.de/PredM#isDetectableInDataStreamOf_Direct>  ?component.
+                                                                                    ?failureModes <http://iot.uni-trier.de/PredM#hasLabel> ?label.
+                                                                                    ?label a <http://iot.uni-trier.de/''' + curr_label_ + '''>.
+                                                                            }
+                                                                            }
+                                                                            '''
+                            # Count the number of components provided
+                            sparql_query_2 = '''  PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+                                                                                PREFIX owl: <http://www.w3.org/2002/07/owl#>
+                                                                                PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+                                                                                PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+                                                                                PREFIX ftonto: <http://iot.uni-trier.de/FTOnto#>
+                                                                                PREFIX fmeca: <http://iot.uni-trier.de/FMECA#>
+                                                                                PREFIX predm: <http://iot.uni-trier.de/PredM#>
+                                                                                PREFIX sosa: <http://www.w3.org/ns/sosa/>
+                                                                                SELECT  DISTINCT ?items
+                                                                                WHERE {
+                                                                                    {
+                                                                                    ?component <http://iot.uni-trier.de/FTOnto#is_associated_with_data_stream> "''' + data_stream_name + '''"^^<http://www.w3.org/2001/XMLSchema#string>.
+                                                                                    ?component <http://iot.uni-trier.de/FMECA#hasPotentialFailureMode> ?failureModes.
+                            				                                        ?items <http://iot.uni-trier.de/FMECA#hasPotentialFailureMode> ?failureModes.
+                            				                                        '''+Symp_IRI_part+''' 
+                                                                                    '''+Func_IRI_part+'''
+                            				                                
+                            				                                        }
+                                                                                UNION{
+                                                                                        ?component <http://iot.uni-trier.de/FTOnto#is_associated_with_data_stream> "''' + data_stream_name + '''"^^<http://www.w3.org/2001/XMLSchema#string>.
+                                                                                        ?failureModes <http://iot.uni-trier.de/PredM#isDetectableInDataStreamOf_Direct>  ?component.
+                                                                                        ?items <http://iot.uni-trier.de/FMECA#hasPotentialFailureMode> ?failureModes.
+                                                                                        '''+Symp_IRI_part+''' 
+                                                                                        '''+Func_IRI_part+'''
+                                                                                    }
+                                                                                }
+                                                                                '''
 
                         else:
                             raise Exception("NO QUERY IS SPECIFIED!")
@@ -3577,7 +3678,8 @@ def main(run=0):
     q3                              = False
     q4                              = False
     q5                              = False
-    q6                              = True
+    q6                              = False
+    q7                              = True
 
     use_pre_data_stream_contraints  = False
     use_post_label_contraints       = False
@@ -3891,13 +3993,13 @@ def main(run=0):
                                                                                                         restict_to_top_k_data_streams=3,
                                                                                                         tsv_file=emb_mod, is_siam=is_siam)
         #'''
-    elif q5:
+    elif q5 or q7:
         dict_measures = get_component_from_knowledge_graph_from_anomalous_data_streams(most_rel_att,
                                                                                     dataset.y_test_strings, dataset,
                                                                                     y_pred_anomalies,
                                                                                     not_selection_label="no_failure",
                                                                                     only_true_positive_prediction=use_only_true_positive_pred,
-                                                                                    q5=q5)
+                                                                                    q5=q5, q7=q7)
 
     else:
         print("Query not specified!")
