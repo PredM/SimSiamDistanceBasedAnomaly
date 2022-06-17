@@ -138,7 +138,7 @@ class ModelConfiguration:
 
         # Additional option for encoder variant cnn2dwithaddinput and the euclidean distance:
         # Weighted euclidean similarity based on relevant attributes
-        self.useFeatureWeightedSimilarity = True  # default: False
+        self.useFeatureWeightedSimilarity = False  # default: False
 
         # Weights are based on masking vectors that contain 1 if a feature is selected as relevant for a
         # label (failure mode) and 0 otherwise. If option is set False then features based
@@ -448,9 +448,9 @@ class StaticConfiguration:
         # Folder where the trained models are saved to during learning process
         self.hyper_file = self.hyper_file_folder + 'cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2.json' #cnn1d_with_fc_simsiam_128-32.json 'cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2.json'  #cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2.json #cnn2d_withAddInput_ContextStrang.json  'cnn2d_with_graph-26-10.json'  #cnn2d_with_graph_test.json #cnn2d_withAddInput_nwApproach.json
         #3W self.models_folder = '../../../../data/pklein/PredMSiamNN/data/' + 'trained_model2/' #
-        self.models_folder = self.data_folder_prefix + 'trained_models5/'
-        self.save_results_as_file = True
-        self.curr_run_identifier = self.hyper_file.split("/")[-1].split(".")[0] + "cnn2-GCN-GSL-RanInit-Var1"
+        self.models_folder = self.data_folder_prefix + 'trained_models/'
+        self.save_results_as_file = False
+        self.curr_run_identifier = self.hyper_file.split("/")[-1].split(".")[0] + "cnn2-GCN-GSL-RanInit-Var6-AdjMasked_AddNodes"
         self.use_train_FaF_in_eval = True
 
         self.use_pairwise_sim_siam = False
@@ -465,7 +465,7 @@ class StaticConfiguration:
         # of the attention weights multiplied with the other time series
         self.use_time_step_matching_simple_similarity = False
         self.simple_measures_matching = ['euclidean', 'dot_product', 'cosine', 'absmean']
-        self.simple_measure_matching = self.simple_measures_matching[2]
+        self.simple_measure_matching = self.simple_measures_matching[3]
 
         # how often should the pairwise matching occur:
         self.num_of_matching_iterations = 25
