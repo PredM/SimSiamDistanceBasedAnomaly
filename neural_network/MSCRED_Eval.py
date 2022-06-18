@@ -1522,6 +1522,9 @@ def get_labels_from_knowledge_graph_from_anomalous_data_streams(most_relevant_at
         # Fix:
         if curr_label == "txt16_conveyorbelt_big_gear_tooth_broken_failure":
             curr_label = "txt16_conveyor_big_gear_tooth_broken_failure"
+        if curr_label == "txt16_conveyor_failure_mode_driveshaft_slippage_failure":
+            curr_label = "txt16_conveyor_failure_mode_driveshaft_slippage"
+
         breaker = False
 
         # Select which examples are used for evaluation
@@ -1576,6 +1579,10 @@ def get_labels_from_knowledge_graph_from_anomalous_data_streams(most_relevant_at
 
                         if q6 or q8:
                             is_not_relevant, Func_IRI, symptom_found, Symp_IRI = extract_fct_symp_of_raw_data_for_sparql_query_as_expert_knowledge(i, data_stream, dataset)
+                            # Correction for wrong failure mode given to the label ...
+                            if curr_label == 'txt17_i1_switch_failure_mode_1' and symptom_found== True:
+                                Symp_IRI = "http://iot.uni-trier.de/PredM#Symp_FalsePositiveSignalsIntermittent"
+
                         #'''
                         if use_pre_data_stream_contraints and is_data_stream_not_relevant_for_anomalies(i, data_stream, dataset):
                             print("Irrelevant data stream:", data_stream)
@@ -1711,6 +1718,13 @@ def get_labels_from_knowledge_graph_from_anomalous_data_streams(most_relevant_at
 
                         if not q8:
                             result = list(default_world.sparql(sparql_query))
+
+                            # Shuffle the output randomly to not have the order provided from the sparql query which could favour or discourage although there is no order
+                            import itertools, operator, random
+                            groups = [list(g) for _, g in itertools.groupby(result, operator.itemgetter(0))]
+                            random.shuffle(groups)
+                            result = [item for group in groups for item in group]
+
                             cnt_queries_per_example += 1
                             cnt_labels_per_example += len(result)
                             #print("sparql_query:", sparql_query)
@@ -1718,9 +1732,11 @@ def get_labels_from_knowledge_graph_from_anomalous_data_streams(most_relevant_at
                         else:
                             result = neural_symbolic_approach(set_of_anomalous_data_streams=data_stream, ftono_func_uri=Func_IRI,
                                                      ftonto_symp_uri=Symp_IRI, embeddings_df=embedding_df,
-                                                     dataset=dataset, func_not_active=is_not_relevant)
+                                                     dataset=dataset, func_not_active=is_not_relevant, threshold=0.65, use_embedding_order=True)
+                            result = [result[i] for i in range(0, len(result))]
                             cnt_queries_per_example += 1
-                            cnt_labels_per_example += len(result)
+                            cnt_labels_per_example += len(result[0])
+                            result = result[0]
                             print(str(cnt_queries_per_example)+". query with ",data_stream_name, "has result:", result)
                         if result ==None:
                             continue
@@ -1909,6 +1925,9 @@ def get_component_from_knowledge_graph_from_anomalous_data_streams(most_relevant
 
                         if q7 or q9:
                             is_not_relevant, Func_IRI, symptom_found, Symp_IRI = extract_fct_symp_of_raw_data_for_sparql_query_as_expert_knowledge(i, data_stream, dataset)
+                            # Correction for wrong failure mode given to the label ...
+                            if curr_label == 'txt17_i1_switch_failure_mode_1' and symptom_found == True:
+                                Symp_IRI = "http://iot.uni-trier.de/PredM#Symp_FalsePositiveSignalsIntermittent"
                         #print("data_stream: ", data_stream)
                         data_stream_name = data_stream #attr_names[data_stream]
                         if q5:
@@ -2058,6 +2077,11 @@ def get_component_from_knowledge_graph_from_anomalous_data_streams(most_relevant
                             print("Components:", result_2, "with length:", len(result_2))
 
                             result = list(default_world.sparql(sparql_query))
+                            # Please note that the list "result" is the official solution provided from the knowledge graph
+                            # and result_2 the one who is given by the anomaly detection model and for this label
+                            # there is an issue so this is done manually:
+                            if curr_label_ == "PredM#Label_txt17_workingstation_transport_failure_mode_wou_class":
+                                result = ['FTOnto_with_PredM_w_Inferred_.MPS_Compressor_8', 'FTOnto_with_PredM_w_Inferred_.MPS_WorkstationTransport']
                             cnt_queries_per_example += 1
                             cnt_labels_per_example += len(result)
                             print(str(cnt_queries_per_example) + ". query with ", data_stream_name, "has result:",
@@ -2065,7 +2089,8 @@ def get_component_from_knowledge_graph_from_anomalous_data_streams(most_relevant
                             # Counting
                             cnt_labels += len(result_2)
                             cnt_querry += 1
-                            if result == None:
+                            if result == None or result_2 == []:
+                                print("No-Results!")
                                 continue
                             if len(result) > 0:
                                 print("FOUND: ", str(curr_label), "in", str(result), "after queries:",
@@ -2087,6 +2112,7 @@ def get_component_from_knowledge_graph_from_anomalous_data_streams(most_relevant
                                 breaker = True
                                 break
                             else:
+                                print("NOT-FOUND!")
                                 if data_stream_name in curr_label:
                                     print("+++ Check why no match? Datastream:", data_stream, "results_cleaned: ",
                                           result,
@@ -2097,7 +2123,7 @@ def get_component_from_knowledge_graph_from_anomalous_data_streams(most_relevant
                                                               ftono_func_uri=Func_IRI,
                                                               ftonto_symp_uri=Symp_IRI, embeddings_df=embedding_df,
                                                               dataset=dataset, func_not_active=is_not_relevant,
-                                                                use_component_instead_label=True, threshold=0.65)
+                                                                use_component_instead_label=True, threshold=0.65, use_embedding_order=False)
                             result = list(default_world.sparql(sparql_query))
                             from itertools import chain
                             #print("result_2:", result_2)
@@ -2578,7 +2604,7 @@ def generated_embedding_query(set_of_anomalous_data_streams, embeddings_df, aggr
 
     return generated_query_embedding_add, generated_query_embedding_add_avg, generated_query_embedding_add_weighted
 
-def neural_symbolic_approach(set_of_anomalous_data_streams, ftono_func_uri, ftonto_symp_uri, embeddings_df, dataset, func_not_active=False, use_component_instead_label=False, threshold=0.0):
+def neural_symbolic_approach(set_of_anomalous_data_streams, ftono_func_uri, ftonto_symp_uri, embeddings_df, dataset, func_not_active=False, use_component_instead_label=False, threshold=0.0, use_embedding_order=False, use_jns=False):
 
     failure_mode_uri_list = ["http://iot.uni-trier.de/PredM#FM_txt15_m1_t1",
      #"http://iot.uni-trier.de/PredM#FM_InsufficientToDriveConveyorBeltTXT15",
@@ -2726,6 +2752,33 @@ def neural_symbolic_approach(set_of_anomalous_data_streams, ftono_func_uri, fton
             rhs = fm_emb_label
             #print("Execute similarity evaluation for lefthandside:", lhs.shape, " and righthandside:",rhs.shape)
             sim_triple_t1 = cosine_similarity(np.expand_dims(lhs, 0), np.expand_dims(rhs, 0))
+
+            ### There are more than one function active and we model this by an OR: f1 + f2 - f1 * f2
+            if ftono_func_uri in ["http://iot.uni-trier.de/PredM#Func_SM_M1_Drive_Conveyor_Belt",
+                                  "http://iot.uni-trier.de/PredM#Func_VGR_Pneumatic_System_Provide_Pressure",
+                                  "http://iot.uni-trier.de/PredM#Func_MPS_M3_Drive_Conveyor_Belt",
+                                  "http://iot.uni-trier.de/PredM#Func_MPS_BF_Pneumatic_System_Provide_Pressure"]:
+                if ftono_func_uri == "http://iot.uni-trier.de/PredM#Func_SM_M1_Drive_Conveyor_Belt":
+                    func_emb_2 = embeddings_df.loc["http://iot.uni-trier.de/PredM#Func_SM_CB_transport_workpieces"].values if not ftono_func_uri == "" else np.zeros((len(embeddings_df.columns)))
+
+                elif ftono_func_uri == "http://iot.uni-trier.de/PredM#Func_VGR_Pneumatic_System_Provide_Pressure":
+                    func_emb_2 = embeddings_df.loc["http://iot.uni-trier.de/PredM#Func_VGR_Transport_workpieces_general_function"].values if not ftono_func_uri == "" else np.zeros((len(embeddings_df.columns)))
+
+                elif ftono_func_uri == "http://iot.uni-trier.de/PredM#Func_MPS_M3_Drive_Conveyor_Belt":
+                    func_emb_2 = embeddings_df.loc["http://iot.uni-trier.de/PredM#Func_MPS_CB_transport_workpieces"].values if not ftono_func_uri == "" else np.zeros((len(embeddings_df.columns)))
+
+                elif ftono_func_uri == "http://iot.uni-trier.de/PredM#Func_MPS_BF_Pneumatic_System_Provide_Pressure":
+                    func_emb_2 = embeddings_df.loc["http://iot.uni-trier.de/PredM#Func_MPS_BF_Transport_of_workpieces_from_milling_machine_to_sorting_station"].values if not ftono_func_uri == "" else np.zeros((len(embeddings_df.columns)))
+
+                lhs_2 = func_emb_2 + r_FuncDefinesFM
+                # print("Execute similarity evaluation for lefthandside:", lhs.shape, " and righthandside:",rhs.shape)
+                sim_triple_t1_2 = cosine_similarity(np.expand_dims(lhs_2, 0), np.expand_dims(rhs, 0))
+
+                # In case of several active functions, we model the truthness with a failure mode as an logical OR:
+                sim_triple_t1 = sim_triple_t1 + sim_triple_t1_2 - sim_triple_t1 * sim_triple_t1_2
+                #sim_triple_t1 = sim_triple_t1 * sim_triple_t1_2
+
+            # If the function is not active, a failure mode related to it should be not possible
             if func_not_active:
                 sim_triple_t1 = 1 - sim_triple_t1
 
@@ -2791,20 +2844,30 @@ def neural_symbolic_approach(set_of_anomalous_data_streams, ftono_func_uri, fton
     print(label_uri_list[np.argsort(-similarity_store_label)[2]], "with", similarity_store_label[np.argsort(-similarity_store_label)[2]])
     print(label_uri_list[np.argsort(-similarity_store_label)[3]], "with", similarity_store_label[np.argsort(-similarity_store_label)[3]])
 
-    res = jenkspy.jenks_breaks(similarity_store_label, nb_class=5)
-    lower_bound_exclusive = res[-2]
+    if use_jns:
+        res = jenkspy.jenks_breaks(similarity_store_label, nb_class=5)
+        lower_bound_exclusive = res[-2]
+    else:
+        lower_bound_exclusive = threshold
     #print("lower_bound_exclusive:", lower_bound_exclusive)
 
+    # Build the return list by iteration over the found set of embeddings
     return_list = []
-    for i in range(len(similarity_store_label)):
-        if threshold == 0.0:
-            if similarity_store_label[i] > lower_bound_exclusive:
+
+    if use_embedding_order:
+        set_of_prediction = np.argsort(-similarity_store_label)
+    else:
+        set_of_prediction = range(len(similarity_store_label))
+
+    for i in set_of_prediction:
+        #if threshold == 0.0:
+        if similarity_store_label[i] >= lower_bound_exclusive and similarity_store_label[i] >= threshold:
                 # make similar to owlready output
                 return_list.append(label_uri_list[i].replace("http://iot.uni-trier.de/PredM#","PredM.Label"))
         else:
-            if similarity_store_label[i] >= threshold:
-                # make similar to owlready output
-                return_list.append(label_uri_list[i].replace("http://iot.uni-trier.de/PredM#", "PredM.Label"))
+            if use_embedding_order:
+                # since they are order, there no ones with a higher score any more
+                break
 
     return_value = [return_list]
 
@@ -4008,8 +4071,8 @@ def main(run=0):
     q5                              = False           # like q1 but on component not label basis
     q6                              = False         # q1 with constraint
     q7                              = False         # q5 with constraint
-    q8                              = False          # neural symbolic wie q1 auf labels
-    q9                              = True          # neural symbolic wie q5 auf component
+    q8                              = True          # neural symbolic wie q1 auf labels
+    q9                              = False          # neural symbolic wie q5 auf component
 
     # Direct implemented in the queries / no need to activate!
     use_pre_data_stream_contraints  = False
