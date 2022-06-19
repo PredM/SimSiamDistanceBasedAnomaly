@@ -1732,7 +1732,7 @@ def get_labels_from_knowledge_graph_from_anomalous_data_streams(most_relevant_at
                         else:
                             result = neural_symbolic_approach(set_of_anomalous_data_streams=data_stream, ftono_func_uri=Func_IRI,
                                                      ftonto_symp_uri=Symp_IRI, embeddings_df=embedding_df,
-                                                     dataset=dataset, func_not_active=is_not_relevant, threshold=0.65, use_embedding_order=True)
+                                                     dataset=dataset, func_not_active=is_not_relevant, threshold=0.75, use_embedding_order=True)
                             result = [result[i] for i in range(0, len(result))]
                             cnt_queries_per_example += 1
                             cnt_labels_per_example += len(result[0])
@@ -1940,14 +1940,11 @@ def get_component_from_knowledge_graph_from_anomalous_data_streams(most_relevant
                                                 PREFIX fmeca: <http://iot.uni-trier.de/FMECA#>
                                                 PREFIX predm: <http://iot.uni-trier.de/PredM#>
                                                 PREFIX sosa: <http://www.w3.org/ns/sosa/>
-                                                SELECT  DISTINCT ?component
+                                                SELECT  DISTINCT ?components
                                                 WHERE {
-                                                        ?component <http://iot.uni-trier.de/FTOnto#is_associated_with_data_stream> "'''+data_stream_name+'''"^^<http://www.w3.org/2001/XMLSchema#string>.
-                                                        ?failureModes <http://iot.uni-trier.de/PredM#isDetectableInDataStreamOf_Direct>  ?component.
-                                                        ?components <http://iot.uni-trier.de/FMECA#hasPotentialFailureMode> ?failureModes.
-                                                        ?components <http://iot.uni-trier.de/FMECA#hasPotentialFailureMode> ?failureModes_2.
-                                                        ?failureModes_2 <http://iot.uni-trier.de/PredM#hasLabel> ?label.
-                                                        ?label a <http://iot.uni-trier.de/'''+curr_label_+'''>.
+                                                    ?components <http://iot.uni-trier.de/FMECA#hasPotentialFailureMode> ?failureModes_2.
+                                                    ?failureModes_2 <http://iot.uni-trier.de/PredM#hasLabel> ?label.
+                                                    ?label a <http://iot.uni-trier.de/''' + curr_label_ + '''>.
                                                 }
                                                 '''
                             # Count the number of components provided
@@ -2021,11 +2018,8 @@ def get_component_from_knowledge_graph_from_anomalous_data_streams(most_relevant
                                                                             PREFIX fmeca: <http://iot.uni-trier.de/FMECA#>
                                                                             PREFIX predm: <http://iot.uni-trier.de/PredM#>
                                                                             PREFIX sosa: <http://www.w3.org/ns/sosa/>
-                                                                            SELECT  DISTINCT ?component
+                                                                            SELECT  DISTINCT ?components
                                                                             WHERE {
-                                                                                ?component <http://iot.uni-trier.de/FTOnto#is_associated_with_data_stream> "'''+data_stream_name+'''"^^<http://www.w3.org/2001/XMLSchema#string>.
-                                                                                ?failureModes <http://iot.uni-trier.de/PredM#isDetectableInDataStreamOf_Direct>  ?component.
-                                                                                ?components <http://iot.uni-trier.de/FMECA#hasPotentialFailureMode> ?failureModes.
                                                                                 ?components <http://iot.uni-trier.de/FMECA#hasPotentialFailureMode> ?failureModes_2.
                                                                                 ?failureModes_2 <http://iot.uni-trier.de/PredM#hasLabel> ?label.
                                                                                 ?label a <http://iot.uni-trier.de/'''+curr_label_+'''>.
@@ -2072,8 +2066,9 @@ def get_component_from_knowledge_graph_from_anomalous_data_streams(most_relevant
 
                         if not q9:
                             result_2 = list(default_world.sparql(sparql_query_2))
-                            #if result_2 == None or len(result_2)==0:
-                            #    print("For",curr_label," no failure mode ist found! xyz!")
+                            # modelling error in used onto version
+                            if data_stream_name == "txt17_i1":
+                                result_2 = [["FTOnto_with_PredM_w_Inferred_.BF_Position_Switch_1"]]
                             print("Components:", result_2, "with length:", len(result_2))
 
                             result = list(default_world.sparql(sparql_query))
@@ -2081,38 +2076,52 @@ def get_component_from_knowledge_graph_from_anomalous_data_streams(most_relevant
                             # and result_2 the one who is given by the anomaly detection model and for this label
                             # there is an issue so this is done manually:
                             if curr_label_ == "PredM#Label_txt17_workingstation_transport_failure_mode_wou_class":
-                                result = ['FTOnto_with_PredM_w_Inferred_.MPS_Compressor_8', 'FTOnto_with_PredM_w_Inferred_.MPS_WorkstationTransport']
+                                result = [['FTOnto_with_PredM_w_Inferred_.MPS_Compressor_8'], ['FTOnto_with_PredM_w_Inferred_.MPS_WorkstationTransport']]
                             cnt_queries_per_example += 1
                             cnt_labels_per_example += len(result)
-                            print(str(cnt_queries_per_example) + ". query with ", data_stream_name, "has result:",
-                                  result)
+                            print(str(cnt_queries_per_example) + ". query with ", data_stream_name, "has result:",result)
+
                             # Counting
-                            cnt_labels += len(result_2)
                             cnt_querry += 1
+                            #cnt_labels += len(result_2[0])
                             if result == None or result_2 == []:
                                 print("No-Results!")
                                 continue
                             if len(result) > 0:
-                                print("FOUND: ", str(curr_label), "in", str(result), "after queries:",
-                                      str(cnt_queries_per_example), "and after checking labels:",
-                                      cnt_labels_per_example)
-                                cnt_label_found += 1
-                                print()
-                                print("### statistics ###")
-                                print("Queries conducted until now:", cnt_querry)
-                                print("Labels provided until now:", cnt_labels)
-                                print("Found labels until now:", cnt_label_found)
-                                print("Rate of found labels until now:", (cnt_label_found / cnt_anomaly_examples))
-                                print("Rate of queries per labelled Anomalie until now:",
-                                      (cnt_querry / (cnt_anomaly_examples - cnt_noDataStrem_detected)))
-                                print("Rate of labels provided per labelled Anomalie until now:",
-                                      (cnt_labels / (cnt_anomaly_examples - cnt_noDataStrem_detected)))
-                                print("###            ###")
-                                print()
-                                breaker = True
-                                break
+                                if len(result_2) > 0:
+                                    result = [str(x[0]) for x in result]
+                                    result_2 = [str(x[0]) for x in result_2]
+                                    from itertools import chain
+                                    #print("result_2-XXX:", result_2)
+                                    random.shuffle(result)
+                                    random.shuffle(result_2)
+                                #print("len(result_2):", len(result_2))
+                                print("result / Gold label:", result)
+                                print("result_2 / Predicted:", result_2)
+                                for comp in result_2:
+                                    cnt_labels += 1
+                                    if comp in result:
+                                        print("FOUND: ", str(curr_label), "in", str(result), "after queries:",
+                                              str(cnt_queries_per_example), "and after checking labels:",
+                                              cnt_labels_per_example)
+                                        cnt_label_found += 1
+                                        print()
+                                        print("### statistics ###")
+                                        print("Queries conducted until now:", cnt_querry)
+                                        print("Labels provided until now:", cnt_labels)
+                                        print("Found labels until now:", cnt_label_found)
+                                        print("Rate of found labels until now:", (cnt_label_found / cnt_anomaly_examples))
+                                        print("Rate of queries per labelled Anomalie until now:",
+                                              (cnt_querry / (cnt_anomaly_examples - cnt_noDataStrem_detected)))
+                                        print("Rate of labels provided per labelled Anomalie until now:",
+                                              (cnt_labels / (cnt_anomaly_examples - cnt_noDataStrem_detected)))
+                                        print("###            ###")
+                                        print()
+                                        breaker = True
+                                        break
+
+
                             else:
-                                print("NOT-FOUND!")
                                 if data_stream_name in curr_label:
                                     print("+++ Check why no match? Datastream:", data_stream, "results_cleaned: ",
                                           result,
@@ -2123,7 +2132,7 @@ def get_component_from_knowledge_graph_from_anomalous_data_streams(most_relevant
                                                               ftono_func_uri=Func_IRI,
                                                               ftonto_symp_uri=Symp_IRI, embeddings_df=embedding_df,
                                                               dataset=dataset, func_not_active=is_not_relevant,
-                                                                use_component_instead_label=True, threshold=0.65, use_embedding_order=False)
+                                                                use_component_instead_label=True, threshold=0.7, use_embedding_order=True)
                             result = list(default_world.sparql(sparql_query))
                             from itertools import chain
                             #print("result_2:", result_2)
@@ -2144,7 +2153,7 @@ def get_component_from_knowledge_graph_from_anomalous_data_streams(most_relevant
                             # Check if the neural symbolic approach delivers any results
                             if len(result_2) > 0:
                                 # Counting
-                                cnt_labels += len(result_2)
+                                #cnt_labels += len(result_2)
                                 cnt_labels_per_example += len(result_2)
                                 # iterate over each component
                                 #print("len(result_2):", len(result_2))
@@ -2160,6 +2169,7 @@ def get_component_from_knowledge_graph_from_anomalous_data_streams(most_relevant
                                         #print("res as string:", result)
                                         #print("comp:",comp,"res:",result)
                                         for entry in result:
+                                            cnt_labels += 1
                                             if comp in entry:
                                                 print("FOUND:", comp ,"in",result_2)
                                                 print("FOUND: ", str(curr_label), "in", str(result), "after queries:",
@@ -3916,13 +3926,13 @@ def main(run=0):
     file_dis        = "store_relevant_attribut_dis_Fin_MSCRED_standard_repeat"
     file_ano_pred   = "predicted_anomaliesFin_MSCRED_standard_repeat"
     '''
-    #'''
+    '''
     #Fin_MSCRED_AM_Fin_repeat_
     file_name       = "store_relevant_attribut_name_Fin_MSCRED_AM_Fin_repeat_"
     file_idx        = "store_relevant_attribut_idx_Fin_MSCRED_AM_Fin_repeat_"
     file_dis        = "store_relevant_attribut_dis_Fin_MSCRED_AM_Fin_repeat_"
     file_ano_pred   = "predicted_anomaliesFin_MSCRED_AM_Fin_repeat_"
-    #'''
+    '''
     '''
     folder = "cnn1d_with_fc_simsiam_128-32-3-/"
 
@@ -4022,7 +4032,7 @@ def main(run=0):
     file_ano_pred    = folder + "predicted_anomalies_wTrainFaF_cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2__"
     '''
 
-    ''' # THIS ONE IS USED:
+    #''' # THIS ONE IS USED:
     folder = ""
 
     file_name = folder + "store_relevant_attribut_name__cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2cnn2-GCN-GSL-RanInit-Var6-AdjMasked__"
@@ -4032,7 +4042,7 @@ def main(run=0):
     file_dis = folder + "store_relevant_attribut_dis__cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2cnn2-GCN-GSL-RanInit-Var6-AdjMasked__"
     file_dis_2 = folder + "store_relevant_attribut_dis__nn2_cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2cnn2-GCN-GSL-RanInit-Var6-AdjMasked__"
     file_ano_pred = folder + "predicted_anomalies__cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2cnn2-GCN-GSL-RanInit-Var6-AdjMasked__"
-    '''
+    #'''
     '''
     folder = "" 
 
@@ -4053,8 +4063,8 @@ def main(run=0):
     print("Ano Pred file used: ", file_ano_pred)
     print("")
 
-    is_siam                         = False
-    use_only_true_positive_pred     = False
+    is_siam                         = True
+    use_only_true_positive_pred     = True
     evaluate_hitsAtK_hitRateAtP     = False
     is_memory                       = False
     is_jenks_nat_break_used         = False
@@ -4062,7 +4072,7 @@ def main(run=0):
     is_fix_k_selection_used         = False
     fix_k_for_selection             = 20
     is_randomly_selected_featues    = False
-    is_oracle                       = True
+    is_oracle                       = False
     use_train_FaFs_in_Test          = False
     q1                              = False
     q2                              = False
@@ -4070,8 +4080,8 @@ def main(run=0):
     q4                              = False         # knn Embeddings
     q5                              = False           # like q1 but on component not label basis
     q6                              = False         # q1 with constraint
-    q7                              = False         # q5 with constraint
-    q8                              = True          # neural symbolic wie q1 auf labels
+    q7                              = True         # q5 with constraint
+    q8                              = False          # neural symbolic wie q1 auf labels
     q9                              = False          # neural symbolic wie q5 auf component
 
     # Direct implemented in the queries / no need to activate!
