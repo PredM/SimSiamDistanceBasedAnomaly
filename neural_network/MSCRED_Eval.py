@@ -1497,7 +1497,7 @@ def change_model(config: Configuration, start_time_string, num_of_selction_itera
         print(config.directory_model_to_use, '\n')
 
 def get_labels_from_knowledge_graph_from_anomalous_data_streams(most_relevant_attributes, y_test_labels, dataset,y_pred_anomalies, not_selection_label="no_failure",only_true_positive_prediction=False, q1=False, q3=False, q6=False, q8=False,
-                                                                use_pre_data_stream_contraints=False,use_post_label_contraints=False):
+                                                                use_pre_data_stream_contraints=False,use_post_label_contraints=False,onto_version=0,emb_file_version=0):
     store_relevant_attribut_idx, store_relevant_attribut_dis, store_relevant_attribut_name = most_relevant_attributes[0], \
                                                                                              most_relevant_attributes[1], \
                                                                                              most_relevant_attributes[2]
@@ -1506,8 +1506,19 @@ def get_labels_from_knowledge_graph_from_anomalous_data_streams(most_relevant_at
     attr_names = dataset.feature_names_all
     print("attr_names:", attr_names)
     # Get ontological knowledge graph
-    onto = get_ontology("FTOnto_with_PredM_w_Inferred_.owl")
+    if onto_version == 0:
+        onto = get_ontology("FTOnto_with_PredM_w_Inferred_.owl")
+    elif onto_version == 1:
+        onto_path.append("../data/training_data/knowledge/")
+        onto = get_ontology("file://../data/training_data/knowledge/FTOnto_with_PredM_w_Inferred_defected_1.owl")
+    elif onto_version == 2:
+        onto_path.append("../data/training_data/knowledge/")
+        onto = get_ontology("file://../data/training_data/knowledge/FTOnto_with_PredM_w_Inferred_defected_2.owl")
+
+    print("onto.imported_ontologies:",onto.imported_ontologies)
     onto.load()
+    #onto.imported_ontologies.append(ontoPredM)
+    #print("onto.imported_ontologies:", onto.imported_ontologies)
 
     # Iterate over the test data set
     cnt_label_found = 0
@@ -1563,7 +1574,13 @@ def get_labels_from_knowledge_graph_from_anomalous_data_streams(most_relevant_at
             if q8:
                 # '''
                 # Get embeddings
-                tsv_file = '../data/training_data/knowledge/StSp_eval_lr_0.100001_d_25_e_150_bs_5_doLHS_0.0_doRHS_0.0_mNS_50_nSL_100_l_hinge_s_cosine_m_0.7_iM_False.tsv'
+                if emb_file_version == 0:
+                    tsv_file = '../data/training_data/knowledge/StSp_eval_lr_0.100001_d_25_e_150_bs_5_doLHS_0.0_doRHS_0.0_mNS_50_nSL_100_l_hinge_s_cosine_m_0.7_iM_False.tsv'
+                elif emb_file_version == 1:
+                    tsv_file = '../data/training_data/knowledge/StSp_eval_lr_0.10000101_d_25_e_150_bs_5_doLHS_0.0_doRHS_0.0_mNS_50_nSL_100_l_hinge_s_cosine_m_0.7_iM_False.tsv'
+                elif emb_file_version == 2:
+                    tsv_file = '../data/training_data/knowledge/StSp_eval_lr_0.10000102_d_25_e_150_bs_5_doLHS_0.0_doRHS_0.0_mNS_50_nSL_100_l_hinge_s_cosine_m_0.7_iM_False.tsv'
+
                 embedding_df = pd.read_csv(tsv_file, sep='\t', skiprows=1, header=None,
                                            error_bad_lines=False, warn_bad_lines=False, index_col=0)
                 if "StSp" in tsv_file:
@@ -1732,7 +1749,7 @@ def get_labels_from_knowledge_graph_from_anomalous_data_streams(most_relevant_at
                         else:
                             result = neural_symbolic_approach(set_of_anomalous_data_streams=data_stream, ftono_func_uri=Func_IRI,
                                                      ftonto_symp_uri=Symp_IRI, embeddings_df=embedding_df,
-                                                     dataset=dataset, func_not_active=is_not_relevant, threshold=0.75, use_embedding_order=True)
+                                                     dataset=dataset, func_not_active=is_not_relevant, threshold=0.65, use_embedding_order=True)
                             result = [result[i] for i in range(0, len(result))]
                             cnt_queries_per_example += 1
                             cnt_labels_per_example += len(result[0])
@@ -1835,7 +1852,7 @@ def get_labels_from_knowledge_graph_from_anomalous_data_streams(most_relevant_at
 
     # execute a query for each example
 
-def get_component_from_knowledge_graph_from_anomalous_data_streams(most_relevant_attributes, y_test_labels, dataset,y_pred_anomalies, not_selection_label="no_failure",only_true_positive_prediction=False, q5=False, q7=False, q9=False):
+def get_component_from_knowledge_graph_from_anomalous_data_streams(most_relevant_attributes, y_test_labels, dataset,y_pred_anomalies, not_selection_label="no_failure",only_true_positive_prediction=False, q5=False, q7=False, q9=False, onto_version=0,emb_file_version=0):
     store_relevant_attribut_idx, store_relevant_attribut_dis, store_relevant_attribut_name = most_relevant_attributes[0], \
                                                                                              most_relevant_attributes[1], \
                                                                                              most_relevant_attributes[2]
@@ -1844,13 +1861,28 @@ def get_component_from_knowledge_graph_from_anomalous_data_streams(most_relevant
     attr_names = dataset.feature_names_all
     print("attr_names:", attr_names)
     # Get ontological knowledge graph
-    onto = get_ontology("FTOnto_with_PredM_w_Inferred_.owl")
+    if onto_version == 0:
+        onto = get_ontology("FTOnto_with_PredM_w_Inferred_.owl")
+    elif onto_version == 1:
+        onto_path.append("../data/training_data/knowledge/")
+        onto = get_ontology("file://../data/training_data/knowledge/FTOnto_with_PredM_w_Inferred_defected_1.owl")
+    elif onto_version == 2:
+        onto_path.append("../data/training_data/knowledge/")
+        onto = get_ontology("file://../data/training_data/knowledge/FTOnto_with_PredM_w_Inferred_defected_2.owl")
+
+    print("onto.imported_ontologies:", onto.imported_ontologies)
     onto.load()
 
     if q9:
         # '''
         # Get embeddings
-        tsv_file = '../data/training_data/knowledge/StSp_eval_lr_0.100001_d_25_e_150_bs_5_doLHS_0.0_doRHS_0.0_mNS_50_nSL_100_l_hinge_s_cosine_m_0.7_iM_False.tsv'
+        if emb_file_version == 0:
+            tsv_file = '../data/training_data/knowledge/StSp_eval_lr_0.100001_d_25_e_150_bs_5_doLHS_0.0_doRHS_0.0_mNS_50_nSL_100_l_hinge_s_cosine_m_0.7_iM_False.tsv'
+        elif emb_file_version == 1:
+            tsv_file = '../data/training_data/knowledge/StSp_eval_lr_0.10000101_d_25_e_150_bs_5_doLHS_0.0_doRHS_0.0_mNS_50_nSL_100_l_hinge_s_cosine_m_0.7_iM_False.tsv'
+        elif emb_file_version == 2:
+            tsv_file = '../data/training_data/knowledge/StSp_eval_lr_0.10000102_d_25_e_150_bs_5_doLHS_0.0_doRHS_0.0_mNS_50_nSL_100_l_hinge_s_cosine_m_0.7_iM_False.tsv'
+
         embedding_df = pd.read_csv(tsv_file, sep='\t', skiprows=1, header=None,
                                    error_bad_lines=False, warn_bad_lines=False, index_col=0)
         if "StSp" in tsv_file:
@@ -2614,7 +2646,7 @@ def generated_embedding_query(set_of_anomalous_data_streams, embeddings_df, aggr
 
     return generated_query_embedding_add, generated_query_embedding_add_avg, generated_query_embedding_add_weighted
 
-def neural_symbolic_approach(set_of_anomalous_data_streams, ftono_func_uri, ftonto_symp_uri, embeddings_df, dataset, func_not_active=False, use_component_instead_label=False, threshold=0.0, use_embedding_order=False, use_jns=False):
+def neural_symbolic_approach(set_of_anomalous_data_streams, ftono_func_uri, ftonto_symp_uri, embeddings_df, dataset, func_not_active=False, use_component_instead_label=False, threshold=0.0, use_embedding_order=False, use_jns=False, union_q1=False):
 
     failure_mode_uri_list = ["http://iot.uni-trier.de/PredM#FM_txt15_m1_t1",
      #"http://iot.uni-trier.de/PredM#FM_InsufficientToDriveConveyorBeltTXT15",
@@ -2726,6 +2758,7 @@ def neural_symbolic_approach(set_of_anomalous_data_streams, ftono_func_uri, fton
     r_rev_isDetectInDSDirect = embeddings_df.loc["http://iot.uni-trier.de/reverse_PredM#isDetectableInDataStreamOf_Direct"].values
     r_hasLabel = embeddings_df.loc["http://iot.uni-trier.de/PredM#hasLabel"].values
     r_rev_hasPotentialFM = embeddings_df.loc["http://iot.uni-trier.de/reverse_FMECA#hasPotentialFailureMode"].values
+    r_hasPotentialFM = embeddings_df.loc["http://iot.uni-trier.de/FMECA#hasPotentialFailureMode"].values
 
     # TEST
     #func_prov_pressure = embeddings_df.loc["http://iot.uni-trier.de/PredM#Func_SM_Pneumatic_System_Provide_Pressure"].values
@@ -2803,6 +2836,15 @@ def neural_symbolic_approach(set_of_anomalous_data_streams, ftono_func_uri, fton
             rhs = fm_emb_label
             #print("Execute similarity evaluation for lefthandside:", lhs.shape, " and righthandside:", rhs.shape)
             sim_triple_t3 = cosine_similarity(lhs, np.expand_dims(rhs, 0))
+
+            # OR as in Q1-C / Q1-L
+            if union_q1:
+                lhs = data_stream_emb + r_hasPotentialFM
+                rhs = fm_emb_label
+                sim_triple_t3_2 = cosine_similarity(lhs, np.expand_dims(rhs, 0))
+
+                # In case of several active functions, we model the truthness with a failure mode as an logical OR:
+                sim_triple_t3 = sim_triple_t3 + sim_triple_t3_2 - sim_triple_t3 * sim_triple_t3_2
 
             # T4:
             if use_component_instead_label:
@@ -3926,13 +3968,13 @@ def main(run=0):
     file_dis        = "store_relevant_attribut_dis_Fin_MSCRED_standard_repeat"
     file_ano_pred   = "predicted_anomaliesFin_MSCRED_standard_repeat"
     '''
-    '''
+    #'''
     #Fin_MSCRED_AM_Fin_repeat_
     file_name       = "store_relevant_attribut_name_Fin_MSCRED_AM_Fin_repeat_"
     file_idx        = "store_relevant_attribut_idx_Fin_MSCRED_AM_Fin_repeat_"
     file_dis        = "store_relevant_attribut_dis_Fin_MSCRED_AM_Fin_repeat_"
     file_ano_pred   = "predicted_anomaliesFin_MSCRED_AM_Fin_repeat_"
-    '''
+    #'''
     '''
     folder = "cnn1d_with_fc_simsiam_128-32-3-/"
 
@@ -4032,7 +4074,7 @@ def main(run=0):
     file_ano_pred    = folder + "predicted_anomalies_wTrainFaF_cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2__"
     '''
 
-    #''' # THIS ONE IS USED:
+    ''' # THIS ONE IS USED:
     folder = ""
 
     file_name = folder + "store_relevant_attribut_name__cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2cnn2-GCN-GSL-RanInit-Var6-AdjMasked__"
@@ -4042,7 +4084,7 @@ def main(run=0):
     file_dis = folder + "store_relevant_attribut_dis__cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2cnn2-GCN-GSL-RanInit-Var6-AdjMasked__"
     file_dis_2 = folder + "store_relevant_attribut_dis__nn2_cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2cnn2-GCN-GSL-RanInit-Var6-AdjMasked__"
     file_ano_pred = folder + "predicted_anomalies__cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2cnn2-GCN-GSL-RanInit-Var6-AdjMasked__"
-    #'''
+    '''
     '''
     folder = "" 
 
@@ -4063,8 +4105,8 @@ def main(run=0):
     print("Ano Pred file used: ", file_ano_pred)
     print("")
 
-    is_siam                         = True
-    use_only_true_positive_pred     = True
+    is_siam                         = False
+    use_only_true_positive_pred     = False
     evaluate_hitsAtK_hitRateAtP     = False
     is_memory                       = False
     is_jenks_nat_break_used         = False
@@ -4072,7 +4114,7 @@ def main(run=0):
     is_fix_k_selection_used         = False
     fix_k_for_selection             = 20
     is_randomly_selected_featues    = False
-    is_oracle                       = False
+    is_oracle                       = True
     use_train_FaFs_in_Test          = False
     q1                              = False
     q2                              = False
@@ -4080,13 +4122,17 @@ def main(run=0):
     q4                              = False         # knn Embeddings
     q5                              = False           # like q1 but on component not label basis
     q6                              = False         # q1 with constraint
-    q7                              = True         # q5 with constraint
+    q7                              = False         # q5 with constraint
     q8                              = False          # neural symbolic wie q1 auf labels
-    q9                              = False          # neural symbolic wie q5 auf component
+    q9                              = True          # neural symbolic wie q5 auf component
 
     # Direct implemented in the queries / no need to activate!
     use_pre_data_stream_contraints  = False
     use_post_label_contraints       = False
+
+    # Onto Version and Embedding File: 0 = normal (standard), 1 = corrupted_1, 2 = corrupted_2
+    onto_version = 0
+    emb_file_version = 0
 
     print("Used config: use_only_true_positive_pred:", use_only_true_positive_pred,"is_jenks_nat_break_used:", is_jenks_nat_break_used,"is_randomly_selected_featues:", is_randomly_selected_featues,"is_oracle:",is_oracle,"is_fix_k_selection_used:",is_fix_k_selection_used,"fix_k_for_selection:", fix_k_for_selection,"q1:",q1,"q2:",q2,"q3:",q3,"q4:",q4,"q5:",q5)
 
@@ -4371,7 +4417,7 @@ def main(run=0):
     most_rel_att = [store_relevant_attribut_name_shortened, store_relevant_attribut_idx_shortened, store_relevant_attribut_dis]
 
     if q1 or q3 or q6 or q8:
-        dict_measures = get_labels_from_knowledge_graph_from_anomalous_data_streams(most_rel_att, dataset.y_test_strings, dataset, y_pred_anomalies, not_selection_label="no_failure", only_true_positive_prediction=use_only_true_positive_pred, q1=q1, q3=q3, q6=q6, q8=q8, use_pre_data_stream_contraints=use_pre_data_stream_contraints,use_post_label_contraints=use_post_label_contraints)
+        dict_measures = get_labels_from_knowledge_graph_from_anomalous_data_streams(most_rel_att, dataset.y_test_strings, dataset, y_pred_anomalies, not_selection_label="no_failure", only_true_positive_prediction=use_only_true_positive_pred, q1=q1, q3=q3, q6=q6, q8=q8, use_pre_data_stream_contraints=use_pre_data_stream_contraints,use_post_label_contraints=use_post_label_contraints,onto_version=onto_version,emb_file_version=emb_file_version)
     elif q2:
         dict_measures = get_labels_from_knowledge_graph_from_anomalous_data_streams_permuted(most_rel_att, dataset.y_test_strings, dataset, y_pred_anomalies, not_selection_label="no_failure", only_true_positive_prediction=use_only_true_positive_pred, k_data_streams=[2, 3, 5, 10], k_permutations=[3, 2, 1], rel_type="Context")
     elif q4:
@@ -4403,7 +4449,8 @@ def main(run=0):
                                                                                     y_pred_anomalies,
                                                                                     not_selection_label="no_failure",
                                                                                     only_true_positive_prediction=use_only_true_positive_pred,
-                                                                                    q5=q5, q7=q7, q9=q9)
+                                                                                    q5=q5, q7=q7, q9=q9,
+                                                                                    onto_version=onto_version,emb_file_version=emb_file_version)
 
     else:
         print("Query not specified!")
@@ -4420,7 +4467,7 @@ def main(run=0):
 
 
 if __name__ == '__main__':
-    num_of_runs = 5
+    num_of_runs = 1
 
     dict_measures_collection = {}
 
