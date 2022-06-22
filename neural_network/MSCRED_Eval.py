@@ -2378,6 +2378,12 @@ def get_labels_from_knowledge_graph_from_anomalous_data_streams_permuted(most_re
                                         '''
 
                                         result = list(default_world.sparql(sparql_query))
+                                        # Shuffle the output randomly to not have the order provided from the sparql query which could favour or discourage although there is no order
+                                        import operator, random
+                                        groups = [list(g) for _, g in itertools.groupby(result, operator.itemgetter(0))]
+                                        random.shuffle(groups)
+                                        result = [item for group in groups for item in group]
+
                                         cnt_queries_per_example += 1
                                         cnt_labels_per_example += len(result)
                                         print(str(cnt_queries_per_example)+". query with ",data_stream_name, "has result:", result)
@@ -2393,13 +2399,14 @@ def get_labels_from_knowledge_graph_from_anomalous_data_streams_permuted(most_re
                                                 already_provided_labels_not_further_counted.append(found_instance)
 
                                         # Counting
-                                        cnt_labels += len(results_cleaned)
+                                        #cnt_labels += len(results_cleaned)
                                         cnt_querry += 1
                                         #res = [sub.replace('PredM.Label', '') for sub in result]
                                         #print("Label:",curr_label,"SPARQL-Result:", results_cleaned)
                                         if len(results_cleaned) > 0 and breaker == False:
                                             for result in results_cleaned:
                                                 #print("result: ", result)
+                                                cnt_labels += 1
                                                 result = result.replace("[","").replace("]","")
                                                 #print("results_cleaned: ", results_cleaned)
                                                 if curr_label in result or result in curr_label:
@@ -2646,7 +2653,7 @@ def generated_embedding_query(set_of_anomalous_data_streams, embeddings_df, aggr
 
     return generated_query_embedding_add, generated_query_embedding_add_avg, generated_query_embedding_add_weighted
 
-def neural_symbolic_approach(set_of_anomalous_data_streams, ftono_func_uri, ftonto_symp_uri, embeddings_df, dataset, func_not_active=False, use_component_instead_label=False, threshold=0.0, use_embedding_order=False, use_jns=False, union_q1=False):
+def neural_symbolic_approach(set_of_anomalous_data_streams, ftono_func_uri, ftonto_symp_uri, embeddings_df, dataset, func_not_active=False, use_component_instead_label=False, threshold=0.0, use_embedding_order=False, use_jns=False, union_q1=False, w_constraint=True):
 
     failure_mode_uri_list = ["http://iot.uni-trier.de/PredM#FM_txt15_m1_t1",
      #"http://iot.uni-trier.de/PredM#FM_InsufficientToDriveConveyorBeltTXT15",
@@ -2879,7 +2886,11 @@ def neural_symbolic_approach(set_of_anomalous_data_streams, ftono_func_uri, fton
             # Score for a ground rule: s(f1 --> f2) = s(f_1) * s(f_2) - s(f_1) + 1
             rule_evaluation = body * head - body + 1
             # Constraint as conjunction
-            constraint_evaluation = sim_triple_t1 * sim_triple_t2 * sim_triple_t3 * sim_triple_t4
+            if w_constraint:
+                constraint_evaluation = sim_triple_t1 * sim_triple_t2 * sim_triple_t3 * sim_triple_t4
+            else:
+                # No function or symptom constraint are used, just graph structure to the label
+                constraint_evaluation = sim_triple_t3 * sim_triple_t4
             #print(label_uri,":",rule_evaluation," with head:",head,"and body:",body,"constraint:",constraint_evaluation)
 
             if similarity_store_label[h] < constraint_evaluation:
@@ -4117,14 +4128,14 @@ def main(run=0):
     is_oracle                       = True
     use_train_FaFs_in_Test          = False
     q1                              = False
-    q2                              = False
-    q3                              = False
+    q2                              = True         # Q2-L / contextual masking bei oracle active
+    q3                              = False         # Q3-L / contextual masking bei oracle active
     q4                              = False         # knn Embeddings
     q5                              = False           # like q1 but on component not label basis
     q6                              = False         # q1 with constraint
     q7                              = False         # q5 with constraint
     q8                              = False          # neural symbolic wie q1 auf labels
-    q9                              = True          # neural symbolic wie q5 auf component
+    q9                              = False          # neural symbolic wie q5 auf component
 
     # Direct implemented in the queries / no need to activate!
     use_pre_data_stream_contraints  = False
@@ -4134,7 +4145,7 @@ def main(run=0):
     onto_version = 0
     emb_file_version = 0
 
-    print("Used config: use_only_true_positive_pred:", use_only_true_positive_pred,"is_jenks_nat_break_used:", is_jenks_nat_break_used,"is_randomly_selected_featues:", is_randomly_selected_featues,"is_oracle:",is_oracle,"is_fix_k_selection_used:",is_fix_k_selection_used,"fix_k_for_selection:", fix_k_for_selection,"q1:",q1,"q2:",q2,"q3:",q3,"q4:",q4,"q5:",q5)
+    print("Used config: use_only_true_positive_pred:", use_only_true_positive_pred,"is_jenks_nat_break_used:", is_jenks_nat_break_used,"is_randomly_selected_featues:", is_randomly_selected_featues,"is_oracle:",is_oracle,"is_fix_k_selection_used:",is_fix_k_selection_used,"fix_k_for_selection:", fix_k_for_selection,"\nq1:",q1,"q2:",q2,"q3:",q3,"q4:",q4,"q5:",q5,"q6:",q6,"q7:",q7,"q8:",q8,"q9:",q9,"onto_version:",onto_version,"emb_file_version:", emb_file_version)
 
 
     # Wenn memomory in MSCRED aktiv war, dann muss das letzte Besipiel aus den Testdaten gelöscht werden
@@ -4370,7 +4381,9 @@ def main(run=0):
                 masking_strict = curr_gold_standard_attributes[61:]
                 masking_context = curr_gold_standard_attributes[:61]
                 # WTF: masking_strict = masking_context
-
+                if q2 or q3:
+                    print("Please notet that MASKING CONTEXT IS USED!")
+                    masking_strict = masking_context
                 # Replace idx, score and name with the masking data:
                 store_relevant_attribut_idx_shortened[i] = np.squeeze(np.argwhere(masking_strict == True))
                 print("store_relevant_attribut_idx_shortened[i]:", store_relevant_attribut_idx_shortened[i] )
@@ -4467,7 +4480,7 @@ def main(run=0):
 
 
 if __name__ == '__main__':
-    num_of_runs = 1
+    num_of_runs = 5
 
     dict_measures_collection = {}
 
