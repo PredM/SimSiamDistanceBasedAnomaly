@@ -1749,7 +1749,8 @@ def get_labels_from_knowledge_graph_from_anomalous_data_streams(most_relevant_at
                         else:
                             result = neural_symbolic_approach(set_of_anomalous_data_streams=data_stream, ftono_func_uri=Func_IRI,
                                                      ftonto_symp_uri=Symp_IRI, embeddings_df=embedding_df,
-                                                     dataset=dataset, func_not_active=is_not_relevant, threshold=0.65, use_embedding_order=True)
+                                                     dataset=dataset, func_not_active=is_not_relevant, threshold=0.75,
+                                                    use_embedding_order=True, union_q1=False, w_constraint=True)
                             result = [result[i] for i in range(0, len(result))]
                             cnt_queries_per_example += 1
                             cnt_labels_per_example += len(result[0])
@@ -2164,7 +2165,8 @@ def get_component_from_knowledge_graph_from_anomalous_data_streams(most_relevant
                                                               ftono_func_uri=Func_IRI,
                                                               ftonto_symp_uri=Symp_IRI, embeddings_df=embedding_df,
                                                               dataset=dataset, func_not_active=is_not_relevant,
-                                                                use_component_instead_label=True, threshold=0.7, use_embedding_order=True)
+                                                            use_component_instead_label=True, threshold=0.65,
+                                                             use_embedding_order=True, union_q1=False)
                             result = list(default_world.sparql(sparql_query))
                             from itertools import chain
                             #print("result_2:", result_2)
@@ -3973,19 +3975,19 @@ def main(run=0):
     file_dis        = "store_relevant_attribut_dis_Fin_Standard_wAdjMat_newAdj_2_fixed"
     file_ano_pred   = "predicted_anomaliesFin_Standard_wAdjMat_newAdj_2_fixed"
     '''
-    '''
+    #'''
     file_name       = "store_relevant_attribut_name_Fin_MSCRED_standard_repeat"
     file_idx        = "store_relevant_attribut_idx_Fin_MSCRED_standard_repeat"
     file_dis        = "store_relevant_attribut_dis_Fin_MSCRED_standard_repeat"
     file_ano_pred   = "predicted_anomaliesFin_MSCRED_standard_repeat"
-    '''
     #'''
+    '''
     #Fin_MSCRED_AM_Fin_repeat_
     file_name       = "store_relevant_attribut_name_Fin_MSCRED_AM_Fin_repeat_"
     file_idx        = "store_relevant_attribut_idx_Fin_MSCRED_AM_Fin_repeat_"
     file_dis        = "store_relevant_attribut_dis_Fin_MSCRED_AM_Fin_repeat_"
     file_ano_pred   = "predicted_anomaliesFin_MSCRED_AM_Fin_repeat_"
-    #'''
+    '''
     '''
     folder = "cnn1d_with_fc_simsiam_128-32-3-/"
 
@@ -4117,18 +4119,18 @@ def main(run=0):
     print("")
 
     is_siam                         = False
-    use_only_true_positive_pred     = False
+    use_only_true_positive_pred     = True
     evaluate_hitsAtK_hitRateAtP     = False
     is_memory                       = False
     is_jenks_nat_break_used         = False
     is_elbow_selection_used         = False
     is_fix_k_selection_used         = False
     fix_k_for_selection             = 20
-    is_randomly_selected_featues    = False
-    is_oracle                       = True
+    is_randomly_selected_featues    = True
+    is_oracle                       = False
     use_train_FaFs_in_Test          = False
-    q1                              = False
-    q2                              = True         # Q2-L / contextual masking bei oracle active
+    q1                              = True
+    q2                              = False         # Q2-L / contextual masking bei oracle active
     q3                              = False         # Q3-L / contextual masking bei oracle active
     q4                              = False         # knn Embeddings
     q5                              = False           # like q1 but on component not label basis
@@ -4277,6 +4279,7 @@ def main(run=0):
         for i in store_relevant_attribut_dis:
             # randomly change the order of anomaly scores
             #print("store_relevant_attribut_dis[i]: ", store_relevant_attribut_dis[i])
+            store_relevant_attribut_dis[i] =  np.random.uniform(low=0.0, high=1.0, size=store_relevant_attribut_dis[i].shape)
             np.random.shuffle(store_relevant_attribut_dis[i])
             # randomly change idx and name anomaly scores
             #print("store_relevant_attribut_dis[i] random: ", store_relevant_attribut_dis[i])
@@ -4477,6 +4480,20 @@ def main(run=0):
 
     return dict_measures
 
+def reset_state(state):
+    # Set seeds in order to get consistent results
+    seeds = [42, 19901, 20191, 11991, 12201] #[2021, 1990, 2019, 1992, 2202]
+    seed = seeds[state]
+    print("Seeds used: ",seeds)
+    os.environ['PYTHONHASHSEED'] = str(seed)
+    os.environ['TF_DETERMINISTIC_OPS'] = '1'
+    np.random.seed(seed)
+    import random
+    random.seed(seed)
+
+    # Reimporting tensorflow in necessary!
+    import tensorflow as tf
+    tf.random.set_seed(seed)
 
 
 if __name__ == '__main__':
@@ -4487,6 +4504,9 @@ if __name__ == '__main__':
     # Conduct the evaluation for each model and get the relevant metrics
     for run in range(num_of_runs):
         print("Experiment ", run, " started!")
+        # set random state
+        reset_state(run)
+
         dict_measures = main(run=run)
         dict_measures_collection[run] = dict_measures
         print("Experiment ", run, " finished!")
