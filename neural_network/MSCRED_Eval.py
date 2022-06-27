@@ -1577,9 +1577,9 @@ def get_labels_from_knowledge_graph_from_anomalous_data_streams(most_relevant_at
                 if emb_file_version == 0:
                     tsv_file = '../data/training_data/knowledge/StSp_eval_lr_0.100001_d_25_e_150_bs_5_doLHS_0.0_doRHS_0.0_mNS_50_nSL_100_l_hinge_s_cosine_m_0.7_iM_False.tsv'
                 elif emb_file_version == 1:
-                    tsv_file = '../data/training_data/knowledge/StSp_eval_lr_0.10000101_d_25_e_150_bs_5_doLHS_0.0_doRHS_0.0_mNS_50_nSL_100_l_hinge_s_cosine_m_0.7_iM_False.tsv'
+                    tsv_file = '../data/training_data/knowledge/StSp_eval_lr_0.100001011_d_25_e_150_bs_5_doLHS_0.0_doRHS_0.0_mNS_50_nSL_100_l_hinge_s_cosine_m_0.7_iM_False.tsv' # model without Context lr_0.100001011, with context: lr_0.10000101
                 elif emb_file_version == 2:
-                    tsv_file = '../data/training_data/knowledge/StSp_eval_lr_0.10000102_d_25_e_150_bs_5_doLHS_0.0_doRHS_0.0_mNS_50_nSL_100_l_hinge_s_cosine_m_0.7_iM_False.tsv'
+                    tsv_file = '../data/training_data/knowledge/StSp_eval_lr_0.100001012_d_25_e_150_bs_5_doLHS_0.0_doRHS_0.0_mNS_50_nSL_100_l_hinge_s_cosine_m_0.7_iM_False.tsv' # model without Context lr_0.100001012, with context: lr_0.10000102
 
                 embedding_df = pd.read_csv(tsv_file, sep='\t', skiprows=1, header=None,
                                            error_bad_lines=False, warn_bad_lines=False, index_col=0)
@@ -1749,7 +1749,7 @@ def get_labels_from_knowledge_graph_from_anomalous_data_streams(most_relevant_at
                         else:
                             result = neural_symbolic_approach(set_of_anomalous_data_streams=data_stream, ftono_func_uri=Func_IRI,
                                                      ftonto_symp_uri=Symp_IRI, embeddings_df=embedding_df,
-                                                     dataset=dataset, func_not_active=is_not_relevant, threshold=0.75,
+                                                     dataset=dataset, func_not_active=is_not_relevant, threshold=0.65,
                                                     use_embedding_order=True, union_q1=False, w_constraint=True)
                             result = [result[i] for i in range(0, len(result))]
                             cnt_queries_per_example += 1
@@ -1880,9 +1880,9 @@ def get_component_from_knowledge_graph_from_anomalous_data_streams(most_relevant
         if emb_file_version == 0:
             tsv_file = '../data/training_data/knowledge/StSp_eval_lr_0.100001_d_25_e_150_bs_5_doLHS_0.0_doRHS_0.0_mNS_50_nSL_100_l_hinge_s_cosine_m_0.7_iM_False.tsv'
         elif emb_file_version == 1:
-            tsv_file = '../data/training_data/knowledge/StSp_eval_lr_0.10000101_d_25_e_150_bs_5_doLHS_0.0_doRHS_0.0_mNS_50_nSL_100_l_hinge_s_cosine_m_0.7_iM_False.tsv'
+            tsv_file = '../data/training_data/knowledge/StSp_eval_lr_0.100001011_d_25_e_150_bs_5_doLHS_0.0_doRHS_0.0_mNS_50_nSL_100_l_hinge_s_cosine_m_0.7_iM_False.tsv'  # model without Context lr_0.100001011, with context: lr_0.10000101
         elif emb_file_version == 2:
-            tsv_file = '../data/training_data/knowledge/StSp_eval_lr_0.10000102_d_25_e_150_bs_5_doLHS_0.0_doRHS_0.0_mNS_50_nSL_100_l_hinge_s_cosine_m_0.7_iM_False.tsv'
+            tsv_file = '../data/training_data/knowledge/StSp_eval_lr_0.100001012_d_25_e_150_bs_5_doLHS_0.0_doRHS_0.0_mNS_50_nSL_100_l_hinge_s_cosine_m_0.7_iM_False.tsv'  # model without Context lr_0.100001012, with context: lr_0.10000102
 
         embedding_df = pd.read_csv(tsv_file, sep='\t', skiprows=1, header=None,
                                    error_bad_lines=False, warn_bad_lines=False, index_col=0)
@@ -2165,7 +2165,7 @@ def get_component_from_knowledge_graph_from_anomalous_data_streams(most_relevant
                                                               ftono_func_uri=Func_IRI,
                                                               ftonto_symp_uri=Symp_IRI, embeddings_df=embedding_df,
                                                               dataset=dataset, func_not_active=is_not_relevant,
-                                                            use_component_instead_label=True, threshold=0.65,
+                                                            use_component_instead_label=True, threshold=0.55,
                                                              use_embedding_order=True, union_q1=False)
                             result = list(default_world.sparql(sparql_query))
                             from itertools import chain
@@ -4087,7 +4087,7 @@ def main(run=0):
     file_ano_pred    = folder + "predicted_anomalies_wTrainFaF_cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2__"
     '''
 
-    ''' # THIS ONE IS USED:
+    #''' # THIS ONE IS USED:
     folder = ""
 
     file_name = folder + "store_relevant_attribut_name__cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2cnn2-GCN-GSL-RanInit-Var6-AdjMasked__"
@@ -4097,7 +4097,7 @@ def main(run=0):
     file_dis = folder + "store_relevant_attribut_dis__cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2cnn2-GCN-GSL-RanInit-Var6-AdjMasked__"
     file_dis_2 = folder + "store_relevant_attribut_dis__nn2_cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2cnn2-GCN-GSL-RanInit-Var6-AdjMasked__"
     file_ano_pred = folder + "predicted_anomalies__cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2cnn2-GCN-GSL-RanInit-Var6-AdjMasked__"
-    '''
+    #'''
     '''
     folder = "" 
 
@@ -4118,25 +4118,25 @@ def main(run=0):
     print("Ano Pred file used: ", file_ano_pred)
     print("")
 
-    is_siam                         = False
-    use_only_true_positive_pred     = True
+    is_siam                         = True
+    use_only_true_positive_pred     = False
     evaluate_hitsAtK_hitRateAtP     = False
     is_memory                       = False
     is_jenks_nat_break_used         = False
     is_elbow_selection_used         = False
     is_fix_k_selection_used         = False
     fix_k_for_selection             = 20
-    is_randomly_selected_featues    = True
-    is_oracle                       = False
+    is_randomly_selected_featues    = False
+    is_oracle                       = True
     use_train_FaFs_in_Test          = False
-    q1                              = True
+    q1                              = False
     q2                              = False         # Q2-L / contextual masking bei oracle active
     q3                              = False         # Q3-L / contextual masking bei oracle active
     q4                              = False         # knn Embeddings
     q5                              = False           # like q1 but on component not label basis
     q6                              = False         # q1 with constraint
     q7                              = False         # q5 with constraint
-    q8                              = False          # neural symbolic wie q1 auf labels
+    q8                              = True          # neural symbolic wie q1 auf labels
     q9                              = False          # neural symbolic wie q5 auf component
 
     # Direct implemented in the queries / no need to activate!
@@ -4146,7 +4146,6 @@ def main(run=0):
     # Onto Version and Embedding File: 0 = normal (standard), 1 = corrupted_1, 2 = corrupted_2
     onto_version = 0
     emb_file_version = 0
-
     print("Used config: use_only_true_positive_pred:", use_only_true_positive_pred,"is_jenks_nat_break_used:", is_jenks_nat_break_used,"is_randomly_selected_featues:", is_randomly_selected_featues,"is_oracle:",is_oracle,"is_fix_k_selection_used:",is_fix_k_selection_used,"fix_k_for_selection:", fix_k_for_selection,"\nq1:",q1,"q2:",q2,"q3:",q3,"q4:",q4,"q5:",q5,"q6:",q6,"q7:",q7,"q8:",q8,"q9:",q9,"onto_version:",onto_version,"emb_file_version:", emb_file_version)
 
 
