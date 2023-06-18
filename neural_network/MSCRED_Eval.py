@@ -6,7 +6,7 @@ from sklearn.metrics import precision_recall_fscore_support
 from sklearn.metrics import confusion_matrix
 from statsmodels.genmod.families.links import inverse_power
 
-gpus = tf.config.list_physical_devices('GPU')
+#gpus = tf.config.list_physical_devices('GPU')
 import jenkspy
 import pandas as pd
 from owlready2 import *
@@ -14,7 +14,7 @@ from datetime import datetime
 from sklearn.manifold import TSNE
 from scipy.stats import kurtosis
 
-tf.config.experimental.set_memory_growth(gpus[0], True)
+#tf.config.experimental.set_memory_growth(gpus[0], True)
 
 sys.path.append(os.path.abspath(os.path.join(os.getcwd(), os.pardir)))
 # suppress debugging messages of TensorFlow
@@ -1497,7 +1497,7 @@ def change_model(config: Configuration, start_time_string, num_of_selction_itera
         print(config.directory_model_to_use, '\n')
 
 def get_labels_from_knowledge_graph_from_anomalous_data_streams(most_relevant_attributes, y_test_labels, dataset,y_pred_anomalies, not_selection_label="no_failure",only_true_positive_prediction=False, q1=False, q3=False, q6=False, q8=False,
-                                                                use_pre_data_stream_contraints=False,use_post_label_contraints=False,onto_version=0,emb_file_version=0):
+                                                                use_pre_data_stream_contraints=False,use_post_label_contraints=False,onto_version=0,emb_file_version=0, use_cbr=False):
     store_relevant_attribut_idx, store_relevant_attribut_dis, store_relevant_attribut_name = most_relevant_attributes[0], \
                                                                                              most_relevant_attributes[1], \
                                                                                              most_relevant_attributes[2]
@@ -1507,7 +1507,7 @@ def get_labels_from_knowledge_graph_from_anomalous_data_streams(most_relevant_at
     print("attr_names:", attr_names)
     # Get ontological knowledge graph
     if onto_version == 0:
-        onto = get_ontology("FTOnto_with_PredM_w_Inferred_.owl")
+        onto = get_ontology("..\\data\\training_data\\knowledge\\FTOnto_with_PredM_w_Inferred_.owl")
     elif onto_version == 1:
         onto_path.append("../data/training_data/knowledge/")
         onto = get_ontology("file://../data/training_data/knowledge/FTOnto_with_PredM_w_Inferred_defected_1.owl")
@@ -1593,6 +1593,11 @@ def get_labels_from_knowledge_graph_from_anomalous_data_streams(most_relevant_at
                     for data_stream in ordered_data_streams:
                         if breaker == True:
                             break
+
+                        #if True:
+                        #    result = cbr_embedding_approach(set_of_anomalous_data_streams=data_stream, embeddings_df=embedding_df,
+                        #                             dataset=dataset, threshold=0.65,
+                        #                            use_embedding_order=True, union_q1=False, w_constraint=True)
 
                         if q6 or q8:
                             is_not_relevant, Func_IRI, symptom_found, Symp_IRI = extract_fct_symp_of_raw_data_for_sparql_query_as_expert_knowledge(i, data_stream, dataset)
@@ -1747,14 +1752,32 @@ def get_labels_from_knowledge_graph_from_anomalous_data_streams(most_relevant_at
                             #print("sparql_query:", sparql_query)
                             print(str(cnt_queries_per_example)+". query with ",data_stream_name, "has result:", result)
                         else:
-                            result = neural_symbolic_approach(set_of_anomalous_data_streams=data_stream, ftono_func_uri=Func_IRI,
-                                                     ftonto_symp_uri=Symp_IRI, embeddings_df=embedding_df,
-                                                     dataset=dataset, func_not_active=is_not_relevant, threshold=0.65,
-                                                    use_embedding_order=True, union_q1=False, w_constraint=True)
-                            result = [result[i] for i in range(0, len(result))]
-                            cnt_queries_per_example += 1
-                            cnt_labels_per_example += len(result[0])
-                            result = result[0]
+                            if use_cbr:
+                                result = cbr_embedding_approach(set_of_anomalous_data_streams=data_stream,
+                                                                ftono_func_uri=Func_IRI,
+                                                                ftonto_symp_uri=Symp_IRI,
+                                                                func_not_active=is_not_relevant,
+                                                                embeddings_df=embedding_df,
+                                                                dataset=dataset, threshold=0.30,
+                                                                use_embedding_order=True, union_q1=False,
+                                                                w_constraint=True)
+                                result = [result[i] for i in range(0, len(result))]
+                                cnt_queries_per_example += 1
+                                cnt_labels_per_example += 0
+                                #result = result[0]
+                            else:
+                                result = neural_symbolic_approach(set_of_anomalous_data_streams=data_stream, ftono_func_uri=Func_IRI,
+                                                         ftonto_symp_uri=Symp_IRI, embeddings_df=embedding_df,
+                                                         dataset=dataset, func_not_active=is_not_relevant, threshold=0.75,
+                                                        use_embedding_order=True, union_q1=False, w_constraint=True)
+                                #result = cbr_embedding_approach(set_of_anomalous_data_streams=data_stream,
+                                #                                embeddings_df=embedding_df,
+                                #                                dataset=dataset, threshold=0.65,
+                                #                                use_embedding_order=True, union_q1=False, w_constraint=True)
+                                result = [result[i] for i in range(0, len(result))]
+                                cnt_queries_per_example += 1
+                                cnt_labels_per_example += len(result[0])
+                                result = result[0]
                             print(str(cnt_queries_per_example)+". query with ",data_stream_name, "has result:", result)
                         if result ==None:
                             continue
@@ -1863,7 +1886,7 @@ def get_component_from_knowledge_graph_from_anomalous_data_streams(most_relevant
     print("attr_names:", attr_names)
     # Get ontological knowledge graph
     if onto_version == 0:
-        onto = get_ontology("FTOnto_with_PredM_w_Inferred_.owl")
+        onto = get_ontology("..\\data\\training_data\\knowledge\\FTOnto_with_PredM_w_Inferred_.owl")
     elif onto_version == 1:
         onto_path.append("../data/training_data/knowledge/")
         onto = get_ontology("file://../data/training_data/knowledge/FTOnto_with_PredM_w_Inferred_defected_1.owl")
@@ -2268,17 +2291,32 @@ def get_component_from_knowledge_graph_from_anomalous_data_streams(most_relevant
 
     return dict_measures
 
-def get_labels_from_knowledge_graph_from_anomalous_data_streams_permuted(most_relevant_attributes, y_test_labels, dataset,y_pred_anomalies, not_selection_label="no_failure",only_true_positive_prediction=False, k_data_streams=[1,3,5,10], k_permutations=[2,3], rel_type="Context"):
+def get_labels_from_knowledge_graph_from_anomalous_data_streams_permuted(most_relevant_attributes, y_test_labels, dataset,y_pred_anomalies, not_selection_label="no_failure",only_true_positive_prediction=False, k_data_streams=[1,3,5,10], k_permutations=[2,3], rel_type="Context", use_cbr=False, emb_file_version=0):
     store_relevant_attribut_idx, store_relevant_attribut_dis, store_relevant_attribut_name = most_relevant_attributes[0], \
                                                                                              most_relevant_attributes[1], \
                                                                                              most_relevant_attributes[2]
     num_test_examples = y_test_labels.shape[0]
 
+    # Load embedding file (e.g. for cbr)
+    # '''
+    # Get embeddings
+    if emb_file_version == 0:
+        tsv_file = '../data/training_data/knowledge/StSp_eval_lr_0.100001_d_25_e_150_bs_5_doLHS_0.0_doRHS_0.0_mNS_50_nSL_100_l_hinge_s_cosine_m_0.7_iM_False.tsv'
+    elif emb_file_version == 1:
+        tsv_file = '../data/training_data/knowledge/StSp_eval_lr_0.100001011_d_25_e_150_bs_5_doLHS_0.0_doRHS_0.0_mNS_50_nSL_100_l_hinge_s_cosine_m_0.7_iM_False.tsv'  # model without Context lr_0.100001011, with context: lr_0.10000101
+    elif emb_file_version == 2:
+        tsv_file = '../data/training_data/knowledge/StSp_eval_lr_0.100001012_d_25_e_150_bs_5_doLHS_0.0_doRHS_0.0_mNS_50_nSL_100_l_hinge_s_cosine_m_0.7_iM_False.tsv'  # model without Context lr_0.100001012, with context: lr_0.10000102
+
+    embedding_df = pd.read_csv(tsv_file, sep='\t', skiprows=1, header=None,
+                               error_bad_lines=False, warn_bad_lines=False, index_col=0)
+    if "StSp" in tsv_file:
+        embedding_df = embedding_df.set_index('http://iot.uni-trier.de/' + embedding_df.index.astype(str))
+
 
     attr_names = dataset.feature_names_all
     print("attr_names:", attr_names)
     # Get ontological knowledge graph
-    onto = get_ontology("FTOnto_with_PredM_w_Inferred_.owl")
+    onto = get_ontology("..\\data\\training_data\\knowledge\\FTOnto_with_PredM_w_Inferred_.owl")
     onto.load()
 
     # Iterate over the test data set
@@ -2349,46 +2387,58 @@ def get_labels_from_knowledge_graph_from_anomalous_data_streams_permuted(most_re
                                     combination_of_data_streams = combination_of_data_streams_sorted
                                 for combi in combination_of_data_streams:
                                     if breaker == False:
-                                        print("Querying the knowledge graph with combi:",combi)
 
-                                        sparql_query = '''  PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
-                                                            PREFIX owl: <http://www.w3.org/2002/07/owl#>
-                                                            PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-                                                            PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
-                                                            SELECT ?labels
-                                                                WHERE { 
-                                                       '''
-                                        for data_stream in combi:
-                                            data_stream_name = data_stream
+                                        if use_cbr:
+                                            print("Querying the CBR with combi:", combi)
+                                            result = cbr_embedding_approach(set_of_anomalous_data_streams=combi,
+                                                                            embeddings_df=embedding_df,
+                                                                            dataset=dataset, threshold=0.6,
+                                                                            use_embedding_order=True, union_q1=False,
+                                                                            w_constraint=True)
+                                            result = [result[i] for i in range(0, len(result))]
+                                            cnt_queries_per_example += 1
+                                            cnt_labels_per_example += len(result)
+                                        else:
+                                            print("Querying the knowledge graph with combi:",combi)
+
+                                            sparql_query = '''  PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+                                                                PREFIX owl: <http://www.w3.org/2002/07/owl#>
+                                                                PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+                                                                PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+                                                                SELECT ?labels
+                                                                    WHERE { 
+                                                           '''
+                                            for data_stream in combi:
+                                                data_stream_name = data_stream
+                                                sparql_query = sparql_query + '''
+                                                    { 
+                                                        {
+                                                            ?component <http://iot.uni-trier.de/FTOnto#is_associated_with_data_stream> "''' + data_stream_name + '''"^^<http://www.w3.org/2001/XMLSchema#string>.
+                                                            ?component <http://iot.uni-trier.de/FMECA#hasPotentialFailureMode> ?failureModes.
+                                                            ?failureModes <http://iot.uni-trier.de/PredM#hasLabel> ?labels
+                                                        }
+                                                    UNION{
+                                                            ?component2 <http://iot.uni-trier.de/FTOnto#is_associated_with_data_stream> "''' + data_stream_name + '''"^^<http://www.w3.org/2001/XMLSchema#string>.
+                                                            ?failureModes <http://iot.uni-trier.de/PredM#isDetectableInDataStreamOf_''' + rel_type + '''>  ?component2.
+                                                            ?failureModes <http://iot.uni-trier.de/PredM#hasLabel> ?labels
+                                                        }
+                                                    }                                
+                                                '''
+
                                             sparql_query = sparql_query + '''
-                                                { 
-                                                    {
-                                                        ?component <http://iot.uni-trier.de/FTOnto#is_associated_with_data_stream> "''' + data_stream_name + '''"^^<http://www.w3.org/2001/XMLSchema#string>.
-                                                        ?component <http://iot.uni-trier.de/FMECA#hasPotentialFailureMode> ?failureModes.
-                                                        ?failureModes <http://iot.uni-trier.de/PredM#hasLabel> ?labels
-                                                    }
-                                                UNION{
-                                                        ?component2 <http://iot.uni-trier.de/FTOnto#is_associated_with_data_stream> "''' + data_stream_name + '''"^^<http://www.w3.org/2001/XMLSchema#string>.
-                                                        ?failureModes <http://iot.uni-trier.de/PredM#isDetectableInDataStreamOf_''' + rel_type + '''>  ?component2.
-                                                        ?failureModes <http://iot.uni-trier.de/PredM#hasLabel> ?labels
-                                                    }
-                                                }                                
+                                                }
                                             '''
 
-                                        sparql_query = sparql_query + '''
-                                            }
-                                        '''
+                                            result = list(default_world.sparql(sparql_query))
+                                            # Shuffle the output randomly to not have the order provided from the sparql query which could favour or discourage although there is no order
+                                            import operator, random
+                                            groups = [list(g) for _, g in itertools.groupby(result, operator.itemgetter(0))]
+                                            random.shuffle(groups)
+                                            result = [item for group in groups for item in group]
 
-                                        result = list(default_world.sparql(sparql_query))
-                                        # Shuffle the output randomly to not have the order provided from the sparql query which could favour or discourage although there is no order
-                                        import operator, random
-                                        groups = [list(g) for _, g in itertools.groupby(result, operator.itemgetter(0))]
-                                        random.shuffle(groups)
-                                        result = [item for group in groups for item in group]
-
-                                        cnt_queries_per_example += 1
-                                        cnt_labels_per_example += len(result)
-                                        print(str(cnt_queries_per_example)+". query with ",data_stream_name, "has result:", result)
+                                            cnt_queries_per_example += 1
+                                            cnt_labels_per_example += len(result)
+                                        print(str(cnt_queries_per_example)+". query with ",combi, "has result:", result)
                                         if result ==None:
                                             continue
 
@@ -2427,9 +2477,8 @@ def get_labels_from_knowledge_graph_from_anomalous_data_streams_permuted(most_re
                                                     breaker = True
                                                     break
                                                 else:
-                                                    if data_stream_name in curr_label:
-                                                        print("+++ Check why no match? Datastream:", data_stream, "results_cleaned: ", result,
-                                                              "and gold label:", curr_label)
+                                                    #if data_stream_name in curr_label:
+                                                    print("+++ Datastream:", combi, " gold label:", curr_label, " vs results_cleaned: ", result)
                                                     #print("No match, query next data stream ... ")
                                         else:
                                             print("No Failure Mode for this data stream is modelled in the knowledge base.")
@@ -2627,7 +2676,7 @@ def generated_embedding_query(set_of_anomalous_data_streams, embeddings_df, aggr
 
     set_of_anomalous_data_streams = set_of_anomalous_data_streams if isinstance(set_of_anomalous_data_streams, np.ndarray) else [set_of_anomalous_data_streams]
 
-    for iteration, attr_name in enumerate(set_of_anomalous_data_streams):
+    for iteration, attr_name in enumerate(set_of_anomalous_data_streams[0]):
         # Get iri of attribute
         ftOnto_uri = dataset.mapping_attr_to_ftonto_df.loc[set_of_anomalous_data_streams[iteration]]
         pos_attr = np.argwhere(dataset.feature_names_all == attr_name)
@@ -2937,6 +2986,243 @@ def neural_symbolic_approach(set_of_anomalous_data_streams, ftono_func_uri, fton
     return_value = [return_list]
 
     return return_value #label_uri_list[np.argsort(-similarity_store_label)[0]]
+
+
+def cbr_embedding_approach(set_of_anomalous_data_streams, embeddings_df, dataset, func_not_active=False,ftono_func_uri=None, ftonto_symp_uri=None, use_component_instead_label=False, threshold=0.0, use_embedding_order=False, use_jns=False, union_q1=False, w_constraint=True, use_strict=True):
+
+    failure_mode_uri_list = ["http://iot.uni-trier.de/PredM#FM_txt15_m1_t1",
+     #"http://iot.uni-trier.de/PredM#FM_InsufficientToDriveConveyorBeltTXT15",
+     #"http://iot.uni-trier.de/PredM#FM_InsufficientToDriveConveyorBeltTXT16",
+     #"http://iot.uni-trier.de/PredM#FM_InsufficientToPickUpWorkpieceForTransportTXT18",
+     #"http://iot.uni-trier.de/PredM#FM_InsufficientToPushWorkpieceIntoSinkTXT15",
+     #"http://iot.uni-trier.de/PredM#FM_Sensor_MissingSignal",
+     #"http://iot.uni-trier.de/PredM#FM_Sensor_MissingSignal_Switch",
+     #"http://iot.uni-trier.de/PredM#FM_Sensor_Noise",
+     #"http://iot.uni-trier.de/PredM#FM_Sensor_Noise_LightBarrier",
+     #"http://iot.uni-trier.de/PredM#FM_Sensor_Noise_PositionSwitch",
+     #"http://iot.uni-trier.de/PredM#FM_Sensor_Outlier",
+     #"http://iot.uni-trier.de/PredM#FM_Sensor_SignalDrift",
+     "http://iot.uni-trier.de/PredM#FM_txt15_conveyor_failure_mode_driveshaft_slippage",
+     "http://iot.uni-trier.de/PredM#FM_txt15_i1_lightbarrier_failure_mode_1",
+     "http://iot.uni-trier.de/PredM#FM_txt15_i1_lightbarrier_failure_mode_2",
+     "http://iot.uni-trier.de/PredM#FM_txt15_i3_lightbarrier_failure_mode_2",
+     "http://iot.uni-trier.de/PredM#FM_txt15_m1_t2",
+     "http://iot.uni-trier.de/PredM#FM_txt15_pneumatic_leakage_failure_mode_1",
+     "http://iot.uni-trier.de/PredM#FM_txt15_pneumatic_leakage_failure_mode_2",
+     "http://iot.uni-trier.de/PredM#FM_txt15_pneumatic_leakage_failure_mode_3",
+     "http://iot.uni-trier.de/PredM#FM_txt16_conveyor_big_gear_tooth_broken_failure",
+     "http://iot.uni-trier.de/PredM#FM_txt16_conveyor_failure_mode_driveshaft_slippage",
+     "http://iot.uni-trier.de/PredM#FM_txt16_conveyor_small_gear_tooth_broken_failure",
+     "http://iot.uni-trier.de/PredM#FM_txt16_i3_switch_failure_mode_2",
+     "http://iot.uni-trier.de/PredM#FM_txt16_i4_lightbarrier_failure_mode_1",
+     "http://iot.uni-trier.de/PredM#FM_txt16_m3_t1",
+     "http://iot.uni-trier.de/PredM#FM_txt16_m3_t2",
+     "http://iot.uni-trier.de/PredM#FM_txt17_i1_switch_failure_mode_1",
+     "http://iot.uni-trier.de/PredM#FM_txt17_i1_switch_failure_mode_2",
+     "http://iot.uni-trier.de/PredM#FM_txt17_pneumatic_leakage_failure_mode_1",
+     "http://iot.uni-trier.de/PredM#FM_txt17_workingstation_transport_failure_mode_wou",
+     "http://iot.uni-trier.de/PredM#FM_txt18_pneumatic_leakage_failure_mode_1",
+     "http://iot.uni-trier.de/PredM#FM_txt18_pneumatic_leakage_failure_mode_2",
+     "http://iot.uni-trier.de/PredM#FM_txt18_transport_failure_mode_wout_workpiece",
+     "http://iot.uni-trier.de/PredM#FM_txt19_i4_lightbarrier_failure_mode_1",
+     "http://iot.uni-trier.de/PredM#FM_txt19_i4_lightbarrier_failure_mode_2"]
+
+    label_uri_list = ["http://iot.uni-trier.de/PredM#Label_txt15_conveyor_failure_mode_driveshaft_slippage",
+                        "http://iot.uni-trier.de/PredM#Label_txt15_i1_lightbarrier_failure_mode_1",
+                        "http://iot.uni-trier.de/PredM#Label_txt15_i1_lightbarrier_failure_mode_2",
+                        "http://iot.uni-trier.de/PredM#Label_txt15_i3_lightbarrier_failure_mode_2",
+                        "http://iot.uni-trier.de/PredM#Label_txt15_m1_t1_high_wear",
+                        "http://iot.uni-trier.de/PredM#Label_txt15_m1_t1_low_wear",
+                        "http://iot.uni-trier.de/PredM#Label_txt15_m1_t2_wear",
+                        "http://iot.uni-trier.de/PredM#Label_txt15_pneumatic_leakage_failure_mode_1",
+                        "http://iot.uni-trier.de/PredM#Label_txt15_pneumatic_leakage_failure_mode_2",
+                        "http://iot.uni-trier.de/PredM#Label_txt15_pneumatic_leakage_failure_mode_3",
+                        "http://iot.uni-trier.de/PredM#Label_txt16_conveyor_big_gear_tooth_broken_failure",
+                        "http://iot.uni-trier.de/PredM#Label_txt16_conveyor_failure_mode_driveshaft_slippage",
+                        "http://iot.uni-trier.de/PredM#Label_txt16_conveyor_small_gear_tooth_broken_failure",
+                        "http://iot.uni-trier.de/PredM#Label_txt16_i3_switch_failure_mode_2",
+                        "http://iot.uni-trier.de/PredM#Label_txt16_i4_lightbarrier_failure_mode_1",
+                        "http://iot.uni-trier.de/PredM#Label_txt16_m3_t1_high_wear",
+                        "http://iot.uni-trier.de/PredM#Label_txt16_m3_t1_low_wear",
+                        "http://iot.uni-trier.de/PredM#Label_txt16_m3_t2_wear",
+                        "http://iot.uni-trier.de/PredM#Label_txt17_i1_switch_failure_mode_1",
+                        "http://iot.uni-trier.de/PredM#Label_txt17_i1_switch_failure_mode_2",
+                        "http://iot.uni-trier.de/PredM#Label_txt17_pneumatic_leakage_failure_mode_1",
+                        "http://iot.uni-trier.de/PredM#Label_txt17_workingstation_transport_failure_mode_wout_workpiece",
+                        "http://iot.uni-trier.de/PredM#Label_txt18_pneumatic_leakage_failure_mode_1",
+                        "http://iot.uni-trier.de/PredM#Label_txt18_pneumatic_leakage_failure_mode_2",
+                        "http://iot.uni-trier.de/PredM#Label_txt18_pneumatic_leakage_failure_mode_2_faulty",
+                        "http://iot.uni-trier.de/PredM#Label_txt18_transport_failure_mode_wout_workpiece",
+                        "http://iot.uni-trier.de/PredM#Label_txt19_i4_lightbarrier_failure_mode_1",
+                        "http://iot.uni-trier.de/PredM#Label_txt19_i4_lightbarrier_failure_mode_2"]
+
+    component_uri_list = ["http://iot.uni-trier.de/FTOnto#BF_Position_Switch_1",
+                    "http://iot.uni-trier.de/FTOnto#FT_VacuumSuctionGripper",
+                    "http://iot.uni-trier.de/FTOnto#HRS_Light_Barrier_4",
+                    "http://iot.uni-trier.de/FTOnto#MPS_Compressor_8",
+                    "http://iot.uni-trier.de/FTOnto#MPS_Conveyor_Belt",
+                    "http://iot.uni-trier.de/FTOnto#MPS_Motor_3",
+                    "http://iot.uni-trier.de/FTOnto#MPS_Position_Switch_3",
+                    "http://iot.uni-trier.de/FTOnto#MPS_Light_Barrier_4",
+                    "http://iot.uni-trier.de/FTOnto#MPS_WorkstationTransport",
+                    "http://iot.uni-trier.de/FTOnto#SM_Compressor_8",
+                    "http://iot.uni-trier.de/FTOnto#SM_Conveyor_Belt",
+                    "http://iot.uni-trier.de/FTOnto#SM_Light_Barrier_1",
+                    "http://iot.uni-trier.de/FTOnto#SM_Light_Barrier_3",
+                    "http://iot.uni-trier.de/FTOnto#SM_Motor_1",
+                    "http://iot.uni-trier.de/FTOnto#VGR_Compressor_7"]
+
+    map_label_to_act_function = {'txt15_conveyor_failure_mode_driveshaft_slippage_failure': "http://iot.uni-trier.de/PredM#Func_SM_M1_Drive_Conveyor_Belt",
+     'txt15_m1_t1_high_wear': "http://iot.uni-trier.de/PredM#Func_SM_M1_Drive_Conveyor_Belt",
+     'txt15_m1_t1_low_wear': "http://iot.uni-trier.de/PredM#Func_SM_M1_Drive_Conveyor_Belt",
+     'txt15_m1_t2_wear': "http://iot.uni-trier.de/PredM#Func_SM_M1_Drive_Conveyor_Belt",
+     'txt15_pneumatic_leakage_failure_mode_1': "http://iot.uni-trier.de/PredM#Func_SM_Pneumatic_System_Provide_Pressure",
+     'txt15_pneumatic_leakage_failure_mode_2': "http://iot.uni-trier.de/PredM#Func_SM_Pneumatic_System_Provide_Pressure",
+     'txt15_pneumatic_leakage_failure_mode_3': "http://iot.uni-trier.de/PredM#Func_SM_Pneumatic_System_Provide_Pressure",
+     'txt16_conveyor_failure_mode_driveshaft_slippage_failure': "http://iot.uni-trier.de/PredM#Func_MPS_M3_Drive_Conveyor_Belt",
+     'txt16_conveyorbelt_big_gear_tooth_broken_failure': "http://iot.uni-trier.de/PredM#Func_MPS_M3_Drive_Conveyor_Belt",
+     'txt16_conveyorbelt_small_gear_tooth_broken_failure': "http://iot.uni-trier.de/PredM#Func_MPS_M3_Drive_Conveyor_Belt",
+     'txt16_m3_t1_high_wear': "http://iot.uni-trier.de/PredM#Func_MPS_M3_Drive_Conveyor_Belt",
+     'txt16_m3_t1_low_wear': "http://iot.uni-trier.de/PredM#Func_MPS_M3_Drive_Conveyor_Belt",
+     'txt16_m3_t2_wear': "http://iot.uni-trier.de/PredM#Func_MPS_M3_Drive_Conveyor_Belt",
+     'txt17_pneumatic_leakage_failure_mode_1': "http://iot.uni-trier.de/PredM#Func_MPS_BF_Pneumatic_System_Provide_Pressure",
+     'txt17_workingstation_transport_failure_mode_wout_workpiece': "http://iot.uni-trier.de/PredM#Func_MPS_BF_Pneumatic_System_Provide_Pressure",
+     'txt18_pneumatic_leakage_failure_mode_1': "http://iot.uni-trier.de/PredM#Func_VGR_Pneumatic_System_Provide_Pressure",
+     'txt18_pneumatic_leakage_failure_mode_2': "http://iot.uni-trier.de/PredM#Func_VGR_Pneumatic_System_Provide_Pressure",
+     'txt18_pneumatic_leakage_failure_mode_2_faulty': "http://iot.uni-trier.de/PredM#Func_VGR_Pneumatic_System_Provide_Pressure",
+     'txt18_transport_failure_mode_wout_workpiece': "http://iot.uni-trier.de/PredM#Func_VGR_Pneumatic_System_Provide_Pressure",
+     }
+
+    # failure mode 1 = continious
+    map_label_to_symp = {'txt15_i1_lightbarrier_failure_mode_1': "http://iot.uni-trier.de/PredM#Symp_FalsePositiveSignalsIntermittent",
+     'txt15_i1_lightbarrier_failure_mode_2': "http://iot.uni-trier.de/PredM#Symp_FalsePositiveSignalContinuous",
+     'txt15_i3_lightbarrier_failure_mode_2': "http://iot.uni-trier.de/PredM#Symp_FalsePositiveSignalContinuous",
+     'txt16_i4_lightbarrier_failure_mode_1': "http://iot.uni-trier.de/PredM#Symp_FalsePositiveSignalsIntermittent",
+     'txt17_i1_switch_failure_mode_1': "http://iot.uni-trier.de/PredM#Symp_FalsePositiveSignalsIntermittent",
+     'txt17_i1_switch_failure_mode_2': "http://iot.uni-trier.de/PredM#Symp_FalsePositiveSignalContinuous",
+     'txt19_i4_lightbarrier_failure_mode_1': "http://iot.uni-trier.de/PredM#Symp_FalsePositiveSignalsIntermittent",
+     'txt19_i4_lightbarrier_failure_mode_2': "http://iot.uni-trier.de/PredM#Symp_FalsePositiveSignalContinuous"
+     }
+
+    set_of_anomalous_data_streams = set_of_anomalous_data_streams if isinstance(set_of_anomalous_data_streams, np.ndarray) or isinstance(set_of_anomalous_data_streams, tuple) else [set_of_anomalous_data_streams]
+
+    data_stream_emb = np.zeros((len(embeddings_df.columns)))
+
+    # Generate data stream embedding d
+    for iteration, attr_name in enumerate(set_of_anomalous_data_streams):
+        # Get iri of attribute
+        print("set_of_anomalous_data_streams[iteration]:", set_of_anomalous_data_streams[iteration])
+        ftOnto_anomalous_data_stream_uri = dataset.mapping_attr_to_ftonto_df.loc[set_of_anomalous_data_streams[iteration]]
+
+        if ftOnto_anomalous_data_stream_uri.tolist()[0] == "http://iot.uni-trier.de/FTOnto#BF_Lamp_8" :
+            ftOnto_anomalous_data_stream_uri = ["http://iot.uni-trier.de/FTOnto#BF_Radiator_8"] # "http://iot.uni-trier.de/FTOnto#BF_Radiator_8"
+
+        data_stream_emb = data_stream_emb + embeddings_df.loc[ftOnto_anomalous_data_stream_uri].values
+
+    # Generate CaseBase Embeddings
+    case_base_label_emb_rep = {} # key: label (knowledge item/ solution), value: generated emb case representation
+    case_base_pos_label = {} # key: label (knowledge item/ solution), value: generated emb case representation
+    case_rep_array = np.zeros((len(dataset.y_train_strings_unique), len(embeddings_df.columns),))
+    case_rep_func_array = np.zeros((len(dataset.y_train_strings_unique), len(embeddings_df.columns),))
+    case_rep_symp_array = np.zeros((len(dataset.y_train_strings_unique), len(embeddings_df.columns),))
+    case_base_label_single_emb = {}
+    for idx, label in enumerate(dataset.y_train_strings_unique):
+
+        masking = dataset.get_masking(class_label=label,return_strict_masking=True)
+        strict_masking = masking[:61]
+        if not use_strict:
+            context_masking = masking[61:]
+            strict_masking = context_masking
+        data_streams_for_case_rep = dataset.feature_names_all[strict_masking]
+        case_rep_emb = np.zeros((len(embeddings_df.columns)))
+
+        case_base_label_single_emb[label] = {}
+        for ds_attr_name in data_streams_for_case_rep:
+            ftOnto_data_stream_uri = dataset.mapping_attr_to_ftonto_df.loc[ds_attr_name]
+            #embeddings_df.loc[dataset.mapping_attr_to_ftonto_df.loc[dataset.feature_names_all[strict_masking][0]]].values
+            if ftOnto_data_stream_uri.tolist()[0] == "http://iot.uni-trier.de/FTOnto#BF_Lamp_8":
+                ftOnto_data_stream_uri = ["http://iot.uni-trier.de/FTOnto#BF_Radiator_8"]
+            case_rep_emb = case_rep_emb + embeddings_df.loc[ftOnto_data_stream_uri].values
+            case_base_label_single_emb[label][len(case_base_label_single_emb[label].keys())] = embeddings_df.loc[ftOnto_data_stream_uri].values
+        case_base_label_emb_rep[label] = case_rep_emb
+        case_base_pos_label[idx] = label
+        case_rep_array[idx,:] = case_rep_emb
+
+        if w_constraint:
+            # Constraint preperation of cases
+            if label in map_label_to_act_function.keys():
+                func_uri = map_label_to_act_function[label]
+                case_rep_func_array[idx,:] = embeddings_df.loc[func_uri].values
+
+            if label in map_label_to_symp.keys():
+                symp_uri = map_label_to_symp[label]
+                case_rep_symp_array[idx,:] = embeddings_df.loc[symp_uri].values
+
+    # Case Base Retrieval
+    res = cosine_similarity(data_stream_emb, case_rep_array)
+
+    if w_constraint:
+        # used for query
+        if ftono_func_uri is not "":
+            ftono_func_uri_emb = embeddings_df.loc[ftono_func_uri].values
+            if func_not_active:
+                ftono_func_uri_emb = np.ones((len(embeddings_df.columns)))
+            res_func = cosine_similarity(np.expand_dims(ftono_func_uri_emb, 0), case_rep_func_array)
+            #res_func = np.where(res_func < 1, 0, 1) # removed the following line because similar embeddings also result in only a sim of 0,9999...
+        else:
+            res_func = np.ones((1,case_rep_array.shape[0]))
+
+        if ftonto_symp_uri is not "":
+            ftonto_symp_uri_emb = embeddings_df.loc[ftonto_symp_uri].values
+            res_symp = cosine_similarity(np.expand_dims(ftonto_symp_uri_emb, 0), case_rep_symp_array)
+            res_symp = np.where(res_symp < 1, 0,1)
+        else:
+            res_symp = np.ones((1,case_rep_array.shape[0]))
+
+        # addition constrain similarity computation
+        #res_func = cosine_similarity(np.expand_dims(ftono_func_uri_emb,0), case_rep_func_array)
+        #res_symp = cosine_similarity(np.expand_dims(ftonto_symp_uri_emb,0), case_rep_symp_array)
+
+        result = np.concatenate((res, res_func, res_symp)).reshape((3, res.shape[1]))
+        # for debugging purposes:
+        df = pd.DataFrame(result)
+        df.columns = dataset.y_train_strings_unique
+        df = df.rename(index={0: 'DaSt:', 1: 'Func:', 2: 'Symp:'})
+        if "txt16_i4_lightbarrier_failure" in label:
+            print("to check!")
+        res = np.expand_dims(np.min(result, axis=0),0)
+
+    # Sort result according highest cosine sim:
+    max_val = np.amax(res)
+    count_max_val = np.count_nonzero(res == max_val)
+    count_higher_threshold = np.count_nonzero(res >= threshold)
+    sorted_pos = np.argsort(-res)
+    #print("sorted_pos:", sorted_pos)
+    np.random.shuffle(sorted_pos[0][:count_max_val])
+    #print("sorted_pos:", sorted_pos)
+    highest_ranked_pos = list(sorted_pos)[0][0]
+    found_labels = dataset.y_train_strings_unique[sorted_pos[0][:count_higher_threshold]]
+
+    '''
+    # Case Single Retieval
+    result_max = {}
+    for idx, label in enumerate(dataset.y_train_strings_unique):
+        max_per_label = 0
+        for idx in case_base_label_single_emb[label]:
+            single_emb = case_base_label_single_emb[label][idx]
+            res = cosine_similarity(data_stream_emb, single_emb)
+            max_per_label = res if max_per_label < res else max_per_label
+            print(f"{label} with {idx} has {res} and max: {max_per_label}")
+        result_max[label] = max_per_label
+    print("result_max:", result_max)
+    '''
+
+    found_label = case_base_pos_label[highest_ranked_pos]
+    print("highest ranked label: ", found_label, "with sim:",res[0,highest_ranked_pos])
+    found_labels = [x if x != 'txt16_conveyorbelt_big_gear_tooth_broken_failure' else 'txt16_conveyor_big_gear_tooth_broken_failure' for x in found_labels]
+    found_labels = [x if x != 'txt16_conveyor_failure_mode_driveshaft_slippage_failure' else 'txt16_conveyor_failure_mode_driveshaft_slippage' for x in found_labels]
+    return found_labels
+
 
 
 def generated_embedding_query_2(set_of_anomalous_data_streams, embeddings_df, aggrgation_method, dataset,weight=None,is_siam=False):
@@ -4088,7 +4374,7 @@ def main(run=0):
     '''
 
     #''' # THIS ONE IS USED:
-    folder = ""
+    folder = "..\\data\\trained_models\\"
 
     file_name = folder + "store_relevant_attribut_name__cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2cnn2-GCN-GSL-RanInit-Var6-AdjMasked__"
     file_name_2 = folder + "store_relevant_attribut_name__nn2_cnn2d_with_graph_test_GCNGlobAtt_simSiam_128-2cnn2-GCN-GSL-RanInit-Var6-AdjMasked__"
@@ -4119,7 +4405,7 @@ def main(run=0):
     print("")
 
     is_siam                         = True
-    use_only_true_positive_pred     = False
+    use_only_true_positive_pred     = True
     evaluate_hitsAtK_hitRateAtP     = False
     is_memory                       = False
     is_jenks_nat_break_used         = False
@@ -4127,17 +4413,18 @@ def main(run=0):
     is_fix_k_selection_used         = False
     fix_k_for_selection             = 20
     is_randomly_selected_featues    = False
-    is_oracle                       = True
+    is_oracle                       = False
     use_train_FaFs_in_Test          = False
     q1                              = False
     q2                              = False         # Q2-L / contextual masking bei oracle active
     q3                              = False         # Q3-L / contextual masking bei oracle active
     q4                              = False         # knn Embeddings
-    q5                              = False           # like q1 but on component not label basis
+    q5                              = False         # like q1 but on component not label basis
     q6                              = False         # q1 with constraint
     q7                              = False         # q5 with constraint
     q8                              = True          # neural symbolic wie q1 auf labels
-    q9                              = False          # neural symbolic wie q5 auf component
+    q9                              = False         # neural symbolic wie q5 auf component
+    use_cbr                         = True         # in combination with q8, q9 or
 
     # Direct implemented in the queries / no need to activate!
     use_pre_data_stream_contraints  = False
@@ -4216,7 +4503,7 @@ def main(run=0):
             print("i",i)
             # if no entry is available since it was not recognized, go to the second nearest neighbour
             if not i in store_relevant_attribut_dis:
-                print("hier")
+                #print("hier")
                 if i in store_relevant_attribut_dis_2:
                     store_relevant_attribut_name[i] = store_relevant_attribut_name_2[i]
                     store_relevant_attribut_idx[i] = store_relevant_attribut_idx_2[i]
@@ -4432,9 +4719,9 @@ def main(run=0):
     most_rel_att = [store_relevant_attribut_name_shortened, store_relevant_attribut_idx_shortened, store_relevant_attribut_dis]
 
     if q1 or q3 or q6 or q8:
-        dict_measures = get_labels_from_knowledge_graph_from_anomalous_data_streams(most_rel_att, dataset.y_test_strings, dataset, y_pred_anomalies, not_selection_label="no_failure", only_true_positive_prediction=use_only_true_positive_pred, q1=q1, q3=q3, q6=q6, q8=q8, use_pre_data_stream_contraints=use_pre_data_stream_contraints,use_post_label_contraints=use_post_label_contraints,onto_version=onto_version,emb_file_version=emb_file_version)
+        dict_measures = get_labels_from_knowledge_graph_from_anomalous_data_streams(most_rel_att, dataset.y_test_strings, dataset, y_pred_anomalies, not_selection_label="no_failure", only_true_positive_prediction=use_only_true_positive_pred, q1=q1, q3=q3, q6=q6, q8=q8, use_pre_data_stream_contraints=use_pre_data_stream_contraints,use_post_label_contraints=use_post_label_contraints,onto_version=onto_version,emb_file_version=emb_file_version, use_cbr=use_cbr)
     elif q2:
-        dict_measures = get_labels_from_knowledge_graph_from_anomalous_data_streams_permuted(most_rel_att, dataset.y_test_strings, dataset, y_pred_anomalies, not_selection_label="no_failure", only_true_positive_prediction=use_only_true_positive_pred, k_data_streams=[2, 3, 5, 10], k_permutations=[3, 2, 1], rel_type="Context")
+        dict_measures = get_labels_from_knowledge_graph_from_anomalous_data_streams_permuted(most_rel_att, dataset.y_test_strings, dataset, y_pred_anomalies, not_selection_label="no_failure", only_true_positive_prediction=use_only_true_positive_pred, k_data_streams=[2, 3, 5, 10], k_permutations=[3, 2, 1], rel_type="Context", use_cbr=use_cbr, emb_file_version=emb_file_version)
     elif q4:
         dict_measures = {}
         dict_measures = get_labels_from_knowledge_graph_embeddings_from_anomalous_data_streams_permuted(most_rel_att, dataset.y_test_strings, dataset, y_pred_anomalies, dict_measures, not_selection_label="no_failure", only_true_positive_prediction=use_only_true_positive_pred,
