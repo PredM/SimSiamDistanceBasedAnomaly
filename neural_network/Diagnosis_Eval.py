@@ -1507,7 +1507,7 @@ def get_labels_from_knowledge_graph_from_anomalous_data_streams(most_relevant_at
     print("attr_names:", attr_names)
     # Get ontological knowledge graph
     if onto_version == 0:
-        onto = get_ontology("..\\data\\training_data\\knowledge\\FTOnto_with_PredM_w_Inferred_.owl")
+        onto = get_ontology("FTOnto_with_PredM_w_Inferred_.owl")
     elif onto_version == 1:
         onto_path.append("../data/training_data/knowledge/")
         onto = get_ontology("file://../data/training_data/knowledge/FTOnto_with_PredM_w_Inferred_defected_1.owl")
@@ -1809,6 +1809,7 @@ def get_labels_from_knowledge_graph_from_anomalous_data_streams(most_relevant_at
                                     continue
                                 #'''
                                 cnt_labels += 1
+                                cnt_labels_per_example += 1
                                 if curr_label in result or result in curr_label:
                                     print("FOUND: ",str(curr_label),"in",str(result),"after queries:",str(cnt_queries_per_example),"and after checking labels:",cnt_labels_per_example)
                                     cnt_label_found += 1
@@ -4261,12 +4262,12 @@ def main(run=0):
     file_dis        = "store_relevant_attribut_dis_Fin_Standard_wAdjMat_newAdj_2_fixed"
     file_ano_pred   = "predicted_anomaliesFin_Standard_wAdjMat_newAdj_2_fixed"
     '''
-    #'''
+    '''
     file_name       = "store_relevant_attribut_name_Fin_MSCRED_standard_repeat"
     file_idx        = "store_relevant_attribut_idx_Fin_MSCRED_standard_repeat"
     file_dis        = "store_relevant_attribut_dis_Fin_MSCRED_standard_repeat"
     file_ano_pred   = "predicted_anomaliesFin_MSCRED_standard_repeat"
-    #'''
+    '''
     '''
     #Fin_MSCRED_AM_Fin_repeat_
     file_name       = "store_relevant_attribut_name_Fin_MSCRED_AM_Fin_repeat_"
@@ -4421,10 +4422,10 @@ def main(run=0):
     q4                              = False         # knn Embeddings
     q5                              = False         # like q1 but on component not label basis
     q6                              = False         # q1 with constraint
-    q7                              = False         # q5 with constraint
-    q8                              = True          # neural symbolic wie q1 auf labels
+    q7                              = True         # q5 with constraint
+    q8                              = False          # neural symbolic wie q1 auf labels
     q9                              = False         # neural symbolic wie q5 auf component
-    use_cbr                         = True         # in combination with q8, q9 or
+    use_cbr                         = False         # in combination with q8, q9 or
 
     # Direct implemented in the queries / no need to activate!
     use_pre_data_stream_contraints  = False
@@ -4442,16 +4443,18 @@ def main(run=0):
         dataset.y_test_strings = dataset.y_test_strings[:-1]
 
     if is_siam == False:
-        a_file = open('../../ADD_MA-Huneke/anomaly_detection/'+file_name+str(run)+'.pkl', "rb")
+        #'''
+        a_file = open("..\\data\\trained_models\\"+file_name+str(run)+'.pkl', "rb")
         store_relevant_attribut_name = pickle.load(a_file)
         a_file.close()
-        a_file = open('../../ADD_MA-Huneke/anomaly_detection/'+file_idx+str(run)+'.pkl', "rb")
+        a_file = open("..\\data\\trained_models\\"+file_idx+str(run)+'.pkl', "rb")
         store_relevant_attribut_idx = pickle.load(a_file)
         a_file.close()
-        a_file = open('../../ADD_MA-Huneke/anomaly_detection/'+file_dis+str(run)+'.pkl', "rb")
+        a_file = open("..\\data\\trained_models\\"+file_dis+str(run)+'.pkl', "rb")
         store_relevant_attribut_dis = pickle.load(a_file)
         a_file.close()
-        y_pred_anomalies = np.load('../../ADD_MA-Huneke/anomaly_detection/'+file_ano_pred + str(run) + '.npy')
+        y_pred_anomalies = np.load("..\\data\\trained_models\\"+file_ano_pred + str(run) + '.npy')
+        #'''
         '''
         for i in store_relevant_attribut_name:
             print("store_relevant_attribut_name:", store_relevant_attribut_name[i])
@@ -4470,6 +4473,69 @@ def main(run=0):
         a_file = open(file_dis+str(run)+'.pkl',"rb")
         store_relevant_attribut_dis = pickle.load(a_file)
         a_file.close()
+
+        '''
+        store_relevant_attribut_name = {}
+        store_relevant_attribut_idx = {}
+        store_relevant_attribut_dis = {}
+        y_pred_anomalies = np.zeros((3389))
+
+        with open('Q1-L_MSCRED-AM.txt') as f:
+            lines = f.readlines()
+            dict = {}
+            reading_attributes = False
+            run = 0
+            for line in lines:
+
+                if "Example: " in line:
+                    example_num = int(line[len("Example: "):line.find(" | ")])
+                    reading_attributes = False
+                if "Relevant attributes ordered asc:  " in line:
+                    attributes = line[len("Relevant attributes ordered asc:  ["):len(line)]
+                    reading_attributes = True
+                else:
+                    if reading_attributes == True:
+                        if "]" in line:
+                            attributes = attributes + line[:-2]
+                            reading_attributes = False
+                            attributes = attributes.replace("'", "").replace("\n", "").split(" ")
+                            if 'txt19_i7' in attributes:
+                                attributes.remove('txt19_i7')
+                            dict[example_num] = attributes
+                            print("example_num:",example_num)
+                            y_pred_anomalies[example_num] = 1
+                            store_relevant_attribut_name[example_num] = attributes
+                            store_relevant_attribut_dis[example_num] = [1 for element in attributes]
+                            store_relevant_attribut_idx[example_num] = [dataset.feature_names_all.tolist().index(x) for x in
+                                                                attributes]
+                            #attributes = attributes.replace("'","").replace("\n","").split(" ")
+                        else:
+                            attributes = attributes + line
+                if "*** Statistics for Finding Failure Modes to Anomalies ***" in line:
+
+                    a_file = open("..\\data\\trained_models\\new\\" +'store_relevant_attribut_idx_Fin_MSCRED_AM_Fin_repeat' +str(run)+ '.pkl', "wb")
+                    pickle.dump(store_relevant_attribut_idx, a_file)
+                    a_file.close()
+                    a_file = open("..\\data\\trained_models\\new\\" +'store_relevant_attribut_dis_Fin_MSCRED_AM_Fin_repeat' +str(run)+ '.pkl', "wb")
+                    pickle.dump(store_relevant_attribut_dis, a_file)
+                    a_file.close()
+                    a_file = open("..\\data\\trained_models\\new\\" +'store_relevant_attribut_name_Fin_MSCRED_AM_Fin_repeat' +str(run)+ '.pkl', "wb")
+                    pickle.dump(store_relevant_attribut_name, a_file)
+                    a_file.close()
+                    np.save('predicted_anomalies' + 'Fin_MSCRED_AM_Fin_repeat' +str(run)+ '.npy', y_pred_anomalies)
+                    run += 1
+                    # clean
+                    store_relevant_attribut_name = {}
+                    store_relevant_attribut_idx = {}
+                    store_relevant_attribut_dis = {}
+                    y_pred_anomalies = np.zeros((3389))
+        for idx in store_relevant_attribut_name.keys():
+            y_pred_anomalies[idx] = 1
+            list_names = store_relevant_attribut_name[idx]
+            store_relevant_attribut_dis[idx] = [1 for element in list_names]
+            store_relevant_attribut_idx[idx] = [dataset.feature_names_all.tolist().index(x) for x in list_names]
+        print(sddsds)
+        '''
 
         a_file = open(file_name_2+str(run)+'.pkl', "rb")
         store_relevant_attribut_name_2 = pickle.load(a_file)
@@ -4548,7 +4614,7 @@ def main(run=0):
     store_relevant_attribut_name_shortened = store_relevant_attribut_name.copy()
 
     #Shuffle order of anomalous data streams if multiple have the same score:
-    #'''
+    '''
     for i in store_relevant_attribut_idx.keys():
         #print("store_relevant_attribut_idx: ", store_relevant_attribut_idx[i])
         if len(store_relevant_attribut_idx[i]) > 0 and len(store_relevant_attribut_dis[i]) > 0:
@@ -4557,7 +4623,7 @@ def main(run=0):
             store_relevant_attribut_name_shortened[i] = dataset.feature_names_all[
                 np.argsort(-store_relevant_attribut_dis[i])]
         #print("store_relevant_attribut_idx shuffled: ", store_relevant_attribut_idx[i])
-    #'''
+    '''
 
 
     if is_randomly_selected_featues:
